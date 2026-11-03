@@ -1,16 +1,14 @@
 import uuid
-from typing import Annotated, Self
+from typing import Self
 
-from pydantic import BaseModel, EmailStr, Field, StringConstraints, model_validator
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
+from app.core.validation import SafeName
 from app.modules.organizations.models import MemberRole
 from app.modules.users.schemas import UserOut
 
 PASSWORD_MIN = 12
 PASSWORD_MAX = 128
-
-# Human-readable names: trimmed, no control characters (NUL would also break Postgres text).
-SafeName = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[^\x00-\x1f\x7f]+$")]
 
 
 class RegisterIn(BaseModel):

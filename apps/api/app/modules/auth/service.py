@@ -4,8 +4,6 @@ Commit rule: the failed-login event is committed (tenant_session block left) bef
 401 is raised. Session/token lifecycle lives in sessions.py.
 """
 
-import re
-import secrets
 import uuid
 
 from sqlalchemy.exc import IntegrityError
@@ -25,17 +23,13 @@ from app.modules.auth.models import AuthEventType
 from app.modules.auth.schemas import LoginIn, MembershipOut, MeOut, RegisterIn
 from app.modules.organizations import repository as orgs
 from app.modules.organizations.models import MemberRole, Organization, OrganizationMember
+from app.modules.organizations.service import slugify
 from app.modules.users import repository as users
 from app.modules.users.models import User
 from app.modules.users.schemas import UserOut
 
 LOGIN_FAILURE_WINDOW_S = 15 * 60
 EMAIL_UNIQUE_CONSTRAINT = "uq_users_email"
-
-
-def _slugify(name: str) -> str:
-    base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:60] or "org"
-    return f"{base}-{secrets.token_hex(6)}"
 
 
 async def me(user_id: uuid.UUID) -> MeOut:
@@ -75,7 +69,7 @@ async def register(data: RegisterIn, request: HTTPConnection) -> tuple[MeOut, Is
                 Organization(
                     id=org_id,
                     name=data.organization_name,
-                    slug=_slugify(data.organization_name),
+                    slug=slugify(data.organization_name),
                     created_by=user_id,
                 )
             )

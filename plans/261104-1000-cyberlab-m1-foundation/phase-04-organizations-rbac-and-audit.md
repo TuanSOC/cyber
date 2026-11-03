@@ -1,10 +1,11 @@
 ---
 phase: 4
-title: "Organizations RBAC and audit"
-status: pending
+title: Organizations RBAC and audit
+status: completed
 priority: P1
-effort: "6h"
-dependencies: [3]
+effort: 6h
+dependencies:
+  - 3
 ---
 
 # Phase 4: Organizations RBAC and audit
@@ -83,6 +84,15 @@ def require(perm: Permission):
 - [ ] Matrix test covers every (role, permission) pair.
 - [ ] Concurrency test for owner rule passes.
 - [ ] Lint/type/test green.
+
+## Implementation Notes (2026-11-04)
+- `require(permission)` is `functools.cache`d and always used as `Depends(require(p), scope="function")` → tenant session closes (commit/rollback) before the response is sent. Session factory has `autobegin=False`: a query after commit raises instead of running without RLS context.
+- Members split into `organizations/members.py`. Every mutation: `lock_org` → re-read actor role `FOR UPDATE` → read target `FOR UPDATE` → authorize on fresh values (review found stale-role races). Concurrent duplicate add → 409 (IntegrityError mapped).
+- All lists return `{items,total}` (`MyOrgPage`, `MemberPage`, `AuditLogPage`); `offset ≤ 10 000`, `limit ≤ 100`. `GET/PATCH /orgs/{id}` return `MyOrgOut` (includes caller role).
+- Audit filters require timezone-aware datetimes; `from >= to` → 422.
+- Abuse limits: org create 10/h per user; member add 30/10 min per user (bounds email enumeration via `user_not_found`; recorded for THREAT_MODEL).
+- `last_owner` is a defensive guard: with self-modification forbidden and roles re-read under lock it is unreachable via the API; covered by a direct service-level test. Lock behaviour covered deterministically (test holds the org lock while two demotions wait).
+- Tenant-session guard test (AST) allowlists rbac.py, auth register, create_org; also catches keyword calls.
 
 ## Risk Assessment
 - Handlers forgetting `commit()` → tests assert persisted state via a separate session.

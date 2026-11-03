@@ -9,7 +9,9 @@ from app.core.config import get_settings
 from app.core.csrf import CSRFMiddleware
 from app.core.db import get_engine
 from app.core.errors import register_error_handlers
+from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
+from app.modules.organizations.router import router as orgs_router
 
 
 @asynccontextmanager
@@ -36,6 +38,8 @@ def create_app() -> FastAPI:
     v1 = APIRouter(prefix="/api/v1")
     v1.include_router(health.router)
     v1.include_router(auth_router)
+    v1.include_router(orgs_router)
+    v1.include_router(audit_router)
     app.include_router(v1)
     return app
 

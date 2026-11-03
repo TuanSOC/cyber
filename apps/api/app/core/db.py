@@ -25,4 +25,6 @@ def get_engine() -> AsyncEngine:
 
 @lru_cache
 def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
-    return async_sessionmaker(get_engine(), expire_on_commit=False)
+    # autobegin=False: tenant_session() begins explicitly; a query after commit raises instead
+    # of silently running in a new transaction without the RLS context.
+    return async_sessionmaker(get_engine(), expire_on_commit=False, autobegin=False)

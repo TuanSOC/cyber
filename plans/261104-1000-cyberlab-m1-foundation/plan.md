@@ -39,7 +39,7 @@ Out of scope: Celery, OpenSearch, analysis workers, TI, AI, real email, backups/
 | 1 | [Monorepo and Docker Compose](./phase-01-monorepo-and-docker-compose.md) | Completed |
 | 2 | [Database schema RLS and migrations](./phase-02-database-schema-rls-and-migrations.md) | Completed |
 | 3 | [Authentication](./phase-03-authentication.md) | Completed |
-| 4 | [Organizations RBAC and audit](./phase-04-organizations-rbac-and-audit.md) | Pending |
+| 4 | [Organizations RBAC and audit](./phase-04-organizations-rbac-and-audit.md) | Completed |
 | 5 | [Investigations](./phase-05-investigations.md) | Pending |
 | 6 | [Evidence storage and chain of custody](./phase-06-evidence-storage-and-chain-of-custody.md) | Pending |
 | 7 | [Frontend shell and auth pages](./phase-07-frontend-shell-and-auth-pages.md) | Pending |
@@ -82,7 +82,7 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 (backend chain). 7 can start after 4 (nee
 | 1 | Cookie Path=/api invisible to SSR guard; cl_csrf unreadable | Critical | Accept | Completed |
 | 2 | require() membership lookup returns 0 rows under FORCE RLS → all org routes 404 | Critical | Accept | Completed |
 | 3 | NULL-org audit insert fails RLS on INSERT…RETURNING | High | Accept (auth_events table) | Completed |
-| 4 | Request-wide txn rollback erases revocation/failure audit before 401 | High | Accept | Phase 2, 3 |
+| 4 | Request-wide txn rollback erases revocation/failure audit before 401 | High | Accept | Completed |
 | 5 | No gateway body limit (unauth OOM); DB txn held during streams (pool exhaustion) | High | Accept | Phase 1, 2, 6 |
 | 6 | Object lock = versioning: hidden orphans, overwrite via new version, root creds bypass | High | Accept (keep lock, version_id + scoped user) | Phase 1, 2, 6 |
 | 7 | Non-atomic refresh rotation; multi-tab false reuse | High | Accept | Phase 2, 3, 7 |
