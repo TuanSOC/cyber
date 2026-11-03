@@ -1,10 +1,11 @@
 ---
 phase: 7
-title: "Frontend shell and auth pages"
-status: pending
+title: Frontend shell and auth pages
+status: completed
 priority: P1
-effort: "9h"
-dependencies: [4]
+effort: 9h
+dependencies:
+  - 4
 ---
 
 # Phase 7: Frontend shell and auth pages
@@ -61,6 +62,15 @@ Dark dashboard shell (12-item sidebar, org switcher, user menu), typed API clien
 - [ ] All 12 nav items render; planned ones show milestone label, no fake numbers.
 - [ ] No CSP violations in console (dev + prod); headers present via `curl -I`.
 - [ ] Typecheck/lint/build green.
+
+## Implementation Notes (2026-11-04)
+- Next.js 16.4.5 (Turbopack, Cache Components). Signed-in area is client-rendered: one `<Suspense>` in `app/(app)/layout.tsx` + client `AuthGate`; `experimental.instantInsights.validationLevel = "manual-warning"` (implicit instant/static-shell validation reported every client-rendered segment; segment-level `instant = false` did not cover nested dynamic segments). `partialPrefetching` not enabled.
+- shadcn/ui (radix-nova). `cn` dependency is shadcn's own package. `next-themes` dropped (dark-only); `shadcn` is a dev dependency (only its CSS is used at build).
+- API client: openapi-fetch + custom fetch (CSRF at request time, single-flight refresh with three outcomes ok/expired/unavailable — outages never log the user out). `ApiError` carries `Retry-After` for 429 messages.
+- Review fixes: open redirect in `safeNext` (tab/CR/LF stripped by URL parsing → `//evil`) → same-origin URL check + control-char rejection, vitest unit tests; cache cleared on sign-in/expiry/logout; error states with Retry (AuthGate, `/`, members); destructive actions behind an in-page confirm dialog; inline not-found card instead of `notFound()` in client components; font var cycle; `X-Powered-By` removed (Next + Caddy); HSTS in prod Caddyfile; atomic `gen:contracts`.
+- Contracts: `pnpm gen:contracts` dumps OpenAPI offline from the api-test image (`app/scripts/dump_openapi.py`, no DB/Redis access) → `packages/contracts/{openapi.json,src/schema.d.ts}` (committed).
+- Security headers at Caddy: nosniff, no-referrer, X-Frame-Options DENY, COOP, Permissions-Policy, CSP (dev adds 'unsafe-eval' + ws:). `?Content-Security-Policy` keeps the API's `sandbox` CSP on downloads (verified).
+- Browser-verified: / → /login; register → org overview (12-item sidebar, org name + role in header); reload keeps session; members page; planned module page; sign out → /login; protected URL → /login?next=…; no console errors or CSP violations.
 
 ## Risk Assessment
 - Client guard flashes skeleton before redirect → acceptable.

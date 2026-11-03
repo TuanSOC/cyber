@@ -12,5 +12,8 @@ import /etc/caddy/common.caddy
 
 {$SITE_ADDRESS} {
 	tls internal
+	import security_headers
+	import csp_prod
+	import hsts
 	import cyberlab_routes
 }

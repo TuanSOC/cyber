@@ -6,9 +6,16 @@ import type { NextConfig } from "next";
 const pollIntervalMs = Number(process.env.NEXT_WATCH_POLL_MS) || undefined;
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   ...(pollIntervalMs ? { watchOptions: { pollIntervalMs } } : {}),
   cacheComponents: true,
-  partialPrefetching: true,
+  // The signed-in area is client-rendered by design (the session cookie is scoped to /api,
+  // so only the browser knows the user). It has no meaningful static shell, so neither
+  // Partial Prefetching nor implicit instant-navigation validation applies; only segments
+  // that explicitly export `instant` are validated.
+  experimental: {
+    instantInsights: { validationLevel: "manual-warning" },
+  },
   // Monorepo: trace from the repo root so workspace packages land in the standalone output.
   output: "standalone",
   outputFileTracingRoot: path.resolve(process.cwd(), "../.."),

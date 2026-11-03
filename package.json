@@ -9,6 +9,8 @@
     "prod:down": "docker compose -f docker-compose.yml -f docker-compose.prod.yml down",
     "test:api": "docker compose --profile test run --rm api-test uv run pytest",
     "lint:api": "docker compose --profile test run --rm api-test sh -c \"uv run ruff check . && uv run ruff format --check . && uv run mypy app\"",
-    "lint:web": "docker compose run --rm --no-deps web sh -c \"pnpm typecheck && pnpm exec eslint .\""
+    "lint:web": "docker compose run --rm --no-deps web sh -c \"pnpm typecheck && pnpm exec eslint . && pnpm test\"",
+    "gen:contracts": "docker compose --profile test run --rm --no-deps -T api-test python -m app.scripts.dump_openapi > packages/contracts/openapi.json.tmp && mv packages/contracts/openapi.json.tmp packages/contracts/openapi.json && pnpm --filter @cyberlab/contracts gen",
+    "test:web": "docker compose run --rm --no-deps web pnpm test"
   }
 }

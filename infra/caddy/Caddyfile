@@ -12,5 +12,7 @@
 import /etc/caddy/common.caddy
 
 :8080 {
+	import security_headers
+	import csp_dev
 	import cyberlab_routes
 }

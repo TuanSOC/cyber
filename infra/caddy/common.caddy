@@ -1,3 +1,32 @@
+# Security headers. `?` only sets a header when the upstream did not (the API's download
+# responses keep their own `Content-Security-Policy: sandbox`). 'unsafe-inline' is needed by
+# the Next.js App Router without nonces; a strict nonce-based CSP is planned for M2.
+(security_headers) {
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy same-origin
+		-Server
+		-X-Powered-By
+	}
+}
+
+# Prod only (TLS): browsers must keep using HTTPS for this host.
+(hsts) {
+	header Strict-Transport-Security "max-age=31536000"
+}
+
+(csp_prod) {
+	header ?Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+}
+
+# Dev only: React needs eval for debug stacks; Turbopack HMR uses a websocket.
+(csp_dev) {
+	header ?Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+}
+
 (cyberlab_routes) {
 	# Evidence upload is the only route allowed a large body; everything else is capped at 1 MB.
 	@evidence_upload {
