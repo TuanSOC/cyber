@@ -1,0 +1,67 @@
+import pytest
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from tests.conftest import assert_test_database, assert_test_redis
+
+
+async def test_every_tenant_table_has_forced_rls(owner_engine: AsyncEngine) -> None:
+    """Any table with an organization_id column must have RLS enabled AND forced."""
+    query = text(
+        """
+        SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relkind = 'r'
+          AND (
+            EXISTS (SELECT 1 FROM information_schema.columns col
+                    WHERE col.table_schema = 'public' AND col.table_name = c.relname
+                      AND col.column_name = 'organization_id')
+            OR c.relname = 'organizations'
+          )
+        """
+    )
+    async with owner_engine.connect() as conn:
+        rows = (await conn.execute(query)).all()
+
+    assert {r.relname for r in rows} >= {"investigations", "evidence", "audit_logs"}
+    unprotected = [r.relname for r in rows if not (r.relrowsecurity and r.relforcerowsecurity)]
+    assert unprotected == []
+
+
+async def test_every_rls_table_has_a_policy(owner_engine: AsyncEngine) -> None:
+    query = text(
+        """
+        SELECT c.relname FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relrowsecurity
+          AND NOT EXISTS (SELECT 1 FROM pg_policies p
+                          WHERE p.schemaname = 'public' AND p.tablename = c.relname)
+        """
+    )
+    async with owner_engine.connect() as conn:
+        assert (await conn.execute(query)).scalars().all() == []
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql+asyncpg://u:p@postgres:5432/cyberlab",
+        "postgresql+asyncpg://u:p@postgres:5432/cyberlab_testing",
+    ],
+)
+def test_harness_refuses_non_test_databases(url: str) -> None:
+    with pytest.raises(RuntimeError, match="refusing"):
+        assert_test_database(url)
+
+
+@pytest.mark.parametrize(
+    "url", ["redis://redis:6379", "redis://redis:6379/0", "redis://redis:6379?db=0"]
+)
+def test_harness_refuses_redis_db_zero(url: str) -> None:
+    with pytest.raises(RuntimeError, match="refusing"):
+        assert_test_redis(url)
+
+
+def test_harness_accepts_redis_test_db() -> None:
+    assert_test_redis("redis://redis:6379/1")

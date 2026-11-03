@@ -15,8 +15,9 @@ ALTER ROLE cyberlab_app SET statement_timeout = '30s';
 CREATE DATABASE cyberlab OWNER cyberlab_owner;
 CREATE DATABASE cyberlab_test OWNER cyberlab_owner;
 
-REVOKE CONNECT ON DATABASE cyberlab FROM PUBLIC;
-REVOKE CONNECT ON DATABASE cyberlab_test FROM PUBLIC;
+-- No CONNECT or TEMP for PUBLIC (temp objects could shadow names on search_path).
+REVOKE CONNECT, TEMPORARY ON DATABASE cyberlab FROM PUBLIC;
+REVOKE CONNECT, TEMPORARY ON DATABASE cyberlab_test FROM PUBLIC;
 GRANT CONNECT ON DATABASE cyberlab TO cyberlab_app;
 GRANT CONNECT ON DATABASE cyberlab_test TO cyberlab_app;
 EOSQL

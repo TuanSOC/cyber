@@ -1,0 +1,86 @@
+import os
+import subprocess
+from collections.abc import AsyncIterator
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+import pytest
+import pytest_asyncio
+from sqlalchemy import text
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.pool import NullPool
+
+from app.core.clients import get_redis
+from app.core.config import get_settings
+from app.core.db import get_engine
+from app.models import Base
+
+API_ROOT = Path(__file__).resolve().parents[1]
+
+
+def assert_test_database(url: str) -> None:
+    """Refuse to touch anything but a *_test database (cleanup truncates every table)."""
+    name = make_url(url).database or ""
+    if not name.endswith("_test"):
+        raise RuntimeError(f"refusing to run tests against database {name!r} (must end with _test)")
+
+
+def assert_test_redis(url: str) -> None:
+    """Refuse Redis db 0 (the dev stack's db): cleanup runs FLUSHDB."""
+    parsed = urlparse(url)
+    db = parse_qs(parsed.query).get("db", [parsed.path.lstrip("/") or "0"])[0]
+    if db == "0":
+        raise RuntimeError("refusing to flush Redis db 0 in tests (use a non-zero db)")
+
+
+def _owner_url() -> str:
+    return os.environ["TEST_MIGRATION_DATABASE_URL"]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _migrated_test_database() -> None:
+    settings = get_settings()
+    if settings.env != "test":
+        raise RuntimeError("tests must run with ENV=test (use the api-test compose service)")
+    assert_test_database(settings.database_url)
+    assert_test_database(_owner_url())
+    assert_test_redis(settings.redis_url)
+    subprocess.run(
+        ["alembic", "upgrade", "head"],
+        check=True,
+        cwd=API_ROOT,
+        env={**os.environ, "MIGRATION_DATABASE_URL": _owner_url()},
+    )
+
+
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
+async def owner_engine() -> AsyncIterator[AsyncEngine]:
+    """Table-owner connection: test setup/cleanup only. FORCE RLS still applies to it."""
+    engine = create_async_engine(_owner_url(), poolclass=NullPool)
+    yield engine
+    await engine.dispose()
+
+
+async def _reset(owner_engine: AsyncEngine) -> None:
+    tables = ", ".join(Base.metadata.tables)
+    async with owner_engine.begin() as conn:
+        # TRUNCATE bypasses row-level append-only triggers: test database only.
+        await conn.execute(text(f"TRUNCATE TABLE {tables} CASCADE"))
+    await get_redis().flushdb()
+
+
+@pytest_asyncio.fixture(scope="session", autouse=True, loop_scope="session")
+async def _session_state(
+    _migrated_test_database: None, owner_engine: AsyncEngine
+) -> AsyncIterator[None]:
+    # Start clean even if a previous run was interrupted before its teardown.
+    await _reset(owner_engine)
+    yield
+    await get_engine().dispose()
+
+
+@pytest_asyncio.fixture(autouse=True, loop_scope="session")
+async def _clean_state(owner_engine: AsyncEngine, _session_state: None) -> AsyncIterator[None]:
+    yield
+    await _reset(owner_engine)

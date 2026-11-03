@@ -1,10 +1,11 @@
 ---
 phase: 2
-title: "Database schema RLS and migrations"
-status: pending
+title: Database schema RLS and migrations
+status: completed
 priority: P1
-effort: "8h"
-dependencies: [1]
+effort: 8h
+dependencies:
+  - 1
 ---
 
 # Phase 2: Database schema RLS and migrations
@@ -115,6 +116,15 @@ async def tenant_session(org_id: UUID | None, user_id: UUID | None) -> AsyncIter
 - [ ] conftest refuses non-`_test` DB (tested by pointing at `cyberlab`).
 - [ ] `mypy --strict` clean.
 - [ ] `docs/DATABASE.md` written for tables, RLS model, roles/grants, trust boundary. [RT#14]
+
+## Implementation Notes (2026-11-04)
+- Code review found a **cross-tenant write** via the single ALL-command `organization_members` policy (own-row clause authorized UPDATE/DELETE of the caller's membership in another org). Fixed: per-command policies (SELECT broad; INSERT/UPDATE/DELETE org-only) for `organization_members` and `organizations`; regression tests added.
+- `refresh_tokens.replaced_by` FK is `DEFERRABLE INITIALLY DEFERRED` (phase 3 atomic rotation updates old row before inserting successor).
+- `Timestamps` mixin uses `eager_defaults` (updated_at loaded after commit).
+- Immutability trigger covers every evidence column except status/description; org-leading indexes on hashes/custody.
+- Functions schema-qualified / pinned search_path; `TEMPORARY` revoked from PUBLIC on both DBs; pgcrypto dropped (built-in `gen_random_uuid`).
+- Harness: refuses non-`_test` DB **and** Redis db 0; resets state at session start and after each test; disposes the app engine at session end. Uses pooled app engine with session-scoped event loop instead of NullPool (no cross-loop issues observed).
+- Alembic: `prepend_sys_path = .`; asyncpg needs one SQL statement per `op.execute`.
 
 ## Risk Assessment
 - New tenant table without RLS → coverage test catches it.

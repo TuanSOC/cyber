@@ -77,6 +77,8 @@ def require(perm: Permission):
    - parametrized RBAC matrix × representative endpoints.
    - audit rows after each mutation, visible only in own org; pagination + filters.
 
+- RLS trusts `app.org_id` (see docs/DATABASE.md): add a test that greps `app/` for `tenant_session(` calls with a non-`None` org argument outside `core/rbac.py` (and documented service helpers that receive an `OrgContext`) and fails on new ones. [P2 review]
+
 ## Success Criteria
 - [ ] Matrix test covers every (role, permission) pair.
 - [ ] Concurrency test for owner rule passes.
