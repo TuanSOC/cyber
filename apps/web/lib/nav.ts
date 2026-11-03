@@ -32,7 +32,6 @@ export const NAV: NavItem[] = [
     label: "Investigations",
     icon: FolderSearch,
     segment: "investigations",
-    plannedFor: "Milestone 1 (next phase)",
     summary: "Cases, evidence, hashes and chain of custody.",
   },
   {

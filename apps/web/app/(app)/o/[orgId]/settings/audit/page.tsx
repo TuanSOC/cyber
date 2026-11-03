@@ -1,11 +1,11 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Fragment, useDeferredValue, useState } from "react";
+import { Fragment, useState } from "react";
 
+import { ANY, type AuditFilterValues, AuditFilters } from "@/components/audit/audit-filters";
 import { PAGE_SIZE, Pager } from "@/components/pager";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { QueryError } from "@/components/query-error";
 import {
   Table,
   TableBody,
@@ -26,19 +26,19 @@ function dayStart(value: string, plusDays = 0): string | undefined {
   return date.toISOString();
 }
 
+const INITIAL: AuditFilterValues = { action: ANY, actorId: ANY, from: "", to: "" };
+
 export default function AuditLogPage() {
   const { orgId, can } = useOrg();
-  const [action, setAction] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [filters, setFilters] = useState<AuditFilterValues>(INITIAL);
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
-  const deferredAction = useDeferredValue(action.trim());
 
   const query = {
-    action: deferredAction || undefined,
-    from: dayStart(from),
-    to: dayStart(to, 1),
+    action: filters.action === ANY ? undefined : filters.action,
+    actor_id: filters.actorId === ANY ? undefined : filters.actorId,
+    from: dayStart(filters.from),
+    to: dayStart(filters.to, 1),
     limit: PAGE_SIZE,
     offset,
   };
@@ -60,31 +60,15 @@ export default function AuditLogPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="audit-action">Action</Label>
-          <Input
-            id="audit-action"
-            placeholder="e.g. evidence.downloaded"
-            className="w-60"
-            maxLength={100}
-            value={action}
-            onChange={(event) => {
-              setAction(event.target.value);
-              setOffset(0);
-            }}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="audit-from">From</Label>
-          <Input id="audit-from" type="date" value={from} onChange={(e) => { setFrom(e.target.value); setOffset(0); }} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="audit-to">To</Label>
-          <Input id="audit-to" type="date" value={to} onChange={(e) => { setTo(e.target.value); setOffset(0); }} />
-        </div>
-      </div>
-      {logs.isError && <p className="text-sm text-destructive">Could not load the audit log.</p>}
+      <AuditFilters
+        orgId={orgId}
+        value={filters}
+        onChange={(next) => {
+          setFilters(next);
+          setOffset(0);
+        }}
+      />
+      {logs.isError && <QueryError error={logs.error} onRetry={() => void logs.refetch()} />}
       <div className="rounded-lg border">
         <Table>
           <TableHeader>

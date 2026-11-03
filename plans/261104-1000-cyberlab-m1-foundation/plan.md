@@ -43,7 +43,7 @@ Out of scope: Celery, OpenSearch, analysis workers, TI, AI, real email, backups/
 | 5 | [Investigations](./phase-05-investigations.md) | Completed |
 | 6 | [Evidence storage and chain of custody](./phase-06-evidence-storage-and-chain-of-custody.md) | Completed |
 | 7 | [Frontend shell and auth pages](./phase-07-frontend-shell-and-auth-pages.md) | Completed |
-| 8 | [Frontend investigations evidence audit pages](./phase-08-frontend-investigations-evidence-audit-pages.md) | Pending |
+| 8 | [Frontend investigations evidence audit pages](./phase-08-frontend-investigations-evidence-audit-pages.md) | Completed |
 | 9 | [Security E2E tests and docs](./phase-09-security-e2e-tests-and-docs.md) | Pending |
 
 Order: 1 → 2 → 3 → 4 → 5 → 6 (backend chain). 7 can start after 4 (needs auth + org/member API). 8 after 6 + 7. 9 last. [RT#13]
@@ -86,7 +86,7 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 (backend chain). 7 can start after 4 (nee
 | 5 | No gateway body limit (unauth OOM); DB txn held during streams (pool exhaustion) | High | Accept | Completed |
 | 6 | Object lock = versioning: hidden orphans, overwrite via new version, root creds bypass | High | Accept (keep lock, version_id + scoped user) | Completed |
 | 7 | Non-atomic refresh rotation; multi-tab false reuse | High | Accept | Completed |
-| 8 | Owner DB creds in api runtime; false "defends owner" claim; tests could wipe dev DB | High | Accept | Phase 1, 2 |
+| 8 | Owner DB creds in api runtime; false "defends owner" claim; tests could wipe dev DB | High | Accept | Completed |
 | 9 | Windows/Docker bootstrap breakages (uv.lock, bind mounts, CRLF, build context, init SQL, PG15 schema, grants, buckets) | High | Accept | Phase 1, 2 |
 | 10 | CSP default-src 'self' breaks Next/Radix; added too late | High | Accept | Phase 7, 9 |
 | 11 | Rate limits global behind proxy; per-email lockout; test Redis leakage | Medium | Accept | Phase 1, 2, 3 |
