@@ -7,6 +7,7 @@ from pydantic import AwareDatetime
 from app.core.errors import AppError
 from app.core.pagination import PageParamsDep
 from app.core.rbac import OrgContext, Permission, require
+from app.core.validation import SearchTerm
 from app.modules.audit import repository
 from app.modules.audit.repository import AuditFilters
 from app.modules.audit.schemas import AuditLogOut, AuditLogPage
@@ -26,7 +27,7 @@ class InvalidRange(AppError):
 async def list_audit_logs(
     ctx: AuditRead,
     page: PageParamsDep,
-    action: Annotated[str | None, Query(max_length=100)] = None,
+    action: Annotated[SearchTerm | None, Query(max_length=100)] = None,
     actor_id: uuid.UUID | None = None,
     occurred_from: Annotated[AwareDatetime | None, Query(alias="from")] = None,
     occurred_to: Annotated[AwareDatetime | None, Query(alias="to")] = None,

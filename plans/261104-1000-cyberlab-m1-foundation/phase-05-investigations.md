@@ -1,10 +1,11 @@
 ---
 phase: 5
-title: "Investigations"
-status: pending
+title: Investigations
+status: completed
 priority: P1
-effort: "4h"
-dependencies: [4]
+effort: 4h
+dependencies:
+  - 4
 ---
 
 # Phase 5: Investigations
@@ -22,7 +23,7 @@ Case management CRUD (no delete) with status lifecycle, per-org case numbers, se
 
 ## Architecture
 - Case number: in create txn `UPDATE organizations SET next_case_number = next_case_number + 1 WHERE id=:org RETURNING next_case_number - 1` (row lock serializes concurrent creates).
-- Transitions: `open → in_progress → closed → archived`; `closed → in_progress` (reopen); `archived` terminal in M1. Invalid → 409.
+- Transitions (implemented): `open → in_progress | closed`, `in_progress → closed`, `closed → in_progress (reopen) | archived`; `archived` terminal + read-only in M1. Invalid → 409 `invalid_transition`. `open → closed` added deliberately (closing false positives). `InvestigationOut.allowed_transitions` exposes the valid next states so the frontend never duplicates the table.
 - `q`: `title ILIKE '%' || :q || '%' ESCAPE '\'` with `%`, `_`, `\` escaped. No trigram index in M1. [RT#13]
 - Pagination: offset, `limit` default 25, max 100 (same envelope as all lists). [RT#13]
 - Notes, timeline, IOC collections, ATT&CK mapping → later milestones (ROADMAP).
@@ -41,6 +42,11 @@ Case management CRUD (no delete) with status lifecycle, per-org case numbers, se
 ## Success Criteria
 - [ ] Tests green incl. concurrency.
 - [ ] OpenAPI shows typed models incl. `Page[...]`.
+
+## Implementation Notes (2026-11-04)
+- Review fixes: shared `SearchTerm` (no NUL → 422 instead of 500) for `q` and audit `action`; `SafeName` now also rejects zero-width/bidi/BOM chars (title spoofing); `extra="forbid"` on create/update; explicit `null` errors carry the field `loc`.
+- Case-number allocation keeps `organizations.updated_at`; PATCH locks with `FOR NO KEY UPDATE` (evidence inserts' FK KEY SHARE not blocked); severity sorts tie-break on `id`.
+- `evidence_count` counts all evidence incl. archived. No deadlock with member `lock_org` (both take the org row first).
 
 ## Risk Assessment
 - Offset pagination slow at huge volumes → acceptable for M1; revisit with OpenSearch in M2.
