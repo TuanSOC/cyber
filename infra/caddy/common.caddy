@@ -15,11 +15,14 @@
 		expression `{http.request.header.Content-Length} != "" && int({http.request.header.Content-Length}) > 1048576`
 	}
 	# Mutually exclusive handle blocks; named-matcher blocks keep file order, so these run first.
+	# Same {"error": {...}} envelope the API uses.
 	handle @too_large_upload {
-		respond "Request body too large" 413
+		header Content-Type application/json
+		respond `{"error":{"code":"payload_too_large","message":"Request body too large"}}` 413
 	}
 	handle @too_large {
-		respond "Request body too large" 413
+		header Content-Type application/json
+		respond `{"error":{"code":"payload_too_large","message":"Request body too large"}}` 413
 	}
 
 	handle @evidence_upload {

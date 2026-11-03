@@ -1,10 +1,11 @@
 ---
 phase: 6
-title: "Evidence storage and chain of custody"
-status: pending
+title: Evidence storage and chain of custody
+status: completed
 priority: P1
-effort: "14h"
-dependencies: [5]
+effort: 14h
+dependencies:
+  - 5
 ---
 
 # Phase 6: Evidence storage and chain of custody
@@ -98,6 +99,18 @@ class EvidenceStorage(Protocol):
 - [ ] All evidence tests green.
 - [ ] Manual: 1 GB upload through gateway succeeds; API RSS stays flat (observed, not asserted); DB pool unaffected (login works during upload).
 - [ ] No code path opens evidence content except the 8 KiB sniff.
+
+## Implementation Notes (2026-11-04)
+- Modules: `evidence/uploads.py` (spool → put → records), `evidence/locking.py` (retention + failed-upload cleanup), `evidence/transfer.py` (download/verify), `evidence/service.py` (metadata, custody, archive, `record_event` = custody + audit).
+- After the evidence rows commit nothing changes the response: retention lock, its `evidence.lock_failed` audit and the slot release are best effort (shielded, logged). Before commit, any failure deletes exactly the stored version.
+- Per-user slots (`upload`, `verify`) are Redis ZSET tokens with atomic Lua acquire + expiry pruning (6 h), released with ZREM — leaked slots expire, rejected attempts never extend leases.
+- Blocking MinIO calls, spool writes and hashing run on a dedicated 16-thread `evidence_io_limiter` (never the shared anyio limiter used by argon2/health). Spool hashes in ~1 MiB batches off the event loop; verify reads + hashes inside one worker thread.
+- minio-py parts 16 MiB × 2 parallel → 1 GiB upload ≈ 15 s, API RSS peak ≈ 225 MiB (was 430 MiB with 64 MiB × 3). Login during upload unaffected.
+- Reads/verify/delete use the bucket stored on the row. Investigation row locked `FOR SHARE` while recording uploads/archives; archived cases reject upload and evidence archive (409 `investigation_archived`).
+- Upload requires `Content-Type: application/octet-stream` (415 otherwise). Caddy 413s use the JSON error envelope.
+- MinIO policy needs `s3:DeleteObject` in addition to `s3:DeleteObjectVersion` for versioned deletes (MinIO semantics). An unversioned delete would only add a delete marker; the app always reads by version.
+- `api-test` receives MinIO root creds (test profile only) to simulate overwrite attacks and purge locked test versions.
+- Accepted M1 risks → THREAT_MODEL: no per-org storage quota (open registration + 30-day governance lock can fill MinIO); aborted downloads still logged as `downloaded`; no Range/resume. `scripts/reconcile_orphans.py` delivered in phase 9.
 
 ## Risk Assessment
 - Temp disk exhaustion → per-user slot limit + documented sizing; temp files always removed in `finally`; startup sweeps stale temp files older than 1h.

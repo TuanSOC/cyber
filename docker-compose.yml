@@ -188,6 +188,9 @@ services:
       RATE_LIMIT_REGISTER_PER_IP_PER_10MIN: "1000"
       TEST_MIGRATION_DATABASE_URL: ${TEST_MIGRATION_DATABASE_URL}
       MIGRATION_DATABASE_URL: ${TEST_MIGRATION_DATABASE_URL}
+      # Test-only: lets storage tests act as an attacker/admin and clean up locked versions.
+      TEST_MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      TEST_MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
       - ./apps/api:/app
       - upload_tmp_test:${UPLOAD_TMP_DIR}

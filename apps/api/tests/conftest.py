@@ -15,6 +15,7 @@ from app.core.clients import get_redis
 from app.core.config import get_settings
 from app.core.db import get_engine
 from app.models import Base
+from tests.storage_helpers import purge_test_bucket
 
 API_ROOT = Path(__file__).resolve().parents[1]
 
@@ -76,7 +77,9 @@ async def _session_state(
 ) -> AsyncIterator[None]:
     # Start clean even if a previous run was interrupted before its teardown.
     await _reset(owner_engine)
+    purge_test_bucket()
     yield
+    purge_test_bucket()
     await get_engine().dispose()
 
 

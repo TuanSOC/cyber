@@ -1,7 +1,7 @@
 """RLS trusts app.org_id: only vetted call sites may open a tenant session for a concrete org.
 
 Any new `tenant_session(<org>, ...)` call outside this allowlist must be reviewed: the org id
-must either be verified by require()/authorize() first, or be freshly generated (new org).
+must either be verified by require()/org_session() first, or be freshly generated (new org).
 """
 
 import ast
@@ -10,7 +10,7 @@ from pathlib import Path
 APP = Path(__file__).resolve().parents[2] / "app"
 
 ALLOWED = {
-    "core/rbac.py": "require()/authorize(): membership verified inside the same session",
+    "core/rbac.py": "require()/org_session(): membership verified inside the same session",
     "modules/auth/service.py": "register(): org id freshly generated",
     "modules/organizations/service.py": "create_org(): org id freshly generated",
 }

@@ -8,6 +8,7 @@ import enum
 import functools
 import uuid
 from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -79,21 +80,29 @@ def check(role: MemberRole | None, permission: Permission) -> MemberRole:
 def require(
     permission: Permission,
 ) -> Callable[[uuid.UUID, CurrentUser], AsyncIterator[OrgContext]]:
-    """Dependency: one tenant session for the request, membership checked inside it.
+    """Dependency: one org_session() for the request.
 
     Cached per permission so FastAPI dedupes it; use at most one per route. Mutating
     handlers must `await ctx.session.commit()` as their last database step.
     """
 
     async def dependency(org_id: uuid.UUID, user: CurrentUserDep) -> AsyncIterator[OrgContext]:
-        async with tenant_session(org_id, user.id) as session:
-            role = check(await membership_role(session, org_id, user.id), permission)
-            yield OrgContext(org_id=org_id, user=user, role=role, session=session)
+        async with org_session(org_id, user, permission) as ctx:
+            yield ctx
 
     return dependency
 
 
-async def authorize(org_id: uuid.UUID, user: CurrentUser, permission: Permission) -> MemberRole:
-    """Same check in a short session that closes immediately (long-running routes)."""
+@asynccontextmanager
+async def org_session(
+    org_id: uuid.UUID, user: CurrentUser, permission: Permission
+) -> AsyncIterator[OrgContext]:
+    """A short, explicitly scoped tenant session with the membership check inside it.
+
+    Long-running routes (evidence transfer) use several of these instead of one
+    request-wide session, so no connection is held while bytes move and the caller is
+    re-authorized before every write.
+    """
     async with tenant_session(org_id, user.id) as session:
-        return check(await membership_role(session, org_id, user.id), permission)
+        role = check(await membership_role(session, org_id, user.id), permission)
+        yield OrgContext(org_id=org_id, user=user, role=role, session=session)
