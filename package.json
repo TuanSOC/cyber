@@ -1,0 +1,14 @@
+{
+  "name": "cyberlab",
+  "private": true,
+  "packageManager": "pnpm@10.12.4",
+  "scripts": {
+    "dev": "docker compose up --build --renew-anon-volumes",
+    "down": "docker compose down",
+    "prod:up": "docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d --wait",
+    "prod:down": "docker compose -f docker-compose.yml -f docker-compose.prod.yml down",
+    "test:api": "docker compose --profile test run --rm api-test uv run pytest",
+    "lint:api": "docker compose --profile test run --rm api-test sh -c \"uv run ruff check . && uv run ruff format --check . && uv run mypy app\"",
+    "lint:web": "docker compose run --rm --no-deps web sh -c \"pnpm typecheck && pnpm exec eslint .\""
+  }
+}

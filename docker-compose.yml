@@ -1,0 +1,207 @@
+name: cyberlab
+
+x-api-build: &api-build
+  context: ./apps/api
+  target: dev
+
+# Runtime env for the API process: app DB role + scoped MinIO user only.
+x-api-env: &api-env
+  ENV: ${ENV:-dev}
+  COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  DATABASE_URL: ${DATABASE_URL}
+  REDIS_URL: ${REDIS_URL}
+  JWT_SECRET: ${JWT_SECRET}
+  MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+  MINIO_BUCKET: ${MINIO_BUCKET}
+  MAX_EVIDENCE_BYTES: ${MAX_EVIDENCE_BYTES}
+  EVIDENCE_LOCK_DAYS: ${EVIDENCE_LOCK_DAYS}
+  UPLOAD_TMP_DIR: ${UPLOAD_TMP_DIR}
+  MAX_CONCURRENT_UPLOADS_PER_USER: ${MAX_CONCURRENT_UPLOADS_PER_USER}
+  RATE_LIMIT_LOGIN_PER_IP_PER_MIN: ${RATE_LIMIT_LOGIN_PER_IP_PER_MIN}
+  RATE_LIMIT_LOGIN_FAILURES_PER_15MIN: ${RATE_LIMIT_LOGIN_FAILURES_PER_15MIN}
+  RATE_LIMIT_REGISTER_PER_IP_PER_10MIN: ${RATE_LIMIT_REGISTER_PER_IP_PER_10MIN}
+
+x-api-healthcheck: &api-healthcheck
+  test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=4)"]
+  interval: 5s
+  timeout: 5s
+  retries: 30
+
+# Networks: the api trusts X-Forwarded-For from any peer, so only the gateway and the
+# data services share its network. The web container cannot reach the api directly.
+networks:
+  backend:
+  frontend:
+
+services:
+  postgres:
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_OWNER_PASSWORD: ${POSTGRES_OWNER_PASSWORD}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cyberlab"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    # Upstream MinIO stopped publishing community images; frozen bitnami build (2025-05-24).
+    # Dev/learning only: no further security patches (see docs/THREAT_MODEL.md).
+    image: bitnamilegacy/minio:2025.5.24
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_CONSOLE_PORT_NUMBER: "9001"
+    volumes:
+      - miniodata:/bitnami/minio/data
+    ports:
+      - "127.0.0.1:9001:9001"
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  minio-init:
+    image: bitnamilegacy/minio-client:2025.5.21
+    entrypoint: ["/bin/sh", "/init/init.sh"]
+    environment:
+      MC_CONFIG_DIR: /tmp/.mc
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_TEST_BUCKET: ${MINIO_TEST_BUCKET}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    volumes:
+      - ./infra/minio:/init:ro
+    networks: [backend]
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  migrate:
+    # Reuses the image built by `api` (building the same tag twice in parallel races).
+    image: cyberlab/api:dev
+    pull_policy: never
+    command: ["uv", "run", "alembic", "upgrade", "head"]
+    environment:
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL}
+    volumes:
+      - ./apps/api:/app
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: cyberlab/api:dev
+    build: *api-build
+    environment: *api-env
+    volumes:
+      - ./apps/api:/app
+      - upload_tmp:${UPLOAD_TMP_DIR}
+    networks: [backend]
+    healthcheck: *api-healthcheck
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  web:
+    image: cyberlab/web:dev
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: dev
+    volumes:
+      # Only the web sources: the repo root (with .env) is never mounted here.
+      - ./apps/web:/repo/apps/web
+      - ./packages:/repo/packages
+      # Keep the image's Linux node_modules instead of the host's.
+      - /repo/apps/web/node_modules
+      - /repo/packages/contracts/node_modules
+      - /repo/apps/web/.next
+    networks: [frontend]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  gateway:
+    image: caddy:2.10.2-alpine
+    environment:
+      CADDY_EVIDENCE_MAX: ${CADDY_EVIDENCE_MAX}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./infra/caddy/common.caddy:/etc/caddy/common.caddy:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks: [backend, frontend]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
+  # --- test profile: owner creds + test DB/bucket/redis db, never used by the running api ---
+  api-test:
+    profiles: ["test"]
+    image: cyberlab/api:dev
+    build: *api-build
+    environment:
+      <<: *api-env
+      ENV: test
+      DATABASE_URL: ${TEST_DATABASE_URL}
+      REDIS_URL: ${TEST_REDIS_URL}
+      MINIO_BUCKET: ${MINIO_TEST_BUCKET}
+      EVIDENCE_LOCK_DAYS: "0"
+      RATE_LIMIT_LOGIN_PER_IP_PER_MIN: "1000"
+      RATE_LIMIT_LOGIN_FAILURES_PER_15MIN: "1000"
+      RATE_LIMIT_REGISTER_PER_IP_PER_10MIN: "1000"
+      TEST_MIGRATION_DATABASE_URL: ${TEST_MIGRATION_DATABASE_URL}
+      MIGRATION_DATABASE_URL: ${TEST_MIGRATION_DATABASE_URL}
+    volumes:
+      - ./apps/api:/app
+      - upload_tmp_test:${UPLOAD_TMP_DIR}
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  miniodata:
+  upload_tmp:
+  upload_tmp_test:

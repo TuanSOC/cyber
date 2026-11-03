@@ -1,0 +1,47 @@
+(cyberlab_routes) {
+	# Evidence upload is the only route allowed a large body; everything else is capped at 1 MB.
+	@evidence_upload {
+		method POST
+		path_regexp ^/api/v1/orgs/[^/]+/investigations/[^/]+/evidence$
+	}
+
+	# max_size only trips when the upstream reads the body; reject declared oversize bodies up front.
+	@too_large_upload {
+		path_regexp ^/api/v1/orgs/[^/]+/investigations/[^/]+/evidence$
+		expression `{http.request.header.Content-Length} != "" && int({http.request.header.Content-Length}) > {$CADDY_EVIDENCE_MAX}`
+	}
+	@too_large {
+		not path_regexp ^/api/v1/orgs/[^/]+/investigations/[^/]+/evidence$
+		expression `{http.request.header.Content-Length} != "" && int({http.request.header.Content-Length}) > 1048576`
+	}
+	# Mutually exclusive handle blocks; named-matcher blocks keep file order, so these run first.
+	handle @too_large_upload {
+		respond "Request body too large" 413
+	}
+	handle @too_large {
+		respond "Request body too large" 413
+	}
+
+	handle @evidence_upload {
+		request_body {
+			max_size {$CADDY_EVIDENCE_MAX}
+		}
+		reverse_proxy api:8000 {
+			flush_interval -1
+		}
+	}
+
+	handle /api/* {
+		request_body {
+			max_size 1MiB
+		}
+		reverse_proxy api:8000
+	}
+
+	handle {
+		request_body {
+			max_size 1MiB
+		}
+		reverse_proxy web:3000
+	}
+}

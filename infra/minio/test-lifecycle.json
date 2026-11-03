@@ -1,0 +1,11 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-test-leftovers",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "" },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 1 },
+      "Expiration": { "ExpiredObjectDeleteMarker": true }
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+# Prod-like override: built images, no bind mounts, secure cookies, TLS at the gateway.
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+services:
+  minio:
+    ports: !reset []
+
+  migrate:
+    image: cyberlab/api:prod
+    pull_policy: never
+    command: ["alembic", "upgrade", "head"]
+    volumes: !reset []
+
+  api:
+    image: cyberlab/api:prod
+    build:
+      context: ./apps/api
+      target: prod
+    environment:
+      ENV: prod
+      COOKIE_SECURE: "true"
+    volumes: !override
+      - upload_tmp:${UPLOAD_TMP_DIR}
+
+  web:
+    image: cyberlab/web:prod
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: prod
+    volumes: !reset []
+
+  gateway:
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    volumes: !override
+      - ./infra/caddy/Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - ./infra/caddy/common.caddy:/etc/caddy/common.caddy:ro
+      - caddydata:/data
+    ports: !override
+      - "127.0.0.1:8443:8443"
+
+volumes:
+  caddydata:
