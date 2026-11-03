@@ -1,10 +1,11 @@
 ---
 phase: 3
-title: "Authentication"
-status: pending
+title: Authentication
+status: completed
 priority: P1
-effort: "9h"
-dependencies: [2]
+effort: 9h
+dependencies:
+  - 2
 ---
 
 # Phase 3: Authentication
@@ -98,6 +99,18 @@ RETURNING user_id, family_id;
 - [ ] All tests green; `ruff` + `mypy --strict` clean.
 - [ ] No token in response bodies; only `cl_csrf` readable by JS.
 - [ ] auth_events rows written for register/login success/failure/logout/reuse, including on 401 paths.
+
+## Implementation Notes (2026-11-04)
+- Split: `auth/service.py` (register, login, me) + `auth/sessions.py` (token issue, refresh rotation, logout, family revocation).
+- Access JWT carries `fid` (refresh family); revoking a family (logout / reuse / deactivation) sets `denylist:fam:{fid}` for 15 min, so access tokens die with their family. Per-token `denylist:{jti}` kept for logout.
+- Rotation + revocation serialized per family with `pg_advisory_xact_lock`; absolute session lifetime 30 days (`SESSION_MAX_AGE`) on top of the 7-day sliding refresh.
+- Login failure limiter reserves a slot atomically before verifying (released on success) → concurrent guesses cannot exceed the limit. Limiter key uses explicit `unknown` when no client IP.
+- argon2 runs in a worker thread; register hashes before opening the transaction.
+- CSRF middleware parses cookies with Starlette's lenient parser (a malformed foreign cookie no longer hides `cl_csrf`); exactly one `X-CSRF-Token` header required.
+- Error envelope everywhere: AppError, validation (no input echo), Starlette 404/405, Redis outage → 503 `service_unavailable` (fail closed), unhandled → 500 `internal_error`.
+- Names reject control characters / blank; register maps only `uq_users_email` violations to 409.
+- email-validator rejects special-use domains (`.local`, `.test`) — known limitation (API docs).
+- Inactive-user refresh bug found by tests: rotation pointed `replaced_by` at a successor never created (deferred FK failed at commit) → `abandon_rotation` clears it.
 
 ## Risk Assessment
 - SameSite=Strict: arriving via external link sends no cookies on that first navigation → client guard calls `me` (same-site fetch) → cookies sent → fine.

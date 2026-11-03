@@ -176,7 +176,7 @@ async def test_foreign_org_cannot_be_locked_or_updated() -> None:
 async def test_membership_lookup_inside_org_context() -> None:
     """The require() pattern: tenant_session(org, user) then look up (org, user)."""
     a = await seed_tenant("alpha")
-    outsider = await seed_user("outsider@example.test")
+    outsider = await seed_user("outsider@example.com")
 
     async def lookup(user_id: uuid.UUID) -> MemberRole | None:
         async with tenant_session(a.org_id, user_id) as s:
@@ -194,7 +194,7 @@ async def test_register_sequence_in_one_session() -> None:
     """Phase 3 register: user, org (pre-generated id), owner membership, audit in one txn."""
     org_id, user_id = uuid.uuid4(), uuid.uuid4()
     async with tenant_session(org_id, user_id) as s:
-        s.add(User(id=user_id, email="new@example.test", password_hash="x", display_name="new"))
+        s.add(User(id=user_id, email="new@example.com", password_hash="x", display_name="new"))
         await s.flush()
         s.add(Organization(id=org_id, name="New", slug="new", created_by=user_id))
         await s.flush()

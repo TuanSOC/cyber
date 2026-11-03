@@ -6,7 +6,10 @@ from fastapi import APIRouter, FastAPI
 from app.core import health
 from app.core.clients import get_redis
 from app.core.config import get_settings
+from app.core.csrf import CSRFMiddleware
 from app.core.db import get_engine
+from app.core.errors import register_error_handlers
+from app.modules.auth.router import router as auth_router
 
 
 @asynccontextmanager
@@ -27,9 +30,12 @@ def create_app() -> FastAPI:
         redoc_url=None,
         lifespan=lifespan,
     )
+    register_error_handlers(app)
+    app.add_middleware(CSRFMiddleware)
 
     v1 = APIRouter(prefix="/api/v1")
     v1.include_router(health.router)
+    v1.include_router(auth_router)
     app.include_router(v1)
     return app
 

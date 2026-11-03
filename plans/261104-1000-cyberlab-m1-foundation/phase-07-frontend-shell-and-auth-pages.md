@@ -52,6 +52,8 @@ Dark dashboard shell (12-item sidebar, org switcher, user menu), typed API clien
 6. Caddy headers; check pages hydrate with CSP in both dev and prod (`pnpm prod:up`).
 7. `tsc --noEmit`, `eslint`, `next build`.
 
+- Client contract notes from phase 3 review: read `cl_csrf` from `document.cookie` at request time (rotates on every refresh); on `stale_refresh` retry once after ~300 ms then give up (never loop); treat 403 `csrf_failed` on logout as already logged out; all errors share `{"error":{"code","message"}}` incl. 404/405/429/503.
+
 ## Success Criteria
 - [ ] Register → lands in new org overview; reload keeps session; after 15 min access expiry, next action auto-refreshes; logout → `/login`.
 - [ ] Two tabs open, access expired, both act → neither tab logged out.
