@@ -2,7 +2,8 @@
 
 Stdlib only (python:3.12-alpine). It sits on the `egress` network alone, so the enrich worker
 is its only client. Every request but `/health` must carry `X-Mock-Key` equal to
-`TI_MOCK_EXPECTED_KEY` (401 otherwise).
+`TI_MOCK_EXPECTED_KEY` (401 otherwise). Like some real providers, every 401 body echoes the
+key it received: the key-leak suite (phase 7) proves the worker never logs or stores it.
 
 Routes:
 - `GET /health`
@@ -16,6 +17,7 @@ and `a@hit.example.com` behave alike:
 | first label       | answer                                                            |
 |-------------------|-------------------------------------------------------------------|
 | `hit*`            | 200, found                                                        |
+| `echo401*`        | 401 echoing the (valid) key it received                           |
 | `notfound*`       | 404                                                               |
 | `ratelimit-ra*`   | 429 with `Retry-After: 5` on the first request for that value, then a hit |
 | `ratelimit-long*` | always 429 with `Retry-After: 3600`                               |
@@ -91,13 +93,17 @@ class Handler(BaseHTTPRequestHandler):
         key = self.headers.get("X-Mock-Key", "")
         return bool(EXPECTED_KEY) and hmac.compare_digest(key.encode(), EXPECTED_KEY.encode())
 
+    def _unauthorized(self) -> None:
+        received = self.headers.get("X-Mock-Key", "")
+        self._send(401, {"error": "unauthorized", "received_key": received})
+
     def do_GET(self) -> None:  # noqa: N802
         path = self.path.split("?")[0]
         if path == "/health":
             self._send(200, {"status": "ok"})
             return
         if not self._authorized():
-            self._send(401, {"error": "unauthorized"})
+            self._unauthorized()
             return
         if path == "/v1/verify":
             self._send(200, {"status": "valid"})
@@ -116,7 +122,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(404, {"found": False})
             return
         label = _label(ioc_type, value)
-        if label.startswith("hit"):
+        if label.startswith("echo401"):
+            self._unauthorized()
+        elif label.startswith("hit"):
             self._send(200, HIT)
         elif label.startswith("notfound"):
             self._send(404, {"found": False})

@@ -8,6 +8,9 @@ No test beat runs, so the tests send `ti.resume` themselves. Values are made uni
 """
 
 import asyncio
+import base64
+import contextlib
+import json
 import os
 import time
 import uuid
@@ -15,12 +18,14 @@ from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from typing import Any
 
+import pytest
+import redis
 from cyberlab_jobs import TI_ENRICH, TI_RESUME, TI_VERIFY, Queues
 from sqlalchemy import func, select, update
 
 from app.core.config import get_settings
 from app.core.tenancy import tenant_session
-from app.modules.threat_intel import runs
+from app.modules.threat_intel import runs, service_integrations
 from app.modules.threat_intel.models import (
     TiEnrichmentRun,
     TiProviderConfig,
@@ -28,6 +33,7 @@ from app.modules.threat_intel.models import (
     TiRunIndex,
     TiRunItem,
 )
+from app.modules.threat_intel.providers.base import ProviderName
 from tests.integration.seed import Tenant, seed_tenant
 from tests.ti_helpers import PublicSealKey, assert_key_absent, seal_config
 
@@ -214,4 +220,127 @@ async def test_verify_task() -> None:
             return config.verify_status == "valid"
 
     await _until(verified, 45)
+    await assert_key_absent(t, MOCK_KEY)
+
+
+# --- key-leak suite (phase 7) ------------------------------------------------------------
+
+
+async def test_a_401_that_echoes_the_key_is_stored_without_it() -> None:
+    """`echo401*`: ti-mock answers 401 with the (valid) key it received in the body. The
+    worker records `auth_failed`, re-verifies (still valid) and keeps the key out of every
+    row; `scripts/check-ti-key-leak.mjs` scans the worker logs for it afterwards."""
+    t = await _tenant()
+    echo, hit = _name("echo401"), _name("hit")
+    run_id = await _start(t, echo, hit)
+    assert await _final(t, run_id) == "partial"
+    results = await _results(t, run_id)
+    assert (results[echo].status, results[echo].error_code) == ("auth_failed", "auth_401")
+    assert results[echo].summary is None
+    async with tenant_session(t.org_id, t.owner_id) as s:
+        config = (await s.scalars(select(TiProviderConfig))).one()
+        # The re-check passed (the key itself is fine): never marked invalid.
+        assert config.verify_status != "invalid"
+    await assert_key_absent(t, MOCK_KEY)
+
+
+def _broker_dump(client: Any, keys: list[str]) -> list[bytes]:
+    """Every value under `keys`, read as the api broker user (inspection is denied to the
+    enrich user itself). Hashes, lists, sets and sorted sets are read whole."""
+    found: list[bytes] = []
+    for key in keys:
+        kind = client.type(key)
+        if kind == b"string":
+            found.append(client.get(key))
+        elif kind == b"list":
+            found.extend(client.lrange(key, 0, -1))
+        elif kind == b"hash":
+            for field, value in client.hgetall(key).items():
+                found.extend((field, value))
+        elif kind == b"set":
+            found.extend(client.smembers(key))
+        elif kind == b"zset":
+            found.extend(member for member, _ in client.zrange(key, 0, -1, withscores=True))
+    return found
+
+
+def _decoded(raw: bytes) -> str:
+    """A kombu envelope with its (base64) body decoded, as text."""
+    text = raw.decode(errors="replace")
+    try:
+        envelope = json.loads(text)
+    except ValueError:
+        return text
+    body = envelope.get("body") if isinstance(envelope, dict) else None
+    if isinstance(body, str):
+        with contextlib.suppress(ValueError):
+            text += base64.b64decode(body).decode(errors="replace")
+    return text
+
+
+async def test_broker_holds_no_key_while_a_run_waits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The broker only ever carries ids: while a run waits on a 429, every enrich key the
+    worker and the API use (queue, unacked bookkeeping, limiter state, verify dedupe) and a
+    copy of each published message (`ti.enrich`, `ti.verify`, sent through the real
+    publish code to a probe queue nobody consumes) is free of the key."""
+    t = await _tenant()
+    limited = _name("ratelimit-ra")
+    run_id = await _start(t, limited, _name("hit"))
+    _send(TI_VERIFY, {"org_id": str(t.org_id), "provider": "mock"})
+
+    async def waiting() -> bool:
+        return await _status(t, run_id) == "waiting"
+
+    await _until(waiting)
+    prefix = get_settings().queue_prefix
+    enrich_q = Queues(prefix).enrich
+    probe = f"{enrich_q}.leak-probe-{uuid.uuid4().hex[:8]}"
+
+    class ProbeQueues:
+        def __init__(self, _: str) -> None:
+            self.enrich = probe
+
+    monkeypatch.setattr(runs, "Queues", ProbeQueues)
+    monkeypatch.setattr(service_integrations, "Queues", ProbeQueues)
+    assert await runs.dispatch(run_id, t.org_id)
+    assert await service_integrations.send_verify(t.org_id, ProviderName.MOCK)
+
+    client = redis.Redis.from_url(os.environ["TEST_BROKER_API_URL"], socket_timeout=3)
+    org = str(t.org_id)
+    today = time.strftime("%Y%m%d", time.gmtime())
+    keys = [
+        enrich_q,
+        f"{enrich_q}.unacked",
+        f"{enrich_q}.unacked_index",
+        f"_kombu.binding.{enrich_q}",
+        probe,
+        f"_kombu.binding.{probe}",
+        f"{enrich_q}.ti:rl:mock:{org}",
+        f"{enrich_q}.ti:day:mock:{org}:{today}",
+        f"{enrich_q}.ti:cool:mock:{org}",
+        f"{enrich_q}.ti:strikes:mock:{org}",
+        f"{enrich_q}.ti:verify:{org}:mock:1",
+    ]
+    try:
+        values = _broker_dump(client, keys)
+        published = client.lrange(probe, 0, -1)
+    finally:
+        client.delete(probe, f"_kombu.binding.{probe}")
+        client.close()
+    assert len(published) == 2  # the probe really captured both messages
+    texts = [_decoded(v) for v in values]
+    bodies = [_decoded(m) for m in published]
+    assert any(str(run_id) in b for b in bodies) and all(org in b for b in bodies)
+    for text in texts + bodies:
+        assert MOCK_KEY not in text
+        assert MOCK_KEY.encode().hex() not in text
+        assert base64.b64encode(MOCK_KEY.encode()).decode() not in text
+    # The run still finishes once resumed.
+    async with tenant_session(None, None) as s:
+        index = await s.get(TiRunIndex, run_id)
+        assert index is not None and index.resume_at is not None
+        resume_in = (index.resume_at.timestamp() - time.time()) + 0.5
+    await asyncio.sleep(max(0.0, resume_in))
+    _send(TI_RESUME, {})
+    assert await _final(t, run_id) == "completed"
     await assert_key_absent(t, MOCK_KEY)

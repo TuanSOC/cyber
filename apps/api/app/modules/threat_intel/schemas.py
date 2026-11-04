@@ -22,6 +22,7 @@ from pydantic import (
     StringConstraints,
     field_validator,
 )
+from pydantic.config import JsonDict
 
 from app.core.pagination import Page
 from app.modules.threat_intel.models import MAX_EXCLUDED_SUFFIXES, MAX_VALUE_CHARS
@@ -40,6 +41,10 @@ RunScope = Literal["manual", "job"]
 RunStatus = Literal["queued", "running", "waiting", "completed", "partial", "failed"]
 ItemState = Literal["pending", "done", "cached", "abandoned"]
 ItemReason = Literal["rate_limited", "quota_exhausted", "deadline", "auth_failed"]
+# The contract name of the provider-side `IocType` (the analysis results have their own
+# `IocType`): a PEP 695 alias gives the OpenAPI component a stable, distinct name. Use it,
+# never the bare enum, in request/response models.
+type TiIocType = IocType
 
 _KEY_RULE = f"api_key must be {MIN_KEY_CHARS}-{MAX_KEY_CHARS} printable ASCII characters"
 
@@ -61,6 +66,10 @@ def _api_key(value: SecretStr) -> SecretStr:
 ApiKey = Annotated[SecretStr, AfterValidator(_api_key)]
 
 
+def _no_default(schema: JsonDict) -> None:
+    schema.pop("default", None)
+
+
 # --- integrations --------------------------------------------------------------------
 
 
@@ -80,7 +89,9 @@ class IntegrationUpdate(_In):
     # Write-only: never part of any response, audit row or log line.
     api_key: ApiKey | None = None
     enabled: bool | None = None
-    acknowledge_terms: bool = False
+    # Optional (false when omitted). No `default` in the JSON schema: openapi-typescript would
+    # otherwise make it a required property of the generated request type.
+    acknowledge_terms: bool = Field(default=False, json_schema_extra=_no_default)
     # MISP only: https, no userinfo/query/fragment (checked syntactically, no DNS).
     base_url: Annotated[str, StringConstraints(max_length=2048)] | None = None
     # Replaces the org's limits; `{}` resets them to the catalog defaults.
@@ -90,7 +101,7 @@ class IntegrationUpdate(_In):
 class IntegrationOut(BaseModel):
     name: ProviderName
     label: str
-    supported_types: list[IocType]
+    supported_types: list[TiIocType]
     tos_note: str
     privacy_note: str
     needs_base_url: bool
@@ -163,7 +174,7 @@ class ResultOut(BaseModel):
     id: uuid.UUID
     run_id: uuid.UUID
     provider: ProviderName
-    ioc_type: IocType
+    ioc_type: TiIocType
     value_norm: str
     ioc_key: str
     status: ResultStatus
@@ -192,7 +203,7 @@ class ResultPage(Page[ResultOut]):
 class HistoryOut(Page[ResultOut]):
     """Every stored answer for one normalized indicator (all providers, newest first)."""
 
-    ioc_type: IocType | None
+    ioc_type: TiIocType | None
     value_norm: str | None
     ioc_key: str | None
     notes: list[str]
@@ -282,7 +293,7 @@ class RunPage(Page[RunOut]):
 class RunItemOut(BaseModel):
     seq: int
     provider: ProviderName
-    ioc_type: IocType
+    ioc_type: TiIocType
     value_norm: str
     ioc_key: str
     state: ItemState

@@ -15,7 +15,7 @@ export type NetRecord = Schemas["RecordOut"];
 export type RecordKind = Schemas["RecordKind"];
 export type NetAlert = Schemas["AlertOut"];
 export type Ioc = Schemas["IocOut"];
-export type IocType = Schemas["app__modules__pcap_analysis__schemas__IocType"];
+export type IocType = Schemas["AnalysisIocType"];
 export type TimelineItem = Schemas["TimelineOut"];
 
 type Json = Record<string, unknown>;

@@ -28,7 +28,8 @@ Test isolation: the API suite uses `cyberlab_test`, Redis db 1 and the `evidence
 - Worker kit (`packages/py-worker-kit/tests`): sandbox, isolation and result-writer tests, run in both worker images.
 - API (M3 additions): `test_analysis_static.py` (auto-run rules, profiles, per-analyzer caps, `sample_too_large`), `test_static_results.py` (hostile `static.v1` streams → `invalid_result` with zero rows, read API, foreign / pcap jobs → 404, report headers, caps and audit); the new routes are also covered by the auto-enumerated `test_idor_routes.py`, `unit/test_static_stream.py`, `test_storage_quota.py` (declared and undeclared length, concurrent uploads, archived evidence, column grants, owned-org limit).
 - Static pipeline end to end: `apps/api/tests/integration/test_analysis_static_pipeline.py` uploads a plain file (`av`) and a PE (`full`) through the real broker and the real `static-worker-test` container, ingests the result, checks the sample hashes against the evidence and downloads the report. It runs in `pnpm test:api`.
-- Web: unit tests (redirect safety, CSP builder, pcap and static result helpers), typecheck, lint, production build.
+- API (M4 additions): the threat-intel suites, the enrich worker pipeline through `ti-mock` and the network tests; see [M4 threat intelligence suites](#m4-threat-intelligence-suites).
+- Web: unit tests (redirect safety, CSP builder, pcap and static result helpers, TI wording and helpers), typecheck, lint, production build.
 - E2E: Playwright specs, run against dev (`pnpm e2e`) and the prod-like stack over TLS (`pnpm e2e --prod`, part of `verify:prod`), with no console errors:
   - `smoke.spec.ts`: register → create case → upload (hash checked against a locally computed SHA-256) → verify → custody chain → sign out;
   - `pcap.spec.ts`: capture upload → automatic PCAP analysis → findings;
@@ -71,6 +72,10 @@ E2E runs against the real stack, not the test database. Each run:
 | Parser vulnerabilities (posture) | ✅ isolation + fuzz-lite (50 mutated captures and 50 mutated PE/ELF end cleanly); upstream fuzzing not replicated | `tests/evaluation/test_fuzz_lite.py` (both workers), `test_sandbox.py`, `test_parsers.py`, `test_hostile_output.py` |
 | Malware dataset (benign PE, packed PE, suspicious imports, test signatures, EICAR; no real malware) | ✅ synthetic, generated at test time with labels | `apps/workers/static/samples/` |
 | Malware detection precision/recall, parsing success | ✅ (synthetic) | `apps/workers/static/tests/evaluation/test_detection_quality.py` |
+| Threat-intel API keys encrypted, never exposed to the browser | ✅ M4: sealed, write-only, never in reprs or error paths (full sentinel crawl: phase 7) | `test_ti_seal.py`, `test_ti_http.py`, `test_ti_api_integrations.py` |
+| IOC enrichment: cache, rate limits, history, source attribution | ✅ M4 (fixtures and `ti-mock`; no live provider) | `test_ti_cache.py`, `test_ti_ratelimit.py`, `test_enrich_worker.py`, `test_ti_pipeline.py`, `ti-wording.test.ts` |
+| SSRF (org-supplied MISP URL) | ✅ M4 | `test_ti_ssrf.py`, `test_ti_ssrf_resolve.py`, `test_ti_misp_worker.py` |
+| IOC enrichment success metric | ⏳ M4 phase 7 (placeholder below) | `apps/api/tests/ti/test_enrichment_metric.py` |
 
 ## M2 metrics (synthetic dataset, local test rules)
 
@@ -106,3 +111,61 @@ docker compose --profile test run --rm --no-deps static-worker-test sh -c \
 ```
 
 Set `EVALUATION_OUT=/path.json` for the detector report and `FUZZ_OUT=/path.json` for the fuzz outcomes. After changing worker code, recreate the worker containers first (`docker compose --profile test up -d --force-recreate --no-deps static-worker static-worker-test`); Celery does not hot-reload.
+
+## M4 threat intelligence suites
+
+All run in `pnpm test:api` (api-test, `backend` only, no route out) unless noted. No test reaches a real provider: adapters use `httpx.MockTransport` and handcrafted fixtures (`tests/fixtures/ti/`), and the pipeline uses the `ti-mock` sink.
+
+| Area | Tests |
+|---|---|
+| Sealing | `unit/test_ti_seal.py`: round trip, MISP key bound to its URL, wrong org / provider / kid / version / private key, flipped or truncated parts, no plaintext in reprs or errors, key bounds, private key file loading, worker startup check |
+| Contracts and import guard | `unit/test_ti_contracts.py` (summary models: worst case under 16 KiB, control/bidi stripped, https-only permalinks; catalog; `ioc_key`; errors carry no body); `unit/test_ti_import_guard.py` (adapters, registry, `http` and `unseal` only in `app/workers/enrich*.py`, any import form) |
+| Settings | `unit/test_config.py`: enrich role refuses JWT / MinIO / app Redis, private key file only for `enrich`, prod refuses the mock, the dev MISP flags and `dev-` seal keys; the prod enrich-worker env fixture checked by `scripts/check-enrich-env.mjs` |
+| Normalization | `unit/test_ti_normalize.py`: refang, embedded IPv4 (6to4, NAT64, Teredo, mapped), special-use and `.arpa` names, URL query removal, excluded suffixes, per-provider eligibility, emails only to MISP |
+| HTTP client | `unit/test_ti_http.py`: key only in the auth header and never in reprs, error bodies never read, status mapping, `Retry-After` forms, path allowlist before sending, body cap, gzip bomb with bounded memory, `trust_env` ignored, timeouts, hostile JSON → `bad_json` |
+| Adapters | `unit/test_ti_provider_adapters.py`, `unit/test_ti_provider_fixtures.py` (every fixture of VT, AbuseIPDB, URLhaus, MalwareBazaar, OTX); `unit/test_ti_provider_live.py` (opt-in, below) |
+| MISP and SSRF | `unit/test_ti_ssrf.py` (save-time syntax), `unit/test_ti_ssrf_resolve.py` (resolution, every answer global, pinning, Host/SNI, DNS pool busy), `unit/test_ti_misp.py`, `unit/test_ti_misp_worker.py` |
+| ATT&CK | `unit/test_attack_index.py`, `unit/test_build_attack_index.py` (sha256 pin, deterministic output, tactics from the bundle), `integration/test_attack_route.py` |
+| Schema | `integration/test_ti_schema.py`: tenant isolation, run index visibility, cross-org writes, append-only results (also for the owner), run transitions, key-version trigger, column grants, no DELETE on configs, constraints |
+| Cache and limiter | `integration/test_ti_cache.py` (TTL table, freshness rules), `integration/test_ti_ratelimit.py` (bucket, daily cap, cooldowns, strikes, ceilings, broker outage) |
+| Runs and worker | `integration/test_ti_runs.py` (planning, order, caps, skips); `integration/test_enrich_worker.py` (hit / not found, redelivery and duplicate slices, org mismatch, cache hit, faults, slice re-publish, waiting and resume, deadline, 429 past the deadline, fallback reaper, 401/403 with inline verify, daily quota, VT 429 strikes, limiter outage, lazy re-seal, verify task and dedupe) |
+| API | `integration/test_ti_api_integrations.py`, `test_ti_api_runs.py`, `test_ti_api_results.py`, `test_ti_api_rbac.py`; the TI routes are also in the auto-enumerated `security/test_idor_routes.py` and `test_rls_coverage.py` |
+| Broker ACL | `integration/test_enrich_acl.py`: `enrich` confined to `enrich*`, analyzers cannot touch it, `api` can publish |
+| Pipeline | `integration/test_ti_pipeline.py`: seal → broker → real `enrich-worker-test` → httpx → `egress` → `ti-mock` |
+| Network | `container/test_egress.py` (api-test: no default route, no internet); `container/test_enrich_network.py`, run **inside** `enrich-worker-test` by the gate: Postgres and the broker reachable, Redis / MinIO / API / gateway / web not |
+| Web | `lib/ti.test.ts`, `lib/ti-wording.test.ts` (attributed, verdict-free templates), `components/ti/integration-card.test.tsx` |
+
+Phase 7 adds the key-leak suite (a sentinel key absent from responses, audit rows, logs, Celery messages and reprs), the extended egress suite, the metric harness and `apps/web/e2e/threat-intel.spec.ts` (dev: the full flow against `mock`; prod: `mock` refused).
+
+Run the enrich worker's own network test by hand:
+
+```bash
+docker compose --profile test run --rm --no-deps -e PYTHONDONTWRITEBYTECODE=1 enrich-worker-test \
+  python -m pytest --noconftest -q -p no:cacheprovider tests/container/test_enrich_network.py
+```
+
+**Live provider smoke tests** (never in the gate; each costs quota): set `CYBERLAB_LIVE_TI=1` and `CYBERLAB_TI_KEY_<PROVIDER>` (`CYBERLAB_TI_KEY_ABUSECH` covers URLhaus and MalwareBazaar) and run `tests/unit/test_ti_provider_live.py` from a container with egress (the enrich worker's networks). No live run is recorded yet.
+
+After changing TI code, recreate the workers (`docker compose --profile test up -d --force-recreate --no-deps enrich-worker enrich-worker-test`); Celery does not hot-reload.
+
+## M4 metric: IOC enrichment success (resilience under synthetic faults)
+
+600 lookups over the six real adapters' fixture handlers with a seeded fault mix (10% 5xx, 5% 429 — half with `Retry-After`, 2% malformed JSON, 1% timeout), a virtual clock and the real limiter. Success = (`ok` + `not_found`) / items that reached a provider, per provider; skipped and cached items are reported separately. Floors: ≥ 0.95 per provider and 0 ineligible values sent. With 3 retries the number mostly measures the retry and resume logic, not the providers (RT24). Harness: `apps/api/tests/ti/test_enrichment_metric.py` (marked `metric`) and `scripts/ti_eval.py`.
+
+| Provider | Lookups | Success | Errors |
+|---|---|---|---|
+| VirusTotal | 100 | 1.000 | 0 |
+| AbuseIPDB | 100 | 0.970 | 3 |
+| URLhaus | 100 | 0.970 | 3 |
+| MalwareBazaar | 100 | 0.990 | 1 |
+| OTX | 100 | 0.980 | 2 |
+| MISP | 100 | 0.970 | 3 |
+| **All** | **600** | **0.980** | **12** |
+
+- **Eligibility:** 245 ineligible values were submitted and skipped; 0 reached a provider.
+- **Abandoned:** none (0 rate_limited, 0 quota_exhausted, 0 deadline).
+- **Latency:** 730 requests; virtual p95 per request 1.08 s, p95 time to answer 59.9 s (429 cooldowns). The pass took 29.5 virtual minutes, paced by VirusTotal's 4/min.
+- **Cache (2nd pass):** 588 of 600 served from cache (0.980), i.e. every `ok` / `not_found` answer.
+- Results vary by about ±1 item between runs (task timing). Full report: `plans/reports/ti-metric-261105.md`.
+
+Live runs (`CYBERLAB_LIVE_TI=1`): none recorded.

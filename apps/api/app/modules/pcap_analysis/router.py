@@ -13,6 +13,7 @@ from app.modules.pcap_analysis import repository as repo
 from app.modules.pcap_analysis.schemas import (
     AlertOut,
     AlertPage,
+    AnalysisIocType,
     EnrichedIocOut,
     FindingOut,
     FindingPage,
@@ -22,7 +23,6 @@ from app.modules.pcap_analysis.schemas import (
     FlowProto,
     FlowSort,
     IocPage,
-    IocType,
     RecordKind,
     RecordOut,
     RecordPage,
@@ -108,7 +108,7 @@ async def list_iocs(
     job_id: uuid.UUID,
     ctx: EvidenceRead,
     page: PageParamsDep,
-    type: IocType | None = None,  # noqa: A002 - public query parameter name
+    type: AnalysisIocType | None = None,  # noqa: A002 - public query parameter name
     q: Annotated[SearchTerm | None, Query()] = None,
     include: IocInclude | None = None,
 ) -> IocPage:

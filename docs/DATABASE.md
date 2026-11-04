@@ -1,6 +1,6 @@
 # Database
 
-PostgreSQL 17. Schema owned by Alembic (`apps/api/alembic/versions`): `0001` is M1, `0002`–`0005` M2 (analysis jobs, pcap results), `0006`–`0008` M3 (static analyzer, malware results, storage quota).
+PostgreSQL 17. Schema owned by Alembic (`apps/api/alembic/versions`): `0001` is M1, `0002`–`0005` M2 (analysis jobs, pcap results), `0006`–`0008` M3 (static analyzer, malware results, storage quota), `0009`–`0010` M4 (threat intelligence).
 
 ## Roles
 
@@ -40,6 +40,13 @@ erDiagram
   analysis_jobs ||--o{ malware_strings : produced
   analysis_jobs ||--o{ malware_signature_matches : produced
   analysis_jobs ||--o{ malware_capabilities : produced
+  organizations ||--o{ ti_provider_configs : "sealed keys"
+  organizations ||--o| ti_org_settings : "TI settings"
+  analysis_jobs ||--o{ ti_enrichment_runs : "enriched by"
+  ti_enrichment_runs ||--|| ti_run_index : "system lookup"
+  ti_enrichment_runs ||--o{ ti_run_items : "planned pairs"
+  ti_enrichment_runs ||--o{ ti_results : "provider answers"
+  ti_results ||--o{ ti_run_items : "answer or cache hit"
 ```
 
 (`malware_exports` and `malware_resources` hang off `analysis_jobs` the same way.)
@@ -71,6 +78,12 @@ erDiagram
 | `malware_strings` | tenant | capped; `encoding` ascii / utf16le / floss_decoded / floss_stack / floss_tight; offset |
 | `malware_signature_matches` | tenant | `engine` clamav / yara, name, namespace, tags, meta |
 | `malware_capabilities` | tenant | capa rule name, namespace, ATT&CK and MBC ids (jsonb), match count |
+| `ti_provider_configs` | tenant | one row per (org, provider); provider check; `enabled`; MISP `base_url` (normalized, required iff `misp`); sealed key `key_kid`, `key_version`, `key_epk`, `key_nonce`, `key_ct`, `key_last4`; `verify_status` unverified/valid/invalid/error, `verified_at`, `last_error_code`; `limits` jsonb (org-lowered); `terms_ack_at`, `terms_ack_by` |
+| `ti_org_settings` | tenant | one per org: `excluded_suffixes` (≤ 50 domain suffixes never sent) |
+| `ti_enrichment_runs` | tenant | `scope` manual / job, `job_id` (composite FK to `analysis_jobs`), `requested_by`, `providers`, `status` (queued / running / waiting / completed / partial / failed), `summary` jsonb (≤ 16 KiB, counts only), `deadline_at`, `started_at`, `finished_at` |
+| `ti_run_index` | system lookup | run → org, `status`, `resume_at`, `deadline_at`, `dispatched_at`, `lease_until`, `lease_owner` for the enrich worker, `ti.resume` and the reaper; same RLS pattern as `analysis_job_index`; index (status, resume_at) |
+| `ti_run_items` | tenant | the frozen plan of a run: PK (run_id, provider, ioc_key), `seq`, `ioc_type`, `value_norm`, `state` pending / done / cached / abandoned, `result_id` (this run's answer or the cached one), `reason` rate_limited / quota_exhausted / deadline / auth_failed |
+| `ti_results` | tenant | append-only provider answers (history = cache): `provider`, `ioc_type`, `value_norm`, `ioc_key` (sha256 of type ‖ 0 ‖ value), `status` ok / not_found / error / auth_failed, `found` (only with ok), `detections`, `score` + `score_scale`, `tags`, `families`, `attack_ids`, `first_seen`, `last_seen`, `summary` (strict per-provider model, ≤ 16 KiB, never the raw body), `permalink` (`https://` only), `error_code`, `latency_ms`, `fetched_at`, `expires_at` (NULL for errors); unique (run_id, provider, ioc_key); index (org, ioc_key, provider, fetched_at DESC) |
 
 All ids are UUIDs (client-generated `uuid4`, server default `gen_random_uuid()`); timestamps are `timestamptz`.
 Child rows are pinned to their parent's tenant with composite foreign keys, e.g. `evidence(investigation_id, organization_id) → investigations(id, organization_id)`.
@@ -85,6 +98,12 @@ Static results (migration 0007) follow the same rules:
 - Findings and IOCs of static jobs go into the shared `analysis_findings` and `iocs`. The §11 `malware_findings` table is therefore `analysis_findings` of static jobs.
 - Reports are built on demand; there is no `reports` table yet.
 
+Threat intel (migrations 0009/0010; details in [THREAT_INTEL.md](THREAT_INTEL.md)):
+- `iocs` is unchanged: results join on `ioc_key`, computed in Python.
+- Rate-limited, quota and deadline outcomes are item states, never `ti_results` rows; the history shows only what a provider said.
+- A cache hit is the newest unexpired `ok` / `not_found` row of the same org (DB clock).
+- `ti_results` is never purged yet (no retention policy).
+
 ## Tenant isolation (RLS)
 
 Every tenant table has `ENABLE` **and** `FORCE ROW LEVEL SECURITY` (`test_rls_coverage.py` fails if a table with `organization_id` lacks either).
@@ -98,7 +117,8 @@ app_user_id() = NULLIF(current_setting('app.user_id', true), '')::uuid
 
 | Table | Command | Policy |
 |---|---|---|
-| investigations, evidence, evidence_hashes, evidence_custody_events, audit_logs, analysis_jobs, pcap result tables, `malware_*` | ALL | `organization_id = app_org_id()` (USING + CHECK) |
+| investigations, evidence, evidence_hashes, evidence_custody_events, audit_logs, analysis_jobs, pcap result tables, `malware_*`, `ti_*` except `ti_run_index` | ALL | `organization_id = app_org_id()` (USING + CHECK) |
+| analysis_job_index, ti_run_index | ALL | `app_org_id() IS NULL OR organization_id = app_org_id()`: trusted workers' system sessions see every row, tenant sessions only their org's |
 | organization_members | SELECT | `organization_id = app_org_id() OR user_id = app_user_id()` |
 | organization_members | INSERT / UPDATE / DELETE | `organization_id = app_org_id()` |
 | organizations | SELECT | `id = app_org_id() OR id IN (memberships of app_user_id())` |
@@ -132,10 +152,20 @@ Rules:
 | organization_members | SELECT, INSERT, UPDATE, DELETE |
 | auth_events, audit_logs, evidence_hashes, evidence_custody_events | SELECT, INSERT |
 | pcap result tables, `malware_*` | SELECT, INSERT |
+| `ti_provider_configs` | SELECT, INSERT; UPDATE on `enabled, base_url, key_kid, key_version, key_epk, key_nonce, key_ct, key_last4, verify_status, verified_at, last_error_code, limits, terms_ack_at, terms_ack_by, updated_at`; **no DELETE** (0010) |
+| `ti_org_settings` | SELECT, INSERT; UPDATE on `excluded_suffixes, updated_by, updated_at` |
+| `ti_enrichment_runs` | SELECT, INSERT; UPDATE on `status, summary, deadline_at, started_at, finished_at` |
+| `ti_run_items` | SELECT, INSERT; UPDATE on `state, result_id, reason` |
+| `ti_run_index` | SELECT, INSERT; UPDATE on `status, resume_at, deadline_at, dispatched_at, lease_until, lease_owner` |
+| `ti_results` | SELECT, INSERT |
+
+The enrich worker uses the same `cyberlab_app` role as the API (no dedicated role yet; accepted residual, see THREAT_MODEL).
 
 ## Triggers
 
-- `forbid_mutation()` — `BEFORE UPDATE OR DELETE` on the four append-only tables.
+- `forbid_mutation()` — `BEFORE UPDATE OR DELETE` on the four append-only tables and on `ti_results` (M4).
+- `ti_run_transition()` — `BEFORE UPDATE` on `ti_enrichment_runs`: only `queued → running / partial / failed`, `running → waiting / completed / partial / failed`, `waiting → running / partial / failed`; final states never change; identity columns (`id`, org, `scope`, `job_id`, `requested_by`, `providers`, `created_at`) are immutable.
+- `ti_key_version_guard()` — `BEFORE UPDATE` on `ti_provider_configs`: `key_version` never decreases; new sealed columns need a higher `key_version`, except a re-seal of the same key (same version and last4) under another kid. Clearing a key keeps the version, so an old ciphertext can never be put back (RT18).
 - `evidence_immutable()` — `BEFORE UPDATE` on `evidence`; every column except `status` and `description` is immutable (incl. `id`, detected type, storage location/version, uploader, timestamps).
 
 **Trust boundary:** grants + triggers stop the app role (and accidental owner `UPDATE`/`DELETE`). The table owner can still `TRUNCATE` or drop triggers; it is a trusted admin identity and its credentials never reach the API. Test cleanup relies on owner `TRUNCATE` against `cyberlab_test` only (the harness refuses any database not ending in `_test`).
@@ -155,6 +185,13 @@ M3 migrations:
 | `0006` static analyzer | `ALTER TYPE analyzer ADD VALUE 'static'` inside `autocommit_block()`: `env.py` runs all pending migrations in one transaction, and Postgres cannot use an enum value added in a transaction that has not committed. Later SQL compares `analyzer::text`, never the `'static'` literal as an enum. Adds `analysis_jobs.profile` with checks `ck_analysis_jobs_profile_valid` (`full` / `av`) and `ck_analysis_jobs_profile_iff_static`, adds `profile` to the immutable identity columns of the job trigger, and adds `analysis_job_index.analyzer` (backfilled `pcap`) with index `(analyzer, status)`. Downgrade cannot remove the enum value. |
 | `0007` static results | the eight `malware_*` tables, with RLS ENABLE + FORCE, `tenant_isolation` policy and SELECT/INSERT grants, as for the pcap tables |
 | `0008` storage quota | `organizations.storage_quota_bytes` (nullable, check ≥ 0); replaces the app's table-wide INSERT/UPDATE on `organizations` with column grants, so the app cannot raise its own quota |
+
+M4 migrations:
+
+| Revision | Changes |
+|---|---|
+| `0009` threat intel | the six `ti_*` tables with checks (provider list, statuses, `permalink LIKE 'https://%'`, summary ≤ 16 KiB, 64-char `ioc_key`, `found` only with `ok`, sealed-column shapes), composite tenant FKs, RLS ENABLE + FORCE with `tenant_isolation` (and `run_index_scope` on `ti_run_index`), per-column UPDATE grants, the run-transition, key-version and append-only triggers |
+| `0010` TI hardening | revokes the app's DELETE on `ti_provider_configs` (deleting a row reset the `key_version` floor); `ti_run_index.run_id` now references `(id, organization_id)` of the run, so an index row cannot name another org |
 
 asyncpg executes one statement per call, so raw SQL in migrations is issued statement by statement. `citext` is created by migration `0001` (trusted extension, created by the database owner); `gen_random_uuid()` is built in.
 

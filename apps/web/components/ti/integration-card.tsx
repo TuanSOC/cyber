@@ -173,8 +173,7 @@ function ManageControls({
       unwrap(
         await api.PUT("/api/v1/orgs/{org_id}/integrations/{provider}", {
           params: { path: { org_id: orgId, provider: i.name } },
-          // `acknowledge_terms` is required by the generated type (it has a server default).
-          body: { acknowledge_terms: false, ...body },
+          body,
         }),
       ),
     onSuccess: async () => {

@@ -242,14 +242,18 @@ class MockSink:
         _, _, _, ioc_type, encoded = path.split("/")
         value = unquote(encoded)
         self.calls[value] += 1
+        # Like infra/ti-mock: every 401 echoes the key it received.
+        echo = {"error": "unauthorized", "received_key": request.headers.get("X-Mock-Key")}
         if not authorized:
-            return httpx.Response(401, json={"error": "unauthorized", "echo": "x"})
+            return httpx.Response(401, json=echo)
         if self.lookup_status is not None:
             return httpx.Response(self.lookup_status, json={})
         if ioc_type in ("md5", "sha1", "sha256"):
             return httpx.Response(200 if value.startswith("deadbeef") else 404, json=HIT_BODY)
         label = (urlsplit(value).hostname or "") if ioc_type == "url" else value
         label = label.rpartition("@")[2].split(".")[0]
+        if label.startswith("echo401"):
+            return httpx.Response(401, json=echo)
         if label.startswith("hit"):
             return httpx.Response(200, json=HIT_BODY)
         if label.startswith("ratelimit-long"):

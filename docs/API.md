@@ -63,8 +63,17 @@ Base path `/api/v1`, served through the gateway. Interactive docs (dev only): `/
 | GET | static jobs: `/orgs/{org_id}/analyses/{job_id}/sample` · `/sections` · `/imports?library&q` · `/exports?q` · `/resources` | `evidence.read` |
 | GET | static jobs: `/orgs/{org_id}/analyses/{job_id}/strings?encoding&q` · `/signatures?engine=clamav\|yara` · `/capabilities?namespace&attack` | `evidence.read` |
 | GET | `/orgs/{org_id}/analyses/{job_id}/report` (static jobs) | `evidence.read` (audited) |
+| GET | `/orgs/{org_id}/analyses/{job_id}/iocs?include=enrichment` (latest answer per provider on each IOC, M4) | `evidence.read` |
+| GET | `/orgs/{org_id}/integrations` (provider catalog + this org's status; never a key) · `/orgs/{org_id}/ti/settings` | `org.read` |
+| PUT | `/orgs/{org_id}/integrations/{provider}` `{api_key?, enabled?, acknowledge_terms?, base_url?, limits?}` · `/orgs/{org_id}/ti/settings` `{excluded_suffixes}` | `integrations.manage` |
+| DELETE | `/orgs/{org_id}/integrations/{provider}/key` | `integrations.manage` |
+| POST | `/orgs/{org_id}/integrations/{provider}/verify` → 202 (10 per provider / 10 min) | `integrations.manage` |
+| POST | `/orgs/{org_id}/analyses/{job_id}/enrichments` `{providers?}` · `/orgs/{org_id}/ti/lookups` `{values: [{value, type?}], providers?}` → 202 new run, 200 deduplicated / nothing eligible | `evidence.write` (30 / 10 min per user) |
+| GET | `/orgs/{org_id}/ti/runs?job_id&status` · `/orgs/{org_id}/ti/runs/{run_id}?provider&state` (items with their results, `from_cache`) | `evidence.read` |
+| GET | `/orgs/{org_id}/ti/results?value&type&provider` (history of one indicator, newest first) · `/orgs/{org_id}/ti/results/{result_id}` | `evidence.read` |
+| GET | `/attack/techniques?ids=T1055,T1059.001` (labels + MITRE notice, ≤ 100 ids) | signed in |
 
-Roles: **viewer** = all `*.read`; **analyst** = viewer + `investigation.write`, `evidence.write`; **admin** = analyst + `org.update`, `members.manage`, `audit.read`; **owner** = admin + owner-role management.
+Roles: **viewer** = all `*.read`; **analyst** = viewer + `investigation.write`, `evidence.write`; **admin** = analyst + `org.update`, `members.manage`, `audit.read`, `integrations.manage` (M4); **owner** = admin + owner-role management.
 
 ## Evidence upload
 
@@ -115,3 +124,21 @@ Job `error_code` values:
 - **Static jobs** use the same input, transfer and trusted-side codes (`sample_too_large` instead of `capture_too_large`). A capped, skipped or incomplete engine does not fail the job: it is listed in the result's `engine_errors` (e.g. `av_not_fully_scanned`, `av_unavailable`, `capa_skipped`).
 
 Result lists are paged like every list. Text filters are case-insensitive substring matches with `%`/`_` escaped.
+
+## Threat intelligence (M4)
+
+Details: [THREAT_INTEL.md](THREAT_INTEL.md).
+
+- **Keys are write-only.** `api_key` is accepted on `PUT` only (8–256 printable ASCII characters) and never returned, logged or audited. The read model has `configured`, `key_last4`, `enabled`, `verify_status` (`unverified` / `valid` / `invalid` / `error`), `verified_at`, `last_error_code`, `terms_ack_at`, `base_url` (MISP), `limits`, the catalog defaults and ceilings, and `available` (false for `mock` in prod).
+- **First enable** needs `acknowledge_terms: true` (audited `integration.terms_acknowledged`). A new key or MISP URL queues a check after the commit; `verify_queued` says whether it was (the save stands either way). Audit actions: `integration.key_set`, `integration.key_replaced`, `integration.key_removed`, `integration.updated`, `integration.verified` / `integration.verify_failed` (worker, no actor), `ti.settings_updated`, `ti.enrichment_requested`, `ti.run_deadline` (reaper).
+- **Runs** answer `RunRequestOut`: the run (or none when nothing was eligible) plus, for lookups, a per-value normalization report (`skipped` reason, `query_removed` / `refanged` notes). Poll `GET .../ti/runs/{run_id}` until the status is final.
+- **History** answers `400 invalid_ioc` for a value that cannot be normalized; `skipped` says why no provider would receive it.
+
+| Status | Code |
+|---|---|
+| 400 | `invalid_ioc` |
+| 404 | `not_found` (also an unknown job for an enrichment request) |
+| 409 | `integration_not_configured` (no key to verify or remove), `job_not_ready` (job not succeeded), `no_provider_enabled`, `provider_not_enabled`, `enrichment_busy` (3 active runs per org / 20 overall) |
+| 422 | `provider_unavailable` (TI disabled, or `mock` in prod), `terms_not_acknowledged`, `api_key_required`, `invalid_api_key`, `key_required_for_url_change` (a MISP URL change needs the key again), `misp_url_required`, `misp_url_invalid` (fixed reason, URL never echoed), `base_url_not_supported`, `limit_above_ceiling`, `too_many_values` (> `TI_MAX_LOOKUP_VALUES`, 20), `no_values`, `unknown_provider`, `invalid_attack_ids` |
+| 429 | `rate_limited` (run requests, verify checks) |
+| 503 | `seal_key_unavailable` (no usable active public key), `broker_unavailable` (verify could not be queued, `Retry-After: 5`) |

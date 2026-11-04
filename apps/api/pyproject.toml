@@ -34,6 +34,7 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.8",
     "mypy>=1.13",
+    "hypothesis>=6.100",
 ]
 
 [tool.pytest.ini_options]
@@ -42,6 +43,7 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
+markers = ["metric: IOC enrichment metric harness (M4 phase 7; scripts/ti_eval.py)"]
 # minio-py still calls datetime.utcnow() internally.
 filterwarnings = ["ignore:datetime.datetime.utcnow:DeprecationWarning:minio"]
 

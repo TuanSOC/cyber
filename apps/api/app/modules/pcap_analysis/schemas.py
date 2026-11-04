@@ -58,6 +58,12 @@ class IocType(enum.StrEnum):
     FILE_PATH = "file_path"
 
 
+# The contract name of `IocType` (threat intel has its own `IocType`): a PEP 695 alias gives
+# the OpenAPI component a stable, distinct name instead of a module-path one. Use it, never
+# the bare enum, in request/response models and route parameters.
+type AnalysisIocType = IocType
+
+
 class _Endpoints(_Row):
     id: uuid.UUID
     ts: datetime
@@ -113,7 +119,7 @@ class FindingOut(_Endpoints):
 
 class IocOut(_Row):
     id: uuid.UUID
-    type: IocType
+    type: AnalysisIocType
     value: str
     first_seen: datetime
     last_seen: datetime

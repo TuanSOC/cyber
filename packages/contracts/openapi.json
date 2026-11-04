@@ -310,6 +310,25 @@
         "title": "AnalysisCreate",
         "type": "object"
       },
+      "AnalysisIocType": {
+        "description": "Every IOC type of the result contracts (cyberlab_jobs.results.IocType).",
+        "enum": [
+          "ip",
+          "domain",
+          "url",
+          "email",
+          "ja3",
+          "ja3s",
+          "cert_sha256",
+          "file_md5",
+          "file_sha1",
+          "file_sha256",
+          "registry_key",
+          "file_path"
+        ],
+        "title": "IocType",
+        "type": "string"
+      },
       "AnalysisJobOut": {
         "properties": {
           "analyzer": {
@@ -1102,7 +1121,7 @@
             "type": "string"
           },
           "type": {
-            "$ref": "#/components/schemas/app__modules__pcap_analysis__schemas__IocType"
+            "$ref": "#/components/schemas/AnalysisIocType"
           },
           "value": {
             "title": "Value",
@@ -1758,7 +1777,7 @@
           "ioc_type": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/app__modules__threat_intel__providers__base__IocType"
+                "$ref": "#/components/schemas/TiIocType"
               },
               {
                 "type": "null"
@@ -2004,7 +2023,7 @@
           },
           "supported_types": {
             "items": {
-              "$ref": "#/components/schemas/app__modules__threat_intel__providers__base__IocType"
+              "$ref": "#/components/schemas/TiIocType"
             },
             "title": "Supported Types",
             "type": "array"
@@ -2178,7 +2197,7 @@
           },
           "supported_types": {
             "items": {
-              "$ref": "#/components/schemas/app__modules__threat_intel__providers__base__IocType"
+              "$ref": "#/components/schemas/TiIocType"
             },
             "title": "Supported Types",
             "type": "array"
@@ -2254,7 +2273,6 @@
         "additionalProperties": false,
         "properties": {
           "acknowledge_terms": {
-            "default": false,
             "title": "Acknowledge Terms",
             "type": "boolean"
           },
@@ -2655,7 +2673,7 @@
             "type": "string"
           },
           "type": {
-            "$ref": "#/components/schemas/app__modules__pcap_analysis__schemas__IocType"
+            "$ref": "#/components/schemas/AnalysisIocType"
           },
           "value": {
             "title": "Value",
@@ -2696,25 +2714,6 @@
         ],
         "title": "IocPage",
         "type": "object"
-      },
-      "IocType-Input": {
-        "description": "Every IOC type of the result contracts (cyberlab_jobs.results.IocType).",
-        "enum": [
-          "ip",
-          "domain",
-          "url",
-          "email",
-          "ja3",
-          "ja3s",
-          "cert_sha256",
-          "file_md5",
-          "file_sha1",
-          "file_sha256",
-          "registry_key",
-          "file_path"
-        ],
-        "title": "IocType",
-        "type": "string"
       },
       "LibraryCount": {
         "properties": {
@@ -4597,7 +4596,7 @@
             "type": "string"
           },
           "ioc_type": {
-            "$ref": "#/components/schemas/app__modules__threat_intel__providers__base__IocType"
+            "$ref": "#/components/schemas/TiIocType"
           },
           "last_seen": {
             "anyOf": [
@@ -4894,7 +4893,7 @@
             "type": "string"
           },
           "ioc_type": {
-            "$ref": "#/components/schemas/app__modules__threat_intel__providers__base__IocType"
+            "$ref": "#/components/schemas/TiIocType"
           },
           "provider": {
             "$ref": "#/components/schemas/ProviderName"
@@ -5650,6 +5649,20 @@
         ],
         "title": "StringPage",
         "type": "object"
+      },
+      "TiIocType": {
+        "enum": [
+          "ipv4",
+          "ipv6",
+          "domain",
+          "url",
+          "md5",
+          "sha1",
+          "sha256",
+          "email"
+        ],
+        "title": "IocType",
+        "type": "string"
       },
       "TiSettingsOut": {
         "properties": {
@@ -6407,39 +6420,6 @@
         },
         "title": "VtVotes",
         "type": "object"
-      },
-      "app__modules__pcap_analysis__schemas__IocType": {
-        "description": "Every IOC type of the result contracts (cyberlab_jobs.results.IocType).",
-        "enum": [
-          "ip",
-          "domain",
-          "url",
-          "email",
-          "ja3",
-          "ja3s",
-          "cert_sha256",
-          "file_md5",
-          "file_sha1",
-          "file_sha256",
-          "registry_key",
-          "file_path"
-        ],
-        "title": "IocType",
-        "type": "string"
-      },
-      "app__modules__threat_intel__providers__base__IocType": {
-        "enum": [
-          "ipv4",
-          "ipv6",
-          "domain",
-          "url",
-          "md5",
-          "sha1",
-          "sha256",
-          "email"
-        ],
-        "title": "IocType",
-        "type": "string"
       }
     }
   },
@@ -7779,7 +7759,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/IocType-Input"
+                  "$ref": "#/components/schemas/AnalysisIocType"
                 },
                 {
                   "type": "null"
@@ -9222,7 +9202,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Successful Response"
+            "description": "The key was removed"
           },
           "422": {
             "content": {

@@ -997,6 +997,12 @@ export interface components {
             analyzer: components["schemas"]["Analyzer"];
             profile?: components["schemas"]["Profile"] | null;
         };
+        /**
+         * IocType
+         * @description Every IOC type of the result contracts (cyberlab_jobs.results.IocType).
+         * @enum {string}
+         */
+        AnalysisIocType: "ip" | "domain" | "url" | "email" | "ja3" | "ja3s" | "cert_sha256" | "file_md5" | "file_sha1" | "file_sha256" | "registry_key" | "file_path";
         /** AnalysisJobOut */
         AnalysisJobOut: {
             analyzer: components["schemas"]["Analyzer"];
@@ -1296,7 +1302,7 @@ export interface components {
             last_seen: string;
             /** Source */
             source: string;
-            type: components["schemas"]["app__modules__pcap_analysis__schemas__IocType"];
+            type: components["schemas"]["AnalysisIocType"];
             /** Value */
             value: string;
         };
@@ -1541,7 +1547,7 @@ export interface components {
         HistoryOut: {
             /** Ioc Key */
             ioc_key: string | null;
-            ioc_type: components["schemas"]["app__modules__threat_intel__providers__base__IocType"] | null;
+            ioc_type: components["schemas"]["TiIocType"] | null;
             /** Items */
             items: components["schemas"]["ResultOut"][];
             /** Notes */
@@ -1618,7 +1624,7 @@ export interface components {
             /** Privacy Note */
             privacy_note: string;
             /** Supported Types */
-            supported_types: components["schemas"]["app__modules__threat_intel__providers__base__IocType"][];
+            supported_types: components["schemas"]["TiIocType"][];
             /** Terms Ack At */
             terms_ack_at: string | null;
             /** Tos Note */
@@ -1667,7 +1673,7 @@ export interface components {
             /** Privacy Note */
             privacy_note: string;
             /** Supported Types */
-            supported_types: components["schemas"]["app__modules__threat_intel__providers__base__IocType"][];
+            supported_types: components["schemas"]["TiIocType"][];
             /** Terms Ack At */
             terms_ack_at: string | null;
             /** Tos Note */
@@ -1680,11 +1686,8 @@ export interface components {
         };
         /** IntegrationUpdate */
         IntegrationUpdate: {
-            /**
-             * Acknowledge Terms
-             * @default false
-             */
-            acknowledge_terms: boolean;
+            /** Acknowledge Terms */
+            acknowledge_terms?: boolean;
             /** Api Key */
             api_key?: string | null;
             /** Base Url */
@@ -1827,7 +1830,7 @@ export interface components {
             last_seen: string;
             /** Source */
             source: string;
-            type: components["schemas"]["app__modules__pcap_analysis__schemas__IocType"];
+            type: components["schemas"]["AnalysisIocType"];
             /** Value */
             value: string;
         };
@@ -1841,12 +1844,6 @@ export interface components {
              */
             total: number;
         };
-        /**
-         * IocType
-         * @description Every IOC type of the result contracts (cyberlab_jobs.results.IocType).
-         * @enum {string}
-         */
-        "IocType-Input": "ip" | "domain" | "url" | "email" | "ja3" | "ja3s" | "cert_sha256" | "file_md5" | "file_sha1" | "file_sha256" | "registry_key" | "file_path";
         /** LibraryCount */
         LibraryCount: {
             /** Imports */
@@ -2577,7 +2574,7 @@ export interface components {
             id: string;
             /** Ioc Key */
             ioc_key: string;
-            ioc_type: components["schemas"]["app__modules__threat_intel__providers__base__IocType"];
+            ioc_type: components["schemas"]["TiIocType"];
             /** Last Seen */
             last_seen: string | null;
             /** Permalink */
@@ -2665,7 +2662,7 @@ export interface components {
             from_cache: boolean;
             /** Ioc Key */
             ioc_key: string;
-            ioc_type: components["schemas"]["app__modules__threat_intel__providers__base__IocType"];
+            ioc_type: components["schemas"]["TiIocType"];
             provider: components["schemas"]["ProviderName"];
             /** Reason */
             reason: ("rate_limited" | "quota_exhausted" | "deadline" | "auth_failed") | null;
@@ -2950,6 +2947,11 @@ export interface components {
              */
             total: number;
         };
+        /**
+         * IocType
+         * @enum {string}
+         */
+        TiIocType: "ipv4" | "ipv6" | "domain" | "url" | "md5" | "sha1" | "sha256" | "email";
         /** TiSettingsOut */
         TiSettingsOut: {
             /** Excluded Suffixes */
@@ -3191,17 +3193,6 @@ export interface components {
              */
             malicious: number;
         };
-        /**
-         * IocType
-         * @description Every IOC type of the result contracts (cyberlab_jobs.results.IocType).
-         * @enum {string}
-         */
-        app__modules__pcap_analysis__schemas__IocType: "ip" | "domain" | "url" | "email" | "ja3" | "ja3s" | "cert_sha256" | "file_md5" | "file_sha1" | "file_sha256" | "registry_key" | "file_path";
-        /**
-         * IocType
-         * @enum {string}
-         */
-        app__modules__threat_intel__providers__base__IocType: "ipv4" | "ipv6" | "domain" | "url" | "md5" | "sha1" | "sha256" | "email";
     };
     responses: never;
     parameters: never;
@@ -3854,7 +3845,7 @@ export interface operations {
     list_iocs_api_v1_orgs__org_id__analyses__job_id__iocs_get: {
         parameters: {
             query?: {
-                type?: components["schemas"]["IocType-Input"] | null;
+                type?: components["schemas"]["AnalysisIocType"] | null;
                 q?: string | null;
                 include?: components["schemas"]["IocInclude"] | null;
                 limit?: number;
@@ -4526,7 +4517,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description The key was removed */
             204: {
                 headers: {
                     [name: string]: unknown;

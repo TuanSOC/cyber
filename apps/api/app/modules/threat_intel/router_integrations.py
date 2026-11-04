@@ -53,7 +53,12 @@ async def update_integration(
     return IntegrationSaved(**out.model_dump(), verify_queued=queued)
 
 
-@router.delete("/integrations/{provider}/key", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/integrations/{provider}/key",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    responses={status.HTTP_204_NO_CONTENT: {"description": "The key was removed"}},
+)
 async def remove_integration_key(provider: ProviderName, ctx: Manage, request: Request) -> Response:
     await service.remove_key(ctx, provider, request)
     await ctx.session.commit()

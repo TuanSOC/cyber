@@ -79,7 +79,10 @@ async function workerProblems(service) {
 }
 
 async function verifyProd() {
-  run("Prod enrich-worker env: matches the tested fixture", "node scripts/check-enrich-env.mjs");
+  run(
+    "Enrich-worker envs: no api secrets (dev, test, prod), prod env matches the tested fixture",
+    "node scripts/check-enrich-env.mjs",
+  );
   run("Prod stack up", `${COMPOSE_PROD} up -d --build --wait --wait-timeout 400`);
   await probe("Prod enrich-worker: running, never restarted", () => workerProblems("enrich-worker"));
   // The prod-like stack uses Caddy's internal CA: skip certificate checks for these probes.
@@ -109,7 +112,7 @@ try {
   // Celery workers do not hot-reload: recreate them so the gate tests the current code.
   run(
     "Workers: reload code",
-    "docker compose --profile test up -d --force-recreate --no-deps pcap-worker pcap-worker-test static-worker static-worker-test ingest-worker ingest-beat enrich-worker enrich-worker-test",
+    "docker compose --profile test up -d --force-recreate --no-deps pcap-worker pcap-worker-test static-worker static-worker-test ingest-worker ingest-beat enrich-worker enrich-worker-test ti-mock",
   );
   run(
     "API: ruff, format, mypy --strict, pytest",
@@ -119,6 +122,11 @@ try {
     "Enrich worker network: only Postgres, the broker and egress (review M2)",
     "docker compose --profile test run --rm --no-deps -e PYTHONDONTWRITEBYTECODE=1 enrich-worker-test python -m pytest --noconftest -q -p no:cacheprovider tests/container/test_enrich_network.py",
   );
+  run(
+    "Ingest worker network: no route out, no ti-mock (M4 egress suite)",
+    "docker compose exec -T -e PYTHONDONTWRITEBYTECODE=1 ingest-worker python -m pytest --noconftest -q -p no:cacheprovider tests/container/test_egress.py",
+  );
+  run("TI key leak: a fresh sentinel key is absent from every container log", "node scripts/check-ti-key-leak.mjs");
   run("Workers (pcap, static, kit): ruff, format, mypy, sandbox + engine tests", "pnpm -s test:workers");
   run(
     "Web: typecheck, eslint, unit tests",

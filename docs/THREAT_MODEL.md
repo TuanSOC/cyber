@@ -8,6 +8,7 @@ Scope: the M1 stack (gateway, web, API, Postgres, Redis, MinIO) handling untrust
 - Tenant data separation (cases, evidence, members, audit).
 - Sessions and credentials.
 - The audit trail itself.
+- (M4) Third-party API keys of each org, and what the org is investigating (the indicators it looks up).
 
 ## Trust boundaries
 
@@ -17,6 +18,7 @@ Scope: the M1 stack (gateway, web, API, Postgres, Redis, MinIO) handling untrust
 4. Operators (DB owner, MinIO root) — trusted administrators.
 5. (M2) pcap-worker ↔ everything: the parser processes attacker-controlled captures and is treated as compromisable. It holds only a broker URL (ACL user confined to its own queue keys), runs tools as an unprivileged uid with seccomp (no inet sockets), and sits on an internal network without egress. Its output is untrusted data, validated by the trusted ingest worker before anything reaches the database.
 6. (M3) static-worker ↔ everything: same boundary and same controls as the pcap-worker, with its own broker ACL user (`static`). It parses attacker-controlled files of any type (see [MALWARE_ANALYSIS.md](MALWARE_ANALYSIS.md)).
+7. (M4) enrich-worker ↔ internet: the only service with a route out. It is trusted code (constant provider hostnames, org-supplied MISP URL), but everything it receives from providers is untrusted data, and everything it sends leaves the platform. It holds the sealing private keys, the app DB role and its own broker user; never the JWT secret, MinIO credentials or the app Redis. Details: [THREAT_INTEL.md](THREAT_INTEL.md).
 
 ## STRIDE summary
 
@@ -114,3 +116,42 @@ Residual risks (accepted for M3):
 | Authenticode is reported as present, not validated | a forged or revoked signature looks the same as a valid one | chain validation later |
 | Quota is per org, registration is open | one person with many accounts can still claim many quotas | email verification / invitations later |
 | Styles keep `'unsafe-inline'` | CSS injection remains possible (no script execution) | revisit if the UI drops inline styles |
+
+## M4: threat intelligence
+
+The API plans lookups and seals keys; only the enrich-worker (`enrich` + `egress` networks) unseals keys and calls providers. `backend` became `internal`, so the API, ingest and data services have no route out. Details: [THREAT_INTEL.md](THREAT_INTEL.md).
+
+| Threat | Mitigation | Tested by |
+|---|---|---|
+| **Key theft** from the API, a DB dump or a DB writer | sealed boxes (X25519 + HKDF + AES-GCM); the API holds only the public key and cannot import `unseal`; the private file is a compose secret of the enrich-worker only (`Settings` refuses it elsewhere); the AAD binds org, provider, kid and `key_version`, so a ciphertext cannot be moved between orgs or providers; a monotonic `key_version` trigger and no DELETE grant stop an old ciphertext from being put back | `test_ti_seal.py`, `test_ti_import_guard.py`, `test_config.py`, `test_ti_schema.py::test_a_new_key_needs_a_higher_version`, `::test_app_role_cannot_delete_provider_configs` |
+| Key theft by **redirecting the MISP URL** (RT1): a compromised API or app-role DB writer points `base_url` at its own host | `base_url_norm` is in the AAD: the worker can only open a MISP key for the URL it was sealed with; a URL change through the API needs the key again (`key_required_for_url_change`) | `test_ti_seal.py::test_misp_round_trip_is_bound_to_its_url`, `test_ti_api_integrations.py` |
+| Key leakage in logs, reprs, errors, audit or messages | write-only `SecretStr`; per-request `httpx.Auth` with a redacted repr (httpx masks only `Authorization`); error bodies never read; no exception chains; Celery messages carry ids only; the audit sanitizer drops `*key*` fields | `test_ti_http.py::test_key_only_in_the_auth_header_and_never_in_reprs`, `::test_error_bodies_are_never_read`, `test_ti_seal.py::test_plaintext_never_in_reprs_or_errors` |
+| Stolen JWT / MinIO / app-Redis secrets through a compromised worker (RT2) | least-privilege `x-enrich-env`; `PROCESS_ROLE=enrich` refuses them; the worker cannot reach Redis, MinIO, the API or the gateway (`enrich` network) | `test_config.py`, `tests/container/test_enrich_network.py`, `scripts/check-enrich-env.mjs` (verify:prod) |
+| Prod worker in dev mode (RT3) | the prod override sets `ENV=prod` and the prod image; `_prod_guards` refuse `TI_MOCK_ENABLED`, `TI_MISP_ALLOW_PRIVATE`, `TI_MISP_INSECURE_TLS` and `dev-` seal keys | `test_config.py`, verify:prod env fixture and "running, never restarted" probe |
+| **SSRF** through the org's MISP URL | API: syntax only (https, no userinfo/query/fragment, allowed ports, no special-use or IPv4-like names, global literals). Worker: resolves before **every** request, every answer must be global, connects to the pinned IP with Host/SNI = hostname; no redirects; path allowlist | `test_ti_ssrf.py`, `test_ti_ssrf_resolve.py`, `test_ti_misp.py`, `test_ti_misp_worker.py` |
+| An adapter sends something other than a lookup (upload, download, `/users/{key}`) | per-adapter method + host + path allowlist checked before sending; MalwareBazaar form limited to `get_info` | `test_ti_http.py::test_unlisted_paths_are_refused_before_sending`, `test_ti_provider_adapters.py` |
+| **Provider response injection** (hostile JSON, control/bidi text, `javascript:` links, prompt injection aimed at M5) | strict JSON (depth, integer digits, no NaN) → `bad_json`; strict per-provider summary models ≤ 16 KiB, never the raw body; strings stripped of control/format characters; `https:` permalinks only (DB check); rendered as text | `test_ti_http.py::test_hostile_json_is_bad_json`, `test_ti_provider_fixtures.py`, `test_ti_schema.py::test_result_constraints` |
+| **Decompression bombs** and oversize bodies | `Accept-Encoding: identity`; incremental inflate capped on the inflated size; 1 MiB cap (MISP 2 MiB); 20 s total timeout | `test_ti_http.py::test_gzip_bomb_is_refused_with_bounded_memory`, `::test_body_cap`, `::test_total_timeout` |
+| **Quota exhaustion** (an org's key burned by big runs, or VT's silent daily quota) | per-org token bucket and daily cap on the broker, ceilings an org cannot raise; 429 cooldowns; 3 consecutive VT 429s park the provider until 00:00 UTC; the limiter fails closed; 30 run requests / 10 min per user, 3 active runs per org | `test_ti_ratelimit.py`, `test_enrich_worker.py::test_daily_quota_abandons_quota_exhausted`, `::test_consecutive_429s_are_taken_as_a_spent_daily_quota`, `::test_limiter_outage_fails_closed` |
+| **Privacy leakage** (URL tokens, internal names, private IPs, emails sent to third parties) | pure normalization: global IPs only (including 6to4/NAT64/Teredo-embedded), special-use and `.arpa` names refused, URL query and fragment removed before sending or keying, emails only to MISP, paths/registry keys/JA3/certificates never; org excluded suffixes; per-provider terms acknowledgement | `test_ti_normalize.py`, `test_ti_runs.py`, `test_ti_api_runs.py` |
+| **Cross-org cache inference** (learning what another org investigates from cache hits or results) | the cache is the org's own history (RLS plus an explicit org filter); no shared cache; per-org rate-limit buckets and keys | `test_ti_cache.py`, `test_ti_schema.py::test_tenant_tables_are_isolated`, `test_idor_routes.py`, `test_rls_coverage.py` |
+| **Worker starvation** (one org's 200-IOC VT run holds the single worker for 50 min, RT6) | ≤ 20 s time slices (asyncio-enforced), re-queue at the tail, `waiting` + `resume_at` instead of sleeping; DB lease against duplicates; 30 min deadline; reaper fallback | `test_enrich_worker.py::test_slice_budget_republishes_to_the_tail`, `::test_redelivery_and_concurrent_duplicates_make_no_extra_calls`, `::test_deadline_ends_partial`, `::test_fallback_reaper` |
+| Forged or cross-org `ti.*` messages | messages carry ids only; the org must match `ti_run_index`; `ti.verify` re-reads the config in the org's tenant session | `test_enrich_worker.py::test_org_mismatch_and_bad_messages_are_dropped` |
+| A working key disabled by a resource-level 403 (RT23) | 401/403 → inline verify; only a failed verify marks the key invalid | `test_enrich_worker.py::test_403_with_passing_verify_stays_valid` |
+| Analyzers reach the enrich queue or the internet | broker ACL: `pcap` / `static` cannot touch `enrich*`; `enrich` cannot touch `trusted.*` / `ingest*`; analyzers stay on `analysis` (internal) | `test_enrich_acl.py`, `tests/container/test_egress.py`, worker-kit `test_isolation.py` |
+| Reputation read as our verdict | attributed templates, neutral chips, no TI-derived findings or severity changes in M4 | `apps/web/lib/ti-wording.test.ts` |
+
+Residual risks (accepted for M4):
+
+| Gap | Risk | Planned |
+|---|---|---|
+| **Unrestricted egress** of the enrich-worker (no proxy or hostname allowlist) | a compromised worker can send anything it can read (keys it unseals, DB rows) anywhere | egress proxy with a hostname allowlist later |
+| The enrich-worker uses the **full app DB role** (RT17) | a compromised worker can read every tenant's rows (it sets the org context itself, as the trusted ingest does) | dedicated enrich role (needs bootstrapping on existing volumes) later |
+| **DNS channel from internal networks** | if Docker's embedded DNS forwards public names for containers on `internal` networks, a compromised API or ingest could exfiltrate through lookups. On the tested engine (Docker Desktop 4.x / WSL2) `backend` containers cannot resolve public names; other engines may differ | re-check per engine (egress suite); a DNS policy if it changes |
+| **Provider text is untrusted** | injection payloads aimed at the M5 AI analyst | M5 must treat it as prompt-injection input; M4 only renders it as text |
+| **Third-party disclosure** of investigated IOCs | every lookup tells the provider what the org investigates; hash lookups reveal that the org holds a file (RT28) | opt-in per provider with a terms acknowledgement; no auto-enrichment |
+| **No TLP labels** on evidence or cases (RT26) | nothing stops an analyst from enriching an indicator that must not leave the org | revisit with M6 cases |
+| **Terms of service** | VT public and abuse.ch free tiers are non-commercial; a commercial deployment breaks them | bring your own key, ToS on each card; paid tiers for commercial use |
+| One shared enrich-worker and a global cap of 20 active runs | one tenant can fill the global cap (`enrichment_busy` for the others) | per-org fairness / scale-out later |
+| Sealing private keys in a file on the host | a host compromise exposes every stored provider key | KMS/HSM custody later |
+| No batch re-seal tool | keys of idle integrations stay under an old kid until used or verified | `scripts/reseal_ti_keys.py` later (runbook in THREAT_INTEL.md) |

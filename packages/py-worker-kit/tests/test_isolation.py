@@ -2,11 +2,13 @@
 
 import os
 import socket
+from pathlib import Path
 
 import pytest
 import redis
 
 SECRET_HINTS = ("DATABASE", "MINIO", "JWT", "POSTGRES", "SECRET", "PASSWORD", "ACCESS_KEY")
+ROUTES = Path("/proc/net/route")
 
 pytestmark = pytest.mark.skipif(
     "BROKER_URL" not in os.environ, reason="runs inside the pcap-worker container"
@@ -27,6 +29,22 @@ def test_app_services_are_not_reachable(host: str) -> None:
 def test_no_internet_egress() -> None:
     with pytest.raises(OSError):
         socket.create_connection(("1.1.1.1", 443), timeout=3).close()
+
+
+@pytest.mark.skipif(not ROUTES.exists(), reason="Linux container only")
+def test_no_default_route() -> None:
+    lines = ROUTES.read_text().splitlines()[1:]
+    default = [ln for ln in lines if ln.split()[1] == "00000000" and ln.split()[7] == "00000000"]
+    assert default == []
+
+
+@pytest.mark.parametrize("host", ["ti-mock", "enrich-worker", "enrich-worker-test"])
+def test_threat_intel_hosts_are_not_reachable(host: str) -> None:
+    """M4: the provider sink and the internet-facing enrich worker share no network with an
+    analyzer (only `egress` / `enrich` reach them), so a compromised parser cannot use them
+    as a way out or reach the provider keys."""
+    with pytest.raises(socket.gaierror):
+        socket.getaddrinfo(host, 8080)
 
 
 def _broker() -> redis.Redis:
