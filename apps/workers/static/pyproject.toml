@@ -1,0 +1,56 @@
+[project]
+name = "cyberlab-static-worker"
+version = "0.1.0"
+description = "CyberLab static malware analyzer (untrusted-input worker)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "celery[redis]>=5.5",
+    "httpx>=0.28",
+    "pydantic>=2.9",
+    "cyberlab-jobs",
+    "cyberlab-worker",
+    "pefile>=2024.8.26",
+    "pyelftools>=0.31",
+    "yara-python>=4.5,<5",
+    # capa and FLOSS share vivisect / viv-utils; both majors are pinned so the
+    # rules tarball (capa-rules v10.0.0) keeps matching the engine.
+    "flare-capa>=10,<11",
+    "flare-floss>=3,<4",
+    "ppdeep>=20200505",
+    "python-magic>=0.4.27",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[tool.uv.sources]
+# The image places the contracts at /packages/py-jobs (same relative path as here).
+cyberlab-jobs = { path = "../../../packages/py-jobs", editable = true }
+cyberlab-worker = { path = "../../../packages/py-worker-kit", editable = true }
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "S", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S603", "S607", "S108", "S311"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["celery.*", "kombu.*", "pefile.*", "elftools.*", "yara.*", "capa.*", "floss.*", "ppdeep.*", "magic.*"]
+ignore_missing_imports = true

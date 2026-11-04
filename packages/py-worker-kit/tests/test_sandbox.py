@@ -161,3 +161,16 @@ def test_tool_scratch_space_is_its_own_job_directory(dirs: sandbox.JobDirs) -> N
     for shared in ("/tmp", "/dev/shm"):
         with pytest.raises(sandbox.ToolFailed):
             sandbox.run_tool(["sh", "-c", f"echo x > {shared}/leak"], dirs, timeout_s=5)
+
+
+def test_tools_are_the_oom_killers_first_choice(dirs: sandbox.JobDirs) -> None:
+    sandbox.run_tool(["cat", "/proc/self/oom_score_adj"], dirs, timeout_s=5, stdout_name="oom.txt")
+    assert _read(dirs, "oom.txt") == "1000"
+
+
+def test_memory_limit_is_enforced(dirs: sandbox.JobDirs) -> None:
+    hog = "x = bytearray(512 * 1024 * 1024)"
+    with pytest.raises(sandbox.ToolFailed):
+        sandbox.run_tool(["python3", "-c", hog], dirs, timeout_s=10, memory_bytes=256 * 1024 * 1024)
+    sandbox.run_tool(["python3", "-c", "x = bytearray(16)"], dirs, timeout_s=10,
+                     memory_bytes=256 * 1024 * 1024)  # fmt: skip

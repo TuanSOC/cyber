@@ -13,6 +13,7 @@ tool therefore cannot make root read (or overwrite) anything outside out/ via sy
 """
 
 import contextlib
+import ctypes
 import logging
 import os
 import resource
@@ -30,6 +31,9 @@ from typing import BinaryIO
 from cyberlab_worker import seccomp
 
 log = logging.getLogger(__name__)
+
+_LIBC = ctypes.CDLL(None, use_errno=True)
+PR_SET_DUMPABLE = 4
 
 TOOL_UID = 10003
 TOOL_GID = 10003
@@ -90,11 +94,20 @@ def prepare(work_dir: Path, job_id: str) -> JobDirs:
     return JobDirs(root=root, input=input_dir, out=out)
 
 
-def _child_setup(cpu_s: int) -> None:  # runs in the child, after it dropped to the tool uid
+def _child_setup(cpu_s: int, memory_bytes: int | None) -> None:
+    """Runs in the child after it dropped to the tool uid: limits, OOM priority, seccomp."""
     resource.setrlimit(resource.RLIMIT_CPU, (cpu_s, cpu_s))
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_FILE, MAX_OUTPUT_FILE))
     resource.setrlimit(resource.RLIMIT_NOFILE, (1024, 1024))
+    if memory_bytes is not None:
+        resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+    # Under memory pressure the kernel kills the tool, never the worker that reports the job.
+    # Dropping the uid made this process non-dumpable (root-owned /proc/self); restore the
+    # flag so it may raise its own OOM score. exec() re-evaluates it as usual.
+    _LIBC.prctl(PR_SET_DUMPABLE, 1, 0, 0, 0)
+    with open("/proc/self/oom_score_adj", "w") as f:
+        f.write("1000")
     seccomp.deny_network()
 
 
@@ -105,8 +118,13 @@ def run_tool(
     timeout_s: float,
     stdout_name: str | None = None,
     extra_env: dict[str, str] | None = None,
+    memory_bytes: int | None = None,
 ) -> None:
-    """Run one tool as the tool uid in out/. Raises ToolTimeout / ToolFailed."""
+    """Run one tool as the tool uid in out/. Raises ToolTimeout / ToolFailed.
+
+    `memory_bytes` caps the tool's address space (RLIMIT_AS); size it per tool, since
+    emulators and AV engines reserve far more virtual memory than they touch.
+    """
     env = {
         "PATH": TOOL_PATH,
         "HOME": str(dirs.out),
@@ -136,7 +154,7 @@ def run_tool(
             umask=0o077,
             start_new_session=True,
             close_fds=True,
-            preexec_fn=lambda: _child_setup(cpu),  # rlimits + seccomp, no locks taken
+            preexec_fn=lambda: _child_setup(cpu, memory_bytes),  # no locks taken
         )
         try:
             returncode = proc.wait(timeout=timeout_s)
