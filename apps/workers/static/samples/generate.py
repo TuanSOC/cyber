@@ -12,9 +12,17 @@ Nothing is committed as a binary and no real malware is involved: "suspicious" s
 Ground truth goes to labels.json: per scenario the profile to run, the expected file format,
 the expected findings (detector + type), signature matches, capabilities and IOCs.
 
-    python -m samples.generate /path/to/out
+    python -m samples.generate /path/to/out [--inject]
+
+`--inject` (off by default; the default output is unchanged) also writes an adversarial twin
+`<name>__injected.bin` of every PE / ELF scenario sample (not EICAR, the archives or the mingw
+builds): the same sample from the same seed with the prompt-injection payloads of
+`samples/inject.py` planted. labels.json then gains the twins (the clean labels plus
+`twin_of`) and an `_injections` entry recording which field of which twin carries which
+payload. The planted payloads add observables (attacker.example URLs) the clean labels omit.
 """
 
+import argparse
 import gzip
 import io
 import json
@@ -22,7 +30,6 @@ import random
 import shutil
 import struct
 import subprocess
-import sys
 import tarfile
 import zipfile
 import zlib
@@ -30,6 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from samples import elf, pe
+from samples import inject as injection
 
 SEED = 20261105
 TEST_MARKER = "CYBERLAB-STATIC-TEST-MARKER-7f3a"
@@ -40,6 +48,7 @@ LARGE_MEMBER_MIB = 70
 ZIP_DATE = (2026, 1, 1, 0, 0, 0)
 PREFIX = b"CYBERLAB-PREFIX-"  # leading data before a zip (ClamAV still finds the zip)
 MINGW = {"x64": "x86_64-w64-mingw32-gcc", "x86": "i686-w64-mingw32-gcc"}
+TWIN_SUFFIX = "__injected"
 
 Labels = dict[str, dict[str, Any]]
 
@@ -105,11 +114,26 @@ def _standard(rng: random.Random, *strings: str, wide: tuple[str, ...] = ()) -> 
     ]
 
 
-def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
+def build_scenarios(
+    rng: random.Random, injector: injection.Injector | None = None
+) -> tuple[dict[str, bytes], Labels]:
+    """Every labelled sample. With an `injector`, the same samples (same draws from `rng`)
+    with prompt-injection payloads planted; `injector.plants` records them per sample."""
     samples: dict[str, bytes] = {}
     labels: Labels = {}
 
+    def build_pe(spec: pe.PeSpec) -> bytes:
+        return pe.build(spec if injector is None else injector.plant_pe(spec))
+
+    def build_elf(spec: elf.ElfSpec) -> bytes:
+        return elf.build(spec if injector is None else injector.plant_elf(spec))
+
+    def stack_code(value: str) -> bytes:
+        return stack_string_code(value) if injector is None else injector.stack_code(value)
+
     def add(name: str, data: bytes, **label: Any) -> None:
+        if injector is not None:
+            injector.take(name)
         samples[name] = data
         label.setdefault("profile", "full")
         label.setdefault("findings", [])
@@ -122,7 +146,7 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
 
     add(
         "benign_pe32",
-        pe.build(
+        build_pe(
             pe.PeSpec(
                 bits=32,
                 sections=_standard(
@@ -154,7 +178,7 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
     )
     add(
         "benign_pe64",
-        pe.build(
+        build_pe(
             pe.PeSpec(
                 bits=64,
                 dll=True,
@@ -173,7 +197,7 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
     upx1 = rng.randbytes(0x3000) + b"UPX!" + rng.randbytes(0x400)
     add(
         "packed_like",
-        pe.build(
+        build_pe(
             pe.PeSpec(
                 bits=32,
                 sections=[
@@ -200,7 +224,7 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
     )
     add(
         "injection_imports",
-        pe.build(
+        build_pe(
             pe.PeSpec(
                 bits=64,
                 sections=_standard(rng, "target process id: %lu", "explorer.exe"),
@@ -224,7 +248,7 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
     )
     add(
         "keylogger_imports",
-        pe.build(
+        build_pe(
             pe.PeSpec(
                 bits=32,
                 gui=True,
@@ -251,7 +275,7 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
     )
     add(
         "test_marker",
-        pe.build(
+        build_pe(
             pe.PeSpec(
                 bits=32,
                 sections=_standard(rng, "CyberLab test marker sample", TEST_MARKER),
@@ -270,7 +294,7 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
     )
     add(
         "antidebug_imports",
-        pe.build(
+        build_pe(
             pe.PeSpec(
                 bits=64,
                 sections=_standard(rng, "debugger check"),
@@ -286,7 +310,7 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
     )
     add(
         "credential_imports",
-        pe.build(
+        build_pe(
             pe.PeSpec(
                 bits=64,
                 sections=_standard(rng, "credential export"),
@@ -304,7 +328,7 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
     run_key = "Software\\Microsoft\\Windows\\CurrentVersion\\Run"
     add(
         "persistence_imports",
-        pe.build(
+        build_pe(
             pe.PeSpec(
                 bits=32,
                 sections=_standard(
@@ -333,7 +357,7 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
     )
     add(
         "downloader_imports",
-        pe.build(
+        build_pe(
             pe.PeSpec(
                 bits=32,
                 sections=_standard(
@@ -368,7 +392,7 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
     )
     add(
         "pe_anomalies",
-        pe.build(
+        build_pe(
             pe.PeSpec(
                 bits=32,
                 timestamp=4_070_908_800,  # 2099-01-01: in the future
@@ -391,7 +415,7 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
     )
     add(
         "benign_elf",
-        elf.build(
+        build_elf(
             elf.ElfSpec(
                 imports=["puts", "printf", "malloc", "free", "__libc_start_main"],
                 text=code(rng, 0x600),
@@ -404,13 +428,11 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
     )
     add(
         "stack_string",
-        pe.build(
+        build_pe(
             pe.PeSpec(
                 bits=32,
                 sections=[
-                    pe.Section(
-                        ".text", stack_string_code(STACK_STRING) + code(rng, 0x400), pe.TEXT
-                    ),
+                    pe.Section(".text", stack_code(STACK_STRING) + code(rng, 0x400), pe.TEXT),
                     pe.Section(".rdata", rdata("stack string sample"), pe.RDATA),
                 ],
                 imports={"KERNEL32.dll": ["ExitProcess", "GetModuleHandleA", "Sleep"]},
@@ -425,7 +447,7 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
     # Near misses: each must stay below every finding (labelled benign, nothing above info).
     add(
         "near_miss_apis",  # one API group short of every suspicious set
-        pe.build(
+        build_pe(
             pe.PeSpec(
                 bits=64,
                 sections=_standard(rng, "near miss sample", "settings.dat"),
@@ -451,7 +473,7 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
     )
     add(
         "near_miss_packer",  # a single packer indicator (tiny import table)
-        pe.build(
+        build_pe(
             pe.PeSpec(
                 bits=32,
                 sections=_standard(rng, "plugin loader"),
@@ -463,7 +485,7 @@ def build_scenarios(rng: random.Random) -> tuple[dict[str, bytes], Labels]:
     )
     add(
         "near_miss_icon",  # compressed image resources are expected to be high-entropy
-        pe.build(
+        build_pe(
             pe.PeSpec(
                 bits=32,
                 sections=_standard(rng, "icon sample"),
@@ -694,7 +716,8 @@ def compile_c(source: Path, out: Path, arch: str) -> bool:
     return True
 
 
-def generate(out: Path, *, mingw: bool = True) -> dict[str, Path]:
+def generate(out: Path, *, mingw: bool = True, inject: bool = False) -> dict[str, Path]:
+    """The labelled set; with `inject`, also the `<name>__injected` twins (module docstring)."""
     out.mkdir(parents=True, exist_ok=True)
     rng = random.Random(SEED)
     samples, labels = build_scenarios(rng)
@@ -703,6 +726,8 @@ def generate(out: Path, *, mingw: bool = True) -> dict[str, Path]:
         path = out / f"{name}.bin"
         path.write_bytes(data)
         paths[name] = path
+    if inject:
+        write_twins(out, paths, labels)
 
     bomb = out / "nested_zip_bomb.bin"
     nested_zip_bomb(bomb)
@@ -739,6 +764,20 @@ def generate(out: Path, *, mingw: bool = True) -> dict[str, Path]:
     return paths
 
 
+def write_twins(out: Path, paths: dict[str, Path], labels: Labels) -> None:
+    """Injected twins: the same samples rebuilt from the same seed, payloads planted."""
+    injector = injection.Injector()
+    twins, _ = build_scenarios(random.Random(SEED), injector)
+    records: dict[str, Any] = {}
+    for name, plants in injector.plants.items():
+        twin = name + TWIN_SUFFIX
+        paths[twin] = out / f"{twin}.bin"
+        paths[twin].write_bytes(twins[name])
+        labels[twin] = {**labels[name], "twin_of": name}
+        records[twin] = {"clean": name, "plants": plants}
+    labels["_injections"] = {"version": 1, "payloads": injection.catalog(), "twins": records}
+
+
 def mingw_labels(name: str) -> dict[str, Any]:
     """Facts of the cross-compiled programs (mingw's CRT registers TLS callbacks)."""
     base: dict[str, Any] = {
@@ -769,6 +808,18 @@ def mingw_labels(name: str) -> dict[str, Any]:
     return base
 
 
-if __name__ == "__main__":
-    generated = generate(Path(sys.argv[1]))
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(prog="python -m samples.generate")
+    parser.add_argument("out", type=Path)
+    parser.add_argument(
+        "--inject",
+        action="store_true",
+        help="also write prompt-injection twins (<name>__injected.bin); off by default",
+    )
+    args = parser.parse_args(argv)
+    generated = generate(args.out, inject=args.inject)
     print("\n".join(f"{name}: {path}" for name, path in sorted(generated.items())))
+
+
+if __name__ == "__main__":
+    main()

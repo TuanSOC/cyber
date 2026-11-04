@@ -5,13 +5,19 @@ complete (handshake, sequenced data, FIN) so Zeek and Suricata parse them like r
 captures; TLS handshakes carry real DER certificates (self-signed / expired / CA-signed).
 Every scenario comes with ground-truth labels (labels.json) for precision/recall.
 
-    python -m dataset.generate /path/to/out
+    python -m dataset.generate /path/to/out [--inject]
+
+`--inject` (off by default; the default output is unchanged) also writes an adversarial twin
+`<scenario>__injected.pcap` per scenario and for `mixed`: the clean capture, same seed, plus
+planted sessions whose DNS / HTTP / TLS fields carry the prompt-injection payloads of
+`dataset/inject.py`. labels.json then gains the twins (same detector labels) and an
+`_injections` entry recording which field of which twin carries which payload.
 """
 
+import argparse
 import datetime as dt
 import json
 import random
-import sys
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,8 +29,12 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.x509.oid import NameOID
 from scapy.all import DNS, DNSQR, DNSRR, IP, TCP, UDP, Ether, Packet, Raw, wrpcap
 
+from dataset import inject as injection
+
 BASE_TS = 1_767_225_600.0  # 2026-01-01T00:00:00Z
 RESOLVER = "10.0.0.53"
+CA_CN = "CyberLab Synthetic Test CA"
+TWIN_SUFFIX = "__injected"
 MAC_A = "02:00:00:00:00:01"
 MAC_B = "02:00:00:00:00:02"
 
@@ -206,6 +216,7 @@ class Certs:
     self_signed: bytes
     expired: bytes
     legacy: bytes
+    ca_private: bytes = b""  # raw Ed25519 seed of the CA (signs the planted --inject leaf)
 
 
 def _cert(
@@ -218,6 +229,7 @@ def _cert(
     not_after: dt.datetime,
     serial: int,
     ca: bool = False,
+    san: str | None = None,  # defaults to the CN
 ) -> bytes:
     builder = (
         x509.CertificateBuilder()
@@ -231,7 +243,7 @@ def _cert(
     )
     if not ca:
         builder = builder.add_extension(
-            x509.SubjectAlternativeName([x509.DNSName(cn)]), critical=False
+            x509.SubjectAlternativeName([x509.DNSName(san or cn)]), critical=False
         )
     # Ed25519: deterministic signatures, so the dataset is byte-for-byte reproducible.
     return builder.sign(issuer_key, None).public_bytes(serialization.Encoding.DER)
@@ -240,9 +252,10 @@ def _cert(
 def make_certs(rng: random.Random) -> Certs:
     start = dt.datetime.fromtimestamp(BASE_TS, dt.UTC)
     year = dt.timedelta(days=365)
-    ca_key = ed25519.Ed25519PrivateKey.from_private_bytes(rng.randbytes(32))
+    ca_private = rng.randbytes(32)
+    ca_key = ed25519.Ed25519PrivateKey.from_private_bytes(ca_private)
     leaf = ed25519.Ed25519PrivateKey.from_private_bytes(rng.randbytes(32))
-    ca_cn = "CyberLab Synthetic Test CA"
+    ca_cn = CA_CN
     before, after = start - year, start + year
 
     def signed(
@@ -281,6 +294,7 @@ def make_certs(rng: random.Random) -> Certs:
         ),
         expired=signed("expired.example.org", 4, start - 2 * year, start - year),
         legacy=signed("legacy.example.org", 5),
+        ca_private=ca_private,
     )
 
 
@@ -485,29 +499,133 @@ SCENARIOS = {
     "port_scan": port_scan,
     "suspicious_http": suspicious_http,
 }
+# The scenario's own client: planted --inject sessions come from it, so they sit next to the
+# scenario's evidence (same host) without touching its detected flows.
+CLIENTS = {
+    "normal_web": "10.0.1.10",
+    "dns_traffic": "10.0.1.11",
+    "tls_sessions": "10.0.1.12",
+    "beacon": "10.0.2.20",
+    "dns_anomalies": "10.0.3.30",
+    "port_scan": "10.0.4.40",
+    "suspicious_http": "10.0.5.50",
+}
 
 
-def generate(out_dir: Path, seed: int = 1337) -> dict[str, Path]:
-    """Write every scenario plus `mixed` (all of them, time-shifted) and labels.json."""
+# --- adversarial twins (--inject) ------------------------------------------------------------
+
+
+def planted_packets(scenario: str, t0: float, certs: Certs, seed: int) -> list[Packet]:
+    """The planted sessions of one scenario's injected twin.
+
+    They use their own PRNG (seeded by the dataset seed and the scenario name), never the
+    scenario's, so every clean packet of the twin stays byte-identical. One DNS A lookup whose
+    name is a payload split into labels, one TXT lookup answered with payloads, one HTTP request
+    with payloads in the URI / Host / User-Agent, and one TLS session with a payload SNI and a
+    leaf certificate whose CN is a payload (signed by the test CA, so no self-signed finding).
+    """
+    client = CLIENTS[scenario]
+    planted = Capture(random.Random(f"inject:{seed}:{scenario}"))
+    values = {key: [v for _, v in pairs] for key, pairs in injection.planted_values().items()}
+    ts = t0 + injection.PLANT_OFFSET_S
+    [query] = values["dns.query"]
+    dns_lookup(planted, ts, client, query, rcode=3)
+    txt = values["dns.txt"]
+    dns_lookup(planted, ts + 0.5, client, injection.TXT_NAME, qtype="TXT", answers=txt)
+    [uri], [host], [ua] = values["http.uri"], values["http.host"], values["http.user_agent"]
+    tcp_session(
+        planted,
+        ts + 1.0,
+        client,
+        injection.PLANT_SERVER,
+        80,
+        [
+            ("c", http_request("GET", host, uri, ua)),
+            ("s", http_response(200, "text/plain", b"ok\n")),
+        ],
+    )
+    [sni], [cn] = values["tls.server_name"], values["tls.cert_subject_cn"]
+    start = dt.datetime.fromtimestamp(BASE_TS, dt.UTC)
+    year = dt.timedelta(days=365)
+    leaf = _cert(
+        cn,
+        ed25519.Ed25519PrivateKey.from_private_bytes(planted.rng.randbytes(32)),
+        issuer_cn=CA_CN,
+        issuer_key=ed25519.Ed25519PrivateKey.from_private_bytes(certs.ca_private),
+        not_before=start - year,
+        not_after=start + year,
+        serial=99,
+        san=injection.PLANT_SAN,
+    )
+    tls_session(planted, ts + 2.0, client, injection.PLANT_SERVER, sni, [leaf, certs.ca])
+    return planted.packets
+
+
+def _write(path: Path, packets: list[Packet]) -> None:
+    wrpcap(str(path), sorted(packets, key=lambda p: float(p.time)))
+
+
+def generate(out_dir: Path, seed: int = 1337, *, inject: bool = False) -> dict[str, Path]:
+    """Write every scenario plus `mixed` (all of them, time-shifted) and labels.json.
+
+    With `inject`, also the `<name>__injected` twin of each (see the module docstring).
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     certs = make_certs(random.Random(seed - 1))
     paths: dict[str, Path] = {}
     labels: dict[str, Labels] = {}
+    plants: dict[str, list[dict[str, str]]] = {}
     mixed = Capture(random.Random(seed))
     mixed_labels: Labels = []
+    mixed_planted: list[Packet] = []
     for index, (name, build) in enumerate(SCENARIOS.items()):
         cap = Capture(random.Random(seed + index))
         labels[name] = build(cap, BASE_TS, certs)
         paths[name] = out_dir / f"{name}.pcap"
-        wrpcap(str(paths[name]), sorted(cap.packets, key=lambda p: float(p.time)))
+        _write(paths[name], cap.packets)
         mixed_labels += build(mixed, BASE_TS + index * 1000, certs)
+        if inject:
+            twin = name + TWIN_SUFFIX
+            paths[twin] = out_dir / f"{twin}.pcap"
+            _write(paths[twin], cap.packets + planted_packets(name, BASE_TS, certs, seed))
+            labels[twin] = labels[name]
+            plants[twin] = injection.plant_records(name, CLIENTS[name], RESOLVER)
+            mixed_planted += planted_packets(name, BASE_TS + index * 1000, certs, seed)
     paths["mixed"] = out_dir / "mixed.pcap"
-    wrpcap(str(paths["mixed"]), sorted(mixed.packets, key=lambda p: float(p.time)))
+    _write(paths["mixed"], mixed.packets)
     labels["mixed"] = mixed_labels
-    (out_dir / "labels.json").write_text(json.dumps(labels, indent=2))
+    document: dict[str, Any] = dict(labels)
+    if inject:
+        twin = "mixed" + TWIN_SUFFIX
+        paths[twin] = out_dir / f"{twin}.pcap"
+        _write(paths[twin], mixed.packets + mixed_planted)
+        document[twin] = mixed_labels
+        plants[twin] = [record for name in SCENARIOS for record in plants[name + TWIN_SUFFIX]]
+        document["_injections"] = {
+            "version": 1,
+            "payloads": injection.catalog(),
+            "twins": {
+                twin: {"clean": twin.removesuffix(TWIN_SUFFIX), "plants": records}
+                for twin, records in plants.items()
+            },
+        }
+    (out_dir / "labels.json").write_text(json.dumps(document, indent=2))
     return paths
 
 
-if __name__ == "__main__":
-    for name, path in generate(Path(sys.argv[1] if len(sys.argv) > 1 else "dataset-out")).items():
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(prog="python -m dataset.generate")
+    parser.add_argument("out", nargs="?", default="dataset-out", type=Path)
+    parser.add_argument("--seed", type=int, default=1337)
+    parser.add_argument(
+        "--inject",
+        action="store_true",
+        help="also write prompt-injection twins (<name>__injected.pcap); off by default",
+    )
+    args = parser.parse_args(argv)
+    for name, path in generate(args.out, args.seed, inject=args.inject).items():
         print(f"{name}: {path}")
+
+
+if __name__ == "__main__":
+    main()
