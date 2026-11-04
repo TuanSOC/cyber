@@ -124,3 +124,41 @@ def test_compressed_captures_are_named() -> None:
 def test_queue_prefix_isolates_test_queues() -> None:
     assert (Queues().pcap, Queues().ingest) == ("pcap", "ingest")
     assert (Queues("test.").pcap, Queues("test.").ingest) == ("test.pcap", "test.ingest")
+
+
+# --- pcap.v1 result lines ------------------------------------------------------------------
+
+RECORD = {
+    "kind": "flow",
+    "ts": "2026-01-01T00:00:00Z",
+    "src_ip": "10.0.0.1",
+    "dst_ip": "203.0.113.5",
+    "dst_port": 443,
+    "proto": "tcp",
+}
+
+
+def test_result_lines_validate_by_kind() -> None:
+    from cyberlab_jobs.results import RECORD_ADAPTER, FlowRecord
+
+    assert isinstance(RECORD_ADAPTER.validate_python(RECORD), FlowRecord)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"kind": "shell"},
+        {"unexpected": "x"},
+        {"src_ip": "not-an-ip"},
+        {"dst_port": 70000},
+        {"proto": "sctp"},
+        {"service": "x" * 65},
+        {"service": "nul" + chr(0) + "byte"},
+        {"orig_bytes": -1},
+    ],
+)
+def test_result_lines_reject_hostile_values(overrides: dict[str, object]) -> None:
+    from cyberlab_jobs.results import RECORD_ADAPTER
+
+    with pytest.raises(ValidationError):
+        RECORD_ADAPTER.validate_python({**RECORD, **overrides})

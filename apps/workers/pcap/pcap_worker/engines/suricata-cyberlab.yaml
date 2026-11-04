@@ -1,0 +1,20 @@
+%YAML 1.1
+---
+# Included after the packaged suricata.yaml (--include): replaces its outputs so eve.json
+# carries only what the analyzer reads (alerts without metadata, TLS for JA3/JA3S). Other
+# event types would let a capture bury real alerts under millions of flow/anomaly lines.
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: eve.json
+      community-id: yes
+      types:
+        - alert:
+            metadata: no
+            tagged-packets: no
+        - tls:
+            extended: yes
+
+unix-command:
+  enabled: no

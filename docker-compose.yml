@@ -218,6 +218,7 @@ services:
       BROKER_URL: redis://pcap:${BROKER_PCAP_PASSWORD}@redis-broker:6379/0
     volumes:
       - ./apps/workers/pcap/pcap_worker:/srv/workers/pcap/pcap_worker:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
       - pcap_work:/work
     depends_on:
       redis-broker:
@@ -314,12 +315,17 @@ services:
     environment:
       BROKER_URL: redis://pcap:${BROKER_PCAP_PASSWORD}@redis-broker:6379/1
       QUEUE_PREFIX: "test."
+      # Small local rule file: loading ET Open takes ~40 s per job (one test covers it).
+      SURICATA_RULES: /srv/workers/pcap/tests/rules/local-test.rules
       # Read-only rootfs: lint/type caches go to the tmpfs.
       RUFF_CACHE_DIR: /tmp/ruff
       MYPY_CACHE_DIR: /tmp/mypy
     volumes:
       - ./apps/workers/pcap/pcap_worker:/srv/workers/pcap/pcap_worker:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
       - ./apps/workers/pcap/tests:/srv/workers/pcap/tests:ro
+      - ./apps/workers/pcap/dataset:/srv/workers/pcap/dataset:ro
+      - ./apps/workers/pcap/pyproject.toml:/srv/workers/pcap/pyproject.toml:ro
       - pcap_work_test:/work
     depends_on:
       redis-broker:

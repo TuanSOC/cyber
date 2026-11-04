@@ -35,6 +35,7 @@ FROM base AS dev
 RUN uv sync --no-install-project
 COPY pcap_worker ./pcap_worker
 COPY tests ./tests
+COPY dataset ./dataset
 CMD ["celery", "-A", "pcap_worker.celery_app", "worker", "--concurrency", "1", \
      "--max-tasks-per-child", "1", "--without-gossip", "--without-mingle", \
      "--without-heartbeat", "--loglevel", "INFO"]

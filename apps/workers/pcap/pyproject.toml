@@ -38,6 +38,8 @@ select = ["E", "F", "I", "B", "S", "UP"]
 "tests/**" = ["S101", "S603", "S607", "S108"]
 # Tool invocations use fixed argv lists, never a shell.
 "pcap_worker/sandbox.py" = ["S603"]
+# Synthetic test data: seeded PRNG on purpose (reproducible dataset).
+"dataset/**" = ["S311"]
 
 [tool.mypy]
 strict = true
@@ -47,3 +49,8 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 module = ["celery.*", "kombu.*", "scapy.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# scapy's packet DSL is dynamically typed.
+module = ["dataset.*"]
+disable_error_code = ["attr-defined", "no-untyped-call", "no-any-return"]

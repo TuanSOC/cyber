@@ -123,7 +123,7 @@ upload (pcap/pcapng) ──► API ──creates──► analysis_jobs row (que
 | Phase | Name | Status |
 |-------|------|--------|
 | 1 | [Job pipeline and workers](./phase-01-job-pipeline-and-workers.md) | Completed |
-| 2 | [PCAP engine and dataset](./phase-02-pcap-engine-and-dataset.md) | Pending |
+| 2 | [PCAP engine and dataset](./phase-02-pcap-engine-and-dataset.md) | Completed |
 | 3 | [Detections and IOCs](./phase-03-detections-and-iocs.md) | Pending |
 | 4 | [Ingest persistence and read API](./phase-04-ingest-persistence-and-read-api.md) | Pending |
 | 5 | [Frontend PCAP analyzer](./phase-05-frontend-pcap-analyzer.md) | Pending |

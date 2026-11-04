@@ -10,6 +10,7 @@ import gzip
 from collections.abc import Iterator
 
 import pytest
+from cyberlab_jobs.results import RECORD_ADAPTER, ResultHeader, ResultTrailer
 
 from app.core.clients import get_minio
 from app.core.config import get_settings
@@ -44,10 +45,20 @@ async def test_worker_analyzes_an_uploaded_capture() -> None:
     assert job["status"] == "succeeded", seen
     assert seen == ["started:None:None", "finished:succeeded:None"]
 
-    # The result object exists at the job's own key, as the version ingest recorded.
+    # The result object (the version ingest recorded) is a valid pcap.v1 stream.
     key = dispatch.result_key(reg.org_id, job["id"])
-    stat = get_minio().stat_object(get_settings().results_bucket, key)
-    assert stat.size and stat.size > 0
+    response = get_minio().get_object(get_settings().results_bucket, key)
+    try:
+        lines = gzip.decompress(response.read()).splitlines()
+    finally:
+        response.close()
+        response.release_conn()
+    header = ResultHeader.model_validate_json(lines[0])
+    assert str(header.job_id) == job["id"] and header.capture_format == "pcap"
+    assert {"zeek", "tshark", "suricata", "rules_sha256"} <= set(header.tool_versions)
+    stats = RECORD_ADAPTER.validate_json(lines[1])
+    assert stats.kind == "stats" and stats.packets == 3
+    assert ResultTrailer.model_validate_json(lines[-1]).line_count == len(lines) - 1
 
 
 async def _manual_job(
