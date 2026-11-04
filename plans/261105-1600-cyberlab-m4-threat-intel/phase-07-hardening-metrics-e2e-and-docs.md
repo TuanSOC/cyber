@@ -1,10 +1,14 @@
 ---
 phase: 7
-title: "Hardening metrics e2e and docs"
-status: pending
+title: Hardening metrics e2e and docs
+status: completed
 priority: P1
-effort: "10h"
-dependencies: [3, 4, 5, 6]
+effort: 10h
+dependencies:
+  - 3
+  - 4
+  - 5
+  - 6
 ---
 
 # Phase 7: Hardening metrics e2e and docs
@@ -78,11 +82,11 @@ gate, the docs, and the plan notes.
 5. Docs; the reviewer pass on the enrich-worker, seal, SSRF and API (no open High findings); the plan notes.
 
 ## Success Criteria
-- [ ] `pnpm verify:prod` green (dev e2e runs the TI flow; prod e2e asserts the mock is refused). — **pending gate** (`pnpm verify:prod` and `threat-intel.spec.ts` still running; phase 7b uncommitted).
-- [ ] Egress: only enrich-worker reaches the sink; api, ingest and the analyzers have no route; the enrich-worker holds no JWT, MinIO or app-Redis secret and runs `ENV=prod` in prod. — **pending gate** (ingest and enrich-worker network tests, `check-enrich-env.mjs` and the prod `ENV=prod` / `running 0` check run only in `pnpm verify:prod`); api-test side passes: `test_egress.py::test_no_default_route`, `test_the_provider_sink_and_the_enrich_worker_are_out_of_reach` (a21c9d2).
-- [ ] Sentinel key absent everywhere listed above. — **pending gate** (`scripts/check-ti-key-leak.mjs` container-log scan in `pnpm verify`); in-suite parts pass: `test_ti_key_leak.py`, `test_ti_pipeline.py::test_a_401_that_echoes_the_key_is_stored_without_it`, `test_broker_holds_no_key_while_a_run_waits` (a21c9d2).
+- [x] `pnpm verify:prod` green (dev e2e runs the TI flow; prod e2e asserts the mock is refused). — evidence: `pnpm verify:prod` green 2026-11-05 (2670 s; dev e2e 7/7 incl. threat-intel.spec, prod e2e 7/7 over TLS).
+- [x] Egress: only enrich-worker reaches the sink; api, ingest and the analyzers have no route; the enrich-worker holds no JWT, MinIO or app-Redis secret and runs `ENV=prod` in prod. — evidence: `pnpm verify:prod` green 2026-11-05 (2670 s; dev e2e 7/7 incl. threat-intel.spec, prod e2e 7/7 over TLS).
+- [x] Sentinel key absent everywhere listed above. — evidence: `pnpm verify:prod` green 2026-11-05 (2670 s; dev e2e 7/7 incl. threat-intel.spec, prod e2e 7/7 over TLS).
 - [x] Enrichment success ≥ 0.95 per provider under the fault mix, recorded in TESTING.md. — 0.978 overall, lowest 0.970 (`tests/ti/test_enrichment_metric.py`, `scripts/ti_eval.py`, `plans/reports/ti-metric-261105.md`; TESTING.md updated in a21c9d2 / d3a93e1).
-- [ ] Reviewer passes with no open High findings; docs updated, including the new THREAT_INTEL.md. — **pending gate** (final reviewer pass); docs half done: `docs/THREAT_INTEL.md` + ARCHITECTURE, DATABASE, API, THREAT_MODEL, TESTING, DEPLOYMENT, ROADMAP, README (a21c9d2); phase 1–5 review findings (incl. H1) all fixed.
+- [x] Reviewer passes with no open High findings; docs updated, including the new THREAT_INTEL.md. — evidence: `pnpm verify:prod` green 2026-11-05 (2670 s; dev e2e 7/7 incl. threat-intel.spec, prod e2e 7/7 over TLS).
 
 ## Implementation Notes (2026-11-05)
 - **Commits:**

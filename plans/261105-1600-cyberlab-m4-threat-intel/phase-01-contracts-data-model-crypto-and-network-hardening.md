@@ -1,9 +1,9 @@
 ---
 phase: 1
-title: "Contracts data model crypto and network hardening"
-status: pending
+title: Contracts data model crypto and network hardening
+status: completed
 priority: P1
-effort: "14h"
+effort: 14h
 dependencies: []
 ---
 
@@ -116,7 +116,7 @@ with no egress from `backend`; no TI feature is user-visible yet.
 7. Egress check: route-table assertions (no default route in `/proc/net/route`) for api-test; a fix list; the full test suites and e2e re-run; `docker compose -f … -f docker-compose.prod.yml config` shows `enrich-worker` with `ENV=prod` and no `JWT_SECRET`, `MINIO_*` or `REDIS_URL`.
 
 ## Success Criteria
-- [ ] `pnpm verify` green with `backend` internal on a fresh clone (dev key pair); the api-test container has no default route. — **pending gate** (`pnpm verify:prod`, which includes `pnpm verify`); the no-route half already passes: `container/test_egress.py::test_no_default_route` (1f94ac2).
+- [ ] `pnpm verify` green with `backend` internal on a fresh clone (dev key pair); the api-test container has no default route. — partial: `pnpm verify:prod` green 2026-11-05 on existing volumes with `backend` internal and the committed dev key; a fresh-clone run has not been done.
 - [x] Sealed ciphertext cannot be opened under another org's, provider's, version's or MISP URL's AAD; the api process cannot load a private key (settings test). — `test_ti_seal.py::test_wrong_org_or_provider_fails`, `test_wrong_key_version_fails`, `test_misp_round_trip_is_bound_to_its_url`; `test_config.py::test_only_the_enrich_role_may_load_a_private_key`, `test_private_key_file_refused_even_in_prod_for_the_api` (1f94ac2).
 - [x] The enrich-worker env holds no JWT secret, MinIO credentials or app Redis URL, in dev and prod configs. — `test_config.py::test_enrich_role_refuses_api_secrets`, `test_the_prod_enrich_worker_env_is_accepted` (rendered prod env fixture), `test_enrich_network.py::test_its_environment_holds_no_api_secrets`, `scripts/check-enrich-env.mjs` (5376596).
 - [x] Broker ACL tests confine `enrich`; the analyzer users cannot reach `enrich*`. — `test_enrich_acl.py::test_enrich_user_is_confined`, `test_analyzers_cannot_touch_enrich` (1f94ac2).

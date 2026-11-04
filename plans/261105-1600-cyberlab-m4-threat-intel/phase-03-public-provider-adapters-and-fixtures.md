@@ -1,10 +1,11 @@
 ---
 phase: 3
-title: "Public provider adapters and fixtures"
-status: pending
+title: Public provider adapters and fixtures
+status: completed
 priority: P1
-effort: "8h"
-dependencies: [2]
+effort: 8h
+dependencies:
+  - 2
 ---
 
 # Phase 3: Public provider adapters and fixtures

@@ -1,10 +1,12 @@
 ---
 phase: 6
-title: "Threat intel frontend"
-status: pending
+title: Threat intel frontend
+status: completed
 priority: P1
-effort: "10h"
-dependencies: [4, 5]
+effort: 10h
+dependencies:
+  - 4
+  - 5
 ---
 
 # Phase 6: Threat intel frontend
@@ -63,9 +65,9 @@ ATT&CK chips label capa capabilities and findings. All wording is verdict-free a
 6. Wording and untrusted-text tests; typecheck, eslint, prod build.
 
 ## Success Criteria
-- [ ] An admin can acknowledge terms, configure, verify, replace and remove keys; no key value is ever rendered back (unit and e2e). — **pending gate** (Playwright `threat-intel.spec.ts` + web step of `pnpm verify`); unit side: `integration-card.test.tsx` (7 cases, 3e1f686).
-- [ ] IOC rows show source-attributed chips and a history link; ineligible IOCs explain why they were not sent. — **pending gate** (Playwright `threat-intel.spec.ts`: chips, "View history"); templates unit-tested in `lib/ti.test.ts` ("titles every chip with its source and date", "explains why a value was never sent").
-- [ ] capa and finding ATT&CK ids show names and tactics with the MITRE notice; the wording test passes. — **pending gate** (Playwright "a Malware Lab job shows ATT&CK technique names for capa capabilities"; `lib/ti-wording.test.ts` and `lib/ti.test.ts` "labels known, revoked and unknown ids" run in the `pnpm verify` web step).
+- [x] An admin can acknowledge terms, configure, verify, replace and remove keys; no key value is ever rendered back (unit and e2e). — evidence: `pnpm verify:prod` green 2026-11-05 (2670 s; dev e2e 7/7 incl. threat-intel.spec, prod e2e 7/7 over TLS).
+- [x] IOC rows show source-attributed chips and a history link; ineligible IOCs explain why they were not sent. — evidence: `pnpm verify:prod` green 2026-11-05 (2670 s; dev e2e 7/7 incl. threat-intel.spec, prod e2e 7/7 over TLS).
+- [x] capa and finding ATT&CK ids show names and tactics with the MITRE notice; the wording test passes. — evidence: `pnpm verify:prod` green 2026-11-05 (2670 s; dev e2e 7/7 incl. threat-intel.spec, prod e2e 7/7 over TLS).
 
 ## Implementation Notes (2026-11-05)
 - **Commits:** 3e1f686 (31 files, +3772). a21c9d2 made small follow-ups to `integration-card.tsx`, `lib/ti.ts` and `lib/pcap-results.ts` for the OpenAPI renames.

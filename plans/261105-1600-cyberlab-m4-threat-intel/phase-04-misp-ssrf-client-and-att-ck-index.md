@@ -1,10 +1,11 @@
 ---
 phase: 4
-title: "MISP SSRF client and ATT&CK index"
-status: pending
+title: MISP SSRF client and ATT&CK index
+status: completed
 priority: P1
-effort: "8h"
-dependencies: [2]
+effort: 8h
+dependencies:
+  - 2
 ---
 
 # Phase 4: MISP SSRF client and ATT&CK index

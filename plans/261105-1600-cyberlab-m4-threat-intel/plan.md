@@ -1,24 +1,26 @@
 ---
-title: "CyberLab M4 Threat Intelligence"
+title: CyberLab M4 Threat Intelligence
 description: >-
-  Lookup-only IOC enrichment from VirusTotal, AbuseIPDB, URLhaus, MalwareBazaar, AlienVault OTX
-  and MISP via a trusted, least-privilege enrich-worker that alone has egress; offline MITRE
-  ATT&CK index; sealed per-org API keys (API encrypts only, MISP keys bound to their URL);
-  per-org append-only result history used as the cache; broker-side token buckets;
-  time-sliced runs; verdict-free, source-attributed UI (Integrations page, enrichment panels,
-  IOC lookup).
-status: pending
+  Lookup-only IOC enrichment from VirusTotal, AbuseIPDB, URLhaus, MalwareBazaar,
+  AlienVault OTX and MISP via a trusted, least-privilege enrich-worker that
+  alone has egress; offline MITRE ATT&CK index; sealed per-org API keys (API
+  encrypts only, MISP keys bound to their URL); per-org append-only result
+  history used as the cache; broker-side token buckets; time-sliced runs;
+  verdict-free, source-attributed UI (Integrations page, enrichment panels, IOC
+  lookup).
+status: completed
 priority: P1
 effort: 73h
-branch: "feat/m4-threat-intel"
+branch: feat/m4-threat-intel
 tags:
   - feature
   - threat-intel
   - security
-blockedBy: [261105-0900-cyberlab-m3-malware-static]
+blockedBy:
+  - 261105-0900-cyberlab-m3-malware-static
 blocks: []
-created: "2026-11-04T15:44:33.764Z"
-createdBy: "ck:plan"
+created: '2026-11-04T15:44:33.764Z'
+createdBy: 'ck:plan'
 source: skill
 ---
 
@@ -241,13 +243,13 @@ Four hostile reviewers (security, reliability, product/legal, scope) checked the
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Contracts data model crypto and network hardening](./phase-01-contracts-data-model-crypto-and-network-hardening.md) | Pending |
-| 2 | [Enrich worker broker limiter and normalization](./phase-02-enrich-worker-broker-limiter-and-normalization.md) | Pending |
-| 3 | [Public provider adapters and fixtures](./phase-03-public-provider-adapters-and-fixtures.md) | Pending |
-| 4 | [MISP SSRF client and ATT&CK index](./phase-04-misp-ssrf-client-and-att-ck-index.md) | Pending |
-| 5 | [Integrations enrichment and lookup API](./phase-05-integrations-enrichment-and-lookup-api.md) | Pending |
-| 6 | [Threat intel frontend](./phase-06-threat-intel-frontend.md) | Pending |
-| 7 | [Hardening metrics e2e and docs](./phase-07-hardening-metrics-e2e-and-docs.md) | Pending |
+| 1 | [Contracts data model crypto and network hardening](./phase-01-contracts-data-model-crypto-and-network-hardening.md) | Completed |
+| 2 | [Enrich worker broker limiter and normalization](./phase-02-enrich-worker-broker-limiter-and-normalization.md) | Completed |
+| 3 | [Public provider adapters and fixtures](./phase-03-public-provider-adapters-and-fixtures.md) | Completed |
+| 4 | [MISP SSRF client and ATT&CK index](./phase-04-misp-ssrf-client-and-att-ck-index.md) | Completed |
+| 5 | [Integrations enrichment and lookup API](./phase-05-integrations-enrichment-and-lookup-api.md) | Completed |
+| 6 | [Threat intel frontend](./phase-06-threat-intel-frontend.md) | Completed |
+| 7 | [Hardening metrics e2e and docs](./phase-07-hardening-metrics-e2e-and-docs.md) | Completed |
 
 ## Dependencies and parallelism
 

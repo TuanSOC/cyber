@@ -1,10 +1,11 @@
 ---
 phase: 5
-title: "Integrations enrichment and lookup API"
-status: pending
+title: Integrations enrichment and lookup API
+status: completed
 priority: P1
-effort: "9h"
-dependencies: [2]
+effort: 9h
+dependencies:
+  - 2
 ---
 
 # Phase 5: Integrations enrichment and lookup API
@@ -79,7 +80,7 @@ It does not edit `providers/`, `summaries.py`, `catalog.py`, `runs.py`, `ssrf.py
 ## Success Criteria
 - [x] The IDOR and RLS enumerators cover every new route and table, and they pass. — `security/test_idor_routes.py` (TI cases, 6b04ccc), `integration/test_rls_coverage.py` (1f94ac2); full API suite 2221 passed / 19 skipped at d3a93e1.
 - [x] No response, audit detail, error or log line contains the sentinel key or its ciphertext. — `test_ti_api_integrations.py::test_sentinel_key_never_leaks` (responses, audit rows, caplog, 422s), `test_ti_key_leak.py::test_no_api_response_carries_the_key`, `test_failed_puts_never_echo_the_key` (6b04ccc, a21c9d2). The container-log scan (`scripts/check-ti-key-leak.mjs`) is part of the phase-7 gate.
-- [ ] A job enrichment request gives 202 → the worker runs it → `include=enrichment` shows per-provider results, history lists them, and a repeat run shows the cached items. — **pending gate** (Playwright `threat-intel.spec.ts`, the only end-to-end proof of the whole chain); covered piecewise by `test_job_enrichment_creates_one_run_and_dedupes`, `test_ti_pipeline.py::test_hit_not_found_outage_and_cache`, `test_ioc_list_include_enrichment`, `test_history_lists_every_answer_newest_first`, `test_run_detail_shows_cached_items`.
+- [x] A job enrichment request gives 202 → the worker runs it → `include=enrichment` shows per-provider results, history lists them, and a repeat run shows the cached items. — evidence: `pnpm verify:prod` green 2026-11-05 (2670 s; dev e2e 7/7 incl. threat-intel.spec, prod e2e 7/7 over TLS).
 - [x] A MISP `base_url` change cannot reuse the stored key. — `test_ti_api_integrations.py::test_misp_url_is_bound_to_the_key`, `test_ti_key_leak.py::test_a_misp_key_does_not_follow_a_swapped_base_url`, `test_ti_ssrf_resolve.py::test_misp_key_sealed_for_url_a_does_not_open_for_url_b` (6b04ccc, a21c9d2, 913023d).
 
 ## Implementation Notes (2026-11-05)

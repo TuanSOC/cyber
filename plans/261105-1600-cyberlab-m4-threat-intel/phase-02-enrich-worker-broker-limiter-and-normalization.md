@@ -1,10 +1,11 @@
 ---
 phase: 2
-title: "Enrich worker broker limiter and normalization"
-status: pending
+title: Enrich worker broker limiter and normalization
+status: completed
 priority: P1
-effort: "14h"
-dependencies: [1]
+effort: 14h
+dependencies:
+  - 1
 ---
 
 # Phase 2: Enrich worker broker limiter and normalization
