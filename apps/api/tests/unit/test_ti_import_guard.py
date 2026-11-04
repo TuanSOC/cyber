@@ -10,6 +10,10 @@ The API seals keys and plans runs; it never calls a provider and never opens a s
   which the API imports too.
 Every import form counts: `import x`, `import x as y`, `from pkg import x`, relative imports,
 and `importlib.import_module("x")` or `__import__("x")` with a constant name (RT21).
+
+M5: the sealing code moved to `app/core/sealbox.py` / `sealbox_open.py` (the TI modules are
+thin wrappers with the same names). `tests/unit/test_ai_import_guard.py` reuses this parser
+and keeps `sealbox_open` behind the two unseal wrappers; the analyst worker is not exempt here.
 """
 
 import ast
@@ -172,3 +176,40 @@ def test_adapters_may_never_import_unseal(source: str) -> None:
 )
 def test_the_shared_provider_modules_get_no_exemption(rel: str, source: str) -> None:
     assert offenders(source, rel)
+
+
+@pytest.mark.parametrize("rel", ["workers/analyst.py", "workers/analyst_tasks.py"])
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from app.modules.threat_intel.unseal import open_sealed",
+        "from app.modules.threat_intel import http",
+        "from app.modules.threat_intel.providers import registry",
+    ],
+)
+def test_the_analyst_worker_gets_no_threat_intel_exemption(rel: str, source: str) -> None:
+    """M5: the AI analyst worker is internet-facing too, but never opens TI keys."""
+    assert offenders(source, rel)
+
+
+def test_the_ti_wrappers_keep_their_public_names() -> None:
+    """The moved generic code is re-exported under the M4 names (callers unchanged)."""
+    from app.modules.threat_intel import seal, unseal
+
+    for name in (
+        "SCHEME",
+        "SealedKey",
+        "SealError",
+        "aad",
+        "check_context",
+        "derive_key",
+        "last4",
+        "load_public_key",
+        "raw_public",
+        "seal",
+        "KID_PATTERN",
+    ):
+        assert hasattr(seal, name), name
+    for name in ("UnsealError", "load_private_keys", "open_sealed"):
+        assert hasattr(unseal, name), name
+    assert seal.SCHEME == "cyberlab.ti.v1"

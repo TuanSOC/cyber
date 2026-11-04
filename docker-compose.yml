@@ -43,6 +43,16 @@ x-api-env: &api-env
   TI_SEAL_PUBLIC_KEYS: ${TI_SEAL_PUBLIC_KEYS}
   TI_MOCK_ENABLED: ${TI_MOCK_ENABLED:-true}
   TI_MOCK_BASE_URL: http://ti-mock:8080
+  # AI analyst (M5): the API seals AI provider keys with the AI public key only. The dev
+  # defaults are the committed dev pair (infra/ai/dev-seal-private.json), refused in prod.
+  AI_ENABLED: ${AI_ENABLED:-true}
+  AI_SEAL_ACTIVE_KID: ${AI_SEAL_ACTIVE_KID:-dev-ai-1}
+  AI_SEAL_PUBLIC_KEYS: '${AI_SEAL_PUBLIC_KEYS:-{"dev-ai-1":"YqrtDS8h4Q5PCQ0wa+0X7Qy72jDi3HYjQfotX+oH6io="}}'
+  AI_MOCK_ENABLED: ${AI_MOCK_ENABLED:-true}
+  AI_MOCK_BASE_URL: http://ai-mock:8080
+  GEMINI_BILLING_ENABLED: ${GEMINI_BILLING_ENABLED:-false}
+  # Non-secret: which provider the dev-only platform key overlay covers (empty: none).
+  AI_PLATFORM_PROVIDER: ${AI_PLATFORM_PROVIDER:-}
 
 # Least-privilege env of the internet-facing enrich worker (M4 RT2). Never merged with
 # *api-env: no JWT secret, no MinIO credentials, no app Redis (Settings refuses them when
@@ -62,6 +72,27 @@ x-enrich-env: &enrich-env
   TI_MOCK_ENABLED: ${TI_MOCK_ENABLED:-true}
   TI_MOCK_BASE_URL: http://ti-mock:8080
 
+# Least-privilege env of the AI analyst worker (M5). Never merged with *api-env or
+# *enrich-env: no JWT secret, MinIO, app Redis or TI private key (Settings refuses them when
+# PROCESS_ROLE=analyst). The AI public keys are here for the lazy re-seal (RT18).
+x-analyst-env: &analyst-env
+  ENV: ${ENV:-dev}
+  PROCESS_ROLE: analyst
+  DATABASE_URL: ${DATABASE_URL}
+  # Default password: an older .env without BROKER_ANALYST_PASSWORD still starts (RT25).
+  BROKER_URL: redis://analyst:${BROKER_ANALYST_PASSWORD:-change-me-broker-analyst}@redis-broker:6379/0
+  QUEUE_PREFIX: ""
+  UV_NO_SYNC: "1"
+  UV_OFFLINE: "1"
+  AI_ENABLED: ${AI_ENABLED:-true}
+  AI_SEAL_ACTIVE_KID: ${AI_SEAL_ACTIVE_KID:-dev-ai-1}
+  AI_SEAL_PUBLIC_KEYS: '${AI_SEAL_PUBLIC_KEYS:-{"dev-ai-1":"YqrtDS8h4Q5PCQ0wa+0X7Qy72jDi3HYjQfotX+oH6io="}}'
+  AI_SEAL_PRIVATE_KEYS_FILE: /run/secrets/ai_seal_private
+  AI_MOCK_ENABLED: ${AI_MOCK_ENABLED:-true}
+  AI_MOCK_BASE_URL: http://ai-mock:8080
+  GEMINI_BILLING_ENABLED: ${GEMINI_BILLING_ENABLED:-false}
+  AI_ANTHROPIC_EFFORT: ${AI_ANTHROPIC_EFFORT:-medium}
+
 # Trusted enrich worker (api image): the only service with internet egress. It joins only
 # `enrich` (Postgres and the broker, nothing else) and `egress`: never `backend` (app Redis,
 # MinIO, the api) nor `analysis` (review M2).
@@ -78,6 +109,22 @@ x-enrich-worker: &enrich-worker
   networks: [enrich, egress]
   # The sealing private keys (dev: the committed dev-only pair; prod: .secrets/).
   secrets: [ti_seal_private]
+
+# Trusted AI analyst worker (M5, api image): the same isolation as the enrich worker
+# (`enrich` = Postgres + broker only, plus `egress`), with its own key pair and broker user.
+# It never gets the enrich worker's TI secret, nor the enrich worker its AI secret.
+x-analyst-worker: &analyst-worker
+  image: cyberlab/api:dev
+  pull_policy: never
+  user: "10001"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs:
+    - /tmp:size=16m
+  restart: unless-stopped
+  networks: [enrich, egress]
+  secrets: [ai_seal_private]
 
 # Untrusted parser container: broker URL only, tools run as an unprivileged uid inside.
 x-pcap-worker: &pcap-worker
@@ -143,9 +190,10 @@ networks:
   backend:
     internal: true
   frontend:
-  # Internet egress for the enrich worker only (and the ti-mock sink in test/e2e).
+  # Internet egress for the enrich and analyst workers only (and the ti-mock / ai-mock
+  # sinks in test/e2e).
   egress:
-  # The enrich worker's way to its data: Postgres and the broker only, no egress.
+  # The enrich and analyst workers' way to their data: Postgres and the broker only.
   enrich:
     internal: true
   # Parser network: no egress (internal), only the broker and MinIO (presigned URLs) on it.
@@ -230,6 +278,8 @@ services:
       BROKER_PCAP_PASSWORD: ${BROKER_PCAP_PASSWORD}
       BROKER_STATIC_PASSWORD: ${BROKER_STATIC_PASSWORD}
       BROKER_ENRICH_PASSWORD: ${BROKER_ENRICH_PASSWORD}
+      # Default: an older .env without it must not crash the broker (RT25); prod requires it.
+      BROKER_ANALYST_PASSWORD: ${BROKER_ANALYST_PASSWORD:-change-me-broker-analyst}
     volumes:
       - ./infra/redis-broker:/init:ro
     networks: [backend, analysis, enrich]
@@ -336,6 +386,22 @@ services:
       redis-broker:
         condition: service_healthy
 
+  # AI analyst (M5). Phase 1: consumes `ai.*` and fails every run with `not_implemented`.
+  analyst-worker:
+    <<: *analyst-worker
+    command: ["celery", "-A", "app.workers.analyst_app", "worker", "-Q", "analyst",
+              "--pool", "solo", "--without-gossip", "--without-mingle", "--without-heartbeat",
+              "--loglevel", "INFO"]
+    environment: *analyst-env
+    volumes:
+      - ./apps/api:/srv/api:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis-broker:
+        condition: service_healthy
+
   static-worker:
     <<: *static-worker
     environment:
@@ -425,16 +491,19 @@ services:
       TEST_MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       TEST_MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       # Test jobs: own broker db + queue prefix, so dev workers never see them.
-      BROKER_URL: redis://ingest:${BROKER_INGEST_PASSWORD}@redis-broker:6379/1
+      BROKER_URL: redis://ingest:${BROKER_INGEST_PASSWORD}@redis-broker:6379/${TEST_BROKER_DB:-1}
       QUEUE_PREFIX: "test."
       RESULTS_BUCKET: ${RESULTS_TEST_BUCKET}
       # Lets tests probe the broker ACL as each component's user.
-      TEST_BROKER_PCAP_URL: redis://pcap:${BROKER_PCAP_PASSWORD}@redis-broker:6379/1
-      TEST_BROKER_STATIC_URL: redis://static:${BROKER_STATIC_PASSWORD}@redis-broker:6379/1
-      TEST_BROKER_ENRICH_URL: redis://enrich:${BROKER_ENRICH_PASSWORD}@redis-broker:6379/1
-      TEST_BROKER_API_URL: redis://api:${BROKER_API_PASSWORD}@redis-broker:6379/1
+      TEST_BROKER_PCAP_URL: redis://pcap:${BROKER_PCAP_PASSWORD}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      TEST_BROKER_STATIC_URL: redis://static:${BROKER_STATIC_PASSWORD}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      TEST_BROKER_ENRICH_URL: redis://enrich:${BROKER_ENRICH_PASSWORD}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      TEST_BROKER_API_URL: redis://api:${BROKER_API_PASSWORD}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      TEST_BROKER_ANALYST_URL: redis://analyst:${BROKER_ANALYST_PASSWORD:-change-me-broker-analyst}@redis-broker:6379/${TEST_BROKER_DB:-1}
       # The key ti-mock expects: the TI pipeline test seals it like an admin would.
       TEST_TI_MOCK_EXPECTED_KEY: ${TI_MOCK_EXPECTED_KEY:-cyberlab-ti-mock-key}
+      # The key ai-mock expects (the AI pipeline tests seal it like an admin would).
+      TEST_AI_MOCK_EXPECTED_KEY: ${AI_MOCK_EXPECTED_KEY:-cyberlab-ai-mock-key}
     volumes:
       - ./apps/api:/srv/api
       - ./packages/py-jobs:/packages/py-jobs
@@ -455,6 +524,8 @@ services:
         condition: service_started
       enrich-worker-test:
         condition: service_started
+      analyst-worker-test:
+        condition: service_started
 
   enrich-worker-test:
     <<: *enrich-worker
@@ -466,7 +537,7 @@ services:
       <<: *enrich-env
       ENV: test
       DATABASE_URL: ${TEST_DATABASE_URL}
-      BROKER_URL: redis://enrich:${BROKER_ENRICH_PASSWORD}@redis-broker:6379/1
+      BROKER_URL: redis://enrich:${BROKER_ENRICH_PASSWORD}@redis-broker:6379/${TEST_BROKER_DB:-1}
       QUEUE_PREFIX: "test."
       TI_MOCK_ENABLED: "true"
     volumes:
@@ -479,6 +550,52 @@ services:
         condition: service_healthy
       ti-mock:
         condition: service_started
+
+  analyst-worker-test:
+    <<: *analyst-worker
+    profiles: ["test"]
+    command: ["celery", "-A", "app.workers.analyst_app", "worker", "-Q", "test.analyst",
+              "--pool", "solo", "--without-gossip", "--without-mingle", "--without-heartbeat",
+              "--loglevel", "INFO"]
+    environment:
+      <<: *analyst-env
+      ENV: test
+      DATABASE_URL: ${TEST_DATABASE_URL}
+      BROKER_URL: redis://analyst:${BROKER_ANALYST_PASSWORD:-change-me-broker-analyst}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      QUEUE_PREFIX: "test."
+      AI_MOCK_ENABLED: "true"
+    volumes:
+      - ./apps/api:/srv/api:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-broker:
+        condition: service_healthy
+      ai-mock:
+        condition: service_started
+
+  # Deterministic LLM sink for the AI `mock` provider (test + e2e only; phase 2 implements
+  # the wire protocol documented in app/modules/ai/contracts.py). A stdlib server on
+  # `egress` only, so the analyst worker is the only client that can reach it.
+  ai-mock:
+    profiles: ["test", "e2e"]
+    image: python:3.12-alpine
+    command: ["python", "/srv/ai-mock/server.py"]
+    environment:
+      AI_MOCK_EXPECTED_KEY: ${AI_MOCK_EXPECTED_KEY:-cyberlab-ai-mock-key}
+    volumes:
+      - ./infra/ai-mock:/srv/ai-mock:ro
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [egress]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
   # Deterministic provider sink for the `mock` provider (test + e2e only): a stdlib server
   # on the egress network only, so the enrich worker is the only client that can reach it.
@@ -505,7 +622,7 @@ services:
     <<: *static-worker
     profiles: ["test"]
     environment:
-      BROKER_URL: redis://static:${BROKER_STATIC_PASSWORD}@redis-broker:6379/1
+      BROKER_URL: redis://static:${BROKER_STATIC_PASSWORD}@redis-broker:6379/${TEST_BROKER_DB:-1}
       QUEUE_PREFIX: "test."
       WORKER_QUEUE: static
       RUFF_CACHE_DIR: /tmp/ruff
@@ -526,7 +643,7 @@ services:
     <<: *pcap-worker
     profiles: ["test"]
     environment:
-      BROKER_URL: redis://pcap:${BROKER_PCAP_PASSWORD}@redis-broker:6379/1
+      BROKER_URL: redis://pcap:${BROKER_PCAP_PASSWORD}@redis-broker:6379/${TEST_BROKER_DB:-1}
       QUEUE_PREFIX: "test."
       # Small local rule file: loading ET Open takes ~40 s per job (one test covers it).
       SURICATA_RULES: /srv/workers/pcap/tests/rules/local-test.rules
@@ -570,6 +687,9 @@ secrets:
   # Dev-only seal private key (committed, refused in prod); the prod override swaps the file.
   ti_seal_private:
     file: ./infra/ti/dev-seal-private.json
+  # Dev-only AI seal private key (committed kid dev-ai-1, refused in prod); same rules.
+  ai_seal_private:
+    file: ./infra/ai/dev-seal-private.json
 
 volumes:
   pgdata:

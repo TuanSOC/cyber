@@ -1,5 +1,5 @@
-"""Migrations replay from scratch in one alembic run (M3 RT7); 0009 and 0006 downgrade
-cleanly.
+"""Migrations replay from scratch in one alembic run (M3 RT7); 0011, 0010, 0009 and 0006
+downgrade cleanly.
 
 `env.py` applies every pending revision in a single transaction; 0006 adds an enum value,
 which Postgres will not let that same transaction use. The session fixture already upgrades
@@ -61,6 +61,28 @@ TI_FUNCTIONS = (
 )
 
 
+AI_TABLES = (
+    "ai_provider_configs",
+    "ai_org_settings",
+    "ai_runs",
+    "ai_run_index",
+    "ai_run_inputs",
+    "ai_context_refs",
+    "ai_outputs",
+    "ai_citations",
+)
+AI_REGCLASSES = "SELECT " + ", ".join(f"to_regclass('{t}')::text" for t in AI_TABLES)
+AI_FUNCTIONS = (
+    "SELECT proname::text FROM pg_proc WHERE proname IN "
+    "('ai_run_transition', 'ai_key_version_guard') ORDER BY proname"
+)
+
+
+async def _ai_tables(engine: AsyncEngine) -> list[object]:
+    async with engine.connect() as conn:
+        return [t for t in (await conn.execute(text(AI_REGCLASSES))).one() if t is not None]
+
+
 async def _ti_tables(engine: AsyncEngine) -> list[object]:
     async with engine.connect() as conn:
         return [t for t in (await conn.execute(text(TI_REGCLASSES))).one() if t is not None]
@@ -69,6 +91,9 @@ async def _ti_tables(engine: AsyncEngine) -> list[object]:
 async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine) -> None:
     await get_engine().dispose()
     try:
+        _alembic("downgrade", "0010")  # 0011 (M5 AI analyst) goes away completely
+        assert await _ai_tables(owner_engine) == []
+        assert await _scalars(owner_engine, AI_FUNCTIONS) == []
         _alembic("downgrade", "0009")  # 0010 (review L7/L8) reverts cleanly
         assert await _scalars(owner_engine, RUN_INDEX_FKS) == [
             "fk_ti_run_index_organization_id_organizations",
@@ -91,7 +116,8 @@ async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine)
         _alembic("upgrade", "head")  # never leave the shared test database half-migrated
         await get_engine().dispose()
 
-    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0010"]
+    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0011"]
+    assert await _ai_tables(owner_engine) == list(AI_TABLES)
     assert await _ti_tables(owner_engine) == list(TI_TABLES)
     assert await _scalars(owner_engine, RUN_INDEX_FKS) == [
         "fk_ti_run_index_organization_id_organizations",

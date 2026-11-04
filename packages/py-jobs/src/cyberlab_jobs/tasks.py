@@ -11,6 +11,10 @@ REAP = "ingest.reap"
 TI_ENRICH = "ti.enrich"
 TI_RESUME = "ti.resume"
 TI_VERIFY = "ti.verify"
+# AI analyst (M5): consumed only by the trusted analyst worker (queue `analyst`).
+AI_RUN = "ai.run"
+AI_RESUME = "ai.resume"
+AI_VERIFY = "ai.verify"
 
 
 @dataclass(frozen=True)
@@ -34,3 +38,7 @@ class Queues:
     @property
     def enrich(self) -> str:
         return f"{self.prefix}enrich"
+
+    @property
+    def analyst(self) -> str:
+        return f"{self.prefix}analyst"

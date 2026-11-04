@@ -5,7 +5,7 @@ Imported by the API only to enqueue (`send_task`); run as the ingest worker with
 """
 
 from celery import Celery
-from cyberlab_jobs import REAP, TI_RESUME, Queues
+from cyberlab_jobs import AI_RESUME, REAP, TI_RESUME, Queues
 
 from app.core.config import get_settings
 
@@ -50,6 +50,13 @@ celery_app.conf.update(
             "schedule": 30.0,
             "kwargs": {"message": {}},
             "options": {"queue": queues.enrich, "expires": 25},
+        },
+        # AI analyst (M5): the same resume loop for the analyst worker's runs.
+        "resume-ai-runs": {
+            "task": AI_RESUME,
+            "schedule": 30.0,
+            "kwargs": {"message": {}},
+            "options": {"queue": queues.analyst, "expires": 25},
         },
     },
 )

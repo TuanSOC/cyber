@@ -15,6 +15,9 @@ from cyberlab_jobs.messages import (
     PresignedPost,
 )
 from cyberlab_jobs.tasks import (
+    AI_RESUME,
+    AI_RUN,
+    AI_VERIFY,
     INGEST_EVENT,
     PCAP_ANALYZE,
     REAP,
@@ -26,6 +29,9 @@ from cyberlab_jobs.tasks import (
 )
 
 __all__ = [
+    "AI_RESUME",
+    "AI_RUN",
+    "AI_VERIFY",
     "INGEST_EVENT",
     "INGEST_SCHEMA",
     "PCAP_ANALYZE",

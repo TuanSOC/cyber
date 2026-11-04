@@ -1,0 +1,23 @@
+# Dev-only overlay (M5): a platform AI key for the analyst worker, used only for orgs that
+# have no own key for that provider (they must still enable AI and acknowledge the terms).
+# Never part of the gate; refused in prod (Settings: AI_PLATFORM_KEY_FILE /
+# AI_PLATFORM_PROVIDER with ENV=prod). A global daily ceiling bounds it
+# (AI_PLATFORM_DAILY_TOKENS, RT17).
+#   printf '%s' "$KEY" > .secrets/ai_platform_key   (gitignored)
+#   AI_PLATFORM_PROVIDER=anthropic docker compose -f docker-compose.yml \
+#     -f docker-compose.ai-platform.yml up -d analyst-worker api
+services:
+  analyst-worker:
+    environment:
+      AI_PLATFORM_KEY_FILE: /run/secrets/ai_platform_key
+      AI_PLATFORM_PROVIDER: ${AI_PLATFORM_PROVIDER:?set AI_PLATFORM_PROVIDER (anthropic or gemini)}
+    secrets: [ai_seal_private, ai_platform_key]
+
+  # Non-secret: the API only shows that the platform key covers this provider.
+  api:
+    environment:
+      AI_PLATFORM_PROVIDER: ${AI_PLATFORM_PROVIDER:?set AI_PLATFORM_PROVIDER (anthropic or gemini)}
+
+secrets:
+  ai_platform_key:
+    file: ./.secrets/ai_platform_key

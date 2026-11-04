@@ -1,6 +1,7 @@
 """Fail jobs whose deadline passed: never started (queue TTL) or ran too long.
 
-Also the threat-intel fallback reaper (`reap_ti_runs`, M4 RT9).
+Also the threat-intel fallback reaper (`reap_ti_runs`, M4 RT9) and the AI analyst one
+(`reap_ai_runs`, M5: a phase-1 stub that phase 2 fills).
 """
 
 import logging
@@ -111,3 +112,12 @@ async def reap_ti_runs() -> int:
     if reaped:
         log.info("reaped %d stale threat-intel runs", reaped)
     return reaped
+
+
+# --- AI analyst fallback (M5) ----------------------------------------------------------------
+# Phase 2 fills this: finalize runs 10 minutes past their deadline with no live lease as
+# `failed / deadline` (audited `ai.run_deadline`). Already called by the `reap` task.
+
+
+async def reap_ai_runs() -> int:
+    return 0

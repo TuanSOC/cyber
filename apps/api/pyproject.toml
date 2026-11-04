@@ -22,6 +22,10 @@ dependencies = [
     # Threat intel (M4): sealed provider keys (X25519/HKDF/AES-GCM) and provider HTTP calls.
     "cryptography>=44",
     "httpx>=0.28",
+    # AI analyst (M5): official SDKs, pinned below the next major (a bump is a parent
+    # decision). anthropic uses the separate httpx2 package; google-genai uses httpx.
+    "anthropic>=2.5,<3",
+    "google-genai>=2.34,<3",
 ]
 
 [tool.uv.sources]

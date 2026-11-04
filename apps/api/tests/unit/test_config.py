@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.core.config import DEV_SEAL_PUBLIC_KEYS, Settings
+from app.core.config import DEV_AI_SEAL_PUBLIC_KEYS, DEV_SEAL_PUBLIC_KEYS, Settings
 from app.modules.threat_intel.catalog import CATALOG
 from app.modules.threat_intel.providers.base import ProviderName
 
@@ -21,10 +21,15 @@ BASE = {
 }
 PUBLIC = base64.b64encode(bytes(range(32))).decode()
 # The api-test container sets the dev TI values (mock on, dev- kid): prod cases override them.
+AI_PUBLIC = base64.b64encode(bytes(range(32, 64))).decode()
 PROD_TI: dict[str, Any] = {
     "ti_mock_enabled": False,
     "ti_seal_active_kid": "prod-1",
     "ti_seal_public_keys": {"prod-1": PUBLIC},
+    # M5: the api role also needs a prod AI kid (and the test env sets the dev AI values).
+    "ai_mock_enabled": False,
+    "ai_seal_active_kid": "prod-ai-1",
+    "ai_seal_public_keys": {"prod-ai-1": AI_PUBLIC},
 }
 # The enrich worker gets none of the role-gated settings (explicit None beats the test env).
 ENRICH = {
@@ -44,6 +49,7 @@ def _no_env_seal_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     # pydantic-settings deep-merges dict settings across sources: the api-test env's dev
     # public key would be merged into every `ti_seal_public_keys` passed here.
     monkeypatch.delenv("TI_SEAL_PUBLIC_KEYS", raising=False)
+    monkeypatch.delenv("AI_SEAL_PUBLIC_KEYS", raising=False)
 
 
 def test_prod_requires_secure_cookies() -> None:
@@ -252,3 +258,188 @@ def test_kids_must_match_the_seal_pattern(kid: str) -> None:
         Settings(**BASE, ti_seal_active_kid=kid, ti_seal_public_keys={"k1": PUBLIC})
     with pytest.raises(ValidationError, match="invalid kid"):
         Settings(**BASE, ti_seal_public_keys={kid: PUBLIC})
+
+
+# --- M5: the analyst role, AI settings and role-scoped prod guards (RT6) -------------------
+
+# The api-test env sets the dev TI/AI values (mocks on): explicit values beat it.
+ANALYST = {
+    **ENRICH,
+    "process_role": "analyst",
+    "broker_url": "redis://analyst:x@b:6379/0",
+    "ti_mock_enabled": False,
+    "ai_mock_enabled": False,
+}
+COMPOSE = Path(__file__).resolve().parents[1] / "fixtures/compose"
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("jwt_secret", "y" * 48),
+        ("redis_url", "redis://redis:6379/0"),
+        ("minio_endpoint", "minio:9000"),
+        ("minio_access_key", "cyberlab-api"),
+        ("minio_secret_key", "s3cret-minio"),
+        ("ti_seal_private_keys_file", "/run/secrets/ti_seal_private"),
+    ],
+)
+def test_analyst_role_refuses_api_secrets_and_ti_keys(name: str, value: str) -> None:
+    with pytest.raises(ValidationError, match=name.upper()):
+        Settings(**{**ANALYST, name: value})
+
+
+def test_analyst_role_runs_without_api_secrets() -> None:
+    settings = Settings(
+        **ANALYST,
+        ai_seal_private_keys_file="/run/secrets/ai_seal_private",
+        ai_platform_key_file="/run/secrets/ai_platform_key",
+    )
+    assert settings.jwt_secret is None and settings.redis_url is None
+    with pytest.raises(RuntimeError, match="not available to the analyst process"):
+        settings.need("minio_secret_key")
+
+
+@pytest.mark.parametrize("role", ["api", "ingest", "enrich"])
+@pytest.mark.parametrize("name", ["ai_seal_private_keys_file", "ai_platform_key_file"])
+def test_only_the_analyst_may_hold_ai_private_or_platform_keys(role: str, name: str) -> None:
+    values = ENRICH if role == "enrich" else BASE
+    with pytest.raises(ValidationError, match=name.upper()):
+        Settings(**{**values, "process_role": role, name: "/run/secrets/x"})
+
+
+@pytest.mark.parametrize(
+    "flag",
+    [
+        ("ai_mock_enabled", True),
+        ("ai_platform_provider", "anthropic"),
+        ("ai_anthropic_base_url", "http://replay:8080"),
+        ("ai_gemini_base_url", "http://replay:8080"),
+    ],
+)
+def test_prod_refuses_dev_only_ai_settings(flag: tuple[str, object]) -> None:
+    name, value = flag
+    with pytest.raises(ValidationError, match=name.upper()):
+        Settings(**BASE, **{**PROD_TI, name: value}, env="prod", cookie_secure=True)
+
+
+def test_prod_refuses_the_platform_key_even_for_the_analyst() -> None:
+    values = {**ANALYST, **_prod_ai(), "ai_platform_key_file": "/run/secrets/k"}
+    with pytest.raises(ValidationError, match="AI_PLATFORM_KEY_FILE"):
+        Settings(**values, env="prod")
+
+
+def _prod_ai(**overrides: object) -> dict[str, object]:
+    return {
+        "ai_mock_enabled": False,
+        "ai_seal_active_kid": "prod-ai-1",
+        "ai_seal_public_keys": {"prod-ai-1": AI_PUBLIC},
+        **overrides,
+    }
+
+
+@pytest.mark.parametrize("kid", ["dev-ai-1", "DEV-x", "Dev-prod"])
+@pytest.mark.parametrize("role", ["api", "analyst"])
+def test_prod_refuses_dev_ai_kids(kid: str, role: str) -> None:
+    base = {**BASE, **PROD_TI} if role == "api" else ANALYST
+    values = {
+        **base,
+        **_prod_ai(ai_seal_active_kid=kid, ai_seal_public_keys={kid: AI_PUBLIC}),
+        "process_role": role,
+    }
+    with pytest.raises(ValidationError, match="AI_SEAL_ACTIVE_KID: dev- seal keys"):
+        Settings(**values, env="prod", cookie_secure=True)
+
+
+@pytest.mark.parametrize("role", ["api", "analyst"])
+def test_prod_needs_the_active_ai_kid_for_the_roles_that_seal_or_open(role: str) -> None:
+    base = {**BASE, **PROD_TI} if role == "api" else ANALYST
+    values = {**base, **_prod_ai(ai_seal_public_keys={"other": AI_PUBLIC}), "process_role": role}
+    with pytest.raises(ValidationError, match="AI_SEAL_ACTIVE_KID must name"):
+        Settings(**values, env="prod", cookie_secure=True)
+    # AI_ENABLED=false needs no AI key.
+    values = {**base, "ai_enabled": False, "ai_mock_enabled": False, "process_role": role}
+    assert Settings(**values, env="prod", cookie_secure=True).ai_enabled is False
+
+
+def test_role_scoped_kid_guards() -> None:
+    """RT6: the enrich env has no AI keys and the analyst env no TI keys; both start in
+    prod. Ingest checks neither kid (it seals and opens nothing)."""
+    ti = {k: v for k, v in PROD_TI.items() if k.startswith("ti_")}
+    enrich = {**ENRICH, **ti, "ai_mock_enabled": False}
+    assert Settings(**enrich, ti_seal_private_keys_file="/run/secrets/ti", env="prod")
+    assert Settings(**{**ANALYST, **_prod_ai()}, env="prod").process_role == "analyst"
+    ingest = {**BASE, "ti_mock_enabled": False, "ai_mock_enabled": False, "process_role": "ingest"}
+    assert Settings(**ingest, env="prod").process_role == "ingest"
+
+
+def test_prod_refuses_the_committed_dev_ai_public_key_in_any_role() -> None:
+    [dev_key] = DEV_AI_SEAL_PUBLIC_KEYS
+    for role, base in (("api", {**BASE, **PROD_TI}), ("analyst", ANALYST), ("ingest", BASE)):
+        values = {
+            **base,
+            **_prod_ai(ai_seal_public_keys={"prod-ai-1": AI_PUBLIC, "old": dev_key}),
+            "ti_mock_enabled": False,
+            "process_role": role,
+        }
+        with pytest.raises(ValidationError, match="AI_SEAL_PUBLIC_KEYS: the committed dev"):
+            Settings(**values, env="prod", cookie_secure=True)
+
+
+def test_prod_refuses_change_me_broker_passwords() -> None:
+    values = {**ANALYST, **_prod_ai(), "broker_url": "redis://analyst:change-me-broker-analyst@b/0"}
+    with pytest.raises(ValidationError, match="broker_url"):
+        Settings(**values, env="prod")
+
+
+def test_ai_public_keys_and_kid_are_validated() -> None:
+    with pytest.raises(ValidationError, match="AI_SEAL_PUBLIC_KEYS"):
+        Settings(**BASE, ai_seal_public_keys={"k1": "bm90LWEta2V5"})
+    with pytest.raises(ValidationError, match="AI_SEAL_ACTIVE_KID"):
+        Settings(**BASE, ai_seal_active_kid="bad kid")
+
+
+def test_ai_defaults_and_ceilings() -> None:
+    settings = Settings(**BASE)
+    assert (settings.ai_max_output_tokens, settings.ai_call_timeout_s) == (16_000, 300)
+    assert (settings.ai_call_idle_timeout_s, settings.ai_max_calls_per_run) == (60, 3)
+    assert (settings.ai_run_deadline_s, settings.ai_incident_deadline_s) == (1200, 3600)
+    assert settings.ai_ceilings.daily_token_budget == 20_000_000
+    assert settings.ai_ceilings.run_token_cap == 200_000
+    assert settings.ai_ceilings.incident_token_cap == 2_000_000
+    assert settings.ai_platform_daily_tokens == 200_000
+    custom = Settings(**BASE, ai_ceilings={"daily_token_budget": 5, "per_minute": {"gemini": 9}})
+    assert custom.ai_ceilings.daily_token_budget == 5
+    with pytest.raises(ValidationError):
+        Settings(**BASE, ai_ceilings={"per_minute": {"openai": 1}})
+    with pytest.raises(ValidationError):
+        Settings(**BASE, ai_ceilings={"surprise": 1})
+
+
+@pytest.mark.parametrize(
+    ("fixture", "role"),
+    [
+        ("api.prod.env.json", "api"),
+        ("ingest-worker.prod.env.json", "ingest"),
+        ("enrich-worker.prod.env.json", "enrich"),
+        ("analyst-worker.prod.env.json", "analyst"),
+    ],
+)
+def test_the_rendered_prod_env_of_every_role_is_accepted(
+    fixture: str, role: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """RT6: each prod env exactly as compose renders it (secrets masked) starts."""
+    env = json.loads((COMPOSE / fixture).read_text(encoding="utf-8"))
+    _only_env(monkeypatch, env)
+    settings = Settings()
+    assert (settings.env, settings.process_role) == ("prod", role)
+    assert settings.ai_mock_enabled is False and settings.ai_platform_key_file is None
+    if role in ("enrich", "analyst"):
+        for name in ("jwt_secret", "redis_url", "minio_endpoint", "minio_secret_key"):
+            assert getattr(settings, name) is None
+    if role == "analyst":
+        assert settings.ti_seal_private_keys_file is None and not settings.ti_seal_public_keys
+        assert settings.ai_seal_private_keys_file == "/run/secrets/ai_seal_private"
+        assert settings.broker_url.startswith("redis://analyst:")
+    if role == "enrich":
+        assert settings.ai_seal_private_keys_file is None and not settings.ai_seal_public_keys

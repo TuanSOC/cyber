@@ -5,7 +5,7 @@
 set -eu
 
 : "${BROKER_API_PASSWORD:?}" "${BROKER_INGEST_PASSWORD:?}" "${BROKER_PCAP_PASSWORD:?}"
-: "${BROKER_STATIC_PASSWORD:?}" "${BROKER_ENRICH_PASSWORD:?}"
+: "${BROKER_STATIC_PASSWORD:?}" "${BROKER_ENRICH_PASSWORD:?}" "${BROKER_ANALYST_PASSWORD:?}"
 
 # Commands no component needs and that would let one inspect or disrupt others' queues.
 DENY="-@dangerous -@admin -keys -scan -randomkey -sort -dump -object"
@@ -37,6 +37,18 @@ enrich_keys() {
   echo "$keys"
 }
 
+# The trusted AI analyst worker (M5) is internet-facing too: same confinement as enrich,
+# under analyst* / test.analyst* (its queue, unacked keys and `analyst.ai:*` limiter and
+# budget keys). It cannot touch enrich*, ingest* or trusted.*, and nothing but api / ingest
+# (`~*`) can touch analyst*.
+analyst_keys() {
+  keys="resetkeys ~analyst* ~test.analyst*"
+  for q in analyst test.analyst; do
+    keys="$keys ~_kombu.binding.$q ~_kombu.binding_permanent.$q"
+  done
+  echo "$keys"
+}
+
 cat >/tmp/users.acl <<EOF
 user default off
 user api on >${BROKER_API_PASSWORD} ~* resetchannels +@all ${DENY}
@@ -44,6 +56,7 @@ user ingest on >${BROKER_INGEST_PASSWORD} ~* resetchannels +@all ${DENY}
 user pcap on >${BROKER_PCAP_PASSWORD} $(analyzer_keys pcap) resetchannels +@all ${DENY} ${READ_DENY}
 user static on >${BROKER_STATIC_PASSWORD} $(analyzer_keys static) resetchannels +@all ${DENY} ${READ_DENY}
 user enrich on >${BROKER_ENRICH_PASSWORD} $(enrich_keys) resetchannels +@all ${DENY} ${READ_DENY}
+user analyst on >${BROKER_ANALYST_PASSWORD} $(analyst_keys) resetchannels +@all ${DENY} ${READ_DENY}
 user healthcheck on nopass resetkeys +ping
 EOF
 chmod 600 /tmp/users.acl

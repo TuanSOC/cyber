@@ -34,6 +34,14 @@ async def test_every_tenant_table_has_forced_rls(owner_engine: AsyncEngine) -> N
         "ti_run_items",
         "ti_run_index",
         "ti_results",
+        "ai_provider_configs",
+        "ai_org_settings",
+        "ai_runs",
+        "ai_run_index",
+        "ai_run_inputs",
+        "ai_context_refs",
+        "ai_outputs",
+        "ai_citations",
     }
     unprotected = [r.relname for r in rows if not (r.relrowsecurity and r.relforcerowsecurity)]
     assert unprotected == []
@@ -71,6 +79,31 @@ async def test_system_visible_ti_run_index_holds_no_tenant_data(
         "dispatched_at",
         "lease_until",
         "lease_owner",
+    }
+
+
+async def test_system_visible_ai_run_index_holds_no_tenant_data(
+    owner_engine: AsyncEngine,
+) -> None:
+    """Same rule for the AI run index (M5): ids, scheduling and call counts only, never
+    context, model output or provider data."""
+    query = text(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = 'public' AND table_name = 'ai_run_index'"
+    )
+    async with owner_engine.connect() as conn:
+        columns = set((await conn.execute(query)).scalars())
+    assert columns == {
+        "run_id",
+        "organization_id",
+        "status",
+        "resume_at",
+        "deadline_at",
+        "dispatched_at",
+        "lease_until",
+        "lease_owner",
+        "attempts",
+        "calls",
     }
 
 

@@ -55,3 +55,4 @@ def ingest_event(message: dict[str, Any]) -> None:
 def reap() -> None:
     run(reaper.reap())
     run(reaper.reap_ti_runs())
+    run(reaper.reap_ai_runs())

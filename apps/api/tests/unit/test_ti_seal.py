@@ -233,3 +233,31 @@ def test_worker_startup_check(tmp_path: Path) -> None:
     other = base64.b64encode(raw_public(X25519PrivateKey.generate().public_key())).decode()
     with pytest.raises(RuntimeError, match="does not match"):
         enrich.check_startup(_enrich_settings(path, public=other))
+
+
+# --- M5: the generic sealbox refactor keeps the M4 bytes ------------------------------------
+
+PREREFACTOR = Path(__file__).resolve().parents[1] / "fixtures/seal/ti_prerefactor.json"
+
+
+def test_prerefactor_ciphertext_still_opens() -> None:
+    """Ciphertexts written by the M4 code (before `app/core/sealbox.py`) open unchanged."""
+    fixture = json.loads(PREREFACTOR.read_text(encoding="utf-8"))
+    org = uuid.UUID(fixture["org_id"])
+    keys = {
+        kid: X25519PrivateKey.from_private_bytes(base64.b64decode(raw))
+        for kid, raw in fixture["private_keys"].items()
+    }
+    assert len(fixture["cases"]) == 2
+    for case in fixture["cases"]:
+        sealed = SealedKey(
+            kid=case["kid"],
+            key_version=case["key_version"],
+            epk=base64.b64decode(case["epk"]),
+            nonce=base64.b64decode(case["nonce"]),
+            ct=base64.b64decode(case["ct"]),
+            last4=case["last4"],
+        )
+        opened = open_sealed(sealed, org, case["provider"], case["base_url_norm"], keys)
+        assert opened.get_secret_value() == case["plaintext"]
+        assert case["plaintext"][-4:] == case["last4"]

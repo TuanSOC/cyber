@@ -14,9 +14,11 @@ ALLOWED = {
     "modules/auth/service.py": "register(): org id freshly generated",
     "modules/organizations/service.py": "create_org(): org id freshly generated",
     "workers/ingest.py": "org from the non-tenant job index; message org must match + job token",
-    # Also hosts the TI fallback reaper (M4 phase 2): org from the non-tenant ti_run_index.
+    # Also hosts the TI fallback reaper (M4 phase 2): org from the non-tenant ti_run_index,
+    # and the AI one (M5 `reap_ai_runs`, filled by phase 2): org from ai_run_index.
     "workers/reaper.py": "org from the non-tenant job index (system data, no request input)",
     "workers/enrich.py": "org from the non-tenant ti_run_index; the message org must match",
+    "workers/analyst.py": "org from the non-tenant ai_run_index; the message org must match",
 }
 
 

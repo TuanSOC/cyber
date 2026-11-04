@@ -9,6 +9,15 @@ x-prod-ti: &prod-ti
   TI_SEAL_ACTIVE_KID: ${TI_PROD_SEAL_ACTIVE_KID:?run scripts/gen_ti_seal_keys.py and set TI_PROD_SEAL_ACTIVE_KID}
   TI_SEAL_PUBLIC_KEYS: ${TI_PROD_SEAL_PUBLIC_KEYS:?run scripts/gen_ti_seal_keys.py and set TI_PROD_SEAL_PUBLIC_KEYS}
 
+# AI analyst in prod (M5): no ai-mock, no platform key, and a real AI seal key pair
+# (scripts/gen_ai_seal_keys.py writes .secrets/ai_seal_private.json and prints the two
+# AI_PROD_* lines for .env). Settings refuses a `dev-` kid and the committed dev key.
+x-prod-ai: &prod-ai
+  AI_MOCK_ENABLED: "false"
+  AI_PLATFORM_PROVIDER: ""
+  AI_SEAL_ACTIVE_KID: ${AI_PROD_SEAL_ACTIVE_KID:?run scripts/gen_ai_seal_keys.py and set AI_PROD_SEAL_ACTIVE_KID}
+  AI_SEAL_PUBLIC_KEYS: ${AI_PROD_SEAL_PUBLIC_KEYS:?run scripts/gen_ai_seal_keys.py and set AI_PROD_SEAL_PUBLIC_KEYS}
+
 services:
   minio:
     ports: !reset []
@@ -25,7 +34,7 @@ services:
       context: ./apps/api
       target: prod
     environment:
-      <<: *prod-ti
+      <<: [*prod-ti, *prod-ai]
       ENV: prod
       COOKIE_SECURE: "true"
     volumes: !override
@@ -34,7 +43,7 @@ services:
   ingest-worker:
     image: cyberlab/api:prod
     environment:
-      <<: *prod-ti
+      <<: [*prod-ti, *prod-ai]
       ENV: prod
       COOKIE_SECURE: "true"
     volumes: !override
@@ -43,7 +52,7 @@ services:
   ingest-beat:
     image: cyberlab/api:prod
     environment:
-      <<: *prod-ti
+      <<: [*prod-ti, *prod-ai]
       ENV: prod
       COOKIE_SECURE: "true"
     volumes: !reset []
@@ -56,6 +65,22 @@ services:
       <<: *prod-ti
       ENV: prod
     volumes: !reset []
+
+  # The AI analyst worker in prod: prod image, ENV=prod (mock refused), its own broker
+  # password required, two replicas (the DB lease keeps them safe, M5 RT2).
+  analyst-worker:
+    image: cyberlab/api:prod
+    environment:
+      <<: *prod-ai
+      ENV: prod
+      BROKER_URL: redis://analyst:${BROKER_ANALYST_PASSWORD:?set BROKER_ANALYST_PASSWORD}@redis-broker:6379/0
+    volumes: !reset []
+    deploy:
+      replicas: 2
+
+  redis-broker:
+    environment:
+      BROKER_ANALYST_PASSWORD: ${BROKER_ANALYST_PASSWORD:?set BROKER_ANALYST_PASSWORD}
 
   static-worker:
     image: cyberlab/static-worker:prod
@@ -102,6 +127,9 @@ secrets:
   # From scripts/gen_ti_seal_keys.py (mode 0400, owned by uid 10001 on a Linux host).
   ti_seal_private:
     file: ./.secrets/ti_seal_private.json
+  # From scripts/gen_ai_seal_keys.py (same rules).
+  ai_seal_private:
+    file: ./.secrets/ai_seal_private.json
 
 volumes:
   caddydata:

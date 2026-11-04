@@ -4,12 +4,15 @@ Every API route with an `{org_id}` path parameter must have an entry in ROUTE_CA
 fails when a new org-scoped route is added without one, so coverage cannot silently drift.
 Each case is also replayed by the resource owner (positive control): a request that fails for
 everyone would otherwise pass the 404 assertions vacuously.
+
+M5 (RT11): the cases of later phases live in per-owner modules (`idor_cases_reads.py`,
+`idor_cases_ai.py`), merged here with their victim extenders, path overrides, resource
+parameters and state hooks; the cases and assertions below are unchanged.
 """
 
 import ast
+import dataclasses
 import uuid
-from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -21,30 +24,21 @@ from app.modules.organizations.models import MemberRole
 from tests import static_results
 from tests.factories import Registered, add_member, csrf, make_user, new_client, register
 from tests.pcap_results import seed_results
+from tests.security import idor_cases_ai, idor_cases_reads
+from tests.security.idor_types import (
+    PathOverrides,
+    Request,
+    RouteCases,
+    StateHook,
+    Victim,
+    VictimExtender,
+)
 from tests.ti_api_helpers import add_result, capture_sends, enable, lookup
 
-
-@dataclass(frozen=True)
-class Victim:
-    """Resources owned by another organization."""
-
-    org_id: uuid.UUID
-    member_id: str  # an analyst in the victim org (not the owner, so the owner may change it)
-    investigation_id: str
-    evidence_id: str
-    job_id: str  # an analysis job (on a second evidence, so the first can still be analyzed)
-    static_job_id: str  # the second evidence's automatic static job, with results
-    outsider_email: str  # a real user who is not a member of the victim org
-    run_id: str  # a threat intel enrichment run
-    result_id: str  # one of its provider answers
-    provider: str = "mock"  # a configured, enabled provider (not an org-owned id)
-
-
-Request = dict[str, Any]
-CaseBuilder = Callable[[Victim], Request]
+CASE_MODULES = (idor_cases_reads, idor_cases_ai)
 
 # (method, path template) -> request kwargs that are valid for the resource owner.
-ROUTE_CASES: dict[tuple[str, str], CaseBuilder] = {
+ROUTE_CASES: RouteCases = {
     ("GET", "/api/v1/orgs/{org_id}"): lambda v: {},
     ("PATCH", "/api/v1/orgs/{org_id}"): lambda v: {"json": {"name": "Hijacked"}},
     ("GET", "/api/v1/orgs/{org_id}/storage"): lambda v: {},
@@ -146,6 +140,17 @@ STATIC_JOB_ROUTES = {
 }
 
 
+# Merged per-owner case modules (RT11): a duplicate route would be a plan bug.
+VICTIM_EXTENDERS: list[VictimExtender] = []
+PATH_OVERRIDES: PathOverrides = {}
+STATE_HOOKS: list[StateHook] = []
+for _module in CASE_MODULES:
+    assert not set(_module.ROUTE_CASES) & set(ROUTE_CASES), _module.__name__
+    ROUTE_CASES.update(_module.ROUTE_CASES)
+    VICTIM_EXTENDERS.extend(_module.VICTIM_EXTENDERS)
+    PATH_OVERRIDES.update(_module.PATH_OVERRIDES)
+    STATE_HOOKS.extend(_module.STATE_HOOKS)
+
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
 RESOURCE_PARAMS = (
     "{member_id}",
@@ -154,6 +159,7 @@ RESOURCE_PARAMS = (
     "{job_id}",
     "{run_id}",
     "{result_id}",
+    *(param for module in CASE_MODULES for param in module.RESOURCE_PARAMS),
 )
 APP_DIR = Path(__file__).resolve().parents[2] / "app"
 
@@ -255,7 +261,7 @@ async def _victim() -> tuple[Registered, Victim]:
     assert run.status_code == 202, run.text
     run_id = run.json()["run"]["id"]
     result_id = await add_result(owner.org_id, run_id)
-    return owner, Victim(
+    victim = Victim(
         owner.org_id,
         member["id"],
         case["id"],
@@ -266,20 +272,27 @@ async def _victim() -> tuple[Registered, Victim]:
         run_id=run_id,
         result_id=str(result_id),
     )
+    for extend in VICTIM_EXTENDERS:  # resources of the later-phase case modules (RT11)
+        victim = dataclasses.replace(victim, extra={**victim.extra, **await extend(owner, victim)})
+    return owner, victim
 
 
 def _url(template: str, org_id: uuid.UUID, victim: Victim) -> str:
     static = template in STATIC_JOB_ROUTES
-    return template.format(
-        org_id=org_id,
-        member_id=victim.member_id,
-        investigation_id=victim.investigation_id,
-        evidence_id=victim.evidence_id,
-        job_id=victim.static_job_id if static else victim.job_id,
-        run_id=victim.run_id,
-        result_id=victim.result_id,
-        provider=victim.provider,
-    )
+    params = {
+        "member_id": victim.member_id,
+        "investigation_id": victim.investigation_id,
+        "evidence_id": victim.evidence_id,
+        "job_id": victim.static_job_id if static else victim.job_id,
+        "run_id": victim.run_id,
+        "result_id": victim.result_id,
+        "provider": victim.provider,
+        **victim.extra,
+    }
+    override = PATH_OVERRIDES.get(template)
+    if override is not None:
+        params.update(override(victim))
+    return template.format(org_id=org_id, **params)
 
 
 async def _call(client: AsyncClient, method: str, url: str, request: Request) -> int:
@@ -309,7 +322,11 @@ async def _victim_state(owner: Registered, victim: Victim) -> dict[str, Any]:
     integrations = (await c.get(f"{base}/integrations")).json()
     ti_settings = (await c.get(f"{base}/ti/settings")).json()
     ti_runs = (await c.get(f"{base}/ti/runs")).json()
+    extra: dict[str, Any] = {}
+    for hook in STATE_HOOKS:
+        extra.update(await hook(owner, victim))
     return {
+        **extra,
         "integrations": sorted(
             (i["name"], i["configured"], i["enabled"], i["key_last4"], str(i["limits"]))
             for i in integrations["items"]

@@ -10,6 +10,7 @@ from app.core.csrf import CSRFMiddleware
 from app.core.db import get_engine
 from app.core.errors import register_error_handlers
 from app.core.hashing import sweep_stale_spools
+from app.modules.ai.router import router as ai_router
 from app.modules.analysis.router import router as analysis_router
 from app.modules.attack.router import router as attack_router
 from app.modules.audit.router import router as audit_router
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
     v1.include_router(static_analysis_router)
     v1.include_router(threat_intel_router)
     v1.include_router(attack_router)
+    v1.include_router(ai_router)
     app.include_router(v1)
     return app
 

@@ -3,14 +3,22 @@ import binascii
 from functools import lru_cache
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.sealbox import KID_PATTERN
+from app.modules.ai.contracts import AiProviderName
 from app.modules.threat_intel.catalog import CATALOG, ProviderLimits
 from app.modules.threat_intel.providers.base import ProviderName
-from app.modules.threat_intel.seal import KID_PATTERN
 
-ProcessRole = Literal["api", "ingest", "enrich"]
+ProcessRole = Literal["api", "ingest", "enrich", "analyst"]
 
 # Settings the internet-facing enrich worker must never hold (M4 RT2): a session-forging
 # JWT secret, object-store credentials, the app Redis (token denylist, rate limits).
@@ -24,6 +32,16 @@ ENRICH_FORBIDDEN = (
 # The committed dev-only seal key pair (infra/ti/dev-seal-private.json, kid dev-1): its
 # private half is public, so prod refuses its public key under any kid (review L6).
 DEV_SEAL_PUBLIC_KEYS = frozenset({"yzkMNEv4XawVLz1SuyMqEqSDdzMc1QpC7ERo9zFe7Gs="})
+# The trusted AI analyst worker (M5) has the same restrictions, and may not open TI keys
+# either: `threat_intel.unseal` and `ai.unseal` are never both usable by one process role.
+ANALYST_FORBIDDEN = (*ENRICH_FORBIDDEN, "ti_seal_private_keys_file")
+# The committed dev-only AI seal key pair (infra/ai/dev-seal-private.json, kid dev-ai-1).
+DEV_AI_SEAL_PUBLIC_KEYS = frozenset({"YqrtDS8h4Q5PCQ0wa+0X7Qy72jDi3HYjQfotX+oH6io="})
+# Per-org AI budget defaults (`ai_org_settings` server defaults, migration 0011, RT9).
+AI_DEFAULT_DAILY_TOKEN_BUDGET = 1_000_000
+AI_DEFAULT_RUN_TOKEN_CAP = 100_000
+AI_DEFAULT_INCIDENT_TOKEN_CAP = 600_000
+AnthropicEffort = Literal["low", "medium", "high", "xhigh", "max"]
 RequiredSetting = Literal[
     "jwt_secret", "minio_endpoint", "minio_access_key", "minio_secret_key", "redis_url"
 ]
@@ -37,6 +55,25 @@ class TiCeiling(BaseModel):
     per_minute: int = Field(ge=1, le=100_000)
     per_day: int | None = Field(default=None, ge=1, le=10_000_000)
     concurrency: int = Field(default=4, ge=1, le=4)
+
+
+class AiCeilings(BaseModel):
+    """Operator ceilings over the per-org AI budgets (`AI_CEILINGS` JSON, RT9): an org admin
+    can never set a budget above them. `per_minute` overrides the catalog request ceilings."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    daily_token_budget: int = Field(default=20_000_000, ge=1, le=1_000_000_000)
+    run_token_cap: int = Field(default=200_000, ge=1, le=10_000_000)
+    incident_token_cap: int = Field(default=2_000_000, ge=1, le=100_000_000)
+    per_minute: dict[AiProviderName, int] = {}
+
+    @field_validator("per_minute")
+    @classmethod
+    def _per_minute(cls, value: dict[AiProviderName, int]) -> dict[AiProviderName, int]:
+        if any(not 1 <= v <= 100_000 for v in value.values()):
+            raise ValueError("AI_CEILINGS.per_minute values must be 1..100000")
+        return value
 
 
 class Settings(BaseSettings):
@@ -147,8 +184,48 @@ class Settings(BaseSettings):
     # Per-provider ceiling overrides: JSON {provider: {per_minute, per_day, concurrency}}.
     ti_ceilings: dict[ProviderName, TiCeiling] = {}
 
+    # --- AI analyst (M5) ---
+    ai_enabled: bool = True
+    # kid -> base64 raw X25519 public key: the API seals AI provider keys with it; the analyst
+    # holds it too, for the lazy re-seal under the active kid (RT18).
+    ai_seal_public_keys: dict[str, str] = {}
+    ai_seal_active_kid: str | None = None
+    # JSON {kid: base64 private key}: the analyst worker only (refused for any other role).
+    ai_seal_private_keys_file: str | None = None
+    # Dev/test platform key (a compose secret file, never an env value): analyst only and
+    # refused in prod. `AI_PLATFORM_PROVIDER` names its provider (non-secret: the API reads it
+    # to show `platform_key` on the catalog; refused in prod too).
+    ai_platform_key_file: str | None = None
+    ai_platform_provider: AiProviderName | None = None
+    # Global daily ceiling of the platform key (broker counter, RT17).
+    ai_platform_daily_tokens: int = Field(default=200_000, ge=1, le=100_000_000)
+    # Dev/test sink (`ai-mock`): refused in prod.
+    ai_mock_enabled: bool = False
+    ai_mock_base_url: str = "http://ai-mock:8080"
+    # Operator flag: Gemini only runs with paid-tier billing (and the org's attestation, RT5).
+    gemini_billing_enabled: bool = False
+    ai_default_provider: AiProviderName = AiProviderName.ANTHROPIC
+    ai_anthropic_effort: AnthropicEffort = "medium"
+    # Test-only endpoint overrides (replay servers); refused in prod.
+    ai_anthropic_base_url: str | None = None
+    ai_gemini_base_url: str | None = None
+    ai_max_input_tokens: int = Field(default=60_000, ge=1_000, le=1_000_000)
+    ai_max_output_tokens: int = Field(default=16_000, ge=256, le=128_000)
+    ai_call_timeout_s: int = Field(default=300, ge=5, le=3600)
+    ai_call_idle_timeout_s: int = Field(default=60, ge=1, le=600)
+    ai_max_calls_per_run: int = Field(default=3, ge=1, le=10)
+    ai_run_deadline_s: int = Field(default=1200, ge=60)
+    # Incident trees: the children inherit the parent's deadline (RT8).
+    ai_incident_deadline_s: int = Field(default=3600, ge=60)
+    ai_max_jobs_per_incident: int = Field(default=10, ge=1, le=50)
+    ai_ceilings: AiCeilings = AiCeilings()
+    ai_runs_per_user_10min: int = Field(default=10, ge=1)
+    # Both count every non-final run, incident children included (RT8).
+    ai_active_runs_per_org: int = Field(default=12, ge=1)
+    ai_active_runs_global: int = Field(default=40, ge=1)
+
     def need(self, name: RequiredSetting) -> str:
-        """A setting every role but enrich requires (validated at startup)."""
+        """A setting every role but enrich and analyst requires (validated at startup)."""
         value: str | None = getattr(self, name)
         if value is None:
             raise RuntimeError(f"{name} is not available to the {self.process_role} process")
@@ -160,40 +237,59 @@ class Settings(BaseSettings):
             return CATALOG[provider].ceilings
         return ProviderLimits(override.per_minute, override.per_day, override.concurrency)
 
-    @field_validator("ti_seal_public_keys")
+    @field_validator("ti_seal_public_keys", "ai_seal_public_keys")
     @classmethod
-    def _public_keys(cls, value: dict[str, str]) -> dict[str, str]:
+    def _public_keys(cls, value: dict[str, str], info: ValidationInfo) -> dict[str, str]:
+        name = (info.field_name or "").upper()
         for kid, encoded in value.items():
             if not KID_PATTERN.fullmatch(kid):
-                raise ValueError("TI_SEAL_PUBLIC_KEYS has an invalid kid")
+                raise ValueError(f"{name} has an invalid kid")
             try:
                 raw = base64.b64decode(encoded, validate=True)
             except (binascii.Error, ValueError):
                 raw = b""
             if len(raw) != 32:
-                raise ValueError(f"TI_SEAL_PUBLIC_KEYS[{kid!r}] is not a base64 X25519 key")
+                raise ValueError(f"{name}[{kid!r}] is not a base64 X25519 key")
         return value
 
     @field_validator(
-        "ti_seal_active_kid", "ti_seal_private_keys_file", "ti_misp_ca_file", mode="before"
+        "ti_seal_active_kid",
+        "ti_seal_private_keys_file",
+        "ti_misp_ca_file",
+        "ai_seal_active_kid",
+        "ai_seal_private_keys_file",
+        "ai_platform_key_file",
+        "ai_platform_provider",
+        "ai_anthropic_base_url",
+        "ai_gemini_base_url",
+        mode="before",
     )
     @classmethod
     def _blank_ti_is_unset(cls, value: object) -> object:
         return None if isinstance(value, str) and not value.strip() else value
 
-    @field_validator("ti_seal_active_kid")
+    @field_validator("ti_seal_active_kid", "ai_seal_active_kid")
     @classmethod
-    def _active_kid(cls, value: str | None) -> str | None:
+    def _active_kid(cls, value: str | None, info: ValidationInfo) -> str | None:
         if value is not None and not KID_PATTERN.fullmatch(value):
-            raise ValueError("TI_SEAL_ACTIVE_KID must match [A-Za-z0-9._-]{1,64}")
+            name = (info.field_name or "").upper()
+            raise ValueError(f"{name} must match [A-Za-z0-9._-]{{1,64}}")
         return value
 
     @model_validator(mode="after")
     def _role_guards(self) -> Self:
-        if self.process_role == "enrich":
-            present = [name.upper() for name in ENRICH_FORBIDDEN if getattr(self, name)]
+        role = self.process_role
+        # The AI private and platform keys: the analyst worker only (enrich and the API never
+        # open AI keys).
+        if role != "analyst":
+            for name in ("ai_seal_private_keys_file", "ai_platform_key_file"):
+                if getattr(self, name) is not None:
+                    raise ValueError(f"{name.upper()} is only accepted with PROCESS_ROLE=analyst")
+        if role in ("enrich", "analyst"):
+            forbidden = ENRICH_FORBIDDEN if role == "enrich" else ANALYST_FORBIDDEN
+            present = [name.upper() for name in forbidden if getattr(self, name)]
             if present:
-                raise ValueError(f"PROCESS_ROLE=enrich must not receive: {', '.join(present)}")
+                raise ValueError(f"PROCESS_ROLE={role} must not receive: {', '.join(present)}")
             return self
         missing = [name.upper() for name in ENRICH_FORBIDDEN if getattr(self, name) is None]
         if missing:
@@ -218,19 +314,31 @@ class Settings(BaseSettings):
             raise ValueError("COOKIE_SECURE must be true when ENV=prod")
         placeholders = [
             name
-            for name in ("jwt_secret", "minio_secret_key", "database_url")
+            # broker_url (M5 RT25): the dev compose default broker passwords are change-me.
+            for name in ("jwt_secret", "minio_secret_key", "database_url", "broker_url")
             if "change-me" in (getattr(self, name) or "")
         ]
         if placeholders:
             raise ValueError(f"placeholder values not allowed in prod: {', '.join(placeholders)}")
         unsafe = [
             name.upper()
-            for name in ("ti_mock_enabled", "ti_misp_allow_private", "ti_misp_insecure_tls")
+            for name in (
+                "ti_mock_enabled",
+                "ti_misp_allow_private",
+                "ti_misp_insecure_tls",
+                "ai_mock_enabled",
+                "ai_platform_key_file",
+                "ai_platform_provider",
+                "ai_anthropic_base_url",
+                "ai_gemini_base_url",
+            )
             if getattr(self, name)
         ]
         if unsafe:
             raise ValueError(f"dev-only settings not allowed in prod: {', '.join(unsafe)}")
-        if self.ti_enabled:
+        # Role-scoped kid guards (M5 RT6): the kid checks run for the roles that seal or open a
+        # domain's keys; the dev public-key refusals apply wherever keys are present.
+        if self.ti_enabled and self.process_role in ("api", "enrich"):
             kid = self.ti_seal_active_kid
             if not kid or kid not in self.ti_seal_public_keys:
                 raise ValueError("TI_SEAL_ACTIVE_KID must name a key in TI_SEAL_PUBLIC_KEYS")
@@ -240,6 +348,16 @@ class Settings(BaseSettings):
         if any(_key_bytes(v) in _DEV_KEY_BYTES for v in self.ti_seal_public_keys.values()):
             raise ValueError(
                 "TI_SEAL_PUBLIC_KEYS: the committed dev seal key is not allowed in prod"
+            )
+        if self.ai_enabled and self.process_role in ("api", "analyst"):
+            kid = self.ai_seal_active_kid
+            if not kid or kid not in self.ai_seal_public_keys:
+                raise ValueError("AI_SEAL_ACTIVE_KID must name a key in AI_SEAL_PUBLIC_KEYS")
+            if kid.lower().startswith("dev-"):
+                raise ValueError("AI_SEAL_ACTIVE_KID: dev- seal keys are not allowed in prod")
+        if any(_key_bytes(v) in _DEV_AI_KEY_BYTES for v in self.ai_seal_public_keys.values()):
+            raise ValueError(
+                "AI_SEAL_PUBLIC_KEYS: the committed dev seal key is not allowed in prod"
             )
         return self
 
@@ -252,6 +370,7 @@ def _key_bytes(encoded: str) -> bytes:
 
 
 _DEV_KEY_BYTES = frozenset(_key_bytes(k) for k in DEV_SEAL_PUBLIC_KEYS)
+_DEV_AI_KEY_BYTES = frozenset(_key_bytes(k) for k in DEV_AI_SEAL_PUBLIC_KEYS)
 
 
 @lru_cache

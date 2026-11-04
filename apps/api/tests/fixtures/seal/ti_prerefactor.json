@@ -1,0 +1,31 @@
+{
+  "_comment": "Produced by the M4 threat_intel.seal code BEFORE the M5 sealbox refactor (test-only key pair). Never regenerate: it proves stored TI ciphertexts still open.",
+  "org_id": "5eed0000-0000-4000-8000-00000000f1a7",
+  "private_keys": {
+    "fixture-1": "YLSGZLiHY5ctyeeW/zcIk2lUM0q0djedCPoGZ7zScFI="
+  },
+  "cases": [
+    {
+      "provider": "virustotal",
+      "base_url_norm": "",
+      "kid": "fixture-1",
+      "key_version": 3,
+      "epk": "QFwP2pdKi+DxInBvtlU546yx+4ZDqVmbqqe+2qRJ8i0=",
+      "nonce": "eVPUn3Y17kzbJvu9",
+      "ct": "xeFTn5DmP1PaKLpjxMp4RRdJWDiJfvRDvmGIKC0BctBRl/e35aoZq4RnhQ7f",
+      "last4": "6789",
+      "plaintext": "PREREFACTOR-vt-key-0123456789"
+    },
+    {
+      "provider": "misp",
+      "base_url_norm": "https://misp.example.org",
+      "kid": "fixture-1",
+      "key_version": 1,
+      "epk": "x2CADe0J2RQSD3tJOEq5CXop8rpiRuxHFRqaSsJl6RQ=",
+      "nonce": "/yiVu2x28jcY+W/v",
+      "ct": "E2WvuI+P4PrKedzrCXRAFeu9VCk4Ke8UgXR8+ks8pBQqjydpipoQT5Dg4w==",
+      "last4": "cdef",
+      "plaintext": "PREREFACTOR-misp-key-abcdef"
+    }
+  ]
+}

@@ -1,6 +1,16 @@
 """Imports every model so Base.metadata is complete (Alembic autogenerate, tests)."""
 
 from app.core.models_base import Base
+from app.modules.ai.models import (
+    AiCitation,
+    AiContextRef,
+    AiOrgSettings,
+    AiOutput,
+    AiProviderConfig,
+    AiRun,
+    AiRunIndex,
+    AiRunInput,
+)
 from app.modules.analysis.models import AnalysisJob, AnalysisJobIndex
 from app.modules.audit.models import AuditLog
 from app.modules.auth.models import AuthEvent, RefreshToken
@@ -36,6 +46,14 @@ from app.modules.threat_intel.models import (
 from app.modules.users.models import User
 
 __all__ = [
+    "AiCitation",
+    "AiContextRef",
+    "AiOrgSettings",
+    "AiOutput",
+    "AiProviderConfig",
+    "AiRun",
+    "AiRunIndex",
+    "AiRunInput",
     "AnalysisFinding",
     "AnalysisJob",
     "AnalysisJobIndex",
