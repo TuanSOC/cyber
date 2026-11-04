@@ -13,6 +13,8 @@ from app.core.config import get_settings
 from app.modules.threat_intel.catalog import ProviderLimits
 from app.modules.threat_intel.providers.base import ProviderName
 from app.modules.threat_intel.ratelimit import (
+    STRIKE_TTL_S,
+    VERIFY_DEDUPE_S,
     Decision,
     Limiter,
     LimiterUnavailable,
@@ -107,6 +109,37 @@ async def test_cooldowns_extend_but_never_shorten(broker: Redis) -> None:
     assert await broker.get(limiter.keys(MOCK, org)[1]) is None
 
 
+async def test_429_strikes_count_a_burst_once_and_reset(broker: Redis) -> None:
+    limiter = _limiter(broker, Clock(datetime(2026, 11, 5, 12, tzinfo=UTC)))
+    org, vt = uuid.uuid4(), ProviderName.VIRUSTOTAL
+    cool, strikes = limiter.keys(vt, org)[2], limiter.strikes_key(vt, org)
+    assert strikes == f"test.enrich.ti:strikes:virustotal:{org}"
+    assert await limiter.rate_limited(vt, org, 60) == 1
+    assert await limiter.rate_limited(vt, org, 60) == 1  # in flight with the first: same burst
+    blocked = await limiter.acquire(vt, org, ProviderLimits(per_minute=4, per_day=None))
+    assert blocked.decision is Decision.COOLDOWN and 59 < blocked.wait_s <= 60
+    await broker.delete(cool)  # the cooldown ran out
+    assert await limiter.rate_limited(vt, org, 60) == 2
+    assert 0 < await broker.ttl(strikes) <= STRIKE_TTL_S
+    await limiter.clear_strikes(vt, org)
+    await broker.delete(cool)
+    assert await limiter.rate_limited(vt, org, 60) == 1
+    assert await limiter.rate_limited(vt, uuid.uuid4(), 60) == 1  # per org
+
+
+async def test_verify_claims_dedupe_one_stored_key(broker: Redis) -> None:
+    limiter = _limiter(broker, Clock(datetime(2026, 11, 5, 12, tzinfo=UTC)))
+    org = uuid.uuid4()
+    key = limiter.verify_key(MOCK, org, 1)
+    assert key == f"test.enrich.ti:verify:{org}:mock:1"
+    assert await limiter.claim_verify(MOCK, org, 1) is True
+    assert await limiter.claim_verify(MOCK, org, 1) is False
+    assert 0 < await broker.ttl(key) <= VERIFY_DEDUPE_S
+    assert await limiter.claim_verify(MOCK, org, 2) is True  # a new key is checked at once
+    assert await limiter.claim_verify(ProviderName.OTX, org, 1) is True
+    assert await limiter.claim_verify(MOCK, uuid.uuid4(), 1) is True
+
+
 async def test_the_enrich_acl_user_can_run_the_limiter() -> None:
     client = Redis.from_url(os.environ["TEST_BROKER_ENRICH_URL"], socket_timeout=3)
     try:
@@ -115,6 +148,9 @@ async def test_the_enrich_acl_user_can_run_the_limiter() -> None:
         limits = ProviderLimits(per_minute=5, per_day=10)
         assert (await limiter.acquire(MOCK, org, limits)).decision is Decision.OK
         await limiter.set_cooldown(MOCK, org, 1)
+        assert await limiter.rate_limited(MOCK, org, 1) >= 0
+        await limiter.clear_strikes(MOCK, org)
+        assert await limiter.claim_verify(MOCK, org, 1) is True
         # Outside its prefix the same scripts are refused: the limiter fails closed.
         outside = Limiter(client, "test.ingest.", clock=Clock(datetime(2026, 11, 5, tzinfo=UTC)))
         with pytest.raises(LimiterUnavailable):
@@ -131,6 +167,8 @@ async def test_broker_unavailable_fails_closed() -> None:
             await limiter.acquire(MOCK, uuid.uuid4(), ProviderLimits(per_minute=5, per_day=None))
         with pytest.raises(LimiterUnavailable):
             await limiter.set_cooldown(MOCK, uuid.uuid4(), 5)
+        with pytest.raises(LimiterUnavailable):
+            await limiter.claim_verify(MOCK, uuid.uuid4(), 1)
     finally:
         await client.aclose()
 

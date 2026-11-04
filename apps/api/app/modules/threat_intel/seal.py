@@ -94,9 +94,15 @@ def check_context(provider: str, kid: str, key_version: int, base_url_norm: str)
 
 
 def _plaintext(value: SecretStr | str) -> str:
+    """8-256 printable ASCII characters without surrounding whitespace (a header value that
+    httpx/h11 accept verbatim: a refused one would end up in their exception messages).
+    The error is the fixed code `bad_api_key`, never the key."""
     text = value.get_secret_value() if isinstance(value, SecretStr) else value
-    if not MIN_KEY_CHARS <= len(text) <= MAX_KEY_CHARS or not all(
-        0x20 <= ord(c) <= 0x7E for c in text
+    if (
+        not isinstance(text, str)
+        or not MIN_KEY_CHARS <= len(text) <= MAX_KEY_CHARS
+        or not all(0x20 <= ord(c) <= 0x7E for c in text)
+        or text != text.strip()
     ):
         raise SealError("bad_api_key")
     return text

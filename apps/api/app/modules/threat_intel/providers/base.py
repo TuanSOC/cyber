@@ -158,6 +158,7 @@ def _https_permalink(value: str) -> str:
         parts.scheme != "https"
         or not parts.hostname
         or "@" in parts.netloc
+        or not value.isascii()  # no hidden Unicode (bidi overrides, homoglyphs) in a link
         or any(ord(c) < 0x21 or ord(c) == 0x7F for c in value)
     ):
         raise ValueError("permalink must be an https URL without credentials")

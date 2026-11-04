@@ -147,6 +147,9 @@ _HEX = re.compile(r"[0-9a-f]+")
 _LABEL = re.compile(r"(?!-)[a-z0-9_-]{1,63}(?<!-)")
 _EMAIL_LOCAL = re.compile(r"[a-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}")
 _PATH_SAFE = re.compile(r"[\x21-\x7e]*")
+# A last label that WHATWG's "ends in a number" check (and `inet_aton`) reads as an IPv4 part:
+# decimal/octal digits or `0x` hex (`10.0.0.0x1`, `0x7f.0x0.0x0.0x1`, `127.1`).
+_NUMERIC_LABEL = re.compile(r"0x[0-9a-f]*|[0-9]+", re.IGNORECASE)
 # Not global even if `ipaddress` says so: NAT64 local-use, IPv4-compatible (deprecated).
 _EXTRA_NOT_GLOBAL = (
     ipaddress.ip_network("64:ff9b:1::/48"),
@@ -272,13 +275,15 @@ def normalize_domain(value: str) -> tuple[str | None, SkipReason | None]:
     labels = name.split(".")
     if not all(_LABEL.fullmatch(label) for label in labels):
         return None, SkipReason.INVALID
+    if _NUMERIC_LABEL.fullmatch(labels[-1]) or not re.search(r"[a-z]", labels[-1]):
+        # A numeric last label (decimal, octal or `0x` hex): an IP in disguise that WHATWG
+        # URL parsers and `inet_aton` read as an address (`127.1`, `10.0.0.0x1`,
+        # `0x7f000001`), never a name.
+        return None, SkipReason.INVALID
     if _special_use(name):
         return name, SkipReason.SPECIAL_USE_NAME
     if len(labels) < 2:
         return name, SkipReason.SINGLE_LABEL
-    if labels[-1].isdigit() or not re.search(r"[a-z]", labels[-1]):
-        # All-numeric TLD: an IP in disguise (`127.1`, `10.0.0.999`), never a name.
-        return None, SkipReason.INVALID
     return name, None
 
 

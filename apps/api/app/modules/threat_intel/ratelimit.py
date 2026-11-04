@@ -4,7 +4,13 @@ The enrich worker has no app Redis, so its limiter keys live on the broker, insi
 (`{prefix}enrich*`):
 - `{prefix}enrich.ti:rl:{provider}:{org}`: a per-minute token bucket (Lua, atomic);
 - `{prefix}enrich.ti:day:{provider}:{org}:{yyyymmdd}`: the UTC daily counter (expires 48 h);
-- `{prefix}enrich.ti:cool:{provider}:{org}`: a cooldown after a 429 or an exhausted quota.
+- `{prefix}enrich.ti:cool:{provider}:{org}`: a cooldown after a 429 or an exhausted quota;
+- `{prefix}enrich.ti:strikes:{provider}:{org}`: consecutive 429 "strikes" (VirusTotal: its
+  daily-quota 429 looks like the per-minute one, so repeated 429s mean the quota is spent).
+  A 429 while a cooldown is already set is the same burst, not a new strike; a successful
+  answer clears the count;
+- `{prefix}enrich.ti:verify:{org}:{provider}:{key_version}`: `ti.verify` dedupe (SET NX,
+  60 s): duplicate checks of one stored key are skipped.
 
 Effective limits are the org's own (`ti_provider_configs.limits`) capped by the settings
 ceilings. A broker error fails closed: `LimiterUnavailable` (no provider call; the run goes
@@ -15,7 +21,7 @@ import asyncio
 import enum
 import math
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
@@ -31,6 +37,8 @@ RETRY_AFTER_MIN_S = 1.0
 RETRY_AFTER_MAX_S = 3600.0
 DAY_KEY_TTL_S = 48 * 3600
 BROKER_TIMEOUT_S = 3.0
+STRIKE_TTL_S = 15 * 60
+VERIFY_DEDUPE_S = 60
 
 
 class LimiterUnavailable(Exception):
@@ -97,6 +105,26 @@ return 1
 """
 
 
+# KEYS: cool, strikes. ARGV: ms, strike ttl (s). A 429: extends the cooldown like _COOLDOWN
+# and returns the consecutive-429 count. A 429 arriving while a cooldown is already set came
+# from a request in flight with the first one: it is not a new strike.
+_RATE_LIMITED = """
+local ms = tonumber(ARGV[1])
+local cool = redis.call('PTTL', KEYS[1])
+local strikes
+if cool > 0 then
+  strikes = tonumber(redis.call('GET', KEYS[2]) or '0')
+else
+  strikes = redis.call('INCR', KEYS[2])
+  redis.call('EXPIRE', KEYS[2], tonumber(ARGV[2]))
+end
+if cool < ms then
+  redis.call('SET', KEYS[1], '1', 'PX', ms)
+end
+return strikes
+"""
+
+
 def parse_retry_after(value: str | None, *, now: datetime | None = None) -> float | None:
     """`Retry-After` as seconds (delta seconds or an HTTP date), clamped to 1-3600 s.
     None when absent or malformed (the caller applies its default backoff)."""
@@ -105,19 +133,24 @@ def parse_retry_after(value: str | None, *, now: datetime | None = None) -> floa
     text = value.strip()
     if not text or len(text) > 64:
         return None
+    if not text.isascii():
+        # `str.isdigit()` accepts `²` or Arabic-Indic digits that `int()` refuses.
+        return None
     seconds: float
-    if text.isdigit():
-        seconds = float(int(text[:10]))
-    else:
-        try:
+    try:
+        if text.isdigit():
+            seconds = float(int(text[:10]))
+        else:
             when = parsedate_to_datetime(text)
-        except (TypeError, ValueError, IndexError, OverflowError):
-            return None
-        if when is None:
-            return None
-        if when.tzinfo is None:
-            when = when.replace(tzinfo=UTC)
-        seconds = (when - (now or datetime.now(UTC))).total_seconds()
+            if when is None:
+                return None
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=UTC)
+            seconds = (when - (now or datetime.now(UTC))).total_seconds()
+    except (TypeError, ValueError, IndexError, OverflowError):
+        return None
+    if not math.isfinite(seconds):
+        return None
     return min(max(seconds, RETRY_AFTER_MIN_S), RETRY_AFTER_MAX_S)
 
 
@@ -174,12 +207,21 @@ class Limiter:
             f"{self._base}:cool:{provider.value}:{org_id}",
         )
 
-    async def _eval(self, script: str, keys: list[str], args: list[Any]) -> Any:
+    def strikes_key(self, provider: ProviderName, org_id: object) -> str:
+        return f"{self._base}:strikes:{provider.value}:{org_id}"
+
+    def verify_key(self, provider: ProviderName, org_id: object, key_version: int) -> str:
+        return f"{self._base}:verify:{org_id}:{provider.value}:{key_version}"
+
+    async def _call(self, call: Callable[[], Awaitable[Any]]) -> Any:
         try:
             async with asyncio.timeout(BROKER_TIMEOUT_S):
-                return await self._redis.eval(script, len(keys), *keys, *args)
+                return await call()
         except (RedisError, OSError, TimeoutError) as exc:
             raise LimiterUnavailable(type(exc).__name__) from None
+
+    async def _eval(self, script: str, keys: list[str], args: list[Any]) -> Any:
+        return await self._call(lambda: self._redis.eval(script, len(keys), *keys, *args))
 
     async def acquire(
         self, provider: ProviderName, org_id: object, limits: ProviderLimits
@@ -206,6 +248,28 @@ class Limiter:
         seconds = seconds_to_utc_midnight(self._clock())
         await self.set_cooldown(provider, org_id, seconds)
         return seconds
+
+    async def rate_limited(self, provider: ProviderName, org_id: object, seconds: float) -> int:
+        """A 429: cool down for `seconds` (never shortened) and return the number of
+        consecutive 429 strikes (a 429 during an active cooldown is not a new one)."""
+        cool = self.keys(provider, org_id)[2]
+        strikes = await self._eval(
+            _RATE_LIMITED,
+            [cool, self.strikes_key(provider, org_id)],
+            [max(1, math.ceil(seconds * 1000)), STRIKE_TTL_S],
+        )
+        return int(strikes)
+
+    async def clear_strikes(self, provider: ProviderName, org_id: object) -> None:
+        """A real answer: the 429s before it were not consecutive."""
+        key = self.strikes_key(provider, org_id)
+        await self._call(lambda: self._redis.delete(key))
+
+    async def claim_verify(self, provider: ProviderName, org_id: object, key_version: int) -> bool:
+        """SET NX for `VERIFY_DEDUPE_S`: False when this key was checked moments ago."""
+        key = self.verify_key(provider, org_id, key_version)
+        claimed = await self._call(lambda: self._redis.set(key, "1", nx=True, ex=VERIFY_DEDUPE_S))
+        return bool(claimed)
 
 
 def broker_redis(url: str) -> Redis:

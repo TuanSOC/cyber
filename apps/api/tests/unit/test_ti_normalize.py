@@ -196,6 +196,40 @@ def test_bad_urls(raw: str, reason: SkipReason) -> None:
 
 
 @pytest.mark.parametrize(
+    ("hint", "raw"),
+    [
+        # WHATWG URL parsers and inet_aton read a numeric (hex/octal/decimal) last label as
+        # an IPv4 address: these are private/loopback IPs in disguise, never names.
+        ("url", "http://10.0.0.0x1/a"),
+        ("url", "http://127.0.0.0x1:8080/x"),
+        ("url", "http://0x7f.0x0.0x0.0x1/"),
+        ("url", "http://0X7F.0X0.0X0.0X1/"),
+        ("url", "http://0x7f000001/"),
+        ("url", "http://127.0x/"),
+        ("url", "http://169.254.169.0xfe/latest"),
+        ("domain", "192.168.0.0x1"),
+        ("domain", "0x7f.0x0.0x0.0x1"),
+        ("domain", "acme-corp.0x1"),
+        ("domain", "10.0.0.010"),
+        ("email", "a@10.0.0.0x1"),
+        (None, "192.168.0.0x1"),
+        (None, "http://10.0.0.0x1/"),
+    ],
+)
+def test_numeric_last_labels_are_never_names(hint: str | None, raw: str) -> None:
+    out = normalize(hint, raw)
+    assert isinstance(out, Skip), out
+    assert out.reason in (SkipReason.INVALID, SkipReason.NOT_GLOBAL_IP), out
+    for provider in ProviderName:
+        assert isinstance(eligible(out, provider), Skip)
+
+
+@pytest.mark.parametrize("raw", ["0xdead.acme-corp.net", "x0x1.com", "a.0xyz", "a.co"])
+def test_hex_looking_labels_that_are_names(raw: str) -> None:
+    assert _ok("domain", raw).value_norm == raw
+
+
+@pytest.mark.parametrize(
     ("hint", "raw", "ioc_type"),
     [
         ("file_md5", "D41D8CD98F00B204E9800998ECF8427E", IocType.MD5),

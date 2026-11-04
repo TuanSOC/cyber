@@ -12,13 +12,17 @@ from app.core.config import get_settings
 
 @lru_cache
 def get_engine() -> AsyncEngine:
-    """Process-wide engine for the RLS-bound app role."""
+    """Process-wide engine for the RLS-bound app role (the API and every worker).
+
+    `hide_parameters`: a failed statement's exception (and so a Celery traceback or an API
+    error log) never carries its bound values: IOC values, emails, file names, hashes."""
     return create_async_engine(
         get_settings().database_url,
         pool_size=10,
         max_overflow=10,
         pool_timeout=10,
         pool_pre_ping=True,
+        hide_parameters=True,
         connect_args={"timeout": 5},
     )
 

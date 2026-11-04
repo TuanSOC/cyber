@@ -131,6 +131,40 @@ def test_plaintext_never_in_reprs_or_errors() -> None:
 
 
 @pytest.mark.parametrize(
+    "bad",
+    [
+        f" {SENTINEL}",
+        f"{SENTINEL} ",
+        f"  {SENTINEL}  ",
+        f"{SENTINEL}\n",
+        f"{SENTINEL}\r\nX-Injected: 1",
+        f"\t{SENTINEL}",
+        f"{SENTINEL}\x00",
+        f"{SENTINEL}\x7f",
+        f"{SENTINEL[:10]}\x1b{SENTINEL[10:]}",
+        f"{SENTINEL}é",
+        f"{SENTINEL}​",
+        "x" * 257,
+        "1234567",
+    ],
+)
+def test_keys_must_be_printable_ascii_without_surrounding_space(bad: str) -> None:
+    for value in (bad, SecretStr(bad)):
+        with pytest.raises(SealError) as caught:
+            seal(value, ORG, "otx", "k1", 1, "", PRIVATE.public_key())
+        assert caught.value.code == "bad_api_key"
+        text = str(caught.value) + repr(caught.value)
+        assert SENTINEL not in text and SENTINEL[:10] not in text and bad not in text
+        assert caught.value.__cause__ is None and caught.value.__context__ is None
+
+
+@pytest.mark.parametrize("good", ["12345678", "x" * 256, "a key with inner spaces", "~!@#$%^&"])
+def test_key_bounds_and_inner_spaces_are_accepted(good: str) -> None:
+    sealed = seal(good, ORG, "otx", "k1", 1, "", PRIVATE.public_key())
+    assert open_sealed(sealed, ORG, "otx", "", KEYS).get_secret_value() == good
+
+
+@pytest.mark.parametrize(
     ("provider", "base_url", "kid", "version", "code"),
     [
         ("misp", "", "k1", 1, "base_url_mismatch"),
