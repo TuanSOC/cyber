@@ -76,6 +76,8 @@ export function EvidenceUploader({ orgId, investigationId }: { orgId: string; in
           queryClient.invalidateQueries({ queryKey: ["org", orgId, "evidence-list", investigationId] }),
           queryClient.invalidateQueries({ queryKey: ["org", orgId, "investigation", investigationId] }),
           queryClient.invalidateQueries({ queryKey: ["org", orgId, "investigations"] }),
+          // Captures are analyzed automatically on upload: show the new job.
+          queryClient.invalidateQueries({ queryKey: ["org", orgId, "analyses"] }),
         ]);
       } catch (error) {
         update(id, { state: "failed", error: describe(error) });

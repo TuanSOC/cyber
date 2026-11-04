@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
+import { EvidenceAnalysesCard } from "@/components/analysis/evidence-analyses-card";
 import { CustodyTimeline } from "@/components/evidence/custody-timeline";
 import { EvidenceActions } from "@/components/evidence/evidence-actions";
 import { HashValue } from "@/components/hash-value";
@@ -107,30 +108,38 @@ export default function EvidencePage() {
         </Alert>
       )}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Integrity</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3 text-sm">
-            {(["sha256", "sha1", "md5"] as const).map((algo) => (
-              <div key={algo}>
-                <p className="text-xs text-muted-foreground uppercase">{algo}</p>
-                {e.hashes[algo] && <HashValue value={e.hashes[algo]} />}
-              </div>
-            ))}
-            <div>
-              <p className="text-xs text-muted-foreground">Detected type (first 8 KiB, informational)</p>
-              <p>{e.detected_mime}</p>
-              <p className="text-muted-foreground">{e.detected_description}</p>
-            </div>
-            {e.description && (
+        <div className="flex min-w-0 flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Integrity</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 text-sm">
+              {(["sha256", "sha1", "md5"] as const).map((algo) => (
+                <div key={algo}>
+                  <p className="text-xs text-muted-foreground uppercase">{algo}</p>
+                  {e.hashes[algo] && <HashValue value={e.hashes[algo]} />}
+                </div>
+              ))}
               <div>
-                <p className="text-xs text-muted-foreground">Description</p>
-                <p className="whitespace-pre-wrap">{e.description}</p>
+                <p className="text-xs text-muted-foreground">Detected type (first 8 KiB, informational)</p>
+                <p>{e.detected_mime}</p>
+                <p className="text-muted-foreground">{e.detected_description}</p>
               </div>
-            )}
-          </CardContent>
-        </Card>
+              {e.description && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Description</p>
+                  <p className="whitespace-pre-wrap">{e.description}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <EvidenceAnalysesCard
+            orgId={orgId}
+            evidence={e}
+            canWrite={can("evidence.write")}
+            investigationArchived={investigation.data?.status === "archived"}
+          />
+        </div>
         <Card>
           <CardHeader>
             <CardTitle>

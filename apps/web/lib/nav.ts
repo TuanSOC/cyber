@@ -39,7 +39,6 @@ export const NAV: NavItem[] = [
     label: "PCAP Analyzer",
     icon: Network,
     segment: "pcap",
-    plannedFor: "Milestone 2",
     summary: "TShark, Zeek and Suricata analysis of captures with normalized findings.",
   },
   {
