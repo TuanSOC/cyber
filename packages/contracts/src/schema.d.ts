@@ -176,6 +176,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Alerts */
+        get: operations["list_alerts_api_v1_orgs__org_id__analyses__job_id__alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Findings */
+        get: operations["list_findings_api_v1_orgs__org_id__analyses__job_id__findings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/flows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Flows */
+        get: operations["list_flows_api_v1_orgs__org_id__analyses__job_id__flows_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/iocs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Iocs */
+        get: operations["list_iocs_api_v1_orgs__org_id__analyses__job_id__iocs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Records */
+        get: operations["list_records_api_v1_orgs__org_id__analyses__job_id__records_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Timeline */
+        get: operations["list_timeline_api_v1_orgs__org_id__analyses__job_id__timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/audit-logs": {
         parameters: {
             query?: never;
@@ -396,6 +498,53 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AlertOut */
+        AlertOut: {
+            /** Category */
+            category: string | null;
+            /** Community Id */
+            community_id: string | null;
+            /** Dst Ip */
+            dst_ip: string | null;
+            /** Dst Port */
+            dst_port: number | null;
+            /** Flow Ref */
+            flow_ref: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Proto */
+            proto: string | null;
+            /** Rev */
+            rev: number;
+            /** Severity */
+            severity: number;
+            /** Signature */
+            signature: string;
+            /** Signature Id */
+            signature_id: number;
+            /** Src Ip */
+            src_ip: string | null;
+            /** Src Port */
+            src_port: number | null;
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
+        };
+        /** AlertPage */
+        AlertPage: {
+            /** Items */
+            items: components["schemas"]["AlertOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
         /** AnalysisCreate */
         AnalysisCreate: {
             /** @default pcap */
@@ -598,6 +747,133 @@ export interface components {
          * @enum {string}
          */
         EvidenceStatus: "active" | "archived";
+        /** FindingOut */
+        FindingOut: {
+            /** Attributes */
+            attributes: {
+                [key: string]: unknown;
+            };
+            /** Confidence */
+            confidence: number;
+            /** Description */
+            description: string;
+            /** Detection Method */
+            detection_method: string;
+            /** Dst Ip */
+            dst_ip: string | null;
+            /** Dst Port */
+            dst_port: number | null;
+            /** Evidence Refs */
+            evidence_refs: string[];
+            /**
+             * Finding Id
+             * Format: uuid
+             */
+            finding_id: string;
+            /** Flow Ref */
+            flow_ref: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Seen */
+            last_seen: string | null;
+            /** Protocol */
+            protocol: string | null;
+            severity: components["schemas"]["FindingSeverity"];
+            /** Src Ip */
+            src_ip: string | null;
+            /** Src Port */
+            src_port: number | null;
+            /** Title */
+            title: string;
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
+            /** Type */
+            type: string;
+        };
+        /** FindingPage */
+        FindingPage: {
+            /** Items */
+            items: components["schemas"]["FindingOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
+        /**
+         * FindingSeverity
+         * @enum {string}
+         */
+        FindingSeverity: "info" | "low" | "medium" | "high";
+        /** FlowOut */
+        FlowOut: {
+            /** Community Id */
+            community_id: string | null;
+            /** Conn State */
+            conn_state: string | null;
+            /** Dst Ip */
+            dst_ip: string | null;
+            /** Dst Port */
+            dst_port: number | null;
+            /** Duration S */
+            duration_s: number | null;
+            /** Flow Ref */
+            flow_ref: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Orig Bytes */
+            orig_bytes: number;
+            /** Orig Pkts */
+            orig_pkts: number;
+            /** Proto */
+            proto: string;
+            /** Resp Bytes */
+            resp_bytes: number;
+            /** Resp Pkts */
+            resp_pkts: number;
+            /** Service */
+            service: string | null;
+            /** Src Ip */
+            src_ip: string | null;
+            /** Src Port */
+            src_port: number | null;
+            /** Total Bytes */
+            total_bytes: number;
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
+        };
+        /** FlowPage */
+        FlowPage: {
+            /** Items */
+            items: components["schemas"]["FlowOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
+        /**
+         * FlowProto
+         * @enum {string}
+         */
+        FlowProto: "tcp" | "udp" | "icmp" | "other";
+        /**
+         * FlowSort
+         * @enum {string}
+         */
+        FlowSort: "bytes" | "ts";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -692,6 +968,46 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /** IocOut */
+        IocOut: {
+            /** Count */
+            count: number;
+            /**
+             * First Seen
+             * Format: date-time
+             */
+            first_seen: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Seen
+             * Format: date-time
+             */
+            last_seen: string;
+            /** Source */
+            source: string;
+            type: components["schemas"]["IocType"];
+            /** Value */
+            value: string;
+        };
+        /** IocPage */
+        IocPage: {
+            /** Items */
+            items: components["schemas"]["IocOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
+        /**
+         * IocType
+         * @enum {string}
+         */
+        IocType: "ip" | "domain" | "url" | "ja3" | "ja3s" | "cert_sha256" | "file_md5" | "file_sha1" | "file_sha256";
         /** LoginIn */
         LoginIn: {
             /**
@@ -805,6 +1121,51 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * RecordKind
+         * @enum {string}
+         */
+        RecordKind: "dns" | "http" | "tls";
+        /** RecordOut */
+        RecordOut: {
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /** Dst Ip */
+            dst_ip: string | null;
+            /** Dst Port */
+            dst_port: number | null;
+            /** Flow Ref */
+            flow_ref: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["RecordKind"];
+            /** Src Ip */
+            src_ip: string | null;
+            /** Src Port */
+            src_port: number | null;
+            /** Summary */
+            summary: string;
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
+        };
+        /** RecordPage */
+        RecordPage: {
+            /** Items */
+            items: components["schemas"]["RecordOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
         /** RegisterIn */
         RegisterIn: {
             /** Display Name */
@@ -829,6 +1190,40 @@ export interface components {
          * @enum {string}
          */
         SortKey: "created_at" | "-created_at" | "severity" | "-severity";
+        /** TimelineOut */
+        TimelineOut: {
+            /** Dst Ip */
+            dst_ip: string | null;
+            /** Event */
+            event: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ref */
+            ref: string | null;
+            severity: components["schemas"]["FindingSeverity"] | null;
+            /** Src Ip */
+            src_ip: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
+        };
+        /** TimelinePage */
+        TimelinePage: {
+            /** Items */
+            items: components["schemas"]["TimelineOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
         /** UserOut */
         UserOut: {
             /** Display Name */
@@ -1208,6 +1603,227 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnalysisJobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_alerts_api_v1_orgs__org_id__analyses__job_id__alerts_get: {
+        parameters: {
+            query?: {
+                severity?: number | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_findings_api_v1_orgs__org_id__analyses__job_id__findings_get: {
+        parameters: {
+            query?: {
+                severity?: components["schemas"]["FindingSeverity"] | null;
+                type?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_flows_api_v1_orgs__org_id__analyses__job_id__flows_get: {
+        parameters: {
+            query?: {
+                ip?: string | null;
+                port?: number | null;
+                proto?: components["schemas"]["FlowProto"] | null;
+                sort?: components["schemas"]["FlowSort"];
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_iocs_api_v1_orgs__org_id__analyses__job_id__iocs_get: {
+        parameters: {
+            query?: {
+                type?: components["schemas"]["IocType"] | null;
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IocPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_records_api_v1_orgs__org_id__analyses__job_id__records_get: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["RecordKind"] | null;
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_timeline_api_v1_orgs__org_id__analyses__job_id__timeline_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelinePage"];
                 };
             };
             /** @description Validation Error */

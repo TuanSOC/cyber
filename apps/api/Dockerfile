@@ -12,8 +12,8 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     PYTHONUNBUFFERED=1
 # Fixed UID so dev and prod seed the upload_tmp volume with the same owner.
 RUN useradd --system --uid 10001 --no-create-home cyberlab \
-    && mkdir -p /var/lib/cyberlab/upload-tmp \
-    && chown 10001:10001 /var/lib/cyberlab/upload-tmp
+    && mkdir -p /var/lib/cyberlab/upload-tmp /var/lib/cyberlab/ingest-tmp \
+    && chown 10001:10001 /var/lib/cyberlab/upload-tmp /var/lib/cyberlab/ingest-tmp
 WORKDIR /srv/api
 # Shared contracts (compose `additional_contexts: jobs`), at the path uv.lock expects.
 COPY --from=jobs . /packages/py-jobs

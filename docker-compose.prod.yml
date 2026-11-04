@@ -26,6 +26,14 @@ services:
     environment:
       ENV: prod
       COOKIE_SECURE: "true"
+    volumes: !override
+      - ingest_tmp:/var/lib/cyberlab/ingest-tmp
+
+  ingest-beat:
+    image: cyberlab/api:prod
+    environment:
+      ENV: prod
+      COOKIE_SECURE: "true"
     volumes: !reset []
 
   pcap-worker:

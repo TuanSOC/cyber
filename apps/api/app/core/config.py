@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,10 +49,27 @@ class Settings(BaseSettings):
     analysis_max_records_per_kind: int = 100_000
     analysis_max_findings: int = 5_000
     analysis_max_result_bytes: int = 256 * 1024**2
+    # Ingest: zip-bomb guard on the inflated stream and a cap on its lines (all kinds).
+    analysis_max_result_decompressed_bytes: int = 1024**3
+    analysis_max_result_lines: int = 400_000
+    # Scratch dir for the downloaded result. Required by the ingest worker outside tests
+    # (it refuses to start without one); None = the system temp dir (tests only).
+    ingest_tmp_dir: str | None = None
+    # Free space kept on the scratch volume on top of the result being downloaded.
+    ingest_min_free_bytes: int = 64 * 1024**2
+    # Timeouts of the one write transaction (SET LOCAL: they end with it).
+    ingest_statement_timeout_s: int = 300
+    ingest_idle_in_transaction_timeout_s: int = 30
 
     rate_limit_login_per_ip_per_min: int = 20
     rate_limit_login_failures_per_15min: int = 5
     rate_limit_register_per_ip_per_10min: int = 5
+
+    @field_validator("ingest_tmp_dir", mode="before")
+    @classmethod
+    def _blank_is_unset(cls, value: object) -> object:
+        # INGEST_TMP_DIR= must not silently mean the current directory.
+        return None if isinstance(value, str) and not value.strip() else value
 
     @model_validator(mode="after")
     def _prod_guards(self) -> Self:

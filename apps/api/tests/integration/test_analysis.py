@@ -3,6 +3,7 @@
 import io
 import uuid
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -16,6 +17,7 @@ from app.modules.analysis.models import AnalysisJob, AnalysisJobIndex
 from app.modules.audit.models import AuditLog
 from app.modules.organizations.models import MemberRole
 from app.workers import ingest, reaper
+from tests import pcap_results
 from tests.analysis_helpers import SentJobs, jobs_for, new_case, tiny_pcap, upload
 from tests.factories import add_member, csrf, login, make_user, register, unique_email
 
@@ -231,7 +233,7 @@ async def test_success_needs_the_result_object(sent: SentJobs) -> None:
     rerun = (await _run(reg, evidence["id"])).json()
     item = sent[-1]
     assert str(item.job_id) == rerun["id"]
-    data = b"result"
+    data = pcap_results.stream(item.job_id)
     stored = get_minio().put_object(
         get_settings().results_bucket,
         dispatch.result_key(item.organization_id, item.job_id),
@@ -361,10 +363,10 @@ async def test_permanent_ingest_errors_fail_the_job(
     await upload(reg.client, reg.org_id, await new_case(reg), tiny_pcap())
     item = sent[0]
 
-    async def denied(job: AnalysisJob, version_id: str) -> bool:
+    async def denied(job: AnalysisJob, version_id: str, dest: Path) -> None:
         raise PermissionError("AccessDenied")
 
-    monkeypatch.setattr(ingest, "_result_exists", denied)
+    monkeypatch.setattr(ingest, "_download_result", denied)
     await ingest.handle_event(
         _message(item, event="finished", outcome="succeeded", result_version_id="v1")
     )
@@ -379,10 +381,10 @@ async def test_transient_ingest_errors_are_retried(
     await upload(reg.client, reg.org_id, await new_case(reg), tiny_pcap())
     item = sent[0]
 
-    async def down(job: AnalysisJob, version_id: str) -> bool:
+    async def down(job: AnalysisJob, version_id: str, dest: Path) -> None:
         raise ConnectionError("minio restarting")
 
-    monkeypatch.setattr(ingest, "_result_exists", down)
+    monkeypatch.setattr(ingest, "_download_result", down)
     with pytest.raises(ConnectionError):
         await ingest.handle_event(
             _message(item, event="finished", outcome="succeeded", result_version_id="v1")

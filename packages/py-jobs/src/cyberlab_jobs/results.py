@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from ipaddress import IPv4Address, IPv6Address
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, AwareDatetime, Field, IPvAnyAddress, TypeAdapter
+from pydantic import AfterValidator, AwareDatetime, BeforeValidator, Field, IPvAnyAddress, TypeAdapter
 
 from cyberlab_jobs.base import ErrorCode, Sha256, ShortText, Strict
 from cyberlab_jobs.capture import CaptureFormat
@@ -167,7 +167,22 @@ class AlertRecord(_Endpoints):
     community_id: Text64 | None = None
 
 
-Attribute = Annotated[str, Field(max_length=255, pattern=NO_NUL)] | int | float | bool
+def _bounded_int(value: object) -> object:
+    """Refuse out-of-range ints before the union could silently turn them into floats."""
+    if isinstance(value, int) and not isinstance(value, bool) and not -(2**63) <= value < 2**63:
+        raise ValueError("integer attribute outside the bigint range")
+    return value
+
+
+# bool first: pydantic would otherwise accept true/false as ints. Numbers are jsonb-safe
+# (finite, bigint-bounded) so a validated stream can never fail at insert time.
+Attribute = Annotated[
+    bool
+    | Annotated[int, Field(ge=-(2**63), le=2**63 - 1)]
+    | Annotated[float, Field(allow_inf_nan=False)]
+    | Annotated[str, Field(max_length=255, pattern=NO_NUL)],
+    BeforeValidator(_bounded_int),
+]
 
 
 class FindingRecord(_Endpoints):
@@ -180,7 +195,10 @@ class FindingRecord(_Endpoints):
     description: Text2048
     severity: Literal["info", "low", "medium", "high"]
     confidence: Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
-    detection_method: Annotated[str, Field(pattern=r"^[a-z_]+:[a-z0-9_.\-]{1,64}@\d{1,4}$")]
+    # At most 32 + 1 + 64 + 1 + 4 = 102 chars (stored in a 128-char column).
+    detection_method: Annotated[
+        str, Field(max_length=128, pattern=r"^[a-z_]{1,32}:[a-z0-9_.\-]{1,64}@\d{1,4}$")
+    ]
     last_seen: Timestamp | None = None
     protocol: Text16 | None = None
     evidence_refs: Annotated[list[Text64], Field(max_length=50)] = []

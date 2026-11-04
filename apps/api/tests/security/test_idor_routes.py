@@ -19,6 +19,7 @@ from httpx import AsyncClient
 from app.main import app
 from app.modules.organizations.models import MemberRole
 from tests.factories import Registered, add_member, csrf, make_user, new_client, register
+from tests.pcap_results import seed_results
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,18 @@ ROUTE_CASES: dict[tuple[str, str], CaseBuilder] = {
     ("GET", "/api/v1/orgs/{org_id}/evidence/{evidence_id}/analyses"): lambda v: {},
     ("GET", "/api/v1/orgs/{org_id}/analyses"): lambda v: {},
     ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}"): lambda v: {},
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/findings"): lambda v: {
+        "params": {"severity": "high"}
+    },
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/flows"): lambda v: {
+        "params": {"sort": "ts", "proto": "tcp"}
+    },
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/records"): lambda v: {
+        "params": {"kind": "dns", "q": "example"}
+    },
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/alerts"): lambda v: {},
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/iocs"): lambda v: {"params": {"q": "192"}},
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/timeline"): lambda v: {},
 }
 
 
@@ -152,6 +165,8 @@ async def _victim() -> tuple[Registered, Victim]:
             headers=csrf(c),
         )
     ).json()
+    # The job has persisted results, so the result routes have real rows to leak.
+    await seed_results(owner.org_id, uuid.UUID(job["id"]))
     return owner, Victim(
         owner.org_id,
         member["id"],
