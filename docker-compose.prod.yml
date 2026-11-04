@@ -31,7 +31,8 @@ services:
 
   gateway:
     environment:
-      SITE_ADDRESS: ${SITE_ADDRESS}
+      # `gateway:8443` lets the e2e container reach the same site over the compose network.
+      SITE_ADDRESS: ${SITE_ADDRESS}, gateway:8443
     volumes: !override
       - ./infra/caddy/Caddyfile.prod:/etc/caddy/Caddyfile:ro
       - ./infra/caddy/common.caddy:/etc/caddy/common.caddy:ro

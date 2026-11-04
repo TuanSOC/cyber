@@ -1,10 +1,11 @@
 ---
 phase: 9
-title: "Security E2E tests and docs"
-status: pending
+title: Security E2E tests and docs
+status: completed
 priority: P1
-effort: "12h"
-dependencies: [8]
+effort: 12h
+dependencies:
+  - 8
 ---
 
 # Phase 9: Security E2E tests and docs
@@ -61,6 +62,21 @@ Add only what earlier phases can't: route-wide IDOR coverage, malicious-filename
 - [ ] Every brainstorm DoD security test exists (TESTING.md links each to its file).
 - [ ] 8 docs consistent with code (endpoints, tables, env vars).
 - [ ] No "production-ready" claim; known gaps listed.
+
+## Implementation Notes (2026-11-04)
+- IDOR enumeration uses `app.openapi()["paths"]`, not `app.routes` (FastAPI 0.162 nests included routers). An AST test forbids `include_in_schema` / `add_api_route` / `add_route` in `app/`, so no route can escape enumeration. Each of the 18 cases also runs as an owner-side positive control (`status < 400`), so a route failing for everyone cannot pass vacuously. Victim state includes the victim case's evidence list. The member-add case uses a real outsider email.
+- Filename cases: RFC 5987 `filename*` equals the stored name, percent-encoded; the header is pure ASCII; a 300-char CJK name is capped to 255 characters; empty and NUL names get 422.
+- Rate limits: rather than raising limits for an e2e profile (the api isn't in it), `scripts/e2e.mjs` clears `rl:register:*` in that stack's Redis before every run. E2E leaves one user, org, case and a small locked object per run (documented in TESTING.md).
+- Prod e2e: the prod override serves `gateway:8443` in addition to `SITE_ADDRESS`; Playwright uses `ignoreHTTPSErrors` only when `E2E_IGNORE_HTTPS_ERRORS=1`.
+- `verify.mjs`:
+  - Step failures and HTTP probe errors throw and are reported as `FAILED: <step>`.
+  - The prod phase runs in `try/finally`, so the dev stack is always restored.
+  - `COMPOSE_PROJECT_NAME` lets it run against fresh volumes without touching dev data.
+- `gen:contracts` is now a Node script (`scripts/gen-contracts.mjs`) with no `mv` or shell redirection; it validates the JSON before an atomic rename.
+- Healthchecks got `start_period` (postgres 60 s, minio 30 s), because the stack sometimes came back unhealthy right after the prod stack went down.
+- `reconcile_orphans` needs a role that bypasses RLS. The owner role fails loudly under FORCE RLS, so it runs with the superuser URL inside the api container. Dev result: 0 orphans, 0 missing.
+- `ck plan check` rewrote the "Applied To" column of the red-team table in plan.md. It was restored by hand; row 1's original value had already been lost and was reconstructed as "Phase 3, 7".
+- Known gap: one unexplained verify run with 13 API failures, not reproduced since (TESTING.md).
 
 ## Risk Assessment
 - Playwright image heavy on Windows → only in `verify`, cached after first pull.

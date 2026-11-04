@@ -25,6 +25,7 @@ erDiagram
   evidence ||--o{ evidence_hashes : "hashed as"
   evidence ||--o{ evidence_custody_events : "custody chain"
   organizations ||--o{ audit_logs : records
+  users ||--o{ evidence : uploads
 ```
 
 | Table | Scope | Notes |
@@ -66,7 +67,7 @@ Reads and writes are split per command on purpose: a single ALL-command policy w
 
 The helper functions are schema-qualified (`pg_catalog.current_setting`, `pg_catalog.uuid`) and trigger functions pin `search_path = pg_catalog`; `TEMPORARY` on both databases is revoked from PUBLIC so temp objects cannot shadow names.
 
-**RLS trusts `app.org_id`.** It does not check membership itself: any code that opens `tenant_session(org_id, …)` for an org taken from the request sees that org's rows. Only `require()` / `authorize()` (phase 4) may open a tenant session for a request-supplied org, after verifying membership inside that same session.
+**RLS trusts `app.org_id`.** It does not check membership itself: any code that opens `tenant_session(org_id, …)` for an org taken from the request sees that org's rows. Only `require()` / `org_session()` (`app/core/rbac.py`) may open a tenant session for a request-supplied org, after verifying membership inside that same session; `tests/unit/test_tenant_session_guard.py` fails if `tenant_session(<org>…)` appears anywhere else besides the auth and org-creation services (which use org ids they just created).
 
 With no context set, tenant tables return zero rows. `INSERT … RETURNING` also evaluates `USING`, so every tenant insert runs with a matching `app.org_id`.
 

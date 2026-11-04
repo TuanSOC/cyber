@@ -51,6 +51,8 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
+      # Crash recovery after an unclean stop can take a while; don't count it as unhealthy.
+      start_period: 60s
 
   redis:
     image: redis:7.4-alpine
@@ -79,6 +81,7 @@ services:
       interval: 3s
       timeout: 3s
       retries: 30
+      start_period: 30s
 
   minio-init:
     image: bitnamilegacy/minio-client:2025.5.21
@@ -202,6 +205,20 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+
+  # --- e2e profile: Playwright against the running stack through the gateway ---
+  e2e:
+    profiles: ["e2e"]
+    image: cyberlab/e2e:dev
+    build:
+      context: .
+      dockerfile: apps/web/e2e/Dockerfile
+    environment:
+      E2E_BASE_URL: http://gateway:8080
+    networks: [frontend]
+    depends_on:
+      gateway:
+        condition: service_healthy
 
 volumes:
   pgdata:

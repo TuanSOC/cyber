@@ -7,6 +7,9 @@ const pollIntervalMs = Number(process.env.NEXT_WATCH_POLL_MS) || undefined;
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Dev only: the e2e container reaches the dev server through the compose hostname
+  // `gateway`; Next blocks dev assets for unknown origins by default.
+  allowedDevOrigins: ["gateway"],
   ...(pollIntervalMs ? { watchOptions: { pollIntervalMs } } : {}),
   cacheComponents: true,
   // The signed-in area is client-rendered by design (the session cookie is scoped to /api,

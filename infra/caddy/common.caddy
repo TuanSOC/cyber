@@ -7,15 +7,15 @@
 		Referrer-Policy no-referrer
 		X-Frame-Options DENY
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
-		Cross-Origin-Opener-Policy same-origin
 		-Server
 		-X-Powered-By
 	}
 }
 
-# Prod only (TLS): browsers must keep using HTTPS for this host.
+# Prod only (TLS): HSTS, and COOP (browsers ignore COOP on non-HTTPS origins).
 (hsts) {
 	header Strict-Transport-Security "max-age=31536000"
+	header Cross-Origin-Opener-Policy same-origin
 }
 
 (csp_prod) {

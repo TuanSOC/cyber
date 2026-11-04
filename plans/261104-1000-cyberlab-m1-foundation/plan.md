@@ -3,7 +3,7 @@ title: CyberLab AI Milestone 1 Foundation
 description: >-
   Monorepo + Docker Compose stack, auth, orgs/RBAC, investigations, evidence
   upload with hash verification + chain of custody, dark dashboard shell.
-status: pending
+status: completed
 priority: P1
 effort: 80h
 branch: ''
@@ -44,7 +44,7 @@ Out of scope: Celery, OpenSearch, analysis workers, TI, AI, real email, backups/
 | 6 | [Evidence storage and chain of custody](./phase-06-evidence-storage-and-chain-of-custody.md) | Completed |
 | 7 | [Frontend shell and auth pages](./phase-07-frontend-shell-and-auth-pages.md) | Completed |
 | 8 | [Frontend investigations evidence audit pages](./phase-08-frontend-investigations-evidence-audit-pages.md) | Completed |
-| 9 | [Security E2E tests and docs](./phase-09-security-e2e-tests-and-docs.md) | Pending |
+| 9 | [Security E2E tests and docs](./phase-09-security-e2e-tests-and-docs.md) | Completed |
 
 Order: 1 → 2 → 3 → 4 → 5 → 6 (backend chain). 7 can start after 4 (needs auth + org/member API). 8 after 6 + 7. 9 last. [RT#13]
 
@@ -79,14 +79,14 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 (backend chain). 7 can start after 4 (nee
 
 | # | Finding | Severity | Disposition | Applied To |
 |---|---------|----------|-------------|------------|
-| 1 | Cookie Path=/api invisible to SSR guard; cl_csrf unreadable | Critical | Accept | Completed |
-| 2 | require() membership lookup returns 0 rows under FORCE RLS → all org routes 404 | Critical | Accept | Completed |
-| 3 | NULL-org audit insert fails RLS on INSERT…RETURNING | High | Accept (auth_events table) | Completed |
-| 4 | Request-wide txn rollback erases revocation/failure audit before 401 | High | Accept | Completed |
-| 5 | No gateway body limit (unauth OOM); DB txn held during streams (pool exhaustion) | High | Accept | Completed |
-| 6 | Object lock = versioning: hidden orphans, overwrite via new version, root creds bypass | High | Accept (keep lock, version_id + scoped user) | Completed |
-| 7 | Non-atomic refresh rotation; multi-tab false reuse | High | Accept | Completed |
-| 8 | Owner DB creds in api runtime; false "defends owner" claim; tests could wipe dev DB | High | Accept | Completed |
+| 1 | Cookie Path=/api invisible to SSR guard; cl_csrf unreadable | Critical | Accept | Phase 3, 7 |
+| 2 | require() membership lookup returns 0 rows under FORCE RLS → all org routes 404 | Critical | Accept | Phase 2, 3, 4 |
+| 3 | NULL-org audit insert fails RLS on INSERT…RETURNING | High | Accept (auth_events table) | Phase 2, 3 |
+| 4 | Request-wide txn rollback erases revocation/failure audit before 401 | High | Accept | Phase 2, 3 |
+| 5 | No gateway body limit (unauth OOM); DB txn held during streams (pool exhaustion) | High | Accept | Phase 1, 2, 6 |
+| 6 | Object lock = versioning: hidden orphans, overwrite via new version, root creds bypass | High | Accept (keep lock, version_id + scoped user) | Phase 1, 2, 6 |
+| 7 | Non-atomic refresh rotation; multi-tab false reuse | High | Accept | Phase 2, 3, 7 |
+| 8 | Owner DB creds in api runtime; false "defends owner" claim; tests could wipe dev DB | High | Accept | Phase 1, 2 |
 | 9 | Windows/Docker bootstrap breakages (uv.lock, bind mounts, CRLF, build context, init SQL, PG15 schema, grants, buckets) | High | Accept | Phase 1, 2 |
 | 10 | CSP default-src 'self' breaks Next/Radix; added too late | High | Accept | Phase 7, 9 |
 | 11 | Rate limits global behind proxy; per-email lockout; test Redis leakage | Medium | Accept | Phase 1, 2, 3 |
