@@ -1,0 +1,33 @@
+{
+  "sections": [
+    "general",
+    "url_list"
+  ],
+  "indicator": "https://clean.example.net/index.html",
+  "type": "URL",
+  "type_title": "URL",
+  "base_indicator": {},
+  "pulse_info": {
+    "count": 0,
+    "pulses": [],
+    "references": [],
+    "related": {
+      "alienvault": {
+        "adversary": [],
+        "malware_families": [],
+        "industries": []
+      },
+      "other": {
+        "adversary": [],
+        "malware_families": [],
+        "industries": []
+      }
+    }
+  },
+  "false_positive": [],
+  "validation": [],
+  "whois": "http://whois.domaintools.com/https://clean.example.net/index.html",
+  "alexa": "",
+  "domain": "example.net",
+  "hostname": "clean.example.net"
+}

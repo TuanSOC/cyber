@@ -1,0 +1,8 @@
+{
+  "errors": [
+    {
+      "detail": "You have been temporarily blocked. Please try again later.",
+      "status": 403
+    }
+  ]
+}

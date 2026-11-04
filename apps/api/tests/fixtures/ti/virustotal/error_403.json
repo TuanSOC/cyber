@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "ForbiddenError",
+    "message": "You are not allowed to perform the requested operation"
+  }
+}

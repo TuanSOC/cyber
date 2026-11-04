@@ -1,0 +1,122 @@
+{
+  "response": {
+    "Attribute": [
+      {
+        "id": "1001",
+        "event_id": "42",
+        "object_id": "0",
+        "object_relation": null,
+        "category": "Network activity",
+        "type": "ip-dst",
+        "to_ids": true,
+        "uuid": "5f1c0000-0000-4000-8000-000000001001",
+        "timestamp": "1793660400",
+        "distribution": "5",
+        "sharing_group_id": "0",
+        "comment": "C2 server",
+        "deleted": false,
+        "disable_correlation": false,
+        "first_seen": "2026-10-20T08:00:00.000000+00:00",
+        "last_seen": "2026-11-02T22:00:00.000000+00:00",
+        "value": "192.0.2.10",
+        "Event": {
+          "org_id": "1",
+          "distribution": "1",
+          "id": "42",
+          "info": "ExampleBot C2 infrastructure (fixture)",
+          "orgc_id": "1",
+          "uuid": "5f1c0000-0000-4000-8000-000000000042",
+          "publish_timestamp": "1793577600"
+        },
+        "Tag": [
+          {
+            "id": "2",
+            "name": "tlp:amber",
+            "colour": "#FFC000",
+            "exportable": true,
+            "user_id": "0",
+            "hide_tag": false,
+            "numerical_value": null,
+            "is_galaxy": false,
+            "is_custom_galaxy": false,
+            "local_only": false,
+            "local": 0,
+            "relationship_type": null
+          },
+          {
+            "id": "10",
+            "name": "misp-galaxy:mitre-attack-pattern=\"PowerShell - T1059.001\"",
+            "colour": "#0088cc",
+            "exportable": true,
+            "user_id": "0",
+            "hide_tag": false,
+            "numerical_value": null,
+            "is_galaxy": true,
+            "is_custom_galaxy": false,
+            "local_only": false,
+            "local": 0,
+            "relationship_type": null
+          },
+          {
+            "id": "12",
+            "name": "misp-galaxy:malpedia=\"ExampleBot\"",
+            "colour": "#0088cc",
+            "exportable": true,
+            "user_id": "0",
+            "hide_tag": false,
+            "numerical_value": null,
+            "is_galaxy": true,
+            "is_custom_galaxy": false,
+            "local_only": false,
+            "local": 0,
+            "relationship_type": null
+          }
+        ]
+      },
+      {
+        "id": "1002",
+        "event_id": "43",
+        "object_id": "0",
+        "object_relation": null,
+        "category": "Network activity",
+        "type": "ip-src",
+        "to_ids": false,
+        "uuid": "5f1c0000-0000-4000-8000-000000001002",
+        "timestamp": "1793660400",
+        "distribution": "5",
+        "sharing_group_id": "0",
+        "comment": "",
+        "deleted": false,
+        "disable_correlation": false,
+        "first_seen": null,
+        "last_seen": null,
+        "value": "192.0.2.10",
+        "Event": {
+          "org_id": "1",
+          "distribution": "1",
+          "id": "43",
+          "info": "Fixture phishing wave 2026-10",
+          "orgc_id": "1",
+          "uuid": "5f1c0000-0000-4000-8000-000000000043",
+          "publish_timestamp": "1793577600"
+        },
+        "Tag": [
+          {
+            "id": "3",
+            "name": "tlp:green",
+            "colour": "#339900",
+            "exportable": true,
+            "user_id": "0",
+            "hide_tag": false,
+            "numerical_value": null,
+            "is_galaxy": false,
+            "is_custom_galaxy": false,
+            "local_only": false,
+            "local": 0,
+            "relationship_type": null
+          }
+        ]
+      }
+    ]
+  }
+}

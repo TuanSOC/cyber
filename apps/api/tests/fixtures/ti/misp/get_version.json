@@ -1,0 +1,12 @@
+{
+  "version": "2.5.2",
+  "pymisp_recommended_version": "2.5.2",
+  "perm_sync": false,
+  "perm_sighting": false,
+  "perm_galaxy_editor": false,
+  "request_encoding": [
+    "gzip",
+    "br"
+  ],
+  "filter_sightings": true
+}

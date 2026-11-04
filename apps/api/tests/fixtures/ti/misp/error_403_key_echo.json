@@ -1,0 +1,5 @@
+{
+  "name": "Authentication failed. Please make sure you pass the API key of an API enabled user along in the Authorization header.",
+  "message": "Authentication failed. Please make sure you pass the API key of an API enabled user along in the Authorization header. Received: CYBERLAB-TEST-SENTINEL-KEY-0000000000000000",
+  "url": "/attributes/restSearch"
+}

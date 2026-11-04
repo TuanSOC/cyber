@@ -1,0 +1,82 @@
+{
+  "data": {
+    "id": "192.0.2.10",
+    "type": "ip_address",
+    "links": {
+      "self": "https://www.virustotal.com/api/v3/ip_addresses/192.0.2.10"
+    },
+    "attributes": {
+      "as_owner": "Example Hosting LLC (documentation ASN)",
+      "asn": 64500,
+      "country": "US",
+      "continent": "NA",
+      "network": "192.0.2.0/24",
+      "regional_internet_registry": "ARIN",
+      "jarm": "2ad2ad0002ad2ad00042d42d00000000000000000000000000000000000000",
+      "whois": "NetRange: 192.0.2.0 - 192.0.2.255\nOrgName: Example Hosting LLC\n",
+      "whois_date": 1791072000,
+      "last_analysis_date": 1793660400,
+      "last_analysis_stats": {
+        "harmless": 60,
+        "malicious": 14,
+        "suspicious": 2,
+        "undetected": 20,
+        "timeout": 0
+      },
+      "last_analysis_results": {
+        "Engine000": {
+          "category": "malicious",
+          "engine_name": "Engine000",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine001": {
+          "category": "malicious",
+          "engine_name": "Engine001",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine002": {
+          "category": "malicious",
+          "engine_name": "Engine002",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine003": {
+          "category": "malicious",
+          "engine_name": "Engine003",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine004": {
+          "category": "suspicious",
+          "engine_name": "Engine004",
+          "method": "blacklist",
+          "result": "suspicious"
+        },
+        "Engine005": {
+          "category": "harmless",
+          "engine_name": "Engine005",
+          "method": "blacklist",
+          "result": "clean"
+        },
+        "Engine006": {
+          "category": "harmless",
+          "engine_name": "Engine006",
+          "method": "blacklist",
+          "result": "clean"
+        }
+      },
+      "reputation": -42,
+      "total_votes": {
+        "harmless": 1,
+        "malicious": 17
+      },
+      "tags": [
+        "c2",
+        "scanner"
+      ],
+      "last_modification_date": 1793662200
+    }
+  }
+}

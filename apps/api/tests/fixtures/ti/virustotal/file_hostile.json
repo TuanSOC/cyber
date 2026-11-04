@@ -1,0 +1,132 @@
+{
+  "data": {
+    "id": "755bc045f2d184f6e51ccfa428af80d330ff83b753453e26e0e3217022215224",
+    "type": "file",
+    "links": {
+      "self": "https://www.virustotal.com/api/v3/files/755bc045f2d184f6e51ccfa428af80d330ff83b753453e26e0e3217022215224"
+    },
+    "attributes": {
+      "md5": "65000dd0ed5bdf4b81de862427e1a2aa",
+      "sha1": "946dc26970c4eb96adcedf95c3890cedc523d63f",
+      "sha256": "755bc045f2d184f6e51ccfa428af80d330ff83b753453e26e0e3217022215224",
+      "ssdeep": "96:fixtureSSDEEPaaaaaaaaaaaaaaaaaaaaaa:fixtureSSDEEPbbbbbbbbbbbb",
+      "tlsh": "T10000000000000000000000000000000000000000000000000000000000000000000000",
+      "vhash": "0000000000fixture",
+      "size": 48213,
+      "type_tag": "peexe",
+      "type_description": "Win32 EXE",
+      "type_extension": "exe",
+      "magic": "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+      "meaningful_name": "invoice\u202egpj.exe\u202c",
+      "names": [
+        "<script>alert(1)</script>",
+        "<img src=x onerror=\"alert(document.cookie)\">",
+        "javascript:alert(document.domain)",
+        "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+        "invoice\u202egpj.exe\u202c",
+        "\u2066isolate\u2069\u200b\u200d\ufeffzero-width",
+        "tag\twith\ttabs",
+        "  padded  ",
+        "",
+        "lone-surrogate-\ud800-end"
+      ],
+      "first_submission_date": 1792800000,
+      "last_submission_date": 1793577600,
+      "first_seen_itw_date": 1792713600,
+      "times_submitted": 12,
+      "unique_sources": 5,
+      "popular_threat_classification": {
+        "suggested_threat_label": "<script>alert(1)</script>",
+        "popular_threat_name": [
+          {
+            "count": 1,
+            "value": "<img src=x onerror=\"alert(document.cookie)\">"
+          }
+        ],
+        "popular_threat_category": [
+          {
+            "count": "NaN",
+            "value": "javascript:alert(document.domain)"
+          }
+        ]
+      },
+      "sandbox_verdicts": {
+        "ExampleSandbox": {
+          "category": "malicious",
+          "sandbox_name": "ExampleSandbox",
+          "malware_classification": [
+            "MALWARE",
+            "TROJAN"
+          ],
+          "malware_names": [
+            "ExampleBot"
+          ]
+        }
+      },
+      "crowdsourced_yara_results": [
+        {
+          "rule_name": "<script>alert(1)</script>",
+          "source": "javascript:alert(document.domain)"
+        }
+      ],
+      "last_analysis_date": 1793660400,
+      "last_analysis_stats": {
+        "harmless": 0,
+        "malicious": 48,
+        "suspicious": 2,
+        "undetected": 20,
+        "timeout": 0
+      },
+      "last_analysis_results": {
+        "Engine000": {
+          "category": "malicious",
+          "engine_name": "Engine000",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine001": {
+          "category": "malicious",
+          "engine_name": "Engine001",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine002": {
+          "category": "malicious",
+          "engine_name": "Engine002",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine003": {
+          "category": "malicious",
+          "engine_name": "Engine003",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine004": {
+          "category": "suspicious",
+          "engine_name": "Engine004",
+          "method": "blacklist",
+          "result": "suspicious"
+        }
+      },
+      "reputation": -60,
+      "total_votes": {
+        "harmless": 0,
+        "malicious": 21
+      },
+      "tags": [
+        "<script>alert(1)</script>",
+        "<img src=x onerror=\"alert(document.cookie)\">",
+        "javascript:alert(document.domain)",
+        "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+        "invoice\u202egpj.exe\u202c",
+        "\u2066isolate\u2069\u200b\u200d\ufeffzero-width",
+        "tag\twith\ttabs",
+        "  padded  ",
+        "",
+        "lone-surrogate-\ud800-end"
+      ],
+      "last_modification_date": 1793662200
+    }
+  }
+}

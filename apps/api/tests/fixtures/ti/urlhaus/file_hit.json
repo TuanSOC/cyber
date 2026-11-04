@@ -1,0 +1,41 @@
+{
+  "query_status": "ok",
+  "md5_hash": "b3f2dbcce7819dcbb219d332cc8159e6",
+  "sha256_hash": "afd186792fddd1fb440680e3ce3dd11c1e279bcd95ef234e5d04f91a19848063",
+  "file_type": "exe",
+  "file_size": "48213",
+  "signature": "ExampleBot",
+  "firstseen": "2026-10-30 12:34:56",
+  "lastseen": "2026-11-02 01:02:03",
+  "url_count": "2",
+  "urlhaus_download": "https://urlhaus-api.abuse.ch/v1/download/afd186792fddd1fb440680e3ce3dd11c1e279bcd95ef234e5d04f91a19848063/",
+  "virustotal": {
+    "result": "48 / 70",
+    "percent": "68.57",
+    "link": "https://www.virustotal.com/gui/file/afd186792fddd1fb440680e3ce3dd11c1e279bcd95ef234e5d04f91a19848063"
+  },
+  "imphash": "be6e56c70688aa0b291ace6317dda0f1",
+  "ssdeep": "96:fixtureSSDEEPaaaaaaaaaaaaaaaaaaaaaa:fixtureSSDEEPbbbbbbbbbbbb",
+  "tlsh": "T10000000000000000000000000000000000000000000000000000000000000000000000",
+  "magika": "pebin",
+  "urls": [
+    {
+      "url_id": "3000001",
+      "url": "http://malicious.example.com/payload/dropper.exe",
+      "url_status": "online",
+      "urlhaus_reference": "https://urlhaus.abuse.ch/url/3000001/",
+      "filename": "dropper.exe",
+      "firstseen": "2026-10-30",
+      "lastseen": "2026-11-02"
+    },
+    {
+      "url_id": "3000002",
+      "url": "http://192.0.2.10/x.exe",
+      "url_status": "offline",
+      "urlhaus_reference": "https://urlhaus.abuse.ch/url/3000002/",
+      "filename": null,
+      "firstseen": "2026-10-31",
+      "lastseen": null
+    }
+  ]
+}

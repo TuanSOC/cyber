@@ -1,0 +1,180 @@
+{
+  "type": "bundle",
+  "id": "bundle--00000000-0000-4000-8000-000000000000",
+  "objects": [
+    {
+      "type": "x-mitre-collection",
+      "id": "x-mitre-collection--00000000-0000-4000-8000-000000000001",
+      "name": "Enterprise ATT&CK",
+      "x_mitre_version": "99.0",
+      "x_mitre_attack_spec_version": "3.3.0",
+      "modified": "2026-10-13T17:53:10.145Z"
+    },
+    {
+      "type": "x-mitre-tactic",
+      "id": "x-mitre-tactic--00000000-0000-4000-8000-000000000101",
+      "name": "Execution",
+      "x_mitre_shortname": "execution",
+      "external_references": [{"source_name": "mitre-attack", "external_id": "TA0002"}]
+    },
+    {
+      "type": "x-mitre-tactic",
+      "id": "x-mitre-tactic--00000000-0000-4000-8000-000000000102",
+      "name": "Privilege Escalation",
+      "x_mitre_shortname": "privilege-escalation",
+      "external_references": [{"source_name": "mitre-attack", "external_id": "TA0004"}]
+    },
+    {
+      "type": "x-mitre-tactic",
+      "id": "x-mitre-tactic--00000000-0000-4000-8000-000000000103",
+      "name": "Stealth",
+      "x_mitre_shortname": "stealth",
+      "external_references": [{"source_name": "mitre-attack", "external_id": "TA0005"}]
+    },
+    {
+      "type": "x-mitre-tactic",
+      "id": "x-mitre-tactic--00000000-0000-4000-8000-000000000104",
+      "name": "Defense Impairment",
+      "x_mitre_shortname": "defense-impairment",
+      "external_references": [{"source_name": "mitre-attack", "external_id": "TA0112"}]
+    },
+    {
+      "type": "x-mitre-tactic",
+      "id": "x-mitre-tactic--00000000-0000-4000-8000-000000000105",
+      "name": "Defense Evasion",
+      "x_mitre_shortname": "defense-evasion",
+      "x_mitre_deprecated": true,
+      "external_references": [{"source_name": "mitre-attack", "external_id": "TA9005"}]
+    },
+    {
+      "type": "attack-pattern",
+      "id": "attack-pattern--00000000-0000-4000-8000-000000001055",
+      "name": "Process Injection",
+      "x_mitre_is_subtechnique": false,
+      "kill_chain_phases": [
+        {"kill_chain_name": "mitre-attack", "phase_name": "stealth"},
+        {"kill_chain_name": "mitre-attack", "phase_name": "privilege-escalation"},
+        {"kill_chain_name": "other-framework", "phase_name": "not-a-tactic"}
+      ],
+      "external_references": [
+        {"source_name": "mitre-attack", "external_id": "T1055", "url": "https://attack.mitre.org/techniques/T1055"},
+        {"source_name": "capec", "external_id": "CAPEC-640"}
+      ],
+      "modified": "2026-05-12T15:12:00.617Z"
+    },
+    {
+      "type": "attack-pattern",
+      "id": "attack-pattern--00000000-0000-4000-8000-000000105011",
+      "name": "Extra Window Memory Injection",
+      "x_mitre_is_subtechnique": true,
+      "kill_chain_phases": [
+        {"kill_chain_name": "mitre-attack", "phase_name": "stealth"},
+        {"kill_chain_name": "mitre-attack", "phase_name": "privilege-escalation"}
+      ],
+      "external_references": [
+        {"source_name": "mitre-attack", "external_id": "T1055.011", "url": "https://attack.mitre.org/techniques/T1055/011"}
+      ]
+    },
+    {
+      "type": "attack-pattern",
+      "id": "attack-pattern--00000000-0000-4000-8000-000000001059",
+      "name": "Command and Scripting Interpreter",
+      "x_mitre_is_subtechnique": false,
+      "kill_chain_phases": [{"kill_chain_name": "mitre-attack", "phase_name": "execution"}],
+      "external_references": [
+        {"source_name": "mitre-attack", "external_id": "T1059", "url": "https://attack.mitre.org/techniques/T1059"}
+      ]
+    },
+    {
+      "type": "attack-pattern",
+      "id": "attack-pattern--00000000-0000-4000-8000-000000105901",
+      "name": "PowerShell",
+      "x_mitre_is_subtechnique": true,
+      "kill_chain_phases": [{"kill_chain_name": "mitre-attack", "phase_name": "execution"}],
+      "external_references": [
+        {"source_name": "mitre-attack", "external_id": "T1059.001", "url": "https://attack.mitre.org/techniques/T1059/001"}
+      ]
+    },
+    {
+      "type": "attack-pattern",
+      "id": "attack-pattern--00000000-0000-4000-8000-000000001562",
+      "name": "Impair Defenses",
+      "x_mitre_is_subtechnique": false,
+      "kill_chain_phases": [{"kill_chain_name": "mitre-attack", "phase_name": "defense-impairment"}],
+      "external_references": [
+        {"source_name": "mitre-attack", "external_id": "T1562", "url": "https://attack.mitre.org/techniques/T1562"}
+      ]
+    },
+    {
+      "type": "attack-pattern",
+      "id": "attack-pattern--00000000-0000-4000-8000-000000001064",
+      "name": "Scripting",
+      "x_mitre_is_subtechnique": false,
+      "x_mitre_deprecated": true,
+      "revoked": false,
+      "kill_chain_phases": [{"kill_chain_name": "mitre-attack", "phase_name": "execution"}],
+      "external_references": [
+        {"source_name": "mitre-attack", "external_id": "T1064", "url": "https://attack.mitre.org/techniques/T1064"}
+      ]
+    },
+    {
+      "type": "attack-pattern",
+      "id": "attack-pattern--00000000-0000-4000-8000-000000001086",
+      "name": "PowerShell",
+      "revoked": true,
+      "external_references": [
+        {"source_name": "mitre-attack", "external_id": "T1086", "url": "https://attack.mitre.org/techniques/T1086"}
+      ]
+    },
+    {
+      "type": "attack-pattern",
+      "id": "attack-pattern--00000000-0000-4000-8000-000000001000",
+      "name": "Old Shell Technique",
+      "revoked": true,
+      "external_references": [
+        {"source_name": "mitre-attack", "external_id": "T1000", "url": "https://attack.mitre.org/techniques/T1000"}
+      ]
+    },
+    {
+      "type": "relationship",
+      "id": "relationship--00000000-0000-4000-8000-000000002001",
+      "relationship_type": "subtechnique-of",
+      "source_ref": "attack-pattern--00000000-0000-4000-8000-000000105011",
+      "target_ref": "attack-pattern--00000000-0000-4000-8000-000000001055"
+    },
+    {
+      "type": "relationship",
+      "id": "relationship--00000000-0000-4000-8000-000000002002",
+      "relationship_type": "subtechnique-of",
+      "source_ref": "attack-pattern--00000000-0000-4000-8000-000000105901",
+      "target_ref": "attack-pattern--00000000-0000-4000-8000-000000001059"
+    },
+    {
+      "type": "relationship",
+      "id": "relationship--00000000-0000-4000-8000-000000002003",
+      "relationship_type": "revoked-by",
+      "source_ref": "attack-pattern--00000000-0000-4000-8000-000000001086",
+      "target_ref": "attack-pattern--00000000-0000-4000-8000-000000105901"
+    },
+    {
+      "type": "relationship",
+      "id": "relationship--00000000-0000-4000-8000-000000002004",
+      "relationship_type": "revoked-by",
+      "source_ref": "attack-pattern--00000000-0000-4000-8000-000000001000",
+      "target_ref": "attack-pattern--00000000-0000-4000-8000-000000001086"
+    },
+    {
+      "type": "relationship",
+      "id": "relationship--00000000-0000-4000-8000-000000002005",
+      "relationship_type": "uses",
+      "source_ref": "malware--00000000-0000-4000-8000-000000003001",
+      "target_ref": "attack-pattern--00000000-0000-4000-8000-000000001055"
+    },
+    {
+      "type": "malware",
+      "id": "malware--00000000-0000-4000-8000-000000003001",
+      "name": "ExampleMalware",
+      "external_references": [{"source_name": "mitre-attack", "external_id": "S9999"}]
+    }
+  ]
+}

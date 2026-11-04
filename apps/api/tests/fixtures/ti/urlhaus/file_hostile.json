@@ -1,0 +1,28 @@
+{
+  "query_status": "ok",
+  "md5_hash": "65000dd0ed5bdf4b81de862427e1a2aa",
+  "sha256_hash": "755bc045f2d184f6e51ccfa428af80d330ff83b753453e26e0e3217022215224",
+  "file_type": "invoice\u202egpj.exe\u202c",
+  "file_size": "48213",
+  "signature": "<script>alert(1)</script>",
+  "firstseen": "2026-10-30 12:34:56",
+  "lastseen": "2026-11-02 01:02:03",
+  "url_count": "2",
+  "urlhaus_download": "javascript:alert(document.domain)",
+  "virustotal": null,
+  "imphash": "be6e56c70688aa0b291ace6317dda0f1",
+  "ssdeep": "96:fixtureSSDEEPaaaaaaaaaaaaaaaaaaaaaa:fixtureSSDEEPbbbbbbbbbbbb",
+  "tlsh": "T10000000000000000000000000000000000000000000000000000000000000000000000",
+  "magika": "pebin",
+  "urls": [
+    {
+      "url_id": "1",
+      "url": "javascript:alert(document.domain)",
+      "url_status": "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+      "urlhaus_reference": "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+      "filename": "invoice\u202egpj.exe\u202c",
+      "firstseen": "<img src=x onerror=\"alert(document.cookie)\">",
+      "lastseen": null
+    }
+  ]
+}

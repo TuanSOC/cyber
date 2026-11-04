@@ -1,0 +1,5 @@
+{
+  "name": "Authentication failed. Please make sure you pass the API key of an API enabled user along in the Authorization header.",
+  "message": "Authentication failed. Please make sure you pass the API key of an API enabled user along in the Authorization header.",
+  "url": "/attributes/restSearch"
+}

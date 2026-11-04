@@ -1,0 +1,99 @@
+{
+  "data": {
+    "id": "hostile.example.org",
+    "type": "domain",
+    "links": {
+      "self": "https://www.virustotal.com/api/v3/domains/hostile.example.org"
+    },
+    "attributes": {
+      "tld": "com",
+      "registrar": "<script>alert(1)</script>",
+      "creation_date": 1791936000,
+      "expiration_date": 1823472000,
+      "categories": {
+        "<img src=x onerror=\"alert(document.cookie)\">": "javascript:alert(document.domain)",
+        "Engine001": "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical"
+      },
+      "popularity_ranks": {},
+      "last_dns_records": [
+        {
+          "type": "CNAME",
+          "value": "invoice\u202egpj.exe\u202c",
+          "ttl": 1
+        }
+      ],
+      "last_dns_records_date": 1793656800,
+      "whois": "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+      "last_analysis_date": 1793660400,
+      "last_analysis_stats": {
+        "harmless": 55,
+        "malicious": 11,
+        "suspicious": 3,
+        "undetected": 20,
+        "timeout": 0
+      },
+      "last_analysis_results": {
+        "Engine000": {
+          "category": "malicious",
+          "engine_name": "Engine000",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine001": {
+          "category": "malicious",
+          "engine_name": "Engine001",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine002": {
+          "category": "malicious",
+          "engine_name": "Engine002",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine003": {
+          "category": "malicious",
+          "engine_name": "Engine003",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine004": {
+          "category": "suspicious",
+          "engine_name": "Engine004",
+          "method": "blacklist",
+          "result": "suspicious"
+        },
+        "Engine005": {
+          "category": "harmless",
+          "engine_name": "Engine005",
+          "method": "blacklist",
+          "result": "clean"
+        },
+        "Engine006": {
+          "category": "harmless",
+          "engine_name": "Engine006",
+          "method": "blacklist",
+          "result": "clean"
+        }
+      },
+      "reputation": -27,
+      "total_votes": {
+        "harmless": 0,
+        "malicious": 9
+      },
+      "tags": [
+        "<script>alert(1)</script>",
+        "<img src=x onerror=\"alert(document.cookie)\">",
+        "javascript:alert(document.domain)",
+        "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+        "invoice\u202egpj.exe\u202c",
+        "\u2066isolate\u2069\u200b\u200d\ufeffzero-width",
+        "tag\twith\ttabs",
+        "  padded  ",
+        "",
+        "lone-surrogate-\ud800-end"
+      ],
+      "last_modification_date": 1793662200
+    }
+  }
+}

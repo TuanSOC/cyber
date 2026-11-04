@@ -1,0 +1,41 @@
+{
+  "sections": [
+    "general",
+    "geo",
+    "url_list",
+    "passive_dns",
+    "malware",
+    "whois",
+    "http_scans"
+  ],
+  "indicator": "clean.example.net",
+  "type": "domain",
+  "type_title": "Domain",
+  "base_indicator": {},
+  "pulse_info": {
+    "count": 0,
+    "pulses": [],
+    "references": [],
+    "related": {
+      "alienvault": {
+        "adversary": [],
+        "malware_families": [],
+        "industries": []
+      },
+      "other": {
+        "adversary": [],
+        "malware_families": [],
+        "industries": []
+      }
+    }
+  },
+  "false_positive": [],
+  "validation": [
+    {
+      "source": "whitelist",
+      "message": "Whitelisted domain example.net",
+      "name": "Whitelisted domain"
+    }
+  ],
+  "whois": "http://whois.domaintools.com/clean.example.net"
+}

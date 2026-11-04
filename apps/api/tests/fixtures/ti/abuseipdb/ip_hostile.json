@@ -1,0 +1,88 @@
+{
+  "data": {
+    "ipAddress": "203.0.113.66",
+    "isPublic": true,
+    "ipVersion": 4,
+    "isWhitelisted": false,
+    "abuseConfidenceScore": 87,
+    "countryCode": "U\u202eS",
+    "countryName": "invoice\u202egpj.exe\u202c",
+    "usageType": "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+    "isp": "<script>alert(1)</script>",
+    "domain": "javascript:alert(document.domain)",
+    "hostnames": [
+      "<script>alert(1)</script>",
+      "<img src=x onerror=\"alert(document.cookie)\">",
+      "javascript:alert(document.domain)",
+      "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+      "invoice\u202egpj.exe\u202c",
+      "\u2066isolate\u2069\u200b\u200d\ufeffzero-width",
+      "tag\twith\ttabs",
+      "  padded  ",
+      "",
+      "lone-surrogate-\ud800-end"
+    ],
+    "isTor": false,
+    "totalReports": 99,
+    "numDistinctUsers": 50,
+    "lastReportedAt": "2026-11-02T22:15:07+00:00",
+    "reports": [
+      {
+        "reportedAt": "2026-11-02T22:15:07+00:00",
+        "comment": "<script>alert(1)</script>",
+        "categories": [
+          18,
+          "22",
+          null,
+          -1,
+          999
+        ],
+        "reporterId": 1,
+        "reporterCountryCode": "invoice\u202egpj.exe\u202c",
+        "reporterCountryName": "<img src=x onerror=\"alert(document.cookie)\">"
+      },
+      {
+        "reportedAt": "2026-11-02T22:15:07+00:00",
+        "comment": "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+        "categories": [
+          18,
+          "22",
+          null,
+          -1,
+          999
+        ],
+        "reporterId": 1,
+        "reporterCountryCode": "invoice\u202egpj.exe\u202c",
+        "reporterCountryName": "<img src=x onerror=\"alert(document.cookie)\">"
+      },
+      {
+        "reportedAt": "2026-11-02T22:15:07+00:00",
+        "comment": "\u2066isolate\u2069\u200b\u200d\ufeffzero-width",
+        "categories": [
+          18,
+          "22",
+          null,
+          -1,
+          999
+        ],
+        "reporterId": 1,
+        "reporterCountryCode": "invoice\u202egpj.exe\u202c",
+        "reporterCountryName": "<img src=x onerror=\"alert(document.cookie)\">"
+      },
+      {
+        "reportedAt": "2026-11-02T22:15:07+00:00",
+        "comment": "javascript:alert(document.domain)",
+        "categories": [
+          18,
+          "22",
+          null,
+          -1,
+          999
+        ],
+        "reporterId": 1,
+        "reporterCountryCode": "invoice\u202egpj.exe\u202c",
+        "reporterCountryName": "<img src=x onerror=\"alert(document.cookie)\">"
+      }
+    ]
+  }
+}

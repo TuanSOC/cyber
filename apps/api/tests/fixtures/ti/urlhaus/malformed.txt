@@ -1,0 +1,31 @@
+{
+  "query_status": "ok",
+  "id": "3000001",
+  "urlhaus_reference": "https://urlhaus.abuse.ch/url/3000001/",
+  "url": "http://malicious.example.com/payload/dropper.exe",
+  "url_status": "online",
+  "host": "malicious.example.com",
+  "date_added": "2026-10-30 12:34:56 UTC",
+  "last_online": "2026-11-02 23:00:00 UTC",
+  "threat": "malware_download",
+  "blacklists": {
+    "spamhaus_dbl": "abused_legit_malware",
+    "surbl": "listed"
+  },
+  "reporter": "fixture_reporter",
+  "larted": "true",
+  "takedown_time_seconds": null,
+  "tags": [
+    "exe",
+    "ExampleBot",
+    "opendir"
+  ],
+  "payloads": [
+    {
+      "firstseen": "2026-10-30",
+      "filename": "dropper.exe",
+      "file_type": "exe",
+      "response_size": "48213",
+      "response_md5": "b3f2dbcce7819dcbb219d332cc8159e6",
+      "response_sha256": "afd186792fddd1fb440680e3ce3dd11c1e279bcd95ef234e5d04f91a19848063",
+      "urlhaus_download": "https://urlhaus-api.abuse.ch/v1/download/afd186792fddd1fb440680e3ce3dd11c1e279bcd95ef234e5d04f91a1984806

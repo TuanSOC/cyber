@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "NotFoundError",
+    "message": "Domain clean.example.net not found"
+  }
+}

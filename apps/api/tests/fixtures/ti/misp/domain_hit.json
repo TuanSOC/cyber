@@ -1,0 +1,64 @@
+{
+  "response": {
+    "Attribute": [
+      {
+        "id": "1101",
+        "event_id": "42",
+        "object_id": "0",
+        "object_relation": null,
+        "category": "Network activity",
+        "type": "domain",
+        "to_ids": true,
+        "uuid": "5f1c0000-0000-4000-8000-000000001101",
+        "timestamp": "1793660400",
+        "distribution": "5",
+        "sharing_group_id": "0",
+        "comment": "",
+        "deleted": false,
+        "disable_correlation": false,
+        "first_seen": null,
+        "last_seen": null,
+        "value": "malicious.example.com",
+        "Event": {
+          "org_id": "1",
+          "distribution": "1",
+          "id": "42",
+          "info": "ExampleBot C2 infrastructure (fixture)",
+          "orgc_id": "1",
+          "uuid": "5f1c0000-0000-4000-8000-000000000042",
+          "publish_timestamp": "1793577600"
+        },
+        "Tag": [
+          {
+            "id": "3",
+            "name": "tlp:green",
+            "colour": "#339900",
+            "exportable": true,
+            "user_id": "0",
+            "hide_tag": false,
+            "numerical_value": null,
+            "is_galaxy": false,
+            "is_custom_galaxy": false,
+            "local_only": false,
+            "local": 0,
+            "relationship_type": null
+          },
+          {
+            "id": "11",
+            "name": "misp-galaxy:mitre-attack-pattern=\"Process Injection - T1055\"",
+            "colour": "#0088cc",
+            "exportable": true,
+            "user_id": "0",
+            "hide_tag": false,
+            "numerical_value": null,
+            "is_galaxy": true,
+            "is_custom_galaxy": false,
+            "local_only": false,
+            "local": 0,
+            "relationship_type": null
+          }
+        ]
+      }
+    ]
+  }
+}

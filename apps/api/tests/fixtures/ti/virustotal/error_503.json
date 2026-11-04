@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "TransientError",
+    "message": "Transient error, please try again later"
+  }
+}

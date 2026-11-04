@@ -1,0 +1,51 @@
+{
+  "query_status": "ok",
+  "id": "3000001",
+  "urlhaus_reference": "javascript:alert(document.domain)",
+  "url": "http://hostile.example.org/landing?id=1",
+  "url_status": "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+  "host": "hostile.example.org",
+  "date_added": "2026-10-30 12:34:56 UTC",
+  "last_online": "2026-11-02 23:00:00 UTC",
+  "threat": "<script>alert(1)</script>",
+  "blacklists": {
+    "spamhaus_dbl": "<img src=x onerror=\"alert(document.cookie)\">",
+    "surbl": "\u2066isolate\u2069\u200b\u200d\ufeffzero-width"
+  },
+  "reporter": "invoice\u202egpj.exe\u202c",
+  "larted": "true",
+  "takedown_time_seconds": null,
+  "tags": [
+    "<script>alert(1)</script>",
+    "<img src=x onerror=\"alert(document.cookie)\">",
+    "javascript:alert(document.domain)",
+    "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+    "invoice\u202egpj.exe\u202c",
+    "\u2066isolate\u2069\u200b\u200d\ufeffzero-width",
+    "tag\twith\ttabs",
+    "  padded  ",
+    "",
+    "lone-surrogate-\ud800-end"
+  ],
+  "payloads": [
+    {
+      "firstseen": "2026-10-30",
+      "filename": "invoice\u202egpj.exe\u202c",
+      "file_type": "exe",
+      "response_size": "48213",
+      "response_md5": "b3f2dbcce7819dcbb219d332cc8159e6",
+      "response_sha256": "afd186792fddd1fb440680e3ce3dd11c1e279bcd95ef234e5d04f91a19848063",
+      "urlhaus_download": "javascript:alert(document.domain)",
+      "signature": "<script>alert(1)</script>",
+      "virustotal": {
+        "result": "<img src=x onerror=\"alert(document.cookie)\">",
+        "percent": "NaN",
+        "link": "javascript:alert(document.domain)"
+      },
+      "imphash": "be6e56c70688aa0b291ace6317dda0f1",
+      "ssdeep": "96:fixtureSSDEEPaaaaaaaaaaaaaaaaaaaaaa:fixtureSSDEEPbbbbbbbbbbbb",
+      "tlsh": "T10000000000000000000000000000000000000000000000000000000000000000000000",
+      "magika": "pebin"
+    }
+  ]
+}

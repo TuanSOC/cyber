@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/v1/attack/techniques": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Attack Techniques
+         * @description Labels for MITRE ATT&CK technique ids from the pinned offline index, with its notice.
+         */
+        get: operations["attack_techniques_api_v1_attack_techniques_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -807,6 +827,61 @@ export interface components {
             rich_header_hash: string | null;
             /** Ssdeep */
             ssdeep: string | null;
+        };
+        /**
+         * AttackLabel
+         * @description One requested id. `technique_id` differs from `id` when `id` was revoked and replaced.
+         */
+        AttackLabel: {
+            /** Deprecated */
+            deprecated: boolean;
+            /** Id */
+            id: string;
+            /** Is Subtechnique */
+            is_subtechnique: boolean;
+            /** Name */
+            name: string;
+            /** Parent */
+            parent: string | null;
+            /** Parent Name */
+            parent_name: string | null;
+            /** Revoked */
+            revoked: boolean;
+            /** Tactics */
+            tactics: components["schemas"]["AttackTactic"][];
+            /** Technique Id */
+            technique_id: string;
+            /** Url */
+            url: string;
+        };
+        /** AttackMeta */
+        AttackMeta: {
+            /** Attack Spec */
+            attack_spec: string;
+            /** Built At */
+            built_at: string;
+            /**
+             * Notice
+             * @default © The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation.
+             */
+            notice: string;
+            /** Version */
+            version: string;
+        };
+        /** AttackTactic */
+        AttackTactic: {
+            /** Name */
+            name: string;
+            /** Shortname */
+            shortname: string;
+        };
+        /** AttackTechniquesOut */
+        AttackTechniquesOut: {
+            meta: components["schemas"]["AttackMeta"];
+            /** Techniques */
+            techniques: components["schemas"]["AttackLabel"][];
+            /** Unknown */
+            unknown: string[];
         };
         /** AuditLogOut */
         AuditLogOut: {
@@ -2095,6 +2170,37 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    attack_techniques_api_v1_attack_techniques_get: {
+        parameters: {
+            query?: {
+                ids?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttackTechniquesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     login_api_v1_auth_login_post: {
         parameters: {
             query?: never;

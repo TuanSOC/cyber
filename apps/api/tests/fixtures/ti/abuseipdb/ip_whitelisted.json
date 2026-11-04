@@ -1,0 +1,20 @@
+{
+  "data": {
+    "ipAddress": "198.51.100.53",
+    "isPublic": true,
+    "ipVersion": 4,
+    "isWhitelisted": true,
+    "abuseConfidenceScore": 0,
+    "countryCode": "US",
+    "countryName": "United States of America",
+    "usageType": "Content Delivery Network",
+    "isp": "Example CDN Inc.",
+    "domain": "example.org",
+    "hostnames": [],
+    "isTor": false,
+    "totalReports": 3,
+    "numDistinctUsers": 2,
+    "lastReportedAt": "2026-10-01T00:00:00+00:00",
+    "reports": []
+  }
+}

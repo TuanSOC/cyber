@@ -1,0 +1,58 @@
+{
+  "query_status": "ok",
+  "urlhaus_reference": "https://urlhaus.abuse.ch/host/malicious.example.com/",
+  "host": "malicious.example.com",
+  "firstseen": "2026-10-01 08:00:00 UTC",
+  "url_count": "3",
+  "blacklists": {
+    "spamhaus_dbl": "abused_legit_malware",
+    "surbl": "not listed"
+  },
+  "urls": [
+    {
+      "id": "3000001",
+      "urlhaus_reference": "https://urlhaus.abuse.ch/url/3000001/",
+      "url": "http://malicious.example.com/payload/dropper.exe",
+      "url_status": "online",
+      "date_added": "2026-10-30 12:34:56 UTC",
+      "threat": "malware_download",
+      "reporter": "fixture_reporter",
+      "larted": "true",
+      "takedown_time_seconds": null,
+      "tags": [
+        "exe",
+        "ExampleBot"
+      ]
+    },
+    {
+      "id": "3000002",
+      "urlhaus_reference": "https://urlhaus.abuse.ch/url/3000002/",
+      "url": "http://malicious.example.com/payload/a.sh",
+      "url_status": "offline",
+      "date_added": "2026-10-30 12:34:56 UTC",
+      "threat": "malware_download",
+      "reporter": "fixture_reporter",
+      "larted": "true",
+      "takedown_time_seconds": "3600",
+      "tags": [
+        "exe",
+        "ExampleBot"
+      ]
+    },
+    {
+      "id": "3000003",
+      "urlhaus_reference": "https://urlhaus.abuse.ch/url/3000003/",
+      "url": "http://malicious.example.com/payload/b.bin",
+      "url_status": "unknown",
+      "date_added": "2026-10-30 12:34:56 UTC",
+      "threat": "malware_download",
+      "reporter": "fixture_reporter",
+      "larted": "true",
+      "takedown_time_seconds": null,
+      "tags": [
+        "exe",
+        "ExampleBot"
+      ]
+    }
+  ]
+}

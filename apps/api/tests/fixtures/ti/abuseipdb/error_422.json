@@ -1,0 +1,11 @@
+{
+  "errors": [
+    {
+      "detail": "The ip address must be a valid IP address.",
+      "source": {
+        "parameter": "ipAddress"
+      },
+      "status": 422
+    }
+  ]
+}

@@ -1,0 +1,127 @@
+{
+  "data": {
+    "id": "afd186792fddd1fb440680e3ce3dd11c1e279bcd95ef234e5d04f91a19848063",
+    "type": "file",
+    "links": {
+      "self": "https://www.virustotal.com/api/v3/files/afd186792fddd1fb440680e3ce3dd11c1e279bcd95ef234e5d04f91a19848063"
+    },
+    "attributes": {
+      "md5": "b3f2dbcce7819dcbb219d332cc8159e6",
+      "sha1": "fd7938e5a27678bd5d6d075019669a57d77e0d3a",
+      "sha256": "afd186792fddd1fb440680e3ce3dd11c1e279bcd95ef234e5d04f91a19848063",
+      "ssdeep": "96:fixtureSSDEEPaaaaaaaaaaaaaaaaaaaaaa:fixtureSSDEEPbbbbbbbbbbbb",
+      "tlsh": "T10000000000000000000000000000000000000000000000000000000000000000000000",
+      "vhash": "0000000000fixture",
+      "size": 48213,
+      "type_tag": "peexe",
+      "type_description": "Win32 EXE",
+      "type_extension": "exe",
+      "magic": "PE32 executable (GUI) Intel 80386, for MS Windows",
+      "meaningful_name": "dropper.exe",
+      "names": [
+        "dropper.exe",
+        "invoice_2026.exe"
+      ],
+      "first_submission_date": 1792800000,
+      "last_submission_date": 1793577600,
+      "first_seen_itw_date": 1792713600,
+      "times_submitted": 12,
+      "unique_sources": 5,
+      "popular_threat_classification": {
+        "suggested_threat_label": "trojan.examplebot/fixture",
+        "popular_threat_category": [
+          {
+            "count": 30,
+            "value": "trojan"
+          },
+          {
+            "count": 8,
+            "value": "downloader"
+          }
+        ],
+        "popular_threat_name": [
+          {
+            "count": 22,
+            "value": "examplebot"
+          },
+          {
+            "count": 5,
+            "value": "fixture"
+          }
+        ]
+      },
+      "sandbox_verdicts": {
+        "ExampleSandbox": {
+          "category": "malicious",
+          "sandbox_name": "ExampleSandbox",
+          "malware_classification": [
+            "MALWARE",
+            "TROJAN"
+          ],
+          "malware_names": [
+            "ExampleBot"
+          ]
+        }
+      },
+      "crowdsourced_yara_results": [
+        {
+          "ruleset_name": "fixture_rules",
+          "rule_name": "FIXTURE_ExampleBot",
+          "source": "https://example.org/yara",
+          "author": "fixture"
+        }
+      ],
+      "last_analysis_date": 1793660400,
+      "last_analysis_stats": {
+        "harmless": 0,
+        "malicious": 48,
+        "suspicious": 2,
+        "undetected": 20,
+        "timeout": 0
+      },
+      "last_analysis_results": {
+        "Engine000": {
+          "category": "malicious",
+          "engine_name": "Engine000",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine001": {
+          "category": "malicious",
+          "engine_name": "Engine001",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine002": {
+          "category": "malicious",
+          "engine_name": "Engine002",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine003": {
+          "category": "malicious",
+          "engine_name": "Engine003",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine004": {
+          "category": "suspicious",
+          "engine_name": "Engine004",
+          "method": "blacklist",
+          "result": "suspicious"
+        }
+      },
+      "reputation": -60,
+      "total_votes": {
+        "harmless": 0,
+        "malicious": 21
+      },
+      "tags": [
+        "peexe",
+        "spreader",
+        "detect-debug-environment"
+      ],
+      "last_modification_date": 1793662200
+    }
+  }
+}

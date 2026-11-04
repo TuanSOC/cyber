@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "WrongCredentialsError",
+    "message": "Wrong API key: CYBERLAB-TEST-SENTINEL-KEY-0000000000000000"
+  }
+}

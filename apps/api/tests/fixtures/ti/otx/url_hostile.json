@@ -1,0 +1,156 @@
+{
+  "sections": [
+    "general",
+    "url_list"
+  ],
+  "indicator": "http://hostile.example.org/landing?id=1",
+  "type": "URL",
+  "type_title": "URL",
+  "base_indicator": {
+    "id": 3000000001,
+    "indicator": "http://hostile.example.org/landing?id=1",
+    "type": "URL",
+    "title": "",
+    "description": "",
+    "content": "",
+    "access_type": "public",
+    "access_reason": ""
+  },
+  "pulse_info": {
+    "count": 1,
+    "pulses": [
+      {
+        "id": "006720000000000000000009",
+        "name": "<script>alert(1)</script>invoice\u202egpj.exe\u202c",
+        "description": "Synthetic fixture pulse",
+        "modified": "not-a-datectrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+        "created": "2026-10-20T09:00:00.000000",
+        "tags": [
+          "<script>alert(1)</script>",
+          "<img src=x onerror=\"alert(document.cookie)\">",
+          "javascript:alert(document.domain)",
+          "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+          "invoice\u202egpj.exe\u202c",
+          "\u2066isolate\u2069\u200b\u200d\ufeffzero-width",
+          "tag\twith\ttabs",
+          "  padded  ",
+          "",
+          "lone-surrogate-\ud800-end"
+        ],
+        "references": [
+          "javascript:alert(document.domain)",
+          "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+          "http://example.org/ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical"
+        ],
+        "public": 1,
+        "adversary": "",
+        "targeted_countries": [],
+        "industries": [],
+        "TLP": "white",
+        "cloned_from": null,
+        "malware_families": [
+          {
+            "id": "<script>alert(1)</script>",
+            "display_name": "<script>alert(1)</script>",
+            "target": null
+          },
+          {
+            "id": "invoice\u202egpj.exe\u202c",
+            "display_name": "invoice\u202egpj.exe\u202c",
+            "target": null
+          },
+          {
+            "id": "javascript:alert(document.domain)",
+            "display_name": "javascript:alert(document.domain)",
+            "target": null
+          }
+        ],
+        "attack_ids": [
+          {
+            "id": "T1059.001<script>",
+            "name": "<script>alert(1)</script>",
+            "display_name": "T1059.001<script> - <script>alert(1)</script>"
+          },
+          {
+            "id": "T99999",
+            "name": "bogus",
+            "display_name": "T99999 - bogus"
+          },
+          {
+            "id": "../../admin",
+            "name": "javascript:alert(document.domain)",
+            "display_name": "../../admin - javascript:alert(document.domain)"
+          },
+          {
+            "id": "t1055",
+            "name": "invoice\u202egpj.exe\u202c",
+            "display_name": "t1055 - invoice\u202egpj.exe\u202c"
+          },
+          {
+            "id": "T1055",
+            "name": "Process Injection",
+            "display_name": "T1055 - Process Injection"
+          }
+        ],
+        "export_count": 3,
+        "upvotes_count": 0,
+        "downvotes_count": 0,
+        "votes_count": 0,
+        "locked": false,
+        "pulse_source": "web",
+        "validator_count": 0,
+        "comment_count": 0,
+        "follower_count": 0,
+        "vote": 0,
+        "author": {
+          "username": "fixture_author",
+          "id": "100001",
+          "avatar_url": "javascript:alert(document.domain)",
+          "is_subscribed": false,
+          "is_following": false
+        },
+        "indicator_type_counts": {
+          "IPv4": 4,
+          "domain": 2,
+          "FileHash-SHA256": 1
+        },
+        "indicator_count": 7,
+        "is_author": false,
+        "is_subscribing": null,
+        "subscriber_count": 12,
+        "modified_text": "2 days ago",
+        "is_modified": true,
+        "groups": [],
+        "in_group": false
+      }
+    ],
+    "references": [
+      "https://example.org/report/1"
+    ],
+    "related": {
+      "alienvault": {
+        "adversary": [],
+        "malware_families": [],
+        "industries": []
+      },
+      "other": {
+        "adversary": [],
+        "malware_families": [
+          "<script>alert(1)</script>",
+          "invoice\u202egpj.exe\u202c",
+          "javascript:alert(document.domain)"
+        ],
+        "industries": []
+      }
+    }
+  },
+  "false_positive": [],
+  "validation": [
+    {
+      "source": "<img src=x onerror=\"alert(document.cookie)\">",
+      "message": "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+      "name": "invoice\u202egpj.exe\u202c"
+    }
+  ],
+  "whois": "http://whois.domaintools.com/http://hostile.example.org/landing?id=1"
+}

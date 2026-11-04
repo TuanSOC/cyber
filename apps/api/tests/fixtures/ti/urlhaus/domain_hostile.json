@@ -1,0 +1,36 @@
+{
+  "query_status": "ok",
+  "urlhaus_reference": "javascript:alert(document.domain)",
+  "host": "hostile.example.org",
+  "firstseen": "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+  "url_count": "-1",
+  "blacklists": {
+    "spamhaus_dbl": "abused_legit_malware",
+    "surbl": "not listed"
+  },
+  "urls": [
+    {
+      "id": "3000001",
+      "urlhaus_reference": "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+      "url": "javascript:alert(document.domain)",
+      "url_status": "online",
+      "date_added": "2026-10-30 12:34:56 UTC",
+      "threat": "<script>alert(1)</script>",
+      "reporter": "fixture_reporter",
+      "larted": "true",
+      "takedown_time_seconds": null,
+      "tags": [
+        "<script>alert(1)</script>",
+        "<img src=x onerror=\"alert(document.cookie)\">",
+        "javascript:alert(document.domain)",
+        "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+        "invoice\u202egpj.exe\u202c",
+        "\u2066isolate\u2069\u200b\u200d\ufeffzero-width",
+        "tag\twith\ttabs",
+        "  padded  ",
+        "",
+        "lone-surrogate-\ud800-end"
+      ]
+    }
+  ]
+}

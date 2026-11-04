@@ -1,0 +1,54 @@
+{
+  "data": {
+    "id": "203.0.113.66",
+    "type": "ip_address",
+    "links": {
+      "self": "https://www.virustotal.com/api/v3/ip_addresses/203.0.113.66"
+    },
+    "attributes": {
+      "as_owner": "<img src=x onerror=\"alert(document.cookie)\">",
+      "asn": 64500,
+      "country": "invoice\u202egpj.exe\u202c",
+      "continent": "NA",
+      "network": "192.0.2.0/24",
+      "regional_internet_registry": "ARIN",
+      "jarm": "javascript:alert(document.domain)",
+      "whois": "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical\n<script>alert(1)</script>",
+      "whois_date": 1791072000,
+      "last_analysis_date": 1793660400,
+      "last_analysis_stats": {
+        "harmless": 60,
+        "malicious": 14,
+        "suspicious": 2,
+        "undetected": 20,
+        "timeout": 0
+      },
+      "last_analysis_results": {
+        "<script>alert(1)</script>": {
+          "category": "malicious",
+          "engine_name": "<script>alert(1)</script>",
+          "method": "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+          "result": "invoice\u202egpj.exe\u202c"
+        }
+      },
+      "reputation": -42,
+      "total_votes": {
+        "harmless": 1,
+        "malicious": 17
+      },
+      "tags": [
+        "<script>alert(1)</script>",
+        "<img src=x onerror=\"alert(document.cookie)\">",
+        "javascript:alert(document.domain)",
+        "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+        "invoice\u202egpj.exe\u202c",
+        "\u2066isolate\u2069\u200b\u200d\ufeffzero-width",
+        "tag\twith\ttabs",
+        "  padded  ",
+        "",
+        "lone-surrogate-\ud800-end"
+      ],
+      "last_modification_date": 1793662200
+    }
+  }
+}

@@ -1,0 +1,150 @@
+{
+  "response": {
+    "Attribute": [
+      {
+        "id": "1501",
+        "event_id": "42/../../admin/users",
+        "object_id": "0",
+        "object_relation": null,
+        "category": "<script>alert(1)</script>",
+        "type": "ip-dst",
+        "to_ids": true,
+        "uuid": "5f1c0000-0000-4000-8000-000000001501",
+        "timestamp": "1793660400",
+        "distribution": "5",
+        "sharing_group_id": "0",
+        "comment": "<img src=x onerror=\"alert(document.cookie)\">",
+        "deleted": false,
+        "disable_correlation": false,
+        "first_seen": "not-a-date",
+        "last_seen": "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+        "value": "203.0.113.66",
+        "Event": {
+          "org_id": "1",
+          "distribution": "1",
+          "id": "abc",
+          "info": "<script>alert(1)</script>ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical\u2066isolate\u2069\u200b\u200d\ufeffzero-width",
+          "orgc_id": "1",
+          "uuid": "javascript:alert(document.domain)",
+          "publish_timestamp": "1793577600"
+        },
+        "Tag": [
+          {
+            "id": "90",
+            "name": "<script>alert(1)</script>",
+            "colour": "javascript:alert(document.domain)",
+            "exportable": true,
+            "user_id": "0",
+            "hide_tag": false,
+            "numerical_value": null,
+            "is_galaxy": false,
+            "is_custom_galaxy": false,
+            "local_only": false,
+            "local": 0,
+            "relationship_type": null
+          },
+          {
+            "id": "91",
+            "name": "tlp:invoice\u202egpj.exe\u202c",
+            "colour": "#000",
+            "exportable": true,
+            "user_id": "0",
+            "hide_tag": false,
+            "numerical_value": null,
+            "is_galaxy": false,
+            "is_custom_galaxy": false,
+            "local_only": false,
+            "local": 0,
+            "relationship_type": null
+          },
+          {
+            "id": "92",
+            "name": "misp-galaxy:mitre-attack-pattern=\"Evil - T1059.001<script>\"",
+            "colour": "#0",
+            "exportable": true,
+            "user_id": "0",
+            "hide_tag": false,
+            "numerical_value": null,
+            "is_galaxy": true,
+            "is_custom_galaxy": false,
+            "local_only": false,
+            "local": 0,
+            "relationship_type": null
+          },
+          {
+            "id": "93",
+            "name": "misp-galaxy:mitre-attack-pattern=\"Bad - T99999\"",
+            "colour": "#0",
+            "exportable": true,
+            "user_id": "0",
+            "hide_tag": false,
+            "numerical_value": null,
+            "is_galaxy": true,
+            "is_custom_galaxy": false,
+            "local_only": false,
+            "local": 0,
+            "relationship_type": null
+          },
+          {
+            "id": "4",
+            "name": "tlp:red",
+            "colour": "#CC0000",
+            "exportable": true,
+            "user_id": "0",
+            "hide_tag": false,
+            "numerical_value": null,
+            "is_galaxy": false,
+            "is_custom_galaxy": false,
+            "local_only": false,
+            "local": 0,
+            "relationship_type": null
+          }
+        ]
+      },
+      {
+        "id": "1502",
+        "event_id": "-1",
+        "object_id": "0",
+        "object_relation": null,
+        "category": "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+        "type": "invoice\u202egpj.exe\u202c",
+        "to_ids": "yes",
+        "uuid": "5f1c0000-0000-4000-8000-000000001502",
+        "timestamp": "1793660400",
+        "distribution": "5",
+        "sharing_group_id": "0",
+        "comment": "",
+        "deleted": false,
+        "disable_correlation": false,
+        "first_seen": null,
+        "last_seen": null,
+        "value": "203.0.113.66",
+        "Event": {
+          "org_id": "1",
+          "distribution": "1",
+          "id": "-1",
+          "info": "invoice\u202egpj.exe\u202c",
+          "orgc_id": "1",
+          "uuid": "not-a-uuid",
+          "publish_timestamp": "1793577600"
+        },
+        "Tag": [
+          {
+            "id": "94",
+            "name": "ctrl\u0000nul\u0007bel\u001b[31mANSI-red\u001b[0m\r\nFAKE-LOG-LINE level=critical",
+            "colour": "#0",
+            "exportable": true,
+            "user_id": "0",
+            "hide_tag": false,
+            "numerical_value": null,
+            "is_galaxy": false,
+            "is_custom_galaxy": false,
+            "local_only": false,
+            "local": 0,
+            "relationship_type": null
+          }
+        ]
+      }
+    ]
+  }
+}

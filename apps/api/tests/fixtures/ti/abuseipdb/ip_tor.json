@@ -1,0 +1,32 @@
+{
+  "data": {
+    "ipAddress": "203.0.113.9",
+    "isPublic": true,
+    "ipVersion": 4,
+    "isWhitelisted": false,
+    "abuseConfidenceScore": 35,
+    "countryCode": "US",
+    "countryName": "United States of America",
+    "usageType": "Reserved",
+    "isp": "Example Tor Exit",
+    "domain": "example.net",
+    "hostnames": [],
+    "isTor": true,
+    "totalReports": 41,
+    "numDistinctUsers": 12,
+    "lastReportedAt": "2026-11-02T10:00:00+00:00",
+    "reports": [
+      {
+        "reportedAt": "2026-11-02T22:15:07+00:00",
+        "comment": "SSH brute force from this host",
+        "categories": [
+          18,
+          22
+        ],
+        "reporterId": 1001,
+        "reporterCountryCode": "DE",
+        "reporterCountryName": "Germany"
+      }
+    ]
+  }
+}

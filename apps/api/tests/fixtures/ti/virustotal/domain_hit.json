@@ -1,0 +1,96 @@
+{
+  "data": {
+    "id": "malicious.example.com",
+    "type": "domain",
+    "links": {
+      "self": "https://www.virustotal.com/api/v3/domains/malicious.example.com"
+    },
+    "attributes": {
+      "tld": "com",
+      "registrar": "Example Registrar, Inc.",
+      "creation_date": 1791936000,
+      "expiration_date": 1823472000,
+      "categories": {
+        "Engine000": "malware sites",
+        "Engine001": "phishing"
+      },
+      "popularity_ranks": {},
+      "last_dns_records": [
+        {
+          "type": "A",
+          "value": "192.0.2.10",
+          "ttl": 300
+        },
+        {
+          "type": "NS",
+          "value": "ns1.example.net",
+          "ttl": 86400
+        }
+      ],
+      "last_dns_records_date": 1793656800,
+      "whois": "Domain Name: MALICIOUS.EXAMPLE.COM\nRegistrar: Example Registrar, Inc.\n",
+      "last_analysis_date": 1793660400,
+      "last_analysis_stats": {
+        "harmless": 55,
+        "malicious": 11,
+        "suspicious": 3,
+        "undetected": 20,
+        "timeout": 0
+      },
+      "last_analysis_results": {
+        "Engine000": {
+          "category": "malicious",
+          "engine_name": "Engine000",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine001": {
+          "category": "malicious",
+          "engine_name": "Engine001",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine002": {
+          "category": "malicious",
+          "engine_name": "Engine002",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine003": {
+          "category": "malicious",
+          "engine_name": "Engine003",
+          "method": "blacklist",
+          "result": "malware"
+        },
+        "Engine004": {
+          "category": "suspicious",
+          "engine_name": "Engine004",
+          "method": "blacklist",
+          "result": "suspicious"
+        },
+        "Engine005": {
+          "category": "harmless",
+          "engine_name": "Engine005",
+          "method": "blacklist",
+          "result": "clean"
+        },
+        "Engine006": {
+          "category": "harmless",
+          "engine_name": "Engine006",
+          "method": "blacklist",
+          "result": "clean"
+        }
+      },
+      "reputation": -27,
+      "total_votes": {
+        "harmless": 0,
+        "malicious": 9
+      },
+      "tags": [
+        "dga",
+        "malware-distribution"
+      ],
+      "last_modification_date": 1793662200
+    }
+  }
+}

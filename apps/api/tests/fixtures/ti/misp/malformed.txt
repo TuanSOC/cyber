@@ -1,0 +1,31 @@
+{
+  "response": {
+    "Attribute": [
+      {
+        "id": "1001",
+        "event_id": "42",
+        "object_id": "0",
+        "object_relation": null,
+        "category": "Network activity",
+        "type": "ip-dst",
+        "to_ids": true,
+        "uuid": "5f1c0000-0000-4000-8000-000000001001",
+        "timestamp": "1793660400",
+        "distribution": "5",
+        "sharing_group_id": "0",
+        "comment": "",
+        "deleted": false,
+        "disable_correlation": false,
+        "first_seen": null,
+        "last_seen": null,
+        "value": "192.0.2.10",
+        "Event": {
+          "org_id": "1",
+          "distribution": "1",
+          "id": "42",
+          "info": "ExampleBot C2 infrastructure (fixture)",
+          "orgc_id": "1",
+          "uuid": "5f1c0000-0000-4000-8000-000000000042",
+          "publish_timestamp": "1793577600"
+        },
+        "Tag":

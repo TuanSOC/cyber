@@ -1,0 +1,55 @@
+{
+  "data": {
+    "ipAddress": "192.0.2.10",
+    "isPublic": true,
+    "ipVersion": 4,
+    "isWhitelisted": false,
+    "abuseConfidenceScore": 100,
+    "countryCode": "US",
+    "countryName": "United States of America",
+    "usageType": "Data Center/Web Hosting/Transit",
+    "isp": "Example Hosting LLC",
+    "domain": "example.net",
+    "hostnames": [
+      "host-10.example.net"
+    ],
+    "isTor": false,
+    "totalReports": 1234,
+    "numDistinctUsers": 210,
+    "lastReportedAt": "2026-11-02T22:15:07+00:00",
+    "reports": [
+      {
+        "reportedAt": "2026-11-02T22:15:07+00:00",
+        "comment": "SSH brute force from this host",
+        "categories": [
+          18,
+          22
+        ],
+        "reporterId": 1001,
+        "reporterCountryCode": "DE",
+        "reporterCountryName": "Germany"
+      },
+      {
+        "reportedAt": "2026-11-01T08:01:44+00:00",
+        "comment": "Port scan tcp/23,2323",
+        "categories": [
+          14
+        ],
+        "reporterId": 1002,
+        "reporterCountryCode": "NL",
+        "reporterCountryName": "Netherlands"
+      },
+      {
+        "reportedAt": "2026-10-30T13:37:00+00:00",
+        "comment": "Web app attack: /wp-login.php",
+        "categories": [
+          21,
+          15
+        ],
+        "reporterId": 1003,
+        "reporterCountryCode": "US",
+        "reporterCountryName": "United States of America"
+      }
+    ]
+  }
+}
