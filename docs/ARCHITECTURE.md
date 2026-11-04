@@ -1,4 +1,4 @@
-# Architecture (Milestone 1)
+# Architecture
 
 ## Components
 
@@ -23,7 +23,8 @@ flowchart LR
 
 - **One origin.** The gateway serves both the app and `/api`, so session cookies are first-party and `SameSite=Strict`.
 - **Networks.** `web` cannot reach `api` directly; only the gateway (and data services) share the api's network. uvicorn trusts `X-Forwarded-For` from its peers, which is safe only because of this isolation.
-- **Gateway duties.** 1 MiB body cap everywhere except the evidence upload route; early 413 on oversize `Content-Length` (JSON error envelope); security headers and CSP; TLS + HSTS in prod.
+- **Gateway duties.** 1 MiB body cap everywhere except the evidence upload route; early 413 on oversize `Content-Length` (JSON error envelope); security headers; TLS + HSTS in prod.
+- **CSP (M3).** The upstreams own it. The web app sets a per-request nonce policy on HTML (`apps/web/proxy.ts`, `lib/csp.ts`): `script-src 'self' 'nonce-…' 'strict-dynamic'`, no `'unsafe-inline'` for scripts; styles keep `'unsafe-inline'` (Radix/sonner inline styles). The root layout awaits `connection()`, so every page renders dynamically with a fresh nonce. API downloads send `CSP: sandbox`. Caddy's `csp_fallback` (`infra/caddy/common.caddy`) adds `default-src 'none'` only to responses that carry no CSP.
 
 ## API: modular monolith
 
@@ -34,12 +35,13 @@ apps/api/app/
   modules/
     auth/            register, login, sessions (refresh rotation, logout), events (auth_events)
     users/           identity (models + repository only; `/auth/me` serves the profile)
-    organizations/   orgs (service.py) and memberships (members.py)
+    organizations/   orgs (service.py), memberships (members.py), storage quota (storage.py)
     investigations/  cases, case numbers, status lifecycle
     evidence/        uploads.py, locking.py, transfer.py (download/verify), service.py (custody, archive)
     audit/           audit writer + read API
-    analysis/        analysis jobs: request (manual / auto on capture upload), dispatch, lifecycle
-    pcap_analysis/   result stream validation, ingest into tenant tables, read API
+    analysis/        analysis jobs: request (manual / auto on upload), dispatch per analyzer, lifecycle
+    pcap_analysis/   pcap.v1 validation, ingest into tenant tables, read API (also findings / IOCs of every analyzer)
+    static_analysis/ static.v1 validation, ingest, read API, JSON report
   workers/     celery app, ingest + reaper tasks (trusted side of the analysis pipeline)
   scripts/     dump_openapi (contracts), reconcile_orphans (report-only)
 ```
@@ -77,6 +79,7 @@ sequenceDiagram
 - Failure before commit deletes exactly the stored version; after commit nothing changes the response (retention/lock failure is logged and audited).
 - Download and verify always read the **stored version id**, so overwriting the key in MinIO cannot change what is served or verified.
 - Per-user slots (Redis ZSET leases) bound concurrent uploads/verifies; storage and hashing run on a dedicated thread limiter.
+- **Storage quota (M3).** The declared `Content-Length` is checked against the org quota before the body is read. The actual size is checked again in the insert transaction, under a `FOR NO KEY UPDATE` lock on the org row, so concurrent uploads of one org cannot overshoot it (`413 storage_quota_exceeded`). Usage counts active and archived evidence.
 
 ## Web
 
@@ -120,3 +123,32 @@ flowchart LR
 - **Shared contracts**: the `cyberlab_jobs` package is a path dependency of both the API and the worker. It holds the job message, ingest message, limits, result line models and capture magic detection.
 - **Separate broker**: the analyzer can never reach the app Redis (token denylist, rate limits).
 - **Reaper**: `ingest-beat` schedules it every 60 s. It fails jobs past their queue or run deadline.
+
+## Static analysis (M3)
+
+A second untrusted worker on the same pipeline. Details are in [MALWARE_ANALYSIS.md](MALWARE_ANALYSIS.md).
+
+```mermaid
+flowchart LR
+  A[API] -->|static.analyze / pcap.analyze| RB[(redis-broker)]
+  RB -->|queue static| SW[static-worker<br/>UNTRUSTED]
+  RB -->|queue pcap| PW[pcap-worker<br/>UNTRUSTED]
+  SW -->|presigned GET / POST| M[(MinIO)]
+  SW -->|ingest.event| RB
+  RB --> IW[ingest-worker<br/>trusted]
+  IW -->|static.v1 / pcap.v1| P[(PostgreSQL)]
+  subgraph analysis [analysis network: internal, no egress]
+    SW
+    PW
+  end
+```
+
+- **Auto-run on upload** (from the first bytes, after the upload commits):
+  - pcap / pcapng → pcap analyzer;
+  - PE (`MZ` + in-bounds `PE\0\0`) or ELF (not a core dump) → static, profile `full`;
+  - any other non-empty file ≤ `STATIC_MAX_BYTES` (64 MiB) → static, profile `av` (ClamAV + YARA).
+- **Per analyzer:** each analyzer has its own Celery task, queue and broker ACL user (`static`, confined like `pcap`). The active-job caps (per org and global) count each analyzer separately, so a full pcap queue never blocks static runs.
+- **Engine order:** ClamAV → YARA → facts → PE/ELF → strings → capa → FLOSS. The emulators (capa, FLOSS) run last, so a compromised emulator cannot hide an earlier signature match. The `av` profile stops after facts.
+- **Untrusted side** (`apps/workers/static`): built on the shared worker kit (`packages/py-worker-kit`: sandbox, transfer, result writer, bounded readers), the same one the pcap worker uses. Every engine, including the Python probes (pefile, pyelftools, yara-python), runs as uid 10003 under seccomp and `RLIMIT_AS`; root never parses sample bytes.
+- **Trusted side:** the ingest worker dispatches by schema version. A `static.v1` stream is validated as a whole (header, caps, trailer hash, and sample hashes that must match the evidence record), then written in one transaction into the `malware_*` tables plus the shared `analysis_findings` and `iocs`.
+- **Web:** the Malware Lab (`/o/{org}/malware`, `/malware/{job}`, `/malware/{job}/report`) lists static jobs and shows sample facts, structure, strings, signatures, capabilities, findings and IOCs. It downloads the JSON report and renders a printable one.

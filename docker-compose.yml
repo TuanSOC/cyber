@@ -30,6 +30,9 @@ x-api-env: &api-env
   ANALYSIS_TIMEOUT_S: ${ANALYSIS_TIMEOUT_S}
   ANALYSIS_TOOL_TIMEOUT_S: ${ANALYSIS_TOOL_TIMEOUT_S}
   MAX_ACTIVE_ANALYSES_PER_ORG: ${MAX_ACTIVE_ANALYSES_PER_ORG}
+  STATIC_MAX_BYTES: ${STATIC_MAX_BYTES:-67108864}
+  DEFAULT_STORAGE_QUOTA_BYTES: ${DEFAULT_STORAGE_QUOTA_BYTES:-21474836480}
+  MAX_OWNED_ORGS_PER_USER: ${MAX_OWNED_ORGS_PER_USER:-5}
 
 # Untrusted parser container: broker URL only, tools run as an unprivileged uid inside.
 x-pcap-worker: &pcap-worker
@@ -368,6 +371,8 @@ services:
       minio-init:
         condition: service_completed_successfully
       pcap-worker-test:
+        condition: service_started
+      static-worker-test:
         condition: service_started
 
   static-worker-test:

@@ -27,6 +27,18 @@ const generated = spawnSync(
 );
 if (generated.status !== 0) process.exit(generated.status ?? 1);
 
+// A synthetic executable for the static scenario (it only references APIs; never executed).
+// Only that file is copied out: the full set includes EICAR, which host AV would quarantine.
+const staticDir = resolve(dataDir, "static");
+mkdirSync(staticDir, { recursive: true });
+const samples = spawnSync(
+  "docker",
+  ["run", "--rm", "--entrypoint", "sh", "-v", `${staticDir}:/out`, "cyberlab/static-worker:dev",
+   "-c", "python -m samples.generate /tmp/samples >/dev/null && cp /tmp/samples/downloader_imports.bin /out/"],
+  { stdio: "inherit" },
+);
+if (samples.status !== 0) process.exit(samples.status ?? 1);
+
 // A Lua one-liner avoids shell pipes, so it behaves the same under cmd.exe and sh.
 sh(
   `${COMPOSE} exec -T redis redis-cli EVAL "for _,k in ipairs(redis.call('KEYS', ARGV[1])) do redis.call('DEL', k) end return 1" 0 "rl:register:*"`,
