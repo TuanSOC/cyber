@@ -26,7 +26,6 @@ pnpm dev                  # docker compose up --build --renew-anon-volumes
 | http://localhost:8080 | Web app (through the Caddy gateway) |
 | http://localhost:8080/api/v1/health | API health (db / redis / minio) |
 | http://localhost:8080/api/docs | Swagger UI (dev only) |
-| http://localhost:9001 | MinIO console (root creds from `.env`) |
 
 ## Scripts
 

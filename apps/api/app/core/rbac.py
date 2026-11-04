@@ -30,6 +30,8 @@ class Permission(enum.StrEnum):
     EVIDENCE_READ = "evidence.read"
     EVIDENCE_WRITE = "evidence.write"
     AUDIT_READ = "audit.read"
+    # Threat intel provider keys, terms acknowledgement and TI settings (M4).
+    INTEGRATIONS_MANAGE = "integrations.manage"
 
 
 _READ = {
@@ -39,7 +41,12 @@ _READ = {
     Permission.EVIDENCE_READ,
 }
 _ANALYST = _READ | {Permission.INVESTIGATION_WRITE, Permission.EVIDENCE_WRITE}
-_ADMIN = _ANALYST | {Permission.ORG_UPDATE, Permission.MEMBERS_MANAGE, Permission.AUDIT_READ}
+_ADMIN = _ANALYST | {
+    Permission.ORG_UPDATE,
+    Permission.MEMBERS_MANAGE,
+    Permission.AUDIT_READ,
+    Permission.INTEGRATIONS_MANAGE,
+}
 
 ROLE_PERMISSIONS: dict[MemberRole, frozenset[Permission]] = {
     MemberRole.OWNER: frozenset(_ADMIN),

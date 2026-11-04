@@ -103,7 +103,8 @@ def build_message(item: DispatchInput) -> JobMessage:
         "size_bytes": item.size_bytes,
         "evidence_url": evidence_url,
         "result_post": PresignedPost(
-            url=f"{scheme}://{settings.minio_endpoint}/{settings.results_bucket}", fields=fields
+            url=f"{scheme}://{settings.need('minio_endpoint')}/{settings.results_bucket}",
+            fields=fields,
         ),
         "ingest_token": item.ingest_token,
     }

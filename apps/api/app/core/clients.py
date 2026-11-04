@@ -9,7 +9,9 @@ from app.core.config import get_settings
 
 @lru_cache
 def get_redis() -> Redis:
-    return Redis.from_url(get_settings().redis_url, socket_connect_timeout=2, socket_timeout=2)
+    return Redis.from_url(
+        get_settings().need("redis_url"), socket_connect_timeout=2, socket_timeout=2
+    )
 
 
 @lru_cache
@@ -20,9 +22,9 @@ def get_minio() -> Minio:
         retries=urllib3.Retry(total=2, backoff_factor=0.2),
     )
     return Minio(
-        s.minio_endpoint,
-        access_key=s.minio_access_key,
-        secret_key=s.minio_secret_key,
+        s.need("minio_endpoint"),
+        access_key=s.need("minio_access_key"),
+        secret_key=s.need("minio_secret_key"),
         secure=s.minio_secure,
         http_client=http,
     )

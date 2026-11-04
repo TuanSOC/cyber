@@ -19,6 +19,9 @@ dependencies = [
     "email-validator>=2.2",
     "celery[redis]>=5.5",
     "cyberlab-jobs",
+    # Threat intel (M4): sealed provider keys (X25519/HKDF/AES-GCM) and provider HTTP calls.
+    "cryptography>=44",
+    "httpx>=0.28",
 ]
 
 [tool.uv.sources]
@@ -29,7 +32,6 @@ cyberlab-jobs = { path = "../../packages/py-jobs", editable = true }
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
-    "httpx>=0.28",
     "ruff>=0.8",
     "mypy>=1.13",
 ]

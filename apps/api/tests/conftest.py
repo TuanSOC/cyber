@@ -47,7 +47,7 @@ def _migrated_test_database() -> None:
         raise RuntimeError("tests must run with ENV=test (use the api-test compose service)")
     assert_test_database(settings.database_url)
     assert_test_database(_owner_url())
-    assert_test_redis(settings.redis_url)
+    assert_test_redis(settings.need("redis_url"))
     subprocess.run(
         ["alembic", "upgrade", "head"],
         check=True,

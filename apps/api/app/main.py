@@ -11,6 +11,7 @@ from app.core.db import get_engine
 from app.core.errors import register_error_handlers
 from app.core.hashing import sweep_stale_spools
 from app.modules.analysis.router import router as analysis_router
+from app.modules.attack.router import router as attack_router
 from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
 from app.modules.evidence.router import router as evidence_router
@@ -18,6 +19,7 @@ from app.modules.investigations.router import router as investigations_router
 from app.modules.organizations.router import router as orgs_router
 from app.modules.pcap_analysis.router import router as pcap_analysis_router
 from app.modules.static_analysis.router import router as static_analysis_router
+from app.modules.threat_intel.router import router as threat_intel_router
 
 
 @asynccontextmanager
@@ -53,6 +55,8 @@ def create_app() -> FastAPI:
     v1.include_router(analysis_router)
     v1.include_router(pcap_analysis_router)
     v1.include_router(static_analysis_router)
+    v1.include_router(threat_intel_router)
+    v1.include_router(attack_router)
     app.include_router(v1)
     return app
 

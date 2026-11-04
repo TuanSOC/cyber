@@ -74,7 +74,7 @@ def create_access_token(user_id: uuid.UUID, family_id: uuid.UUID) -> tuple[str, 
             "exp": claims.expires_at,
             "typ": "access",
         },
-        get_settings().jwt_secret,
+        get_settings().need("jwt_secret"),
         algorithm=JWT_ALGORITHM,
     )
     return token, claims
@@ -84,7 +84,7 @@ def decode_access_token(token: str) -> AccessClaims:
     try:
         payload = jwt.decode(
             token,
-            get_settings().jwt_secret,
+            get_settings().need("jwt_secret"),
             algorithms=[JWT_ALGORITHM],
             options={"require": ["sub", "fid", "jti", "iat", "exp", "typ"]},
             leeway=0,

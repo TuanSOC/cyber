@@ -1,5 +1,14 @@
 # Prod-like override: built images, no bind mounts, secure cookies, TLS at the gateway.
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+
+# Threat intel in prod (M4): no mock sink, and a real seal key pair. Settings refuses a
+# `dev-` kid in prod, so generate one first: scripts/gen_ti_seal_keys.py writes
+# .secrets/ti_seal_private.json and prints the two TI_PROD_* lines for .env.
+x-prod-ti: &prod-ti
+  TI_MOCK_ENABLED: "false"
+  TI_SEAL_ACTIVE_KID: ${TI_PROD_SEAL_ACTIVE_KID:?run scripts/gen_ti_seal_keys.py and set TI_PROD_SEAL_ACTIVE_KID}
+  TI_SEAL_PUBLIC_KEYS: ${TI_PROD_SEAL_PUBLIC_KEYS:?run scripts/gen_ti_seal_keys.py and set TI_PROD_SEAL_PUBLIC_KEYS}
+
 services:
   minio:
     ports: !reset []
@@ -16,6 +25,7 @@ services:
       context: ./apps/api
       target: prod
     environment:
+      <<: *prod-ti
       ENV: prod
       COOKIE_SECURE: "true"
     volumes: !override
@@ -24,6 +34,7 @@ services:
   ingest-worker:
     image: cyberlab/api:prod
     environment:
+      <<: *prod-ti
       ENV: prod
       COOKIE_SECURE: "true"
     volumes: !override
@@ -32,8 +43,18 @@ services:
   ingest-beat:
     image: cyberlab/api:prod
     environment:
+      <<: *prod-ti
       ENV: prod
       COOKIE_SECURE: "true"
+    volumes: !reset []
+
+  # Without this entry the worker would run the dev image in dev mode (.env has ENV=dev),
+  # with the mock and the dev-only MISP flags allowed (M4 RT3).
+  enrich-worker:
+    image: cyberlab/api:prod
+    environment:
+      <<: *prod-ti
+      ENV: prod
     volumes: !reset []
 
   static-worker:
@@ -76,6 +97,11 @@ services:
       - caddydata:/data
     ports: !override
       - "127.0.0.1:8443:8443"
+
+secrets:
+  # From scripts/gen_ti_seal_keys.py (mode 0400, owned by uid 10001 on a Linux host).
+  ti_seal_private:
+    file: ./.secrets/ti_seal_private.json
 
 volumes:
   caddydata:

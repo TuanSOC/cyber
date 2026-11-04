@@ -25,6 +25,14 @@ from app.modules.static_analysis.models import (
     MalwareSignatureMatch,
     MalwareString,
 )
+from app.modules.threat_intel.models import (
+    TiEnrichmentRun,
+    TiOrgSettings,
+    TiProviderConfig,
+    TiResult,
+    TiRunIndex,
+    TiRunItem,
+)
 from app.modules.users.models import User
 
 __all__ = [
@@ -53,6 +61,12 @@ __all__ = [
     "Organization",
     "OrganizationMember",
     "RefreshToken",
+    "TiEnrichmentRun",
+    "TiOrgSettings",
+    "TiProviderConfig",
+    "TiResult",
+    "TiRunIndex",
+    "TiRunItem",
     "TimelineEntry",
     "User",
 ]

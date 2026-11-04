@@ -24,7 +24,17 @@ async def test_every_tenant_table_has_forced_rls(owner_engine: AsyncEngine) -> N
     async with owner_engine.connect() as conn:
         rows = (await conn.execute(query)).all()
 
-    assert {r.relname for r in rows} >= {"investigations", "evidence", "audit_logs"}
+    assert {r.relname for r in rows} >= {
+        "investigations",
+        "evidence",
+        "audit_logs",
+        "ti_provider_configs",
+        "ti_org_settings",
+        "ti_enrichment_runs",
+        "ti_run_items",
+        "ti_run_index",
+        "ti_results",
+    }
     unprotected = [r.relname for r in rows if not (r.relrowsecurity and r.relforcerowsecurity)]
     assert unprotected == []
 
@@ -39,6 +49,29 @@ async def test_system_visible_job_index_holds_no_tenant_data(owner_engine: Async
     async with owner_engine.connect() as conn:
         columns = set((await conn.execute(query)).scalars())
     assert columns == {"job_id", "organization_id", "analyzer", "status", "deadline_at"}
+
+
+async def test_system_visible_ti_run_index_holds_no_tenant_data(
+    owner_engine: AsyncEngine,
+) -> None:
+    """Same rule for the threat-intel run index (M4 RT25): ids and scheduling only, never
+    IOC values, providers or results."""
+    query = text(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = 'public' AND table_name = 'ti_run_index'"
+    )
+    async with owner_engine.connect() as conn:
+        columns = set((await conn.execute(query)).scalars())
+    assert columns == {
+        "run_id",
+        "organization_id",
+        "status",
+        "resume_at",
+        "deadline_at",
+        "dispatched_at",
+        "lease_until",
+        "lease_owner",
+    }
 
 
 async def test_every_rls_table_has_a_policy(owner_engine: AsyncEngine) -> None:

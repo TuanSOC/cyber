@@ -48,7 +48,7 @@ def test_matrix_matches_spec() -> None:
     """Pin the permission table from the phase 4 plan."""
     read = {"org.read", "members.read", "investigation.read", "evidence.read"}
     analyst = read | {"investigation.write", "evidence.write"}
-    admin = analyst | {"org.update", "members.manage", "audit.read"}
+    admin = analyst | {"org.update", "members.manage", "audit.read", "integrations.manage"}
     assert {p.value for p in ROLE_PERMISSIONS[MemberRole.VIEWER]} == read
     assert {p.value for p in ROLE_PERMISSIONS[MemberRole.ANALYST]} == analyst
     assert {p.value for p in ROLE_PERMISSIONS[MemberRole.ADMIN]} == admin

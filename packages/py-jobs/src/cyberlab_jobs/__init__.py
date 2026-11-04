@@ -14,7 +14,16 @@ from cyberlab_jobs.messages import (
     PcapJobV1,
     PresignedPost,
 )
-from cyberlab_jobs.tasks import INGEST_EVENT, PCAP_ANALYZE, REAP, STATIC_ANALYZE, Queues
+from cyberlab_jobs.tasks import (
+    INGEST_EVENT,
+    PCAP_ANALYZE,
+    REAP,
+    STATIC_ANALYZE,
+    TI_ENRICH,
+    TI_RESUME,
+    TI_VERIFY,
+    Queues,
+)
 
 __all__ = [
     "INGEST_EVENT",
@@ -23,6 +32,9 @@ __all__ = [
     "PCAP_SCHEMA",
     "REAP",
     "STATIC_ANALYZE",
+    "TI_ENRICH",
+    "TI_RESUME",
+    "TI_VERIFY",
     "IngestEvent",
     "IngestMessageV1",
     "JobLimits",

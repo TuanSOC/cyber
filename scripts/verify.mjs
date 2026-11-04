@@ -95,7 +95,7 @@ try {
   // Celery workers do not hot-reload: recreate them so the gate tests the current code.
   run(
     "Workers: reload code",
-    "docker compose --profile test up -d --force-recreate --no-deps pcap-worker pcap-worker-test static-worker static-worker-test ingest-worker ingest-beat",
+    "docker compose --profile test up -d --force-recreate --no-deps pcap-worker pcap-worker-test static-worker static-worker-test ingest-worker ingest-beat enrich-worker enrich-worker-test",
   );
   run(
     "API: ruff, format, mypy --strict, pytest",

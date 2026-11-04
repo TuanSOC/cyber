@@ -33,6 +33,50 @@ x-api-env: &api-env
   STATIC_MAX_BYTES: ${STATIC_MAX_BYTES:-67108864}
   DEFAULT_STORAGE_QUOTA_BYTES: ${DEFAULT_STORAGE_QUOTA_BYTES:-21474836480}
   MAX_OWNED_ORGS_PER_USER: ${MAX_OWNED_ORGS_PER_USER:-5}
+  PROCESS_ROLE: api
+  # No runtime dependency sync: `backend` has no egress (rebuild the image after a change).
+  UV_NO_SYNC: "1"
+  UV_OFFLINE: "1"
+  # Threat intel: the API seals provider keys with the public key only.
+  TI_ENABLED: ${TI_ENABLED:-true}
+  TI_SEAL_ACTIVE_KID: ${TI_SEAL_ACTIVE_KID}
+  TI_SEAL_PUBLIC_KEYS: ${TI_SEAL_PUBLIC_KEYS}
+  TI_MOCK_ENABLED: ${TI_MOCK_ENABLED:-true}
+  TI_MOCK_BASE_URL: http://ti-mock:8080
+
+# Least-privilege env of the internet-facing enrich worker (M4 RT2). Never merged with
+# *api-env: no JWT secret, no MinIO credentials, no app Redis (Settings refuses them when
+# PROCESS_ROLE=enrich). Its limiter keys live on the broker, under its own ACL prefix.
+x-enrich-env: &enrich-env
+  ENV: ${ENV:-dev}
+  PROCESS_ROLE: enrich
+  DATABASE_URL: ${DATABASE_URL}
+  BROKER_URL: redis://enrich:${BROKER_ENRICH_PASSWORD}@redis-broker:6379/0
+  QUEUE_PREFIX: ""
+  UV_NO_SYNC: "1"
+  UV_OFFLINE: "1"
+  TI_ENABLED: ${TI_ENABLED:-true}
+  TI_SEAL_ACTIVE_KID: ${TI_SEAL_ACTIVE_KID}
+  TI_SEAL_PUBLIC_KEYS: ${TI_SEAL_PUBLIC_KEYS}
+  TI_SEAL_PRIVATE_KEYS_FILE: /run/secrets/ti_seal_private
+  TI_MOCK_ENABLED: ${TI_MOCK_ENABLED:-true}
+  TI_MOCK_BASE_URL: http://ti-mock:8080
+
+# Trusted enrich worker (api image): the only service with internet egress. It joins
+# `backend` (Postgres, broker) and `egress`, never `analysis`.
+x-enrich-worker: &enrich-worker
+  image: cyberlab/api:dev
+  pull_policy: never
+  user: "10001"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs:
+    - /tmp:size=16m
+  restart: unless-stopped
+  networks: [backend, egress]
+  # The sealing private keys (dev: the committed dev-only pair; prod: .secrets/).
+  secrets: [ti_seal_private]
 
 # Untrusted parser container: broker URL only, tools run as an unprivileged uid inside.
 x-pcap-worker: &pcap-worker
@@ -92,9 +136,14 @@ x-api-healthcheck: &api-healthcheck
 
 # Networks: the api trusts X-Forwarded-For from any peer, so only the gateway and the
 # data services share its network. The web container cannot reach the api directly.
+# `backend` has no egress (M4): nothing on it needs the internet at runtime (see
+# docs/DEPLOYMENT.md); the gateway publishes through `frontend`.
 networks:
   backend:
+    internal: true
   frontend:
+  # Internet egress for the enrich worker only (and the ti-mock sink in test/e2e).
+  egress:
   # Parser network: no egress (internal), only the broker and MinIO (presigned URLs) on it.
   analysis:
     internal: true
@@ -137,8 +186,8 @@ services:
       MINIO_CONSOLE_PORT_NUMBER: "9001"
     volumes:
       - miniodata:/bitnami/minio/data
-    ports:
-      - "127.0.0.1:9001:9001"
+    # No console port: MinIO sits on internal networks only, which cannot publish ports.
+    # Use `docker compose exec minio mc ...` instead (docs/DEPLOYMENT.md).
     # On `analysis` so the parser can use its presigned URLs (it holds no MinIO credentials).
     networks: [backend, analysis]
     healthcheck:
@@ -176,6 +225,7 @@ services:
       BROKER_INGEST_PASSWORD: ${BROKER_INGEST_PASSWORD}
       BROKER_PCAP_PASSWORD: ${BROKER_PCAP_PASSWORD}
       BROKER_STATIC_PASSWORD: ${BROKER_STATIC_PASSWORD}
+      BROKER_ENRICH_PASSWORD: ${BROKER_ENRICH_PASSWORD}
     volumes:
       - ./infra/redis-broker:/init:ro
     networks: [backend, analysis]
@@ -192,6 +242,8 @@ services:
     command: ["uv", "run", "alembic", "upgrade", "head"]
     environment:
       MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL}
+      UV_NO_SYNC: "1"
+      UV_OFFLINE: "1"
     volumes:
       - ./apps/api:/srv/api
     networks: [backend]
@@ -227,6 +279,7 @@ services:
               "--without-gossip", "--without-mingle", "--loglevel", "INFO"]
     environment:
       <<: *api-env
+      PROCESS_ROLE: ingest
       BROKER_URL: redis://ingest:${BROKER_INGEST_PASSWORD}@redis-broker:6379/0
       # Result streams (up to 256 MiB compressed) are validated from disk, not tmpfs.
       INGEST_TMP_DIR: /var/lib/cyberlab/ingest-tmp
@@ -250,6 +303,7 @@ services:
               "--schedule", "/tmp/celerybeat-schedule", "--loglevel", "INFO"]
     environment:
       <<: *api-env
+      PROCESS_ROLE: ingest
       BROKER_URL: redis://ingest:${BROKER_INGEST_PASSWORD}@redis-broker:6379/0
     volumes:
       - ./apps/api:/srv/api
@@ -259,6 +313,22 @@ services:
       - /tmp:size=16m
     networks: [backend]
     depends_on:
+      redis-broker:
+        condition: service_healthy
+
+  # Threat intel lookups (M4). Phase 1: consumes `ti.enrich` but has no providers yet.
+  enrich-worker:
+    <<: *enrich-worker
+    command: ["celery", "-A", "app.workers.enrich_app", "worker", "-Q", "enrich",
+              "--pool", "solo", "--without-gossip", "--without-mingle", "--without-heartbeat",
+              "--loglevel", "INFO"]
+    environment: *enrich-env
+    volumes:
+      - ./apps/api:/srv/api:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
       redis-broker:
         condition: service_healthy
 
@@ -354,8 +424,11 @@ services:
       BROKER_URL: redis://ingest:${BROKER_INGEST_PASSWORD}@redis-broker:6379/1
       QUEUE_PREFIX: "test."
       RESULTS_BUCKET: ${RESULTS_TEST_BUCKET}
-      # Lets tests probe the broker ACL as the parser's user.
+      # Lets tests probe the broker ACL as each component's user.
       TEST_BROKER_PCAP_URL: redis://pcap:${BROKER_PCAP_PASSWORD}@redis-broker:6379/1
+      TEST_BROKER_STATIC_URL: redis://static:${BROKER_STATIC_PASSWORD}@redis-broker:6379/1
+      TEST_BROKER_ENRICH_URL: redis://enrich:${BROKER_ENRICH_PASSWORD}@redis-broker:6379/1
+      TEST_BROKER_API_URL: redis://api:${BROKER_API_PASSWORD}@redis-broker:6379/1
     volumes:
       - ./apps/api:/srv/api
       - ./packages/py-jobs:/packages/py-jobs
@@ -374,6 +447,53 @@ services:
         condition: service_started
       static-worker-test:
         condition: service_started
+      enrich-worker-test:
+        condition: service_started
+
+  enrich-worker-test:
+    <<: *enrich-worker
+    profiles: ["test"]
+    command: ["celery", "-A", "app.workers.enrich_app", "worker", "-Q", "test.enrich",
+              "--pool", "solo", "--without-gossip", "--without-mingle", "--without-heartbeat",
+              "--loglevel", "INFO"]
+    environment:
+      <<: *enrich-env
+      ENV: test
+      DATABASE_URL: ${TEST_DATABASE_URL}
+      BROKER_URL: redis://enrich:${BROKER_ENRICH_PASSWORD}@redis-broker:6379/1
+      QUEUE_PREFIX: "test."
+      TI_MOCK_ENABLED: "true"
+    volumes:
+      - ./apps/api:/srv/api:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-broker:
+        condition: service_healthy
+      ti-mock:
+        condition: service_started
+
+  # Deterministic provider sink for the `mock` provider (test + e2e only): a stdlib server
+  # on the egress network only, so the enrich worker is the only client that can reach it.
+  ti-mock:
+    profiles: ["test", "e2e"]
+    image: python:3.12-alpine
+    command: ["python", "/srv/ti-mock/server.py"]
+    environment:
+      TI_MOCK_EXPECTED_KEY: ${TI_MOCK_EXPECTED_KEY:-cyberlab-ti-mock-key}
+    volumes:
+      - ./infra/ti-mock:/srv/ti-mock:ro
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [egress]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
   static-worker-test:
     <<: *static-worker
@@ -436,6 +556,11 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
+
+secrets:
+  # Dev-only seal private key (committed, refused in prod); the prod override swaps the file.
+  ti_seal_private:
+    file: ./infra/ti/dev-seal-private.json
 
 volumes:
   pgdata:
