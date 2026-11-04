@@ -10,7 +10,12 @@
         "s3:GetBucketObjectLockConfiguration",
         "s3:ListBucketMultipartUploads"
       ],
-      "Resource": ["arn:aws:s3:::__BUCKET__", "arn:aws:s3:::__TEST_BUCKET__"]
+      "Resource": [
+        "arn:aws:s3:::__BUCKET__",
+        "arn:aws:s3:::__TEST_BUCKET__",
+        "arn:aws:s3:::__RESULTS_BUCKET__",
+        "arn:aws:s3:::__RESULTS_TEST_BUCKET__"
+      ]
     },
     {
       "Effect": "Allow",
@@ -26,6 +31,11 @@
         "s3:ListMultipartUploadParts"
       ],
       "Resource": ["arn:aws:s3:::__BUCKET__/*", "arn:aws:s3:::__TEST_BUCKET__/*"]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"],
+      "Resource": ["arn:aws:s3:::__RESULTS_BUCKET__/*", "arn:aws:s3:::__RESULTS_TEST_BUCKET__/*"]
     }
   ]
 }

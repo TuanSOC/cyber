@@ -3,7 +3,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.30 /uv /uvx /bin/
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libmagic1 \
     && rm -rf /var/lib/apt/lists/*
-# Virtualenv lives outside /app so the dev bind mount never hides it.
+# Virtualenv lives outside /srv/api so the dev bind mount never hides it.
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -14,7 +14,9 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
 RUN useradd --system --uid 10001 --no-create-home cyberlab \
     && mkdir -p /var/lib/cyberlab/upload-tmp \
     && chown 10001:10001 /var/lib/cyberlab/upload-tmp
-WORKDIR /app
+WORKDIR /srv/api
+# Shared contracts (compose `additional_contexts: jobs`), at the path uv.lock expects.
+COPY --from=jobs . /packages/py-jobs
 COPY pyproject.toml uv.lock ./
 
 FROM base AS dev

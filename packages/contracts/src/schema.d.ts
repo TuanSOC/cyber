@@ -142,6 +142,40 @@ export interface paths {
         patch: operations["update_org_api_v1_orgs__org_id__patch"];
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/analyses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Analyses */
+        get: operations["list_analyses_api_v1_orgs__org_id__analyses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Analysis */
+        get: operations["get_analysis_api_v1_orgs__org_id__analyses__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/audit-logs": {
         parameters: {
             query?: never;
@@ -170,6 +204,27 @@ export interface paths {
         get: operations["get_evidence_api_v1_orgs__org_id__evidence__evidence_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/evidence/{evidence_id}/analyses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Evidence Analyses */
+        get: operations["list_evidence_analyses_api_v1_orgs__org_id__evidence__evidence_id__analyses_get"];
+        put?: never;
+        /**
+         * Run Analysis
+         * @description Queue an analyzer run over the evidence (re-runs keep earlier jobs as history).
+         */
+        post: operations["run_analysis_api_v1_orgs__org_id__evidence__evidence_id__analyses_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -341,6 +396,74 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AnalysisCreate */
+        AnalysisCreate: {
+            /** @default pcap */
+            analyzer: components["schemas"]["Analyzer"];
+        };
+        /** AnalysisJobOut */
+        AnalysisJobOut: {
+            analyzer: components["schemas"]["Analyzer"];
+            /** Auto */
+            auto: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error Code */
+            error_code: string | null;
+            /** Evidence Filename */
+            evidence_filename: string;
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Investigation Id
+             * Format: uuid
+             */
+            investigation_id: string;
+            /**
+             * Requested By
+             * Format: uuid
+             */
+            requested_by: string;
+            /** Requested By Name */
+            requested_by_name: string;
+            /** Started At */
+            started_at: string | null;
+            status: components["schemas"]["AnalysisStatus"];
+            /** Summary */
+            summary: {
+                [key: string]: unknown;
+            };
+        };
+        /** AnalysisJobPage */
+        AnalysisJobPage: {
+            /** Items */
+            items: components["schemas"]["AnalysisJobOut"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * AnalysisStatus
+         * @enum {string}
+         */
+        AnalysisStatus: "queued" | "running" | "succeeded" | "failed";
+        /**
+         * Analyzer
+         * @enum {string}
+         */
+        Analyzer: "pcap";
         /** AuditLogOut */
         AuditLogOut: {
             /** Action */
@@ -383,7 +506,7 @@ export interface components {
          * CustodyAction
          * @enum {string}
          */
-        CustodyAction: "uploaded" | "downloaded" | "verified_ok" | "verified_mismatch" | "archived";
+        CustodyAction: "uploaded" | "downloaded" | "verified_ok" | "verified_mismatch" | "archived" | "analysis_requested" | "analyzed";
         /** CustodyEventOut */
         CustodyEventOut: {
             action: components["schemas"]["CustodyAction"];
@@ -1031,6 +1154,73 @@ export interface operations {
             };
         };
     };
+    list_analyses_api_v1_orgs__org_id__analyses_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["AnalysisStatus"] | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisJobPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_analysis_api_v1_orgs__org_id__analyses__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisJobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_audit_logs_api_v1_orgs__org_id__audit_logs_get: {
         parameters: {
             query?: {
@@ -1088,6 +1278,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EvidenceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_evidence_analyses_api_v1_orgs__org_id__evidence__evidence_id__analyses_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                evidence_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisJobPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_analysis_api_v1_orgs__org_id__evidence__evidence_id__analyses_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+                evidence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalysisCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisJobOut"];
                 };
             };
             /** @description Validation Error */

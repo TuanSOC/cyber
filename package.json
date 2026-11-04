@@ -14,6 +14,7 @@
     "test:web": "docker compose run --rm --no-deps web pnpm test",
     "verify": "node scripts/verify.mjs",
     "verify:prod": "node scripts/verify.mjs --prod",
-    "e2e": "node scripts/e2e.mjs"
+    "e2e": "node scripts/e2e.mjs",
+    "test:workers": "docker compose --profile test run --rm --no-deps pcap-worker-test sh -c \"ruff check . && ruff format --check . && mypy pcap_worker tests && pytest -q -p no:cacheprovider\""
   }
 }

@@ -1,9 +1,9 @@
 ---
 phase: 1
-title: "Job pipeline and workers"
-status: pending
+title: Job pipeline and workers
+status: completed
 priority: P1
-effort: "16h"
+effort: 16h
 dependencies: []
 ---
 
@@ -107,6 +107,50 @@ End-to-end job plumbing with a no-op analyzer:
 - [ ] pcap-worker env has only the broker URL (ACL user); tools cannot read it.
 - [ ] Hash mismatch → failed `integrity_mismatch`; reaper and late messages never reopen a terminal job.
 - [ ] Every new org route has IDOR cases with a positive control.
+
+## Implementation Notes (2026-11-04)
+- **Layout:** image workdirs moved to `/srv/api` and `/srv/workers/pcap` (was `/app`). uv cannot resolve the relative path dependency `../../packages/py-jobs` above `/`; at this depth the path in the image matches the repo. Compose `additional_contexts: jobs` puts the package at `/packages/py-jobs`.
+- **Sandbox (after the Critical review finding):**
+  - Process discovery reads the `Uid:` line of `/proc/<pid>/status`, not the `/proc` directory owner, because non-dumpable processes get a root-owned entry.
+  - Killing is done by a forked helper that becomes uid 10003 and calls `kill(-1, SIGKILL)`. On Linux that call returns 0 whenever any other process exists, so the result is verified by re-scanning.
+  - Fail closed: if a tool process survives, the worker SIGTERMs PID 1 (tini); compose restarts the container (`restart: unless-stopped`).
+  - `reset()` runs before every job and on `worker_process_init` (kills tool processes, wipes `/work`).
+  - Tools get seccomp (libseccomp via ctypes): `socket()` with AF_INET, AF_INET6 or AF_PACKET returns EACCES.
+  - Tools get `TMPDIR` set to their own out/ directory; `/tmp` and `/dev/shm` are root-only tmpfs.
+  - Root never follows tool-created names: reads use `open_output`, stdout/stderr files are created via `dir_fd` with `O_EXCL | O_NOFOLLOW`, and stdout names are random per run.
+- **Broker ACL:**
+  - The `pcap` user uses key selectors:
+    - read/write its own `pcap*` keys and pcap bindings;
+    - write-only on `ingest*`;
+    - read-only on ingest bindings (both `_kombu.binding.*` and kombu's newer `_kombu.binding_permanent.*`).
+  - Each app has its own unacked keys: `pcap.unacked*` for the analyzer, `trusted.unacked*` for the trusted side.
+  - The analyzer publishes ingest reports through a `no_declare` queue; the trusted side declares the bindings.
+  - `maxmemory 256mb noeviction`.
+  - `LLEN` on the ingest queue stays possible: Redis treats it as metadata.
+- **DB (migration 0003):**
+  - `analysis_job_index` has forced RLS: system sessions (no org) see all rows, tenant sessions only their own org's.
+  - The app role may UPDATE only `status` and `deadline_at`.
+  - The trigger enforces the transition graph (queued→running|succeeded|failed, running→succeeded|failed); final states never change.
+- **Dispatch:**
+  - Dedicated `broker_limiter` (4 threads).
+  - Publish timeout 15 s with `abandon_on_cancel`, broker socket timeouts, a single retry.
+  - Nothing after commit can make the request fail (enqueue failure → `enqueue_failed`; failure to record that is logged and left to the reaper).
+- **Fairness:**
+  - Global active-job cap of 50, on top of the per-org cap of 5.
+  - Auto-runs limited to 30 per 10 min per user (skipped and audited with `rate_limited`).
+  - Fair per-org dequeue is deferred (single FIFO, concurrency 1).
+- **Ingest:**
+  - Authenticates without row locks and stats the result object before locking.
+  - Retries only transient errors (DB/connection/urllib3); permanent errors fail the job with `ingest_error`.
+  - The reaper re-checks status and deadline under the lock.
+- **Tests:**
+  - API: 375 tests (analysis rules, ingest auth/transitions/retry classes, reaper races, RLS/grants/trigger, IDOR for 4 new routes with positive controls, real-worker pipeline: success, hash mismatch, size mismatch, compressed capture).
+  - Worker: 24 in-container tests (uid, caps, environ, capture read-only, symlink/fifo/planted names, timeout, setsid and non-dumpable survivors, reset between jobs, seccomp, TMPDIR, no DNS for app services, no egress, ACL key confinement).
+- **Accepted residuals (THREAT_MODEL in phase 6):**
+  - A compromised Celery root process (not just a tool) could LPUSH forged or extra reports or DEL the ingest list. Forged reports for other jobs still need that job's token.
+  - Tools share the network namespace (seccomp blocks inet sockets, not unix sockets).
+  - MinIO is reachable from the analysis network.
+  - Messages under an ETA retry are restored after the 1 h visibility timeout if the ingest worker restarts.
 
 ## Risk Assessment
 - Container root with a few capabilities: acceptable because tools never run as root. no-new-privileges and a read-only rootfs limit what the root process could be abused for.

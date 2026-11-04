@@ -1,20 +1,22 @@
 ---
-title: "CyberLab M2 PCAP Analyzer"
+title: CyberLab M2 PCAP Analyzer
 description: >-
-  First analysis engine: isolated PCAP worker (TShark, Zeek, Suricata) behind a versioned
-  job schema, trusted ingest into tenant tables, detections (beaconing, scans, DNS
-  anomalies, suspicious traffic), IOCs, timeline, analyzer UI.
+  First analysis engine: isolated PCAP worker (TShark, Zeek, Suricata) behind a
+  versioned job schema, trusted ingest into tenant tables, detections
+  (beaconing, scans, DNS anomalies, suspicious traffic), IOCs, timeline,
+  analyzer UI.
 status: pending
 priority: P1
 effort: 70h
-branch: "feat/m2-pcap-analyzer"
+branch: feat/m2-pcap-analyzer
 tags:
   - feature
   - analysis
-blockedBy: [261104-1000-cyberlab-m1-foundation]
+blockedBy:
+  - 261104-1000-cyberlab-m1-foundation
 blocks: []
-created: "2026-11-04T06:17:05.692Z"
-createdBy: "ck:plan"
+created: '2026-11-04T06:17:05.692Z'
+createdBy: 'ck:plan'
 source: skill
 ---
 
@@ -120,7 +122,7 @@ upload (pcap/pcapng) ──► API ──creates──► analysis_jobs row (que
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Job pipeline and workers](./phase-01-job-pipeline-and-workers.md) | Pending |
+| 1 | [Job pipeline and workers](./phase-01-job-pipeline-and-workers.md) | Completed |
 | 2 | [PCAP engine and dataset](./phase-02-pcap-engine-and-dataset.md) | Pending |
 | 3 | [Detections and IOCs](./phase-03-detections-and-iocs.md) | Pending |
 | 4 | [Ingest persistence and read API](./phase-04-ingest-persistence-and-read-api.md) | Pending |

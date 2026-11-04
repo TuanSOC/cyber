@@ -36,6 +36,8 @@ class CustodyAction(enum.StrEnum):
     VERIFIED_OK = "verified_ok"
     VERIFIED_MISMATCH = "verified_mismatch"
     ARCHIVED = "archived"
+    ANALYSIS_REQUESTED = "analysis_requested"
+    ANALYZED = "analyzed"
 
 
 class Evidence(UUIDPk, Base):

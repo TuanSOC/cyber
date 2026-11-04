@@ -1,7 +1,7 @@
 "use client";
 
 import type { Schemas } from "@cyberlab/contracts";
-import { Archive, Download, ShieldAlert, ShieldCheck, Upload } from "lucide-react";
+import { Archive, Download, Microscope, ScanSearch, ShieldAlert, ShieldCheck, Upload } from "lucide-react";
 
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,8 @@ const ACTIONS: Record<Event["action"], { label: string; icon: typeof Upload; ton
   verified_ok: { label: "Verified: hashes match", icon: ShieldCheck, tone: "text-sev-low" },
   verified_mismatch: { label: "Verification FAILED", icon: ShieldAlert, tone: "text-destructive" },
   archived: { label: "Archived", icon: Archive },
+  analysis_requested: { label: "Analysis requested", icon: ScanSearch },
+  analyzed: { label: "Analyzed (worker read this version)", icon: Microscope },
 };
 
 export function CustodyTimeline({ events }: { events: Event[] }) {

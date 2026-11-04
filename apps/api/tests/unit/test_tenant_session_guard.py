@@ -13,6 +13,8 @@ ALLOWED = {
     "core/rbac.py": "require()/org_session(): membership verified inside the same session",
     "modules/auth/service.py": "register(): org id freshly generated",
     "modules/organizations/service.py": "create_org(): org id freshly generated",
+    "workers/ingest.py": "org from the non-tenant job index; message org must match + job token",
+    "workers/reaper.py": "org from the non-tenant job index (system data, no request input)",
 }
 
 

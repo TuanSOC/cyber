@@ -21,6 +21,21 @@ services:
     volumes: !override
       - upload_tmp:${UPLOAD_TMP_DIR}
 
+  ingest-worker:
+    image: cyberlab/api:prod
+    environment:
+      ENV: prod
+      COOKIE_SECURE: "true"
+    volumes: !reset []
+
+  pcap-worker:
+    image: cyberlab/pcap-worker:prod
+    build:
+      context: ./apps/workers/pcap
+      target: prod
+    volumes: !override
+      - pcap_work:/work
+
   web:
     image: cyberlab/web:prod
     build:

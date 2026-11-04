@@ -96,6 +96,7 @@ try {
     "API: ruff, format, mypy --strict, pytest",
     'docker compose --profile test run --rm api-test sh -c "uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest -q"',
   );
+  run("PCAP worker: ruff, format, mypy, sandbox + isolation tests", "pnpm -s test:workers");
   run(
     "Web: typecheck, eslint, unit tests",
     'docker compose run --rm --no-deps web sh -c "pnpm typecheck && pnpm exec eslint . && pnpm test"',

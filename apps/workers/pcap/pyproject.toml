@@ -1,0 +1,49 @@
+[project]
+name = "cyberlab-pcap-worker"
+version = "0.1.0"
+description = "CyberLab PCAP analyzer (untrusted-input worker)"
+requires-python = ">=3.12"
+dependencies = [
+    "celery[redis]>=5.5",
+    "httpx>=0.28",
+    "pydantic>=2.9",
+    "cyberlab-jobs",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "scapy>=2.6",
+    "cryptography>=44",
+]
+
+[tool.uv.sources]
+# The image places the contracts at /packages/py-jobs (same relative path as here).
+cyberlab-jobs = { path = "../../../packages/py-jobs", editable = true }
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "S", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S603", "S607", "S108"]
+# Tool invocations use fixed argv lists, never a shell.
+"pcap_worker/sandbox.py" = ["S603"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["celery.*", "kombu.*", "scapy.*"]
+ignore_missing_imports = true

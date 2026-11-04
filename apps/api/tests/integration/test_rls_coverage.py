@@ -29,6 +29,17 @@ async def test_every_tenant_table_has_forced_rls(owner_engine: AsyncEngine) -> N
     assert unprotected == []
 
 
+async def test_system_visible_job_index_holds_no_tenant_data(owner_engine: AsyncEngine) -> None:
+    """System sessions see every row of the job index, so it stays narrow: ids, status, deadline."""
+    query = text(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = 'public' AND table_name = 'analysis_job_index'"
+    )
+    async with owner_engine.connect() as conn:
+        columns = set((await conn.execute(query)).scalars())
+    assert columns == {"job_id", "organization_id", "status", "deadline_at"}
+
+
 async def test_every_rls_table_has_a_policy(owner_engine: AsyncEngine) -> None:
     query = text(
         """

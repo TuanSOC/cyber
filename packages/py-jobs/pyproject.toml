@@ -1,0 +1,10 @@
+[project]
+name = "cyberlab-jobs"
+version = "1.0.0"
+description = "Versioned job and result contracts shared by the CyberLab API and analysis workers"
+requires-python = ">=3.12"
+dependencies = ["pydantic>=2.9"]
+
+[build-system]
+requires = ["uv_build>=0.9,<0.10"]
+build-backend = "uv_build"

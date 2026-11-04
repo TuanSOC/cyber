@@ -29,6 +29,7 @@ class Victim:
     member_id: str  # an analyst in the victim org (not the owner, so the owner may change it)
     investigation_id: str
     evidence_id: str
+    job_id: str  # an analysis job (on a second evidence, so the first can still be analyzed)
     outsider_email: str  # a real user who is not a member of the victim org
 
 
@@ -65,11 +66,17 @@ ROUTE_CASES: dict[tuple[str, str], CaseBuilder] = {
     ("POST", "/api/v1/orgs/{org_id}/evidence/{evidence_id}/verify"): lambda v: {},
     ("POST", "/api/v1/orgs/{org_id}/evidence/{evidence_id}/archive"): lambda v: {},
     ("GET", "/api/v1/orgs/{org_id}/evidence/{evidence_id}/custody"): lambda v: {},
+    ("POST", "/api/v1/orgs/{org_id}/evidence/{evidence_id}/analyses"): lambda v: {
+        "json": {"analyzer": "pcap"}
+    },
+    ("GET", "/api/v1/orgs/{org_id}/evidence/{evidence_id}/analyses"): lambda v: {},
+    ("GET", "/api/v1/orgs/{org_id}/analyses"): lambda v: {},
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}"): lambda v: {},
 }
 
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
-RESOURCE_PARAMS = ("{member_id}", "{investigation_id}", "{evidence_id}")
+RESOURCE_PARAMS = ("{member_id}", "{investigation_id}", "{evidence_id}", "{job_id}")
 APP_DIR = Path(__file__).resolve().parents[2] / "app"
 
 
@@ -85,7 +92,7 @@ def org_scoped_routes() -> set[tuple[str, str]]:
 
 
 def test_route_enumeration_is_not_empty() -> None:
-    assert len(org_scoped_routes()) >= 18
+    assert len(org_scoped_routes()) >= 22
 
 
 def test_every_org_scoped_route_has_an_idor_case() -> None:
@@ -130,8 +137,28 @@ async def _victim() -> tuple[Registered, Victim]:
             headers={"Content-Type": "application/octet-stream", **csrf(c)},
         )
     ).json()
+    second = (
+        await c.post(
+            f"/api/v1/orgs/{owner.org_id}/investigations/{case['id']}/evidence",
+            params={"filename": "second.bin"},
+            content=b"second evidence",
+            headers={"Content-Type": "application/octet-stream", **csrf(c)},
+        )
+    ).json()
+    job = (
+        await c.post(
+            f"/api/v1/orgs/{owner.org_id}/evidence/{second['id']}/analyses",
+            json={"analyzer": "pcap"},
+            headers=csrf(c),
+        )
+    ).json()
     return owner, Victim(
-        owner.org_id, member["id"], case["id"], evidence["id"], outsider_email=outsider.email
+        owner.org_id,
+        member["id"],
+        case["id"],
+        evidence["id"],
+        job["id"],
+        outsider_email=outsider.email,
     )
 
 
@@ -141,6 +168,7 @@ def _url(template: str, org_id: uuid.UUID, victim: Victim) -> str:
         member_id=victim.member_id,
         investigation_id=victim.investigation_id,
         evidence_id=victim.evidence_id,
+        job_id=victim.job_id,
     )
 
 
@@ -167,7 +195,9 @@ async def _victim_state(owner: Registered, victim: Victim) -> dict[str, Any]:
         await c.get(f"{base}/investigations/{victim.investigation_id}/evidence")
     ).json()
     evidence = (await c.get(f"{base}/evidence/{victim.evidence_id}")).json()
+    jobs = (await c.get(f"{base}/analyses")).json()
     return {
+        "jobs": sorted((j["id"], j["evidence_id"]) for j in jobs["items"]),
         "name": org["name"],
         "members": sorted((m["email"], m["role"]) for m in members["items"]),
         "cases": sorted((i["id"], i["title"], i["status"]) for i in cases["items"]),

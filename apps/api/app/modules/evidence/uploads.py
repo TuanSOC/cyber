@@ -18,6 +18,7 @@ from app.core.filenames import sanitize_filename
 from app.core.hashing import ALGORITHMS, Spooled, TooLarge, spool
 from app.core.rbac import OrgContext, Permission, org_session
 from app.core.upload_slots import slot
+from app.modules.analysis import service as analysis_service
 from app.modules.evidence import repository as repo
 from app.modules.evidence.locking import discard_version, lock_version
 from app.modules.evidence.models import CustodyAction, Evidence, EvidenceHash, HashAlgorithm
@@ -166,4 +167,6 @@ async def upload(
                 raise
         finally:
             spooled.path.unlink(missing_ok=True)
+    # Best effort, after commit: captures are analyzed automatically (never fails the upload).
+    await analysis_service.auto_request(org_id, user, out.id, spooled.head, request)
     return out

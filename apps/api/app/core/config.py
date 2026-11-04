@@ -32,6 +32,24 @@ class Settings(BaseSettings):
     upload_tmp_dir: str = "/var/lib/cyberlab/upload-tmp"
     max_concurrent_uploads_per_user: int = 2
 
+    # Analysis jobs (broker = separate Redis instance with ACL users; see infra/redis-broker).
+    broker_url: str
+    queue_prefix: str = ""
+    results_bucket: str = "analysis-results"
+    pcap_max_bytes: int = 512 * 1024**2
+    analysis_timeout_s: int = 900
+    analysis_tool_timeout_s: int = 600
+    # Presigned URL lifetime == Celery `expires` == reaper's queued deadline.
+    analysis_queue_ttl_s: int = 6 * 3600
+    max_active_analyses_per_org: int = 5
+    # Single FIFO, one job at a time: bounds how long any org can be starved by others.
+    max_active_analyses_global: int = 50
+    auto_analyses_per_user_per_10min: int = 30
+    analysis_max_flows: int = 100_000
+    analysis_max_records_per_kind: int = 100_000
+    analysis_max_findings: int = 5_000
+    analysis_max_result_bytes: int = 256 * 1024**2
+
     rate_limit_login_per_ip_per_min: int = 20
     rate_limit_login_failures_per_15min: int = 5
     rate_limit_register_per_ip_per_10min: int = 5

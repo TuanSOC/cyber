@@ -3,6 +3,8 @@ name: cyberlab
 x-api-build: &api-build
   context: ./apps/api
   target: dev
+  additional_contexts:
+    jobs: ./packages/py-jobs
 
 # Runtime env for the API process: app DB role + scoped MinIO user only.
 x-api-env: &api-env
@@ -22,6 +24,38 @@ x-api-env: &api-env
   RATE_LIMIT_LOGIN_PER_IP_PER_MIN: ${RATE_LIMIT_LOGIN_PER_IP_PER_MIN}
   RATE_LIMIT_LOGIN_FAILURES_PER_15MIN: ${RATE_LIMIT_LOGIN_FAILURES_PER_15MIN}
   RATE_LIMIT_REGISTER_PER_IP_PER_10MIN: ${RATE_LIMIT_REGISTER_PER_IP_PER_10MIN}
+  BROKER_URL: redis://api:${BROKER_API_PASSWORD}@redis-broker:6379/0
+  RESULTS_BUCKET: ${RESULTS_BUCKET}
+  PCAP_MAX_BYTES: ${PCAP_MAX_BYTES}
+  ANALYSIS_TIMEOUT_S: ${ANALYSIS_TIMEOUT_S}
+  ANALYSIS_TOOL_TIMEOUT_S: ${ANALYSIS_TOOL_TIMEOUT_S}
+  MAX_ACTIVE_ANALYSES_PER_ORG: ${MAX_ACTIVE_ANALYSES_PER_ORG}
+
+# Untrusted parser container: broker URL only, tools run as an unprivileged uid inside.
+x-pcap-worker: &pcap-worker
+  image: cyberlab/pcap-worker:dev
+  build:
+    context: ./apps/workers/pcap
+    target: dev
+    additional_contexts:
+      jobs: ./packages/py-jobs
+  # tini as PID 1 reaps the orphaned tool processes the worker kills.
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  # Root process keeps only what it needs to run tools as uid 10003 and clean up after them.
+  cap_add: [SETUID, SETGID, KILL, CHOWN, DAC_OVERRIDE, FOWNER]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 256
+  mem_limit: 2g
+  cpus: 2
+  # Root-only scratch space: tools get TMPDIR inside their own job directory instead.
+  tmpfs:
+    - /tmp:size=64m,mode=1700
+    - /dev/shm:size=1m,mode=1700
+  # Fail closed: the worker stops its container if a tool process cannot be killed.
+  restart: unless-stopped
+  networks: [analysis]
 
 x-api-healthcheck: &api-healthcheck
   test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=4)"]
@@ -34,6 +68,9 @@ x-api-healthcheck: &api-healthcheck
 networks:
   backend:
   frontend:
+  # Parser network: no egress (internal), only the broker and MinIO (presigned URLs) on it.
+  analysis:
+    internal: true
 
 services:
   postgres:
@@ -75,7 +112,8 @@ services:
       - miniodata:/bitnami/minio/data
     ports:
       - "127.0.0.1:9001:9001"
-    networks: [backend]
+    # On `analysis` so the parser can use its presigned URLs (it holds no MinIO credentials).
+    networks: [backend, analysis]
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
       interval: 3s
@@ -94,12 +132,30 @@ services:
       MINIO_TEST_BUCKET: ${MINIO_TEST_BUCKET}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      RESULTS_BUCKET: ${RESULTS_BUCKET}
+      RESULTS_TEST_BUCKET: ${RESULTS_TEST_BUCKET}
     volumes:
       - ./infra/minio:/init:ro
     networks: [backend]
     depends_on:
       minio:
         condition: service_healthy
+
+  redis-broker:
+    image: redis:7.4-alpine
+    entrypoint: ["/bin/sh", "/init/entrypoint.sh"]
+    environment:
+      BROKER_API_PASSWORD: ${BROKER_API_PASSWORD}
+      BROKER_INGEST_PASSWORD: ${BROKER_INGEST_PASSWORD}
+      BROKER_PCAP_PASSWORD: ${BROKER_PCAP_PASSWORD}
+    volumes:
+      - ./infra/redis-broker:/init:ro
+    networks: [backend, analysis]
+    healthcheck:
+      test: ["CMD", "redis-cli", "--user", "healthcheck", "--pass", "", "--no-auth-warning", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
   migrate:
     # Reuses the image built by `api` (building the same tag twice in parallel races).
@@ -109,7 +165,7 @@ services:
     environment:
       MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL}
     volumes:
-      - ./apps/api:/app
+      - ./apps/api:/srv/api
     networks: [backend]
     depends_on:
       postgres:
@@ -120,7 +176,8 @@ services:
     build: *api-build
     environment: *api-env
     volumes:
-      - ./apps/api:/app
+      - ./apps/api:/srv/api
+      - ./packages/py-jobs:/packages/py-jobs
       - upload_tmp:${UPLOAD_TMP_DIR}
     networks: [backend]
     healthcheck: *api-healthcheck
@@ -130,6 +187,40 @@ services:
       minio-init:
         condition: service_completed_successfully
       redis:
+        condition: service_healthy
+      redis-broker:
+        condition: service_healthy
+
+  # Trusted side of the pipeline: validates analyzer messages/results, writes the DB.
+  ingest-worker:
+    image: cyberlab/api:dev
+    pull_policy: never
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--pool", "solo",
+              "-B", "--schedule", "/tmp/celerybeat-schedule",
+              "--without-gossip", "--without-mingle", "--loglevel", "INFO"]
+    environment:
+      <<: *api-env
+      BROKER_URL: redis://ingest:${BROKER_INGEST_PASSWORD}@redis-broker:6379/0
+    volumes:
+      - ./apps/api:/srv/api
+      - ./packages/py-jobs:/packages/py-jobs
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    networks: [backend]
+    depends_on:
+      api:
+        condition: service_healthy
+
+  pcap-worker:
+    <<: *pcap-worker
+    environment:
+      BROKER_URL: redis://pcap:${BROKER_PCAP_PASSWORD}@redis-broker:6379/0
+    volumes:
+      - ./apps/workers/pcap/pcap_worker:/srv/workers/pcap/pcap_worker:ro
+      - pcap_work:/work
+    depends_on:
+      redis-broker:
         condition: service_healthy
 
   web:
@@ -194,8 +285,15 @@ services:
       # Test-only: lets storage tests act as an attacker/admin and clean up locked versions.
       TEST_MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       TEST_MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # Test jobs: own broker db + queue prefix, so dev workers never see them.
+      BROKER_URL: redis://ingest:${BROKER_INGEST_PASSWORD}@redis-broker:6379/1
+      QUEUE_PREFIX: "test."
+      RESULTS_BUCKET: ${RESULTS_TEST_BUCKET}
+      # Lets tests probe the broker ACL as the parser's user.
+      TEST_BROKER_PCAP_URL: redis://pcap:${BROKER_PCAP_PASSWORD}@redis-broker:6379/1
     volumes:
-      - ./apps/api:/app
+      - ./apps/api:/srv/api
+      - ./packages/py-jobs:/packages/py-jobs
       - upload_tmp_test:${UPLOAD_TMP_DIR}
     networks: [backend]
     depends_on:
@@ -203,8 +301,29 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      redis-broker:
+        condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+      pcap-worker-test:
+        condition: service_started
+
+  pcap-worker-test:
+    <<: *pcap-worker
+    profiles: ["test"]
+    environment:
+      BROKER_URL: redis://pcap:${BROKER_PCAP_PASSWORD}@redis-broker:6379/1
+      QUEUE_PREFIX: "test."
+      # Read-only rootfs: lint/type caches go to the tmpfs.
+      RUFF_CACHE_DIR: /tmp/ruff
+      MYPY_CACHE_DIR: /tmp/mypy
+    volumes:
+      - ./apps/workers/pcap/pcap_worker:/srv/workers/pcap/pcap_worker:ro
+      - ./apps/workers/pcap/tests:/srv/workers/pcap/tests:ro
+      - pcap_work_test:/work
+    depends_on:
+      redis-broker:
+        condition: service_healthy
 
   # --- e2e profile: Playwright against the running stack through the gateway ---
   e2e:
@@ -225,3 +344,5 @@ volumes:
   miniodata:
   upload_tmp:
   upload_tmp_test:
+  pcap_work:
+  pcap_work_test:
