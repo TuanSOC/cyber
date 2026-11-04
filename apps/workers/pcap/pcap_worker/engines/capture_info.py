@@ -8,7 +8,7 @@ from pathlib import Path
 from cyberlab_jobs.results import ProtocolStat
 
 from pcap_worker import sandbox
-from pcap_worker.engines.common import RECORD_ERRORS, clip, epoch
+from pcap_worker.engines.common import RECORD_ERRORS, clip, epoch, seconds
 
 PHS_LINE = re.compile(
     r"^(?P<indent> *)(?P<proto>[A-Za-z0-9_.\-]+)\s+frames:(?P<f>\d+)\s+bytes:(?P<b>\d+)\s*$"
@@ -56,13 +56,14 @@ def capinfos(capture: Path, dirs: sandbox.JobDirs, timeout_s: float) -> CaptureM
     if len(lines) < 2 or (failure and "cut short" not in failure.stderr_tail):
         raise failure or sandbox.ToolFailed("capinfos", 0, "no output")
     row = dict(zip(lines[0].split("\t"), lines[1].split("\t"), strict=False))
-    duration = _number(row.get("Capture duration (seconds)"))
+    # Hostile/corrupt captures yield absurd values: anything out of range becomes unknown.
+    duration = seconds(_number(row.get("Capture duration (seconds)")))
     return CaptureMeta(
         packets=int(_number(row.get("Number of packets")) or 0),
         data_bytes=int(_number(row.get("Data size (bytes)")) or 0),
         first_ts=epoch(_number(row.get("Start time"))),
         last_ts=epoch(_number(row.get("End time"))),
-        duration_s=duration if duration is None or duration >= 0 else None,
+        duration_s=duration,
         link_type=clip(row.get("File encapsulation"), 128),
         cut_short=failure is not None,
     )
