@@ -304,10 +304,18 @@ async def list_jobs(
     *,
     evidence_id: uuid.UUID | None = None,
     status: AnalysisStatus | None = None,
+    analyzer: Analyzer | None = None,
+    profile: Profile | None = None,
 ) -> AnalysisJobPage:
     if evidence_id is not None:
         await evidence_service.get_row(ctx, evidence_id)  # 404 for foreign/unknown evidence
     rows, total = await repo.list_rows(
-        ctx.session, ctx.org_id, page, evidence_id=evidence_id, status=status
+        ctx.session,
+        ctx.org_id,
+        page,
+        evidence_id=evidence_id,
+        status=status,
+        analyzer=analyzer,
+        profile=profile,
     )
     return AnalysisJobPage(items=[to_out(r) for r in rows], total=total)

@@ -24,10 +24,19 @@ const COLUMNS = 6;
 const TYPE_OPTIONS = Object.entries(IOC_TYPE_LABELS) as [IocType, string][];
 
 /**
- * Observables seen in the capture. Values are attacker-controlled (a "url" may be anything,
+ * Observables seen in the capture or sample. Values are attacker-controlled (a "url" may be anything,
  * e.g. `javascript:`): shown as text with a copy button, never as a link.
  */
-export function IocsTab({ orgId, jobId }: { orgId: string; jobId: string }) {
+export function IocsTab({
+  orgId,
+  jobId,
+  source = "capture",
+}: {
+  orgId: string;
+  jobId: string;
+  /** What the observables were extracted from ("capture", "file"). */
+  source?: string;
+}) {
   const [type, setType] = useState<IocType | typeof ALL>(ALL);
   const [search, setSearch] = useState("");
   const q = searchTerm(useDebounced(search));
@@ -55,7 +64,7 @@ export function IocsTab({ orgId, jobId }: { orgId: string; jobId: string }) {
       empty={type !== ALL || q ? "No IOCs match these filters." : "No observables recorded."}
       note={
         <p className="text-xs text-muted-foreground">
-          Observables extracted from the capture, without reputation or enrichment. Values are copied, never opened.
+          Observables extracted from the {source}, without reputation or enrichment. Values are copied, never opened.
         </p>
       }
       filters={

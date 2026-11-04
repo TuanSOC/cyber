@@ -4,10 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
 import { AnalysisStatusBadge } from "@/components/analysis/analysis-status-badge";
+import { AnalyzerBadge } from "@/components/analysis/analyzer-badge";
 import { FindingCount } from "@/components/analysis/finding-count";
 import { QueryError } from "@/components/query-error";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { analysisErrorText, latestPerEvidence, pollWhileActive } from "@/lib/analysis";
+import { analysisErrorText, analysisSegment, latestPerEvidence, pollWhileActive } from "@/lib/analysis";
 import { api, unwrap } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { orgPath } from "@/lib/nav";
@@ -15,7 +16,10 @@ import { orgPath } from "@/lib/nav";
 // One request, never one per evidence: the newest org-wide jobs, filtered to this case.
 const RECENT = 100;
 
-/** Latest analysis per evidence of this investigation (among the org's most recent jobs). */
+/**
+ * Latest analysis per evidence and kind of run (PCAP, full static, AV scan) of this investigation,
+ * among the org's most recent jobs.
+ */
 export function InvestigationAnalyses({ orgId, investigationId }: { orgId: string; investigationId: string }) {
   const params = { limit: RECENT, offset: 0 };
   const recent = useQuery({
@@ -46,8 +50,8 @@ export function InvestigationAnalyses({ orgId, investigationId }: { orgId: strin
           <p className="text-sm text-muted-foreground">Loading analyses…</p>
         ) : recent.data.items.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No recent analyses for this case. Packet captures (pcap / pcapng) are analyzed automatically
-            when uploaded.
+            No recent analyses for this case. Uploads are analyzed automatically: packet captures by the
+            PCAP analyzer, executables by static analysis and other files by an AV scan.
           </p>
         ) : (
           <ul className="flex flex-col divide-y">
@@ -57,6 +61,7 @@ export function InvestigationAnalyses({ orgId, investigationId }: { orgId: strin
               return (
                 <li key={job.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
                   <AnalysisStatusBadge status={job.status} />
+                  <AnalyzerBadge job={job} />
                   <Link
                     className="max-w-80 min-w-0 truncate hover:underline"
                     title={job.evidence_filename}
@@ -68,7 +73,7 @@ export function InvestigationAnalyses({ orgId, investigationId }: { orgId: strin
                     {created.local}
                   </span>
                   {job.status === "succeeded" && <FindingCount job={job} />}
-                  <Link className="ml-auto text-xs underline underline-offset-4" href={orgPath(orgId, `pcap/${job.id}`)}>
+                  <Link className="ml-auto text-xs underline underline-offset-4" href={orgPath(orgId, analysisSegment(job))}>
                     Details
                   </Link>
                   {error && <p className="w-full text-xs text-destructive">{error}</p>}
@@ -81,7 +86,11 @@ export function InvestigationAnalyses({ orgId, investigationId }: { orgId: strin
           <p className="text-xs text-muted-foreground">
             Showing the latest analysis per evidence among the organization&apos;s {RECENT} most recent runs.{" "}
             <Link className="underline underline-offset-4" href={orgPath(orgId, "pcap")}>
-              All analyses
+              PCAP analyses
+            </Link>
+            {" · "}
+            <Link className="underline underline-offset-4" href={orgPath(orgId, "malware")}>
+              Malware Lab
             </Link>
           </p>
         )}

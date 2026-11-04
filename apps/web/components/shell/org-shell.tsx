@@ -46,7 +46,7 @@ export function OrgShell({ children }: { children: React.ReactNode }) {
         <AppSidebar />
         {/* min-w-0: wide content (tables) scrolls inside its card, never widens the page */}
         <SidebarInset className="min-w-0">
-          <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
+          <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4 print:hidden">
             <SidebarTrigger />
             <Separator orientation="vertical" className="h-5" />
             {/* Prominent org name: the user always knows which tenant they act in. */}
@@ -55,7 +55,7 @@ export function OrgShell({ children }: { children: React.ReactNode }) {
             </span>
             <Badge variant="secondary">{ROLE_LABELS[membership.role]}</Badge>
           </header>
-          <div className="min-w-0 flex-1 p-4 md:p-6">{children}</div>
+          <div className="min-w-0 flex-1 p-4 md:p-6 print:p-0">{children}</div>
         </SidebarInset>
       </SidebarProvider>
     </OrgProvider>

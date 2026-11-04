@@ -46,8 +46,7 @@ export const NAV: NavItem[] = [
     label: "Malware Lab",
     icon: Skull,
     segment: "malware",
-    plannedFor: "Milestone 3",
-    summary: "Static analysis: PE/ELF metadata, YARA, capa, FLOSS, entropy, IOC extraction.",
+    summary: "Static analysis: PE/ELF metadata, YARA, capa, FLOSS, ClamAV, entropy, IOC extraction.",
   },
   {
     key: "forensics",

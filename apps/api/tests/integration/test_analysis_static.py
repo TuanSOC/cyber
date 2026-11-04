@@ -106,6 +106,30 @@ async def test_auto_run_matrix(
     assert requested["details"].get("profile") == expected[1]
 
 
+async def test_org_list_filters_by_analyzer_and_profile(sent: SentJobs) -> None:
+    reg = await register()
+    case = await new_case(reg)
+    await upload(reg.client, reg.org_id, case, tiny_pcap(), "a.pcap")
+    await upload(reg.client, reg.org_id, case, pe_bytes(), "b.exe")
+    await upload(reg.client, reg.org_id, case, b"notes\n", "c.txt")
+    base = f"/api/v1/orgs/{reg.org_id}/analyses"
+
+    async def names(**params: str) -> list[str]:
+        resp = await reg.client.get(base, params=params)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["total"] == len(resp.json()["items"])
+        return sorted(j["evidence_filename"] for j in resp.json()["items"])
+
+    assert await names() == ["a.pcap", "b.exe", "c.txt"]
+    assert await names(analyzer="pcap") == ["a.pcap"]
+    assert await names(analyzer="static") == ["b.exe", "c.txt"]
+    assert await names(analyzer="static", profile="av") == ["c.txt"]
+    assert await names(profile="full", status="queued") == ["b.exe"]
+    assert await names(analyzer="static", status="failed") == []
+    bad = await reg.client.get(base, params={"analyzer": "dynamic"})
+    assert bad.status_code == 422
+
+
 async def test_oversized_upload_is_not_auto_scanned(
     sent: SentJobs, monkeypatch: pytest.MonkeyPatch
 ) -> None:

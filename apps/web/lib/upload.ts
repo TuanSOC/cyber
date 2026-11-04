@@ -68,7 +68,7 @@ export function uploadEvidence(
         new ApiError(
           0,
           "network_error",
-          "Upload interrupted. If the file is very large it may exceed the evidence size limit.",
+          "Upload interrupted. A very large file may exceed the evidence size limit or the organization's storage quota.",
         ),
       );
     xhr.onabort = () => reject(new ApiError(0, "aborted", "Upload cancelled"));

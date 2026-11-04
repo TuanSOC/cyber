@@ -2,24 +2,38 @@
 
 import type { Schemas } from "@cyberlab/contracts";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, RotateCw } from "lucide-react";
+import { ChevronDown, Play } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { AnalysisStatusBadge } from "@/components/analysis/analysis-status-badge";
+import { AnalyzerBadge } from "@/components/analysis/analyzer-badge";
 import { FindingCount } from "@/components/analysis/finding-count";
+import { SignatureCount } from "@/components/malware/signature-count";
 import { Pager } from "@/components/pager";
 import { QueryError } from "@/components/query-error";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   type AnalysisJob,
+  RUN_KINDS,
+  type RunKind,
   analysisErrorText,
-  anyActive,
+  analysisSegment,
+  evidenceKind,
+  isActiveStatus,
   jobDurationText,
   justSucceeded,
+  offeredRuns,
   pollWhileActive,
 } from "@/lib/analysis";
 import { ApiError, api, errorMessage, unwrap } from "@/lib/api";
@@ -73,16 +87,18 @@ export function EvidenceAnalysesCard({
   });
 
   const run = useMutation({
-    mutationFn: async () =>
-      unwrap(
+    mutationFn: async (kind: RunKind) => {
+      const { analyzer, profile } = RUN_KINDS[kind];
+      return unwrap(
         await api.POST("/api/v1/orgs/{org_id}/evidence/{evidence_id}/analyses", {
           params: { path },
-          body: { analyzer: "pcap" },
+          body: profile ? { analyzer, profile } : { analyzer },
         }),
-      ),
-    onSuccess: async (job) => {
+      );
+    },
+    onSuccess: async (job, kind) => {
       if (job.status === "failed") toast.error(analysisErrorText(job.error_code) ?? "Analysis failed");
-      else toast.success("Analysis queued");
+      else toast.success(`${RUN_KINDS[kind].label} queued`);
       setOffset(0);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: [...evidenceKey, "analyses"] }),
@@ -98,10 +114,14 @@ export function EvidenceAnalysesCard({
   });
 
   const items = jobs.data?.items;
-  const active = anyActive(items);
   const now = useNow(items?.some((job) => job.status === "running") ?? false);
   const runnable = canWrite && !investigationArchived && evidence.status !== "archived";
   const refusal = run.error instanceof ApiError && EXPLAINED.has(run.error.status) ? run.error : null;
+  const { primary, more } = offeredRuns(evidenceKind(evidence));
+  // One active job per analyzer and evidence (the API refuses a second one with 409).
+  const activeAnalyzers = new Set(items?.filter((job) => isActiveStatus(job.status)).map((job) => job.analyzer));
+  const blocked = (kind: RunKind) => activeAnalyzers.has(RUN_KINDS[kind].analyzer);
+  const disabled = run.isPending || !jobs.data;
 
   return (
     <Card>
@@ -113,17 +133,43 @@ export function EvidenceAnalysesCard({
           )}
         </CardTitle>
         {runnable && (
-          <CardAction>
-            <Button
-              size="sm"
-              variant={jobs.data?.total ? "outline" : "default"}
-              disabled={run.isPending || active || !jobs.data}
-              title={active ? "An analysis of this evidence is already queued or running" : undefined}
-              onClick={() => run.mutate()}
-            >
-              {jobs.data?.total ? <RotateCw className="size-4" aria-hidden /> : <Play className="size-4" aria-hidden />}
-              {run.isPending ? "Requesting…" : jobs.data?.total ? "Re-run" : "Run analysis"}
-            </Button>
+          <CardAction className="flex flex-wrap justify-end gap-2">
+            {primary.map((kind, index) => (
+              <Button
+                key={kind}
+                size="sm"
+                variant={index === 0 && !jobs.data?.total ? "default" : "outline"}
+                disabled={disabled || blocked(kind)}
+                title={blocked(kind) ? "An analysis of this kind is already queued or running" : RUN_KINDS[kind].hint}
+                onClick={() => run.mutate(kind)}
+              >
+                <Play className="size-4" aria-hidden />
+                {run.isPending && run.variables === kind ? "Requesting…" : RUN_KINDS[kind].label}
+              </Button>
+            ))}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="ghost" disabled={disabled} aria-label="Other analyses">
+                  More <ChevronDown className="size-4" aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                  Run any analyzer on this file
+                </DropdownMenuLabel>
+                {more.map((kind) => (
+                  <DropdownMenuItem
+                    key={kind}
+                    disabled={blocked(kind)}
+                    onSelect={() => run.mutate(kind)}
+                    className="flex flex-col items-start gap-0"
+                  >
+                    <span>{RUN_KINDS[kind].label}</span>
+                    <span className="text-xs text-muted-foreground">{RUN_KINDS[kind].hint}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </CardAction>
         )}
       </CardHeader>
@@ -140,7 +186,8 @@ export function EvidenceAnalysesCard({
           <p className="text-sm text-muted-foreground">Loading analyses…</p>
         ) : items.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Not analyzed. Packet captures (pcap / pcapng) are analyzed automatically when uploaded
+            Not analyzed. Uploads are analyzed automatically: packet captures by the PCAP analyzer, executables
+            (PE / ELF) by static analysis, and other files by an AV scan
             {runnable ? "; you can also run an analysis manually." : "."}
           </p>
         ) : (
@@ -162,6 +209,7 @@ function JobRow({ orgId, job, now }: { orgId: string; job: AnalysisJob; now: num
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
       <AnalysisStatusBadge status={job.status} />
+      <AnalyzerBadge job={job} />
       <span className="text-muted-foreground" title={created.utc}>
         {created.local}
       </span>
@@ -170,7 +218,8 @@ function JobRow({ orgId, job, now }: { orgId: string; job: AnalysisJob; now: num
       </span>
       <span className="text-muted-foreground tabular-nums">{jobDurationText(job, now)}</span>
       {job.status === "succeeded" && <FindingCount job={job} />}
-      <Link className="ml-auto text-xs underline underline-offset-4" href={orgPath(orgId, `pcap/${job.id}`)}>
+      {job.status === "succeeded" && job.analyzer === "static" && <SignatureCount job={job} hideZero />}
+      <Link className="ml-auto text-xs underline underline-offset-4" href={orgPath(orgId, analysisSegment(job))}>
         Details
       </Link>
       {error && (

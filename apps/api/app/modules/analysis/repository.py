@@ -1,6 +1,7 @@
 import uuid
 from dataclasses import dataclass
 
+from cyberlab_jobs.static import Profile
 from sqlalchemy import Select, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,12 +46,18 @@ async def list_rows(
     *,
     evidence_id: uuid.UUID | None = None,
     status: AnalysisStatus | None = None,
+    analyzer: Analyzer | None = None,
+    profile: Profile | None = None,
 ) -> tuple[list[JobRow], int]:
     where = [AnalysisJob.organization_id == org_id]
     if evidence_id is not None:
         where.append(AnalysisJob.evidence_id == evidence_id)
     if status is not None:
         where.append(AnalysisJob.status == status)
+    if analyzer is not None:
+        where.append(AnalysisJob.analyzer == analyzer)
+    if profile is not None:
+        where.append(AnalysisJob.profile == profile)
     total = (await session.execute(select(func.count(AnalysisJob.id)).where(*where))).scalar_one()
     stmt = (
         _rows_query()

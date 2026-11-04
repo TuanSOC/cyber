@@ -1,6 +1,7 @@
 import uuid
 from typing import Annotated
 
+from cyberlab_jobs.static import Profile
 from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.core import rate_limit
@@ -8,7 +9,7 @@ from app.core.deps import CurrentUserDep
 from app.core.pagination import PageParamsDep
 from app.core.rbac import OrgContext, Permission, require
 from app.modules.analysis import service
-from app.modules.analysis.models import AnalysisStatus
+from app.modules.analysis.models import AnalysisStatus, Analyzer
 from app.modules.analysis.schemas import AnalysisCreate, AnalysisJobOut, AnalysisJobPage
 
 router = APIRouter(prefix="/orgs/{org_id}", tags=["analysis"])
@@ -48,8 +49,10 @@ async def list_analyses(
     ctx: EvidenceRead,
     page: PageParamsDep,
     status: Annotated[AnalysisStatus | None, Query()] = None,
+    analyzer: Annotated[Analyzer | None, Query()] = None,
+    profile: Annotated[Profile | None, Query()] = None,
 ) -> AnalysisJobPage:
-    return await service.list_jobs(ctx, page, status=status)
+    return await service.list_jobs(ctx, page, status=status, analyzer=analyzer, profile=profile)
 
 
 @router.get("/analyses/{job_id}", response_model=AnalysisJobOut)

@@ -1,6 +1,5 @@
 "use client";
 
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -30,12 +29,11 @@ import {
   ANALYSIS_STATUS_LABELS,
   type AnalysisStatus,
   jobDurationText,
-  pollWhileActive,
 } from "@/lib/analysis";
-import { api, unwrap } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { orgPath } from "@/lib/nav";
 import { useOrg } from "@/lib/org-context";
+import { useAnalyzerJobs } from "@/lib/use-analyzer-jobs";
 import { useNow } from "@/lib/use-now";
 
 const ALL = "all";
@@ -46,17 +44,12 @@ export default function PcapAnalysesPage() {
   const [status, setStatus] = useState<AnalysisStatus | typeof ALL>(ALL);
   const [offset, setOffset] = useState(0);
 
-  const params = { status: status === ALL ? undefined : status, limit: PAGE_SIZE, offset };
-  const list = useQuery({
-    queryKey: ["org", orgId, "analyses", params],
-    queryFn: async () =>
-      unwrap(
-        await api.GET("/api/v1/orgs/{org_id}/analyses", {
-          params: { path: { org_id: orgId }, query: params },
-        }),
-      ),
-    placeholderData: keepPreviousData,
-    refetchInterval: (query) => pollWhileActive(query.state.data?.items),
+  const list = useAnalyzerJobs({
+    orgId,
+    analyzer: "pcap",
+    status: status === ALL ? undefined : status,
+    offset,
+    pageSize: PAGE_SIZE,
   });
   const now = useNow(list.data?.items.some((job) => job.status === "running") ?? false);
 
@@ -171,7 +164,7 @@ export default function PcapAnalysesPage() {
           </TableBody>
         </Table>
       </div>
-      <div className="mt-3">
+      <div className="mt-3 flex flex-col gap-2">
         <Pager offset={offset} total={list.data?.total ?? 0} onChange={setOffset} />
       </div>
     </>

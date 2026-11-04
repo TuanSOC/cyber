@@ -3,7 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   ANALYSIS_POLL_MS,
   analysisErrorText,
+  analysisKindLabel,
+  analysisSegment,
   anyActive,
+  evidenceKind,
+  jobsOf,
+  knownErrorText,
+  offeredRuns,
+  runKindOf,
   formatDuration,
   hasSummary,
   isActiveStatus,
@@ -113,5 +120,98 @@ describe("latestPerEvidence", () => {
       { id: "1", evidence_id: "e1" },
     ];
     expect(latestPerEvidence(jobs).map((job) => job.id)).toEqual(["3", "2"]);
+  });
+});
+
+describe("latestPerEvidence per analyzer", () => {
+  it("keeps one row per evidence and kind of run", () => {
+    const jobs = [
+      { id: "5", evidence_id: "e1", analyzer: "static" as const, profile: "av" as const },
+      { id: "4", evidence_id: "e1", analyzer: "static" as const, profile: "full" as const },
+      { id: "3", evidence_id: "e1", analyzer: "pcap" as const, profile: null },
+      { id: "2", evidence_id: "e1", analyzer: "static" as const, profile: "full" as const },
+    ];
+    expect(latestPerEvidence(jobs).map((job) => job.id)).toEqual(["5", "4", "3"]);
+  });
+});
+
+describe("static error texts", () => {
+  it.each([
+    "sample_too_large",
+    "av_unavailable",
+    "av_not_fully_scanned",
+    "results_not_available",
+    "report_unavailable",
+    "analysis_not_succeeded",
+  ])("%s has a human text", (code) => {
+    expect(knownErrorText(code)).toBeTruthy();
+    expect(analysisErrorText(code)).not.toContain("Analysis failed (");
+  });
+
+  it("knownErrorText is null for unknown or empty codes", () => {
+    expect(knownErrorText("nope")).toBeNull();
+    expect(knownErrorText("toString")).toBeNull();
+    expect(knownErrorText(null)).toBeNull();
+  });
+});
+
+describe("analyzers and profiles", () => {
+  it("labels and routes jobs by analyzer", () => {
+    expect(analysisKindLabel({ analyzer: "pcap", profile: null })).toBe("PCAP");
+    expect(analysisKindLabel({ analyzer: "static", profile: "full" })).toBe("Static (full)");
+    expect(analysisKindLabel({ analyzer: "static", profile: "av" })).toBe("AV scan");
+    expect(analysisSegment({ id: "j1", analyzer: "pcap" })).toBe("pcap/j1");
+    expect(analysisSegment({ id: "j2", analyzer: "static" })).toBe("malware/j2");
+    expect(runKindOf({ analyzer: "static", profile: "av" })).toBe("static_av");
+    expect(runKindOf({ analyzer: "static", profile: null })).toBe("static_full");
+  });
+
+  it("filters jobs by analyzer and profile", () => {
+    const jobs = [
+      { id: "1", analyzer: "pcap" as const, profile: null },
+      { id: "2", analyzer: "static" as const, profile: "full" as const },
+      { id: "3", analyzer: "static" as const, profile: "av" as const },
+    ];
+    expect(jobsOf(jobs, "static").map((j) => j.id)).toEqual(["2", "3"]);
+    expect(jobsOf(jobs, "static", "av").map((j) => j.id)).toEqual(["3"]);
+    expect(jobsOf(jobs, "pcap").map((j) => j.id)).toEqual(["1"]);
+  });
+});
+
+describe("evidenceKind / offeredRuns", () => {
+  const ev = (detected_mime: string, original_filename = "file", detected_description = "") => ({
+    detected_mime,
+    original_filename,
+    detected_description,
+  });
+
+  it.each([
+    [ev("application/vnd.tcpdump.pcap"), "capture"],
+    [ev("application/octet-stream", "x.bin", "pcapng capture file - version 1.0"), "capture"],
+    [ev("application/octet-stream", "trace.PCAPNG"), "capture"],
+    [ev("application/vnd.microsoft.portable-executable", "a.exe"), "executable"],
+    [ev("application/x-dosexec", "a.dll"), "executable"],
+    [ev("application/x-executable", "tool"), "executable"],
+    [ev("application/x-sharedlib", "libx.so"), "executable"],
+    [ev("application/x-pie-executable", "bin"), "executable"],
+    [ev("application/octet-stream", "x", "PE32+ executable (console) x86-64, for MS Windows"), "executable"],
+    [ev("application/octet-stream", "setup.exe"), "executable"],
+    [ev("application/x-coredump", "core"), "other"],
+    [ev("application/octet-stream", "core", "ELF 64-bit LSB core file, x86-64"), "other"],
+    [ev("application/pdf", "invoice.exe"), "other"],
+    [ev("application/zip", "a.zip"), "other"],
+    [ev("text/plain", "notes.pcap"), "other"],
+  ] as const)("%o → %s", (evidence, kind) => {
+    expect(evidenceKind(evidence)).toBe(kind);
+  });
+
+  it("offers the fitting runs first and every other run in the menu", () => {
+    expect(offeredRuns("capture")).toEqual({ primary: ["pcap"], more: ["static_full", "static_av"] });
+    expect(offeredRuns("executable")).toEqual({ primary: ["static_full", "static_av"], more: ["pcap"] });
+    expect(offeredRuns("other")).toEqual({ primary: ["static_av"], more: ["static_full", "pcap"] });
+    for (const kind of ["capture", "executable", "other"] as const) {
+      const { primary, more } = offeredRuns(kind);
+      expect(new Set([...primary, ...more])).toEqual(new Set(["pcap", "static_full", "static_av"]));
+    }
   });
 });

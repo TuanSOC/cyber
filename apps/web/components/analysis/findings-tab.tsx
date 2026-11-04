@@ -29,19 +29,28 @@ import {
   flowLinkFor,
   formatPercent,
 } from "@/lib/pcap-results";
+import { STATIC_FINDING_TYPES } from "@/lib/static-results";
 
-const COLUMNS = 9;
 const SEVERITY_OPTIONS = FINDING_SEVERITIES.map((s) => [s, s[0].toUpperCase() + s.slice(1)] as const);
 
+/**
+ * Findings of one job (the shared per-job route). `pcap` findings carry endpoints and evidence
+ * flows (with links into the Flows tab); `static` findings describe the sample, their evidence
+ * references (sections, rules, imports) are shown as text.
+ */
 export function FindingsTab({
   orgId,
   jobId,
   onShowFlow,
+  variant = "pcap",
 }: {
   orgId: string;
   jobId: string;
-  onShowFlow: (link: FlowLink) => void;
+  onShowFlow?: (link: FlowLink) => void;
+  variant?: "pcap" | "static";
 }) {
+  const isPcap = variant === "pcap";
+  const columns = isPcap ? 9 : 6;
   const [severity, setSeverity] = useState<FindingSeverity | typeof ALL>(ALL);
   const [type, setType] = useState<string>(ALL);
   const filters = { severity: severity === ALL ? undefined : severity, type: type === ALL ? undefined : type };
@@ -65,15 +74,19 @@ export function FindingsTab({
       query={findings}
       offset={offset}
       onOffset={setOffset}
-      columns={COLUMNS}
+      columns={columns}
       empty={
         filtered
           ? "No findings match these filters."
-          : "No findings. The heuristics found no behaviour worth a closer look in this capture."
+          : isPcap
+            ? "No findings. The heuristics found no behaviour worth a closer look in this capture."
+            : "No findings. The heuristics and signature engines found nothing worth a closer look in this file."
       }
       note={
         <p className="text-xs text-muted-foreground">
-          Findings are heuristics that describe observed behaviour; they are leads to review, not verdicts.
+          {isPcap
+            ? "Findings are heuristics that describe observed behaviour; they are leads to review, not verdicts."
+            : "Findings are heuristics and signature hits over the file's static features; they are leads to review, not verdicts."}
         </p>
       }
       filters={
@@ -89,7 +102,7 @@ export function FindingsTab({
           <FilterSelect
             value={type}
             onChange={setType}
-            options={FINDING_TYPES}
+            options={isPcap ? FINDING_TYPES : STATIC_FINDING_TYPES}
             allLabel="All types"
             label="Finding type filter"
             className="w-60"
@@ -101,25 +114,37 @@ export function FindingsTab({
           <TableHead className="w-8" />
           <TableHead className="w-24">Severity</TableHead>
           <TableHead>Finding</TableHead>
-          <TableHead>Endpoints</TableHead>
+          {isPcap && <TableHead>Endpoints</TableHead>}
           <TableHead className="w-24 text-right">Confidence</TableHead>
           <TableHead>Method</TableHead>
-          <TableHead className="w-40">First seen</TableHead>
-          <TableHead className="w-40">Last seen</TableHead>
-          <TableHead className="w-16" />
+          <TableHead className="w-40">{isPcap ? "First seen" : "Detected"}</TableHead>
+          {isPcap && <TableHead className="w-40">Last seen</TableHead>}
+          {isPcap && <TableHead className="w-16" />}
         </>
       }
     >
-      {(items) => items.map((f) => <FindingRow key={f.id} finding={f} onShowFlow={onShowFlow} />)}
+      {(items) =>
+        items.map((f) => (
+          <FindingRow key={f.id} finding={f} columns={columns} onShowFlow={isPcap ? onShowFlow : undefined} />
+        ))
+      }
     </ResultTable>
   );
 }
 
-function FindingRow({ finding: f, onShowFlow }: { finding: Finding; onShowFlow: (link: FlowLink) => void }) {
+function FindingRow({
+  finding: f,
+  columns,
+  onShowFlow,
+}: {
+  finding: Finding;
+  columns: number;
+  onShowFlow?: (link: FlowLink) => void;
+}) {
   const attributes = Object.entries(f.attributes ?? {});
   return (
     <ExpandableRow
-      columns={COLUMNS}
+      columns={columns}
       cells={
         <>
           <TableCell>
@@ -129,9 +154,11 @@ function FindingRow({ finding: f, onShowFlow }: { finding: Finding; onShowFlow: 
             <Trunc value={f.title} className="max-w-80 font-medium" />
             <Trunc value={f.type} mono className="text-muted-foreground" />
           </TableCell>
-          <TableCell>
-            <Endpoints e={f} />
-          </TableCell>
+          {onShowFlow && (
+            <TableCell>
+              <Endpoints e={f} />
+            </TableCell>
+          )}
           <TableCell className="text-right tabular-nums">{formatPercent(f.confidence)}</TableCell>
           <TableCell>
             <Trunc value={f.detection_method} mono className="max-w-56" />
@@ -139,12 +166,16 @@ function FindingRow({ finding: f, onShowFlow }: { finding: Finding; onShowFlow: 
           <TableCell>
             <When iso={f.ts} />
           </TableCell>
-          <TableCell>
-            <When iso={f.last_seen} />
-          </TableCell>
-          <TableCell>
-            {f.flow_ref && <FlowButton link={flowLinkFor(f, f.flow_ref, false)} onShowFlow={onShowFlow} />}
-          </TableCell>
+          {onShowFlow && (
+            <TableCell>
+              <When iso={f.last_seen} />
+            </TableCell>
+          )}
+          {onShowFlow && (
+            <TableCell>
+              {f.flow_ref && <FlowButton link={flowLinkFor(f, f.flow_ref, false)} onShowFlow={onShowFlow} />}
+            </TableCell>
+          )}
         </>
       }
       detail={
@@ -173,10 +204,22 @@ function FindingRow({ finding: f, onShowFlow }: { finding: Finding; onShowFlow: 
           </div>
           <div>
             <p className="mb-1 text-xs font-medium text-muted-foreground">
-              Evidence flows ({f.evidence_refs.length})
+              {onShowFlow ? "Evidence flows" : "Evidence references"} ({f.evidence_refs.length})
             </p>
             {f.evidence_refs.length === 0 ? (
               <p className="text-muted-foreground">None recorded.</p>
+            ) : !onShowFlow ? (
+              <div className="flex flex-wrap gap-1">
+                {f.evidence_refs.map((ref) => (
+                  <span
+                    key={ref}
+                    className="max-w-72 truncate rounded-md border px-2 py-0.5 font-mono text-xs"
+                    title={ref}
+                  >
+                    {ref}
+                  </span>
+                ))}
+              </div>
             ) : (
               <div className="flex flex-wrap gap-1">
                 {f.evidence_refs.map((ref) => (

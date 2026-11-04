@@ -2372,6 +2372,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["AnalysisStatus"] | null;
+                analyzer?: components["schemas"]["Analyzer"] | null;
+                profile?: components["schemas"]["Profile"] | null;
                 limit?: number;
                 offset?: number;
             };
