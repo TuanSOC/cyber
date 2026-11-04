@@ -52,6 +52,13 @@ Base path `/api/v1`, served through the gateway. Interactive docs (dev only): `/
 | POST | `/orgs/{org_id}/investigations/{investigation_id}/evidence?filename&description` | `evidence.write` |
 | GET | `/orgs/{org_id}/evidence/{evidence_id}` · `/download` · `/custody` | `evidence.read` |
 | POST | `/orgs/{org_id}/evidence/{evidence_id}/verify` · `/archive` | `evidence.write` |
+| POST | `/orgs/{org_id}/evidence/{evidence_id}/analyses` `{"analyzer":"pcap"}` | `evidence.write` (20 manual runs / 10 min) |
+| GET | `/orgs/{org_id}/evidence/{evidence_id}/analyses` | `evidence.read` |
+| GET | `/orgs/{org_id}/analyses?status` · `/orgs/{org_id}/analyses/{job_id}` (incl. `summary`) | `evidence.read` |
+| GET | `/orgs/{org_id}/analyses/{job_id}/findings?severity&type` | `evidence.read` |
+| GET | `/orgs/{org_id}/analyses/{job_id}/flows?ip&port&proto&sort=bytes\|ts` | `evidence.read` |
+| GET | `/orgs/{org_id}/analyses/{job_id}/records?kind=dns\|http\|tls&q` | `evidence.read` |
+| GET | `/orgs/{org_id}/analyses/{job_id}/alerts?severity` · `/iocs?type&q` · `/timeline` | `evidence.read` |
 
 Roles: **viewer** = all `*.read`; **analyst** = viewer + `investigation.write`, `evidence.write`; **admin** = analyst + `org.update`, `members.manage`, `audit.read`; **owner** = admin + owner-role management.
 
@@ -66,3 +73,32 @@ curl -X POST "https://host/api/v1/orgs/$ORG/investigations/$CASE/evidence?filena
 The body is the raw file (no multipart). Max 2 GiB (`MAX_EVIDENCE_BYTES`); at most 2 concurrent uploads per user. Response includes `hashes.md5/sha1/sha256`. Downloads are `application/octet-stream` attachments with `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox`, `Cache-Control: no-store`.
 
 `investigations.allowed_transitions` lists the valid next statuses for the current one.
+
+## Analyses
+
+- **Automatic runs:** uploads whose first bytes are a pcap/pcapng magic number queue a PCAP analysis automatically, as a best effort after the upload commits (the upload never fails because of it).
+- **Job fields:** `status` is `queued`, `running`, `succeeded` or `failed`; `error_code` is set on failure.
+- **Results:** they appear only after the trusted ingest validated the whole result stream; see [PCAP_ANALYSIS.md](PCAP_ANALYSIS.md).
+
+Refusals when requesting a run:
+
+| Status | Code |
+|---|---|
+| 409 | `analysis_active` (a run of this evidence is queued/running), `evidence_archived`, `investigation_archived` |
+| 413 | `capture_too_large` (> `PCAP_MAX_BYTES`) |
+| 429 | `analysis_queue_full` (5 active per org / 50 overall), `rate_limited` |
+
+Job `error_code` values:
+- **Evidence and input:**
+  - `integrity_mismatch`: bytes differ from the evidence record.
+  - `unsupported_capture_format`: not raw pcap/pcapng, incl. compressed.
+  - `unparseable_capture`, `capture_too_large`, `url_expired`, `evidence_unavailable`.
+- **Engines:** `zeek_failed`, `zeek_timeout`, `tool_timeout`, `timed_out`, `analyzer_error`.
+- **Result transfer:** `result_too_large`, `result_upload_failed`.
+- **Trusted side:**
+  - `invalid_result`: the stream failed validation.
+  - `ingest_error`.
+  - `enqueue_failed`.
+  - `never_started`: the queue TTL expired.
+
+Result lists are paged like every list. Text filters are case-insensitive substring matches with `%`/`_` escaped.

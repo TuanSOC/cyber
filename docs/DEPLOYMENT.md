@@ -51,12 +51,35 @@ The prod override also serves the site as `gateway:8443` so the e2e container ca
 | `RATE_LIMIT_LOGIN_PER_IP_PER_MIN`, `RATE_LIMIT_LOGIN_FAILURES_PER_15MIN`, `RATE_LIMIT_REGISTER_PER_IP_PER_10MIN` | api | |
 | `TEST_DATABASE_URL`, `TEST_MIGRATION_DATABASE_URL`, `TEST_REDIS_URL` | api-test | must point at `*_test` DB and a non-zero Redis db (enforced) |
 | `SITE_ADDRESS` | prod gateway | e.g. `localhost:8443` |
+| `BROKER_API_PASSWORD`, `BROKER_INGEST_PASSWORD`, `BROKER_PCAP_PASSWORD` | redis-broker (ACL users), api / ingest-* / pcap-worker (in their `BROKER_URL`) | URL-safe; each component gets only its own |
+| `RESULTS_BUCKET`, `RESULTS_TEST_BUCKET` | minio-init, api, ingest-worker | versioned, no object lock (derived data) |
+| `PCAP_MAX_BYTES` | api | largest capture accepted for analysis (default 512 MiB) |
+| `ANALYSIS_TIMEOUT_S`, `ANALYSIS_TOOL_TIMEOUT_S` | api (sent to the worker in every job) | 900 / 600 s |
+| `MAX_ACTIVE_ANALYSES_PER_ORG` | api | queued + running jobs per org (default 5; 50 overall) |
+| `INGEST_TMP_DIR` | ingest-worker | disk-backed volume for result validation (results up to 256 MiB compressed, 1 GiB inflated) |
+| `SURICATA_RULES` | pcap-worker-test only | small local rule file instead of the ET Open snapshot |
 
 ## Capacity notes
 
 - Each active upload needs temp disk up to its size plus ~32 MiB of RAM (16 MiB parts × 2). Size `UPLOAD_TMP_DIR` for `MAX_EVIDENCE_BYTES × MAX_CONCURRENT_UPLOADS_PER_USER × concurrent uploaders`.
 - Measured locally: 1 GiB upload ≈ 15 s, API RSS peak ≈ 225 MiB, other requests unaffected.
 - Stale spool files (> 1 h) are removed at API startup.
+- Analysis runs one job at a time per pcap-worker. Measured on the synthetic dataset:
+  - ET Open loading takes ≈ 40 s per job and peaks at ≈ 605 MiB (container limit 2 GiB).
+  - The `pcap_work` volume needs room for the capture plus tool logs.
+  - Scale by running more pcap-worker replicas; each takes jobs from the same queue.
+
+## Analysis services
+
+| Service | Image | Trust | Notes |
+|---|---|---|---|
+| `redis-broker` | redis 7.4 | — | separate from the app Redis; ACL users `api`, `ingest`, `pcap` (+ `healthcheck`), no persistence, `maxmemory 256mb noeviction` |
+| `pcap-worker` | `cyberlab/pcap-worker` (Zeek 8 base + tshark + suricata) | untrusted | `analysis` network only, read-only rootfs, `cap_drop: ALL` + 6 caps, tini init, `restart: unless-stopped` (fails closed), 2 GiB / 2 CPUs |
+| `ingest-worker` | `cyberlab/api` | trusted | `celery worker --pool solo`, app DB role + scoped MinIO user |
+| `ingest-beat` | `cyberlab/api` | trusted | Celery beat: enqueues the reaper every 60 s |
+
+- **Code reload:** Celery workers do not hot-reload. After changing worker code in dev, run `docker compose restart pcap-worker ingest-worker` (and `pcap-worker-test` for tests).
+- **Rules:** the ET Open snapshot is baked into the pcap-worker image at build time. Rebuild the image to update rules and parsers.
 
 ## Operations
 

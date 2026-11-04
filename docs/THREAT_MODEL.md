@@ -15,6 +15,7 @@ Scope: the M1 stack (gateway, web, API, Postgres, Redis, MinIO) handling untrust
 2. Gateway ↔ API (trusted network segment; the API trusts `X-Forwarded-For` only because nothing else can reach it).
 3. API ↔ data stores (API uses an RLS-bound Postgres role and a scoped MinIO user; owner/root credentials never reach it).
 4. Operators (DB owner, MinIO root) — trusted administrators.
+5. (M2) pcap-worker ↔ everything: the parser processes attacker-controlled captures and is treated as compromisable. It holds only a broker URL (ACL user confined to its own queue keys), runs tools as an unprivileged uid with seccomp (no inet sockets), and sits on an internal network without egress. Its output is untrusted data, validated by the trusted ingest worker before anything reaches the database.
 
 ## STRIDE summary
 
@@ -42,10 +43,10 @@ Scope: the M1 stack (gateway, web, API, Postgres, Redis, MinIO) handling untrust
 | Members are added without consent (by email) | spam into orgs; mitigated by showing org name/role prominently and opening the user's own org by default | invitation flow later |
 | Add-member responses reveal whether an email is registered | enumeration; rate limited (30/10 min per user) | invitation flow later |
 | Register 409 reveals existing emails | enumeration; rate limited per IP | later |
-| No per-org storage quota; uploads get a 30-day governance lock | open registration could fill MinIO with undeletable data | quotas in M2/M3 |
+| No per-org storage quota; uploads get a 30-day governance lock | open registration could fill MinIO with undeletable data | quotas re-deferred to M3 |
 | No malware scanning of uploads | stored malware is inert (never executed/parsed) but undetected | ClamAV in M3 |
-| `'unsafe-inline'` scripts in CSP | weaker XSS defence; React escaping + HttpOnly cookies limit impact | nonce CSP in M2 |
-| libmagic runs in the API on 8 KiB of untrusted input | parser bug in libmagic | move identification to workers in M2 |
+| `'unsafe-inline'` scripts in CSP | weaker XSS defence; React escaping + HttpOnly cookies limit impact (M2 renders many packet-derived strings, always as text) | nonce CSP re-deferred to M3 |
+| libmagic runs in the API on 8 KiB of untrusted input | parser bug in libmagic | re-deferred: M2 detects captures by magic number in pure Python; libmagic stays for the `detected_mime` metadata only |
 | MinIO image is frozen `bitnamilegacy/minio` (upstream stopped community images) | no security patches | dev/learning only; replace before any real deployment |
 | DB owner and MinIO root are trusted | an admin can TRUNCATE/DROP TRIGGER or bypass governance | operational controls; credentials never in the API |
 | RLS trusts `app.org_id` | any code that sets it from request input without `require()/org_session()` bypasses membership | AST guard test restricts where it can be set |
@@ -56,3 +57,28 @@ Scope: the M1 stack (gateway, web, API, Postgres, Redis, MinIO) handling untrust
 | uvicorn runs with `--forwarded-allow-ips='*'` | if anything other than the gateway could reach the API, it could spoof client IPs and dodge per-IP rate limits | relies on the `backend` network isolation; pin to the gateway address for real deployments |
 | The `api-test` container (test profile only) holds MinIO root credentials to purge locked test objects | a compromised test run could bypass governance on the dev MinIO | test profile only, never in `api`/prod |
 | No backups / restore procedure | data loss | later milestone |
+
+## M2: analysis pipeline
+
+| Threat | Mitigation | Tested by |
+|---|---|---|
+| Parser exploit reads secrets | Tools run as uid 10003 without capabilities, cannot read the worker's environ/memory; broker credentials only in the root Celery process | `apps/workers/pcap/tests/unit/test_sandbox.py` |
+| Parser exploit pivots on the network | `analysis` network is internal; seccomp denies AF_INET/AF_INET6/AF_PACKET sockets to tools; app services unresolvable | `test_isolation.py`, `test_sandbox.py` |
+| Parser exploit persists into another tenant's job | kill-by-uid after every engine and job (non-dumpable / setsid escapees included), `/work` wiped before every job, container stops itself if a process survives | `test_sandbox.py` |
+| Tool output tricks the root process (symlinks, FIFOs, planted names, giant lines, hostile JSON) | `dir_fd` + `O_NOFOLLOW`, regular files only, `O_EXCL` creation, bounded line/file reads, per-record error isolation | `test_sandbox.py`, `test_parsers.py`, fuzz-lite |
+| Forged or replayed reports for other jobs | per-job token (sha256 stored), org taken from the job index, guarded transitions, final states immutable in the DB | `apps/api/tests/integration/test_analysis.py` |
+| Hostile result stream (bombs, wrong job, extra fields, NaN, NUL, oversize) | full validation (header/trailer/sha256/caps/contract) before one all-or-nothing transaction | `test_pcap_results.py`, `test_result_stream.py` |
+| Evidence swapped before analysis | worker verifies sha256 and size of the exact version; presigned GET pins the version | `test_analysis_pipeline.py` |
+| One tenant starves the analyzer | per-org (5) and global (50) active caps, auto-run rate limit, queue TTL | `test_analysis.py` |
+
+Residual risks (accepted for M2):
+
+| Gap | Risk | Planned |
+|---|---|---|
+| A compromised Celery root process (not just a tool) holds the broker credentials | it could push extra or forged reports onto the ingest queue (still rejected without the target job's token) or delete queued ingest messages | per-job signed reports / separate publisher later |
+| MinIO is reachable from the analysis network (presigned URLs need it) | the frozen MinIO image is exposed to a compromised worker process (tools cannot open sockets) | replace MinIO image before any real deployment |
+| Tools share the container network namespace | seccomp blocks inet sockets but not unix sockets | a no-network sidecar if it becomes necessary |
+| Parsers are the upstream Zeek 8 / Debian 13 builds | vulnerabilities in them are contained, not prevented | rebuild the image to update; track versions in every result |
+| ET Open rules are fetched at build time, unpinned | rule drift between builds | digest recorded in every result; pinning later |
+| Single analyzer FIFO with concurrency 1 | fair scheduling between orgs is approximate | per-org queues later |
+| Heuristic thresholds are static, no allow-lists | false positives (e.g. legitimate updaters beaconing) | analyst feedback / allow-lists later |

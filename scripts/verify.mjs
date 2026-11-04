@@ -92,6 +92,11 @@ function restoreDev() {
 
 try {
   run("Dev stack up", "docker compose up -d --build --renew-anon-volumes --wait --wait-timeout 300");
+  // Celery workers do not hot-reload: recreate them so the gate tests the current code.
+  run(
+    "Workers: reload code",
+    "docker compose --profile test up -d --force-recreate --no-deps pcap-worker pcap-worker-test ingest-worker ingest-beat",
+  );
   run(
     "API: ruff, format, mypy --strict, pytest",
     'docker compose --profile test run --rm api-test sh -c "uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest -q"',

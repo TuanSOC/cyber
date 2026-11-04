@@ -26,6 +26,14 @@ erDiagram
   evidence ||--o{ evidence_custody_events : "custody chain"
   organizations ||--o{ audit_logs : records
   users ||--o{ evidence : uploads
+  evidence ||--o{ analysis_jobs : "analyzed by"
+  analysis_jobs ||--|| analysis_job_index : "system lookup"
+  analysis_jobs ||--o{ network_flows : produced
+  analysis_jobs ||--o{ network_records : produced
+  analysis_jobs ||--o{ network_alerts : produced
+  analysis_jobs ||--o{ analysis_findings : produced
+  analysis_jobs ||--o{ iocs : produced
+  analysis_jobs ||--o{ analysis_timeline : produced
 ```
 
 | Table | Scope | Notes |
@@ -40,9 +48,22 @@ erDiagram
 | `evidence_hashes` | tenant | append-only; md5/sha1/sha256 per evidence |
 | `evidence_custody_events` | tenant | append-only chain of custody |
 | `audit_logs` | tenant | append-only; `organization_id` NOT NULL |
+| `analysis_jobs` | tenant | one analyzer run over one evidence version; status machine enforced by trigger (final states immutable); `ingest_token_sha256`; `summary` jsonb (capture stats, tool versions, engine errors, truncation flags, counts) |
+| `analysis_job_index` | system lookup | job → org, status, deadline for ingest/reaper; RLS: sessions without org context see all rows, tenant sessions only their org; app may UPDATE only `status`, `deadline_at` |
+| `network_flows` | tenant | Zeek conn records (largest `max_flows` by bytes); `total_bytes` indexed for sorting |
+| `network_records` | tenant | `kind` dns/http/tls, `summary` text (searchable), `details` jsonb |
+| `network_alerts` | tenant | Suricata alerts (sid, rev, signature, category, severity, community id) |
+| `analysis_findings` | tenant | heuristic findings: type, severity, confidence, method@version, evidence refs, attributes |
+| `iocs` | tenant | observables with first/last seen, count, source; unique (job, type, md5(value)) |
+| `analysis_timeline` | tenant | capture start/end, findings, serious alerts, first contacts |
 
 All ids are UUIDs (client-generated `uuid4`, server default `gen_random_uuid()`); timestamps are `timestamptz`.
 Child rows are pinned to their parent's tenant with composite foreign keys, e.g. `evidence(investigation_id, organization_id) → investigations(id, organization_id)`.
+
+Analysis result tables (migrations 0004/0005):
+- They are written only by the trusted ingest worker, in the same transaction that moves the job to `succeeded`; a stream is never partially written.
+- The app role has SELECT and INSERT only.
+- `flow_ref` is not a foreign key: a referenced flow may have been dropped by the flow cap.
 
 ## Tenant isolation (RLS)
 

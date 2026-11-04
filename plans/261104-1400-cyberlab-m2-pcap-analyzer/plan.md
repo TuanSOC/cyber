@@ -5,7 +5,7 @@ description: >-
   versioned job schema, trusted ingest into tenant tables, detections
   (beaconing, scans, DNS anomalies, suspicious traffic), IOCs, timeline,
   analyzer UI.
-status: pending
+status: completed
 priority: P1
 effort: 70h
 branch: feat/m2-pcap-analyzer
@@ -125,9 +125,9 @@ upload (pcap/pcapng) ──► API ──creates──► analysis_jobs row (que
 | 1 | [Job pipeline and workers](./phase-01-job-pipeline-and-workers.md) | Completed |
 | 2 | [PCAP engine and dataset](./phase-02-pcap-engine-and-dataset.md) | Completed |
 | 3 | [Detections and IOCs](./phase-03-detections-and-iocs.md) | Completed |
-| 4 | [Ingest persistence and read API](./phase-04-ingest-persistence-and-read-api.md) | Pending |
-| 5 | [Frontend PCAP analyzer](./phase-05-frontend-pcap-analyzer.md) | Pending |
-| 6 | [Hardening e2e and docs](./phase-06-hardening-e2e-and-docs.md) | Pending |
+| 4 | [Ingest persistence and read API](./phase-04-ingest-persistence-and-read-api.md) | Completed |
+| 5 | [Frontend PCAP analyzer](./phase-05-frontend-pcap-analyzer.md) | Completed |
+| 6 | [Hardening e2e and docs](./phase-06-hardening-e2e-and-docs.md) | Completed |
 
 ## Dependencies
 

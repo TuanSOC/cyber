@@ -1,10 +1,11 @@
 ---
 phase: 6
-title: "Hardening e2e and docs"
-status: pending
+title: Hardening e2e and docs
+status: completed
 priority: P1
-effort: "10h"
-dependencies: [5]
+effort: 10h
+dependencies:
+  - 5
 ---
 
 # Phase 6: Hardening e2e and docs
@@ -33,3 +34,23 @@ Prove the isolation claims, extend the gate, write PCAP docs, update M1 docs.
 - [ ] `pnpm verify` + `pnpm verify:prod` green from fresh volumes.
 - [ ] Metrics table in TESTING.md generated from `evaluation.json`.
 - [ ] Reviewer pass with no open High findings.
+
+## Implementation Notes (2026-11-04)
+- **Fuzz-lite** (`tests/evaluation/test_fuzz_lite.py`): 50 mutated dataset captures, every run terminal within the budget with no tool process left. Outcomes: 23 results, 22 unparseable, 3 unsupported format, 2 zeek_failed.
+  - It found a real crash: capinfos reported an absurd duration that broke the contract. Out-of-range values now become unknown.
+- **Isolation tests** (uid, caps, environ, symlinks/FIFOs, escapees incl. non-dumpable, seccomp, TMPDIR, egress, DNS, broker ACL key confinement) were built in phases 1–2 and run in `pnpm test:workers`.
+- **E2E** `apps/web/e2e/pcap.spec.ts`: register → case → upload the synthetic `mixed.pcap` → automatic analysis with the real ET Open snapshot → findings (beaconing, vertical port scan) and flows visible → no console errors (≈ 60 s).
+  - `scripts/e2e.mjs` generates the dataset into `.e2e-data/` (gitignored) with the worker image; the e2e container mounts it at `/data`.
+- **Verify:**
+  - New step: worker reload, since Celery does not hot-reload; it force-recreates pcap-worker, pcap-worker-test, ingest-worker and ingest-beat.
+  - New step: `pnpm test:workers`.
+  - `verify --prod` also runs both e2e scenarios on the prod-like stack.
+- **Docs:** new `docs/PCAP_ANALYSIS.md`. Updated:
+  - ARCHITECTURE (analysis workers diagram, modules)
+  - DATABASE (ERD + tables)
+  - API (routes, refusals, error codes)
+  - THREAT_MODEL (trust boundary 5, M2 STRIDE table, residual risks; nonce CSP, quotas and libmagic re-deferred)
+  - TESTING (commands, coverage, M2 metrics)
+  - DEPLOYMENT (env vars, analysis services, capacity, code reload)
+  - ROADMAP (M2 done, deferrals)
+  - README

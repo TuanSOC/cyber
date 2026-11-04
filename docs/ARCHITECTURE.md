@@ -38,6 +38,9 @@ apps/api/app/
     investigations/  cases, case numbers, status lifecycle
     evidence/        uploads.py, locking.py, transfer.py (download/verify), service.py (custody, archive)
     audit/           audit writer + read API
+    analysis/        analysis jobs: request (manual / auto on capture upload), dispatch, lifecycle
+    pcap_analysis/   result stream validation, ingest into tenant tables, read API
+  workers/     celery app, ingest + reaper tasks (trusted side of the analysis pipeline)
   scripts/     dump_openapi (contracts), reconcile_orphans (report-only)
 ```
 
@@ -87,6 +90,33 @@ Next.js 16 App Router, client-rendered signed-in area:
 
 `pnpm gen:contracts` dumps the OpenAPI schema offline from the API image and regenerates `packages/contracts/src/schema.d.ts`. `pnpm verify` fails on drift.
 
-## Where M2 attaches
+## Analysis workers (M2)
 
-Analysis engines will run as separate workers (Celery + Redis) that read evidence by `(bucket, key, version_id)`, never inside the API process, and write normalized findings back through versioned job schemas. The API will never execute or parse evidence itself.
+Analysis runs outside the API process. Details are in [PCAP_ANALYSIS.md](PCAP_ANALYSIS.md).
+
+```mermaid
+flowchart LR
+  A[API] -->|send_task pcap.analyze| RB[(redis-broker<br/>ACL users)]
+  RB --> PW[pcap-worker<br/>UNTRUSTED]
+  PW -->|presigned GET / POST| M[(MinIO)]
+  PW -->|ingest.event| RB
+  RB --> IW[ingest-worker<br/>trusted]
+  IB[ingest-beat<br/>reaper schedule] --> RB
+  IW --> P[(PostgreSQL)]
+  IW --> M
+  subgraph analysis [analysis network: internal, no egress]
+    PW
+  end
+```
+
+- **Untrusted side** (`apps/workers/pcap`):
+  - The worker holds a broker URL only.
+  - Its tools run as uid 10003 with seccomp, rlimits and kill-by-uid cleanup.
+  - Output is a versioned `pcap.v1` stream (`packages/py-jobs`).
+- **Trusted side** (`apps/api/app/workers`, api image):
+  - It authenticates every message (per-job token, org from the job index).
+  - It validates the whole result before opening one transaction.
+  - It applies only state-valid transitions.
+- **Shared contracts**: the `cyberlab_jobs` package is a path dependency of both the API and the worker. It holds the job message, ingest message, limits, result line models and capture magic detection.
+- **Separate broker**: the analyzer can never reach the app Redis (token denylist, rate limits).
+- **Reaper**: `ingest-beat` schedules it every 60 s. It fails jobs past their queue or run deadline.

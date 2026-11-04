@@ -9,6 +9,7 @@
 | `pnpm test:api` | API test suite (real Postgres, Redis, MinIO; no mocks of analysis or storage) |
 | `pnpm lint:api` | ruff, format check, mypy `--strict` |
 | `pnpm lint:web` | Next typegen + tsc, eslint, vitest |
+| `pnpm test:workers` | PCAP worker: ruff, format, mypy, sandbox/isolation, engine, evaluation and fuzz-lite tests inside the real worker image (tools, seccomp, caps) |
 | `pnpm e2e` | Playwright golden path against the running stack (`pnpm e2e --prod` for the prod-like stack) |
 | `pnpm gen:contracts` | Regenerate the OpenAPI contract and TS types (`verify` fails on drift) |
 
@@ -18,7 +19,8 @@ Test isolation: the API suite uses `cyberlab_test`, Redis db 1 and the `evidence
 
 ## Current results
 
-- API: ~300 tests (unit, integration, security; pytest prints the exact count). Typical run ≈ 75–100 s.
+- API: ~480 tests (unit, integration, security, incl. analysis jobs, ingest validation, read API and a real-worker pipeline). Typical run ≈ 3 min.
+- PCAP worker: ~55 tests inside the worker image: sandbox and container isolation (uid, caps, seccomp, egress, broker ACL, escaped / non-dumpable processes, planted symlinks), real engines over the synthetic dataset, hostile tool output, detection evaluation, fuzz-lite.
 - Web: unit tests (redirect safety), typecheck, lint, production build.
 - E2E: 1 Playwright scenario, run against dev (`pnpm e2e`) and the prod-like stack over TLS (`pnpm e2e --prod`, part of `verify:prod`): register → create case → upload (hash checked against a locally computed SHA-256) → verify → custody chain → sign out, with no console errors.
 - Observed once during development: a `pnpm verify` run had 13 API test failures (CSRF/auth-event assertions) right after the stack was recreated; not reproduced in later runs (including from fresh volumes). Tracked as a possible flake — rerun before investigating.
@@ -53,8 +55,21 @@ E2E runs against the real stack, not the test database. Each run:
 | Parser vulnerabilities | ⏳ M2+ (no parsers yet; evidence is never parsed in M1) | — |
 | Prompt injection | ⏳ M5 (AI analyst) | — |
 | Sandbox escape assumptions | ⏳ dynamic analysis milestone | — |
-| Anonymized PCAP / malware datasets, detection precision/recall | ⏳ M2 / M3 | — |
+| Controlled PCAP dataset (normal web, DNS, TLS, beacon, DNS anomalies, port scans, suspicious HTTP) | ✅ synthetic, generated at test time with ground-truth labels | `apps/workers/pcap/dataset/` |
+| Detection precision/recall, parsing success, latency | ✅ (synthetic) | `tests/evaluation/test_detection_quality.py` |
+| Parser vulnerabilities (posture) | ✅ isolation + fuzz-lite (50 mutated captures end cleanly); upstream fuzzing not replicated | `tests/evaluation/test_fuzz_lite.py`, `test_sandbox.py`, `test_parsers.py` |
+| Malware dataset | ⏳ M3 | — |
 
-## Metrics to collect from M2
+## M2 metrics (synthetic dataset, local test rules)
 
-Parsing success rate, analysis latency, detection precision/recall, IOC enrichment success, AI citation accuracy, worker failure rate (per `requirement.txt` §14).
+| Metric | Value |
+|---|---|
+| Parsing success rate (valid captures) | 100% (8/8 scenarios) |
+| Analysis latency per scenario | 1.2–1.4 s (ET Open adds ≈ 40 s rule loading per job) |
+| beaconing / port_scan / dns_anomaly / suspicious_traffic | precision 1.0, recall 1.0 (TP 1 / 2 / 1 / 5, no FP, no FN) |
+| False positives on benign scenarios | 0 |
+| Fuzz-lite (50 mutants) | 50/50 terminal: 23 results, 22 unparseable, 3 unsupported format, 2 zeek_failed; 0 hangs/crashes |
+| Ingest of 100 k flows | ≈ 20 s (validation ≈ 4 s, inserts ≈ 12 s) |
+
+These are synthetic numbers: they show the detectors behave as specified, not real-world quality.
+Regenerate them with `EVALUATION_OUT=/tmp/eval.json` in the worker test container. Worker failure rate is the fuzz-lite outcome distribution. IOC enrichment and AI citation accuracy are M4/M5 metrics.
