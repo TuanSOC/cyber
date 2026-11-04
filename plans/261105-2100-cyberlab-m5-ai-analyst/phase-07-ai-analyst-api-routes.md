@@ -1,0 +1,113 @@
+---
+phase: 7
+title: "AI analyst API routes"
+status: pending
+priority: P1
+effort: "10h"
+dependencies: [1]
+---
+
+# Phase 7: AI analyst API routes (group B, 2f)
+
+## Overview
+The org-scoped HTTP surface:
+- **AI providers:** catalog, write-only keys, terms acknowledgement, verify.
+- **AI settings:** enable with privacy acknowledgement, pseudonymization, inclusions, budgets.
+- **Context preview.**
+- **Runs:** creation with dedupe, caps and rate limits; list; detail with output, resolved citations and pseudonym display; the context viewer.
+- **Usage.**
+- **Audit.**
+
+The API only builds and freezes the context, seals keys, records and publishes; it never contacts a provider.
+
+**Owns:**
+- `app/modules/ai/router_{runs,providers,settings}.py` (fills the stubs), `app/modules/ai/runs.py` (fills the stub);
+- `app/modules/ai/service_{runs,providers,settings,outputs}.py`, `app/modules/ai/repository.py`, `app/modules/ai/schemas.py`;
+- `tests/ai_api_helpers.py`, `tests/integration/test_ai_api_{providers,settings,runs,outputs,rbac}.py`;
+- `tests/security/idor_cases_ai.py` (the AI cases and victim extenders; phase 1 created it empty and `test_idor_routes.py` merges it, RT11).
+
+## Requirements
+- **Providers** (`router_providers.py`):
+  - `GET /orgs/{org}/ai/providers` (`org.read`): the catalog. Each entry has:
+    - `name`, `label`, `models` (id, label, price per MTok, `verified`), `default_model`, `tos_note`, `privacy_note`;
+    - `available` + `unavailable_reason` (`prod_mock`, `gemini_billing_required`, `ai_disabled_platform`);
+    - `platform_key` (true when the dev platform key covers it: the API reads only a non-secret `AI_PLATFORM_PROVIDER`; it never sees the file);
+    - and, when configured: `enabled`, `model`, `configured`, `key_last4`, `verify_status`, `verified_at`, `last_error_code`, `terms_ack_at`, `paid_tier_ack_at` (gemini).
+
+    Never ciphertext columns.
+  - `PUT /orgs/{org}/ai/providers/{provider}` (`integrations.manage`): `{api_key?: SecretStr, enabled?, acknowledge_terms?, acknowledge_paid_tier?, model?}`.
+    - The first configuration requires a key, unless `platform_key`.
+    - The first `enabled=true` requires `acknowledge_terms` → `422 terms_not_acknowledged`; for `gemini` also `acknowledge_paid_tier` → `422 paid_tier_not_acknowledged` (RT5).
+    - A model outside the allowlist → `422 model_not_allowed`; unavailable → `422 provider_unavailable`.
+    - A new key → `key_version + 1`, sealed with `ai/seal.py` under `AI_SEAL_ACTIVE_KID`, `verify_status=unverified`, `ai.verify` queued (10 per 10 min per org and provider).
+    - The org row is locked `FOR NO KEY UPDATE`.
+    - Audit `integration.ai_terms_acknowledged`, `integration.ai_key_set` / `ai_key_replaced` (provider, last4, kid, version) or `integration.ai_updated`.
+  - `DELETE …/{provider}/key` → an UPDATE clearing the sealed columns and `enabled=false` (version floor kept), 204, audited.
+  - `POST …/{provider}/verify` → 202, rate limited.
+- **Settings** (`router_settings.py`): `GET` (`org.read`) and `PUT` (`integrations.manage`) `/orgs/{org}/ai/settings`:
+  - fields: `ai_enabled`, `acknowledge_privacy`, `default_provider`, `pseudonymize_internal`, `internal_cidrs` (≤ 50 valid CIDRs), `internal_suffixes` (≤ 50 domain suffixes), `include_strings`, `include_ti`, `include_case_text`, `daily_token_budget`, `run_token_cap`, `incident_token_cap` (no `refusal_fallback`, RT10);
+  - turning AI on requires `acknowledge_privacy` (`422 privacy_not_acknowledged`), and so does widening the disclosure later: `include_case_text` or `include_strings` turned on, or `pseudonymize_internal` turned off (RT22); budgets above `AI_CEILINGS` → `422 budget_above_ceiling`;
+  - the response includes the ceilings and the privacy notice text;
+  - audit `ai.settings_updated` (changed field names and booleans; CIDR and suffix counts, not values), `ai.enabled` / `ai.disabled`.
+- **Preview** `POST /orgs/{org}/ai/context-preview` (`evidence.write`; 30 per user per 10 min): same body as a run.
+  - It calls `builder.preview` and returns `context_stats`, the item list as it would be sent (pseudonyms shown), and the categories of data that would leave.
+  - Nothing is persisted and nothing audited.
+  - Refused when AI is disabled (`409 ai_disabled`), so preview never becomes a way around the opt-in.
+- **Runs** (`router_runs.py`):
+  - `POST /orgs/{org}/ai/runs` (`evidence.write`): `{task, job_id?, investigation_id?, target_id?, provider?, model?, regenerate?: bool}`.
+  - **Checks:**
+    - `ai_enabled` → else `409 ai_disabled`;
+    - the provider is enabled with terms acknowledged, available and keyed (own key or platform) → else `409 no_provider_enabled` / `422 provider_unavailable`;
+    - the job is succeeded → else `409 job_not_ready`; task / target validity → `422`;
+    - per user `AI_RUNS_PER_USER_10MIN` → 429;
+    - today's DB usage for the org (sum of `ai_runs.usage`) ≥ `daily_token_budget` → `409 budget_exhausted` (RT9);
+    - non-final runs of the org (**children included**) + the runs this request creates (1, or 1 + children for an incident) > `AI_ACTIVE_RUNS_PER_ORG`, or the same globally > `AI_ACTIVE_RUNS_GLOBAL` → `409 ai_busy`, under the per-org then global advisory locks (the M4 pattern) (RT8).
+  - Then `builder.build_run` → `runs.create_run`, in **one transaction**:
+    - `ai_runs` (+ children for an incident, with `parent_run_id`, scope `job`, task `job_digest`, and the parent's `deadline_at`), `ai_run_index`, `ai_run_inputs` (stage `base`, context, sha256, pseudonym map), `ai_context_refs`;
+    - audit `ai.run_requested`: task, target ids, provider, model, `prompt_version`, `context_sha256`, per-kind counts, pseudonymization counts, the inclusion toggles, truncation; **no content**.
+  - Commit, then `runs.dispatch` (children first, then the parent). A publish failure still answers 202, because `ai.resume` recovers.
+  - **Dedupe:** an identical (org, task, target, provider, model, `prompt_version`, `context_sha256`) run that is active or completed is returned with `deduplicated: true` (200), unless `regenerate`, which creates a new run with `supersedes_run_id`.
+  - `GET /orgs/{org}/ai/runs?job_id&investigation_id&task&status&target_id&cursor` (`evidence.read`): top-level runs, newest first.
+  - `GET /orgs/{org}/ai/runs/{run_id}` (`evidence.read`):
+    - status, error code, `resume_at`, deadline, provider, model, served model, `prompt_version`, `context_stats`, usage, cost (`estimated` flag), metrics, flags, children summaries;
+    - when completed, the output read model (`service_outputs.py`, from the stored body, `verification.claims` and `ai_citations` rows): sections with claim status; citations with status, reason, kind, `ref_id`, `job_id` and a server-built **internal** deep-link descriptor `{route: "pcap"|"malware"|"evidence"|"investigation", job_id, tab, ref}` for verified ones only; and the display text with pseudonyms reversed (from the run tree's map) unless `?pseudonyms=keep`;
+    - `canary_leak` runs never return the body;
+    - refused runs return the category.
+  - `GET /orgs/{org}/ai/runs/{run_id}/context` (`evidence.read`): the exact frozen context(s) sent (base and reduce) plus `context_sha256`; `?reveal=true` adds the pseudonym map.
+  - `GET /orgs/{org}/ai/usage` (`org.read`): today's tokens and cost per provider from `ai_runs.usage` (DB), alongside the budget and ceilings.
+- **Schemas:**
+  - `api_key` is write-only (excluded from every response model; validators never echo it);
+  - the output read model has **no free-form URL field**;
+  - error codes are stable strings;
+  - typed OpenAPI for the output sections, citations and context items.
+- **Contracts:** the parent regenerates `packages/contracts` after the group-B merge.
+
+## Implementation Steps
+1. Repository and service for providers (seal with the public key only; catalog from `catalog.py`; availability from `availability.py`) and settings; routes; tests:
+   - RBAC (analyst or viewer PUT → 403; viewer GET without secrets);
+   - terms and privacy acknowledgements;
+   - the sentinel key absent from responses, audit and caplog (including 422 bodies);
+   - replace bumps the version; remove keeps the floor; concurrent PUTs serialize;
+   - mock unavailable in prod; gemini unavailable without billing; model allowlist;
+   - budget ceilings.
+2. `runs.py` (`create_run`, `dispatch`) and the run routes with tests:
+   - creation and dedupe; regenerate; caps under concurrency (global lock test); rate limit; publish failure → 202;
+   - incident creates children;
+   - a disabled org → 409; preview refused when disabled;
+   - the audit row has no context text (scan for seeded field values).
+3. The output read model (`service_outputs.py`) with tests:
+   - unsupported claims are marked; deep links only for verified citations;
+   - pseudonyms reversed vs kept; a canary-leak body is never returned; refused category.
+4. The context viewer and usage routes.
+5. `idor_cases_ai.py`: the AI cases and a victim extender (provider config, settings, a run with context); `test_idor_routes.py` passes in this lane (the timeline case lives in phase 4's module and is checked at the merge); `test_ai_api_rbac.py` role matrix. Builder-dependent tests monkeypatch `fake_build_run` / `fake_preview` from `tests/ai_doubles.py` over the stub (RT12).
+
+## Success Criteria
+- [ ] The IDOR and RLS enumerators cover every AI route and table, and they pass.
+- [ ] No response, audit detail, error envelope or log line contains the sentinel key, the pseudonym map (unless `reveal`), or context text in audit.
+- [ ] A run request commits the run, index, inputs, refs and audit atomically; caps and dedupe hold under concurrency.
+- [ ] The read model never exposes a link for an unverified or invalid citation, and never returns a canary-leak body.
+
+## Risk Assessment
+- **Preview as a data-exfil or DoS path.** It is behind the same opt-in, permission and per-user limit, with no persistence.
+- **Pseudonym reversal leaks internal names to viewers.** Members can already read the same rows; reversal uses the run's own map only, never across orgs.
+- **Building a large context inside the request** holds a DB session. The caps bound the work; measure p95 and, if it is too slow, note it for phase 11 (async build is out of scope).
