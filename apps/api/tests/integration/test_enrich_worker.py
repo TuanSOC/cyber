@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
 
+import httpx
 import pytest
 import pytest_asyncio
 from sqlalchemy import func, select, update
@@ -265,6 +266,86 @@ async def test_slice_budget_republishes_to_the_tail() -> None:
     while (await w.state(run_id))[0] != "completed":
         await w.slice(run_id)
     assert sum(w.sink.calls.values()) == len(values)
+
+
+@dataclass
+class LateFaults:
+    """Answers the first `fails` lookups of every `hitflaky*` value with a 500 that lands
+    `delay_s` into the call (near the end of a 1 s slice); everything else goes to the sink."""
+
+    sink: MockSink
+    fails: int
+    delay_s: float = 0.7
+    calls: int = 0
+
+    async def __call__(self, request: httpx.Request) -> httpx.Response:
+        if "hitflaky" not in request.url.raw_path.decode():
+            return await self.sink(request)
+        self.calls += 1
+        if self.calls > self.fails:
+            return await self.sink(request)
+        await asyncio.sleep(self.delay_s)
+        return httpx.Response(500, json={})
+
+
+async def _late_faults_world(fails: int) -> tuple[World, LateFaults]:
+    w = await _world(settings=get_settings().model_copy(update={"ti_slice_s": 1}))
+    faults = LateFaults(w.sink, fails)
+    w.deps.transport = SafeTransport(faults)
+    # Full backoff (0.5 s, then 1 s): 0.7 s + 0.5 s always crosses the 1 s slice end.
+    w.deps.jitter = lambda: 1.0
+    return w, faults
+
+
+async def test_5xx_near_the_slice_end_stays_pending_for_the_next_slice() -> None:
+    w, faults = await _late_faults_world(fails=1)
+    run_id = await w.run("hitflaky.example.com")
+    await w.slice(run_id)
+    # The retry's backoff would cross the slice end: no final error, the item waits.
+    assert (await w.items(run_id))["hitflaky.example.com"] == ("pending", None, None)
+    assert await w.results(run_id) == {}
+    assert (await w.state(run_id))[0] == "running"
+    assert w.published == [TiRunMessage(run_id=run_id, org_id=w.t.org_id)]
+    await w.slice(run_id)  # the next slice makes the retry
+    assert (await w.state(run_id))[0] == "completed"
+    row = (await w.results(run_id))["hitflaky.example.com"]
+    assert (row.status, row.found) == ("ok", True)
+    assert (await w.items(run_id))["hitflaky.example.com"] == ("done", None, row.id)
+    assert faults.calls == 2
+    assert w.deps.carried == {}
+    await w.slice(run_id)  # redelivered after the end: no extra call, no second row
+    assert faults.calls == 2 and len(await w.results(run_id)) == 1
+
+
+async def test_carried_over_retries_still_end_after_three_attempts() -> None:
+    w, faults = await _late_faults_world(fails=99)
+    run_id = await w.run("hitflaky.example.com")
+    slices = 0
+    while (await w.state(run_id))[0] not in ("completed", "partial", "failed"):
+        assert slices < 5, "the item kept being carried over"
+        await w.slice(run_id)
+        slices += 1
+    assert (slices, faults.calls) == (3, 3)  # one attempt per slice, 3 in total
+    row = (await w.results(run_id))["hitflaky.example.com"]
+    assert (row.status, row.error_code) == ("error", "http_5xx")
+    assert w.deps.carried == {}
+
+
+async def test_carried_over_item_still_ends_partial_at_the_deadline() -> None:
+    w, faults = await _late_faults_world(fails=99)
+    run_id = await w.run("hit.example.com", "hitflaky.example.com")
+    await w.slice(run_id)
+    assert (await w.items(run_id))["hitflaky.example.com"][0] == "pending"
+    await _expire_deadline(run_id, w.t.org_id, timedelta(seconds=1))
+    await w.slice(run_id)
+    status, index_status, summary = await w.state(run_id)
+    assert (status, index_status) == ("partial", "partial")
+    items = await w.items(run_id)
+    assert items["hitflaky.example.com"][:2] == ("abandoned", "deadline")
+    assert items["hit.example.com"][0] == "done"
+    assert "hitflaky.example.com" not in await w.results(run_id)
+    assert summary["ended_by"] == "deadline"
+    assert faults.calls == 1
 
 
 async def test_token_far_away_waits_and_resumes() -> None:

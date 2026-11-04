@@ -221,15 +221,15 @@ Resilience under synthetic faults, not provider quality (RT24): 600 lookups over
 | AbuseIPDB | 100 | 0.970 | 3 |
 | URLhaus | 100 | 0.970 | 3 |
 | MalwareBazaar | 100 | 0.990 | 1 |
-| OTX | 100 | 0.980 | 2 |
+| OTX | 100 | 0.970 | 3 |
 | MISP | 100 | 0.970 | 3 |
-| **All** | **600** | **0.980** | **12** |
+| **All** | **600** | **0.978** | **13** |
 
 - **Eligibility:** 245 ineligible values were submitted and skipped; 0 reached a provider.
 - **Abandoned:** none (0 rate_limited, 0 quota_exhausted, 0 deadline).
-- **Latency:** 730 requests; virtual p95 per request 1.08 s, p95 time to answer 59.9 s (429 cooldowns). The pass took 29.5 virtual minutes, paced by VirusTotal's 4/min.
-- **Cache (2nd pass):** 588 of 600 served from cache (0.980), i.e. every `ok` / `not_found` answer.
-- Results vary by about ±1 item between runs (task timing). Full report: `plans/reports/ti-metric-261105.md`.
+- **Latency:** 729 requests; virtual p95 per request 1.08 s, p95 time to answer ~59 s (429 cooldowns). The pass took 29.5 virtual minutes, paced by VirusTotal's 4/min.
+- **Cache (2nd pass):** 587 of 600 served from cache (0.978), i.e. every `ok` / `not_found` answer.
+- Counts are identical from run to run (a retry that would cross a slice's end waits for the next slice instead of becoming an error); only slice counts and time to answer move with task timing. Full report: `plans/reports/ti-metric-261105.md`.
 
 ## Limitations
 

@@ -13,7 +13,11 @@
    (unsealed once per provider and slice, lazily re-sealed under the active kid), the provider
    call (up to 3 attempts for timeouts / 5xx / transport errors, full-jitter backoff), and
    one transaction inserting the `ti_results` row (ON CONFLICT DO NOTHING) and marking the
-   item `done`. Concurrency: <= 4 per provider, <= 16 per slice;
+   item `done`. A retry whose backoff would cross the slice's end (or a halted slice) leaves
+   the item `pending` for the next slice instead of writing a final error; the attempts
+   already spent are carried in process memory (`Deps.carried`), so a slice boundary never
+   grants fresh attempts (only a 429's wait does), and the run deadline bounds the rest.
+   Concurrency: <= 4 per provider, <= 16 per slice;
 6. a daily cap -> that provider's pending items `abandoned/quota_exhausted`, cooldown until
    00:00 UTC;
 7. 401/403 -> `provider.verify` once inline (RT23): only a failed verify sets
@@ -36,6 +40,7 @@ key, a header, a provider body or an IOC value (RT11).
 import asyncio
 import base64
 import contextlib
+import enum
 import logging
 import random
 import secrets
@@ -106,6 +111,8 @@ MAX_ATTEMPTS = 3
 BACKOFF_BASE_S = 0.5
 BACKOFF_CAP_S = 4.0
 GLOBAL_CONCURRENCY = 16
+# Bound on `Deps.carried` (items left pending mid-retry); the oldest entries go first.
+CARRIED_MAX = 10_000
 HARD_GRACE_S = 25.0
 RESUME_BATCH = 100
 REDISPATCH_AFTER = timedelta(minutes=2)
@@ -117,6 +124,8 @@ RETRYABLE = frozenset(
 QUOTA_STRIKES: dict[ProviderName, int] = {ProviderName.VIRUSTOTAL: 3}
 
 Publish = Callable[[TiRunMessage], Awaitable[None]]
+# (run_id, provider, ioc_key) of an item left pending mid-retry -> failed attempts so far.
+CarryKey = tuple[uuid.UUID, str, str]
 
 
 def check_startup(settings: Settings) -> None:
@@ -172,6 +181,10 @@ class Deps:
     transport: httpx.AsyncBaseTransport | None = None
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
     jitter: Callable[[], float] = random.random
+    # Failed attempts of items carried over to a later slice. Process memory, because
+    # `ti_run_items` has no attempt column: a restart only re-grants the attempts, and the
+    # run deadline still ends the run.
+    carried: dict[CarryKey, int] = field(default_factory=dict)
 
 
 _deps: Deps | None = None
@@ -240,6 +253,14 @@ class _Config:
             sealed=sealed,
             limits=dict(row.limits or {}),
         )
+
+
+class _Next(enum.Enum):
+    """What a lane worker does with an item after one pass over it."""
+
+    DONE = "done"  # an outcome was written (or the item was abandoned)
+    AGAIN = "again"  # still pending: put it back on the lane (the lane usually just stopped)
+    LATER = "later"  # still pending, but not again in this slice (a deferred retry)
 
 
 @dataclass(frozen=True)
@@ -522,11 +543,11 @@ class _Slice:
             # the DB sessions (one per item at a time; the pool holds 20, the renewer one).
             async with self.global_sem:
                 try:
-                    again = await self._process(lane, item)
+                    after = await self._process(lane, item)
                 except Exception as exc:  # noqa: BLE001 - contained per item, never escapes
-                    again = False
+                    after = _Next.DONE
                     await self._contain(lane, item, exc)
-            if again:
+            if after is _Next.AGAIN:
                 lane.items.appendleft(item)
 
     async def _contain(self, lane: _Lane, item: _Item, exc: Exception) -> None:
@@ -546,30 +567,42 @@ class _Slice:
             )
             self.halted = True
 
-    async def _process(self, lane: _Lane, item: _Item) -> bool:
-        """Handle one item; True to put it back (still pending, try again later)."""
+    async def _process(self, lane: _Lane, item: _Item) -> _Next:
+        """Handle one item and say what the lane worker does with it next."""
         lane.in_flight.add(item.ioc.ioc_key)
         try:
-            pending = await self._attempt(lane, item)
+            after = await self._attempt(lane, item)
         finally:
             lane.in_flight.discard(item.ioc.ioc_key)
-        if pending and lane.abandoned is not None:
+        if after is not _Next.DONE and lane.abandoned is not None:
             await self._abandon_items(lane, lane.abandoned, only=item)
-            return False
-        return pending
+            return _Next.DONE
+        return after
 
-    async def _attempt(self, lane: _Lane, item: _Item) -> bool:
-        """True while the item has no outcome yet (it stays pending)."""
+    def _carry_key(self, item: _Item) -> CarryKey:
+        return (self.run_id, item.provider.value, item.ioc.ioc_key)
+
+    def _carry(self, item: _Item, attempts: int) -> None:
+        """Remember the failed attempts of an item left pending mid-retry."""
+        if attempts <= 0:
+            return
+        carried = self.deps.carried
+        while len(carried) >= CARRIED_MAX:
+            carried.pop(next(iter(carried)))
+        carried[self._carry_key(item)] = attempts
+
+    async def _attempt(self, lane: _Lane, item: _Item) -> _Next:
+        """One pass over an item: an outcome (DONE), or still pending (AGAIN / LATER)."""
+        # Failed attempts already spent on it by earlier slices of this process (else 0).
+        attempt = self.deps.carried.pop(self._carry_key(item), 0)
         if await self._cache_hit(item):
-            return False
-        attempt = 0
+            return _Next.DONE
         while True:
-            if not await self._acquire(lane):
-                return True
-            if not await self._ensure_client(lane):
-                return True
+            if not await self._acquire(lane) or not await self._ensure_client(lane):
+                self._carry(item, attempt)
+                return _Next.AGAIN
             if lane.adapter is None or lane.client is None:
-                return False
+                return _Next.DONE
             started = time.monotonic()
             try:
                 result = await lane.adapter.lookup(lane.client, item.ioc)
@@ -577,22 +610,28 @@ class _Slice:
                 latency = int((time.monotonic() - started) * 1000)
                 if exc.kind in RETRYABLE and attempt + 1 < MAX_ATTEMPTS:
                     delay = self.deps.jitter() * min(BACKOFF_CAP_S, BACKOFF_BASE_S * 2**attempt)
-                    if time.monotonic() + delay < self.soft_end and not self.halted:
-                        attempt += 1
-                        await self.deps.sleep(delay)
-                        continue
-                return await self._on_error(lane, item, exc, latency)
+                    attempt += 1
+                    if self.halted or time.monotonic() + delay >= self.soft_end:
+                        # Not a final error: a later slice makes this retry (the slice stays
+                        # short, RT6; the run deadline still bounds the item).
+                        self._carry(item, attempt)
+                        return _Next.LATER
+                    await self.deps.sleep(delay)
+                    continue
+                # A 429 / quota answer ends the pass; its wait starts a fresh retry budget.
+                pending = await self._on_error(lane, item, exc, latency)
+                return _Next.AGAIN if pending else _Next.DONE
             except Exception as exc:  # noqa: BLE001 - an adapter bug never kills the slice
                 latency = int((time.monotonic() - started) * 1000)
                 log.warning("ti %s adapter raised %s", lane.provider.value, type(exc).__name__)
                 await self._record(item, _error_result(lane.provider, "internal_error"), latency)
-                return False
+                return _Next.DONE
             latency = int((time.monotonic() - started) * 1000)
             if result.provider is not lane.provider:
                 result = _error_result(lane.provider, "internal_error")
             await self._record(item, result, latency)
             await self._clear_strikes(lane)
-            return False
+            return _Next.DONE
 
     async def _clear_strikes(self, lane: _Lane) -> None:
         if lane.strikes_clear or lane.provider not in QUOTA_STRIKES:
