@@ -24,20 +24,42 @@ from app.modules.audit.service import sanitize
         "x-apikey",
         "X-OTX-API-KEY",
         "key",
+        "keys",
         "provider_key",
         "misp_key",
+        # Review M4: normalized before matching (camelCase, dashes, spaces, case).
+        "X-Mock-Key",
+        "mock-key",
+        "privateKey",
+        "mispKey",
+        "accessKey",
+        "access key",
+        "credentials",
+        "credential",
+        "passphrase",
+        "cookie",
+        "Set-Cookie",
+        "X-OTX-API-KEY",
+        "x-otx-api-key",
+        "Auth-Key",
+        "authKey",
+        "Private.Key",
     ],
 )
 def test_sensitive_keys_are_dropped(key: str) -> None:
     assert sanitize({key: "SENTINEL", "provider": "otx"}) == {"provider": "otx"}
 
 
-@pytest.mark.parametrize("key", ["key_last4", "key_kid", "key_version", "ioc_key"])
+@pytest.mark.parametrize(
+    "key", ["key_last4", "key_kid", "key_version", "ioc_key", "keyLast4", "ioc-key"]
+)
 def test_key_metadata_is_allowlisted(key: str) -> None:
     assert sanitize({key: "v"}) == {key: "v"}
 
 
-@pytest.mark.parametrize("key", ["keys", "keyword", "monkey_business", "keyring", "provider"])
+@pytest.mark.parametrize(
+    "key", ["keyword", "monkey_business", "keyring", "provider", "turkey", "hockey_score"]
+)
 def test_ordinary_keys_survive(key: str) -> None:
     assert sanitize({key: "v"}) == {key: "v"}
 

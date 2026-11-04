@@ -454,3 +454,49 @@ async def test_orm_round_trip_counts() -> None:
     async with tenant_session(a.org_id, a.owner_id) as s:
         for model in (*TENANT_MODELS, TiRunIndex):
             assert (await s.execute(select(func.count()).select_from(model))).scalar_one() == 1
+
+
+# --- migration 0010 (review L7, L8) ------------------------------------------------------
+
+
+async def test_app_role_cannot_delete_provider_configs() -> None:
+    t = await seed_tenant("alpha")
+    await seed_config(t)
+    with pytest.raises(DBAPIError, match="permission denied"):
+        async with tenant_session(t.org_id, t.owner_id) as s:
+            await s.execute(text("DELETE FROM ti_provider_configs"))
+    # Removing a key is an UPDATE that keeps the key_version floor.
+    async with tenant_session(t.org_id, t.owner_id) as s:
+        await s.execute(
+            text(
+                "UPDATE ti_provider_configs SET enabled = false, key_kid = NULL, key_epk = NULL, "
+                "key_nonce = NULL, key_ct = NULL, key_last4 = NULL"
+            )
+        )
+        assert (await s.execute(text("SELECT key_version FROM ti_provider_configs"))).scalar() == 1
+
+
+async def test_run_index_cannot_name_another_org() -> None:
+    a = await seed_tenant("alpha")
+    b = await seed_tenant("bravo")
+    run_id = uuid.uuid4()
+    async with tenant_session(a.org_id, a.owner_id) as s:
+        s.add(
+            TiEnrichmentRun(
+                id=run_id,
+                organization_id=a.org_id,
+                scope="manual",
+                requested_by=a.owner_id,
+                providers=["mock"],
+                deadline_at=datetime.now(UTC),
+            )
+        )
+    with pytest.raises(DBAPIError, match="fk_ti_run_index_run_id_organization_id"):
+        async with tenant_session(b.org_id, b.owner_id) as s:
+            await s.execute(
+                text(
+                    "INSERT INTO ti_run_index (run_id, organization_id, status, deadline_at) "
+                    "VALUES (:r, :o, 'queued', now())"
+                ),
+                {"r": run_id, "o": b.org_id},
+            )

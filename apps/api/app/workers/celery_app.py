@@ -5,7 +5,7 @@ Imported by the API only to enqueue (`send_task`); run as the ingest worker with
 """
 
 from celery import Celery
-from cyberlab_jobs import REAP, Queues
+from cyberlab_jobs import REAP, TI_RESUME, Queues
 
 from app.core.config import get_settings
 
@@ -42,6 +42,14 @@ celery_app.conf.update(
             "task": REAP,
             "schedule": 60.0,
             "options": {"queue": queues.ingest, "expires": 55},
-        }
+        },
+        # Threat intel (M4, RT8): re-send due waiting runs and lost messages to the enrich
+        # worker (no Celery ETA/countdown anywhere). Expires before the next tick.
+        "resume-ti-runs": {
+            "task": TI_RESUME,
+            "schedule": 30.0,
+            "kwargs": {"message": {}},
+            "options": {"queue": queues.enrich, "expires": 25},
+        },
     },
 )

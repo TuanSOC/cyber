@@ -50,6 +50,10 @@ TI_TABLES = (
     "ti_run_index",
     "ti_results",
 )
+RUN_INDEX_FKS = (
+    "SELECT conname::text FROM pg_constraint WHERE conrelid = to_regclass('ti_run_index') "
+    "AND contype = 'f' ORDER BY conname"
+)
 TI_REGCLASSES = "SELECT " + ", ".join(f"to_regclass('{t}')::text" for t in TI_TABLES)
 TI_FUNCTIONS = (
     "SELECT proname::text FROM pg_proc WHERE proname IN "
@@ -65,6 +69,11 @@ async def _ti_tables(engine: AsyncEngine) -> list[object]:
 async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine) -> None:
     await get_engine().dispose()
     try:
+        _alembic("downgrade", "0009")  # 0010 (review L7/L8) reverts cleanly
+        assert await _scalars(owner_engine, RUN_INDEX_FKS) == [
+            "fk_ti_run_index_organization_id_organizations",
+            "fk_ti_run_index_run_id_ti_enrichment_runs",
+        ]
         _alembic("downgrade", "0008")  # 0009 (threat intel) goes away completely
         assert await _ti_tables(owner_engine) == []
         assert await _scalars(owner_engine, TI_FUNCTIONS) == []
@@ -82,8 +91,12 @@ async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine)
         _alembic("upgrade", "head")  # never leave the shared test database half-migrated
         await get_engine().dispose()
 
-    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0009"]
+    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0010"]
     assert await _ti_tables(owner_engine) == list(TI_TABLES)
+    assert await _scalars(owner_engine, RUN_INDEX_FKS) == [
+        "fk_ti_run_index_organization_id_organizations",
+        "fk_ti_run_index_run_id_organization_id_ti_enrichment_runs",
+    ]
     assert await _scalars(owner_engine, TI_FUNCTIONS) == [
         "ti_key_version_guard",
         "ti_run_transition",

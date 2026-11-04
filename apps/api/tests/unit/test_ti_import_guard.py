@@ -1,12 +1,15 @@
 """Only the enrich worker may reach providers, the provider HTTP client and unsealing (M4).
 
 The API seals keys and plans runs; it never calls a provider and never opens a sealed key.
-So the adapter modules and the registry (`threat_intel.providers.*` except the shared
-`providers.base`), `threat_intel.http` and `threat_intel.unseal` may only be imported from
-`app/workers/enrich*.py`, and from inside `threat_intel/providers/` itself (adapters use the
-HTTP client; the registry imports adapters). Every import form counts: `import x`,
-`import x as y`, `from pkg import x`, relative imports, and `importlib.import_module("x")`
-or `__import__("x")` with a constant name (RT21).
+- `threat_intel.unseal` may only be imported from `app/workers/enrich*.py`: nothing else is
+  ever exempt for it, not even the adapters (review L5).
+- The adapter modules and the registry (`threat_intel.providers.*` except the shared
+  `providers.base`) and `threat_intel.http` may be imported from `app/workers/enrich*.py`
+  and from the adapter and registry modules themselves (adapters use the HTTP client; the
+  registry imports adapters), but not from `providers/base.py` or `providers/__init__.py`,
+  which the API imports too.
+Every import form counts: `import x`, `import x as y`, `from pkg import x`, relative imports,
+and `importlib.import_module("x")` or `__import__("x")` with a constant name (RT21).
 """
 
 import ast
@@ -16,8 +19,13 @@ import pytest
 
 APP = Path(__file__).resolve().parents[2] / "app"
 TI = "app.modules.threat_intel"
-FORBIDDEN_EXACT = {f"{TI}.http", f"{TI}.unseal", f"{TI}.providers"}
+UNSEAL = f"{TI}.unseal"
+FORBIDDEN_EXACT = {f"{TI}.http", UNSEAL, f"{TI}.providers"}
 SHARED = {f"{TI}.providers.base"}
+# Imported by the API as well: no exemption at all.
+SHARED_FILES = frozenset(
+    {"modules/threat_intel/providers/base.py", "modules/threat_intel/providers/__init__.py"}
+)
 
 
 def forbidden(module: str) -> bool:
@@ -63,16 +71,23 @@ def imported_modules(source: str, rel: str) -> list[tuple[int, str]]:
     return found
 
 
-def allowed_importer(rel: str) -> bool:
-    return (rel.startswith("workers/enrich") and rel.endswith(".py")) or rel.startswith(
-        "modules/threat_intel/providers/"
-    )
+def _is_unseal(module: str) -> bool:
+    return module == UNSEAL or module.startswith(f"{UNSEAL}.")
+
+
+def allowed_importer(rel: str, module: str) -> bool:
+    if rel.startswith("workers/enrich") and rel.endswith(".py"):
+        return True
+    adapter_side = rel.startswith("modules/threat_intel/providers/") and rel not in SHARED_FILES
+    return adapter_side and not _is_unseal(module)
 
 
 def offenders(source: str, rel: str) -> list[str]:
-    if allowed_importer(rel):
-        return []
-    return [f"{rel}:{line} {mod}" for line, mod in imported_modules(source, rel) if forbidden(mod)]
+    return [
+        f"{rel}:{line} {mod}"
+        for line, mod in imported_modules(source, rel)
+        if forbidden(mod) and not allowed_importer(rel, mod)
+    ]
 
 
 def test_only_the_enrich_worker_imports_providers_http_and_unseal() -> None:
@@ -125,5 +140,35 @@ def test_the_enrich_worker_and_adapters_may_import_them() -> None:
     source = "from app.modules.threat_intel.unseal import open_sealed\nfrom .. import http"
     assert offenders(source, "workers/enrich.py") == []
     assert offenders(source, "workers/enrich_tasks.py") == []
-    assert offenders(source, "modules/threat_intel/providers/virustotal.py") == []
     assert offenders(source, "workers/ingest.py")
+    adapter = "from .. import http\nfrom . import registry\nfrom .registry import create"
+    assert offenders(adapter, "modules/threat_intel/providers/virustotal.py") == []
+    assert offenders(adapter, "modules/threat_intel/providers/registry.py") == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from app.modules.threat_intel.unseal import open_sealed",
+        "from .. import unseal",
+        "import app.modules.threat_intel.unseal as u",
+    ],
+)
+def test_adapters_may_never_import_unseal(source: str) -> None:
+    assert offenders(source, "modules/threat_intel/providers/virustotal.py")
+    assert offenders(source, "modules/threat_intel/providers/registry.py")
+
+
+@pytest.mark.parametrize("rel", sorted(SHARED_FILES))
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from .. import http",
+        "from . import registry",
+        "from .registry import create",
+        "from . import mock",
+        "from app.modules.threat_intel.unseal import open_sealed",
+    ],
+)
+def test_the_shared_provider_modules_get_no_exemption(rel: str, source: str) -> None:
+    assert offenders(source, rel)

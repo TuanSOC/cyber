@@ -66,8 +66,22 @@ async function healthProblems(base) {
   return ['"db":"ok"', '"redis":"ok"', '"minio":"ok"'].every((s) => health.includes(s)) ? [] : [health];
 }
 
+// A crash-looping worker can look "running" between restarts: let it settle, then require
+// a running state and no restart at all (review H1: the prod enrich-worker crash-looped).
+async function workerProblems(service) {
+  await new Promise((resolve) => setTimeout(resolve, 15_000));
+  const id = spawnSync(`${COMPOSE_PROD} ps -q ${service}`, { shell: true }).stdout.toString().trim();
+  if (!id) return [`${service}: no container`];
+  const state = spawnSync(`docker inspect -f "{{.State.Status}} {{.RestartCount}}" ${id}`, { shell: true })
+    .stdout.toString()
+    .trim();
+  return state === "running 0" ? [] : [`${service}: ${state} (expected "running 0")`];
+}
+
 async function verifyProd() {
+  run("Prod enrich-worker env: matches the tested fixture", "node scripts/check-enrich-env.mjs");
   run("Prod stack up", `${COMPOSE_PROD} up -d --build --wait --wait-timeout 400`);
+  await probe("Prod enrich-worker: running, never restarted", () => workerProblems("enrich-worker"));
   // The prod-like stack uses Caddy's internal CA: skip certificate checks for these probes.
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
   await probe("Prod health", () => healthProblems("https://localhost:8443"));
@@ -100,6 +114,10 @@ try {
   run(
     "API: ruff, format, mypy --strict, pytest",
     'docker compose --profile test run --rm api-test sh -c "uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest -q"',
+  );
+  run(
+    "Enrich worker network: only Postgres, the broker and egress (review M2)",
+    "docker compose --profile test run --rm --no-deps -e PYTHONDONTWRITEBYTECODE=1 enrich-worker-test python -m pytest --noconftest -q -p no:cacheprovider tests/container/test_enrich_network.py",
   );
   run("Workers (pcap, static, kit): ruff, format, mypy, sandbox + engine tests", "pnpm -s test:workers");
   run(

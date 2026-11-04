@@ -1,10 +1,13 @@
 import base64
+import json
+import os
+from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
-from app.core.config import Settings
+from app.core.config import DEV_SEAL_PUBLIC_KEYS, Settings
 from app.modules.threat_intel.catalog import CATALOG
 from app.modules.threat_intel.providers.base import ProviderName
 
@@ -34,6 +37,13 @@ ENRICH = {
     "minio_access_key": None,
     "minio_secret_key": None,
 }
+
+
+@pytest.fixture(autouse=True)
+def _no_env_seal_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    # pydantic-settings deep-merges dict settings across sources: the api-test env's dev
+    # public key would be merged into every `ti_seal_public_keys` passed here.
+    monkeypatch.delenv("TI_SEAL_PUBLIC_KEYS", raising=False)
 
 
 def test_prod_requires_secure_cookies() -> None:
@@ -160,3 +170,85 @@ def test_ceiling_defaults_to_the_catalog_and_can_be_overridden() -> None:
     assert settings.ti_ceiling(ProviderName.OTX) == CATALOG[ProviderName.OTX].ceilings
     with pytest.raises(ValidationError):
         Settings(**BASE, ti_ceilings={"nope": {"per_minute": 1}})
+
+
+# --- review fixes (H1, L6) ---------------------------------------------------------------
+
+# The prod enrich-worker env exactly as `docker compose -f docker-compose.yml -f
+# docker-compose.prod.yml config enrich-worker` renders it (passwords and the site's seal
+# key masked); `scripts/check-enrich-env.mjs` keeps it in sync (verify:prod).
+PROD_ENRICH_ENV = (
+    Path(__file__).resolve().parents[1] / "fixtures/compose/enrich-worker.prod.env.json"
+)
+
+
+def _only_env(monkeypatch: pytest.MonkeyPatch, env: dict[str, str]) -> None:
+    for name in list(os.environ):
+        if name.lower() in Settings.model_fields:
+            monkeypatch.delenv(name)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+
+
+def test_the_prod_enrich_worker_env_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    env = json.loads(PROD_ENRICH_ENV.read_text(encoding="utf-8"))
+    assert "COOKIE_SECURE" not in env and "JWT_SECRET" not in env
+    _only_env(monkeypatch, env)
+    settings = Settings()
+    assert (settings.env, settings.process_role) == ("prod", "enrich")
+    assert settings.cookie_secure is False  # irrelevant to a worker: not required
+    assert settings.ti_mock_enabled is False
+    assert settings.ti_seal_private_keys_file == "/run/secrets/ti_seal_private"
+    for name in ("jwt_secret", "redis_url", "minio_endpoint", "minio_secret_key"):
+        assert getattr(settings, name) is None
+
+
+def test_the_cookie_guard_still_holds_for_the_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    env = json.loads(PROD_ENRICH_ENV.read_text(encoding="utf-8"))
+    _only_env(
+        monkeypatch,
+        {
+            **env,
+            "PROCESS_ROLE": "api",
+            "JWT_SECRET": "x" * 48,
+            "REDIS_URL": "redis://redis:6379/0",
+            "MINIO_ENDPOINT": "minio:9000",
+            "MINIO_ACCESS_KEY": "a",
+            "MINIO_SECRET_KEY": "b",
+            "TI_SEAL_PRIVATE_KEYS_FILE": "",
+        },
+    )
+    with pytest.raises(ValidationError, match="COOKIE_SECURE"):
+        Settings()
+
+
+def test_prod_ingest_needs_no_cookie_flag() -> None:
+    settings = Settings(**BASE, **PROD_TI, env="prod", process_role="ingest", cookie_secure=False)
+    assert settings.process_role == "ingest"
+
+
+@pytest.mark.parametrize("kid", ["DEV-1", "Dev-prod", "dev-x"])
+def test_prod_refuses_dev_kids_in_any_case(kid: str) -> None:
+    values = {**PROD_TI, "ti_seal_active_kid": kid, "ti_seal_public_keys": {kid: PUBLIC}}
+    with pytest.raises(ValidationError, match="dev- seal keys"):
+        Settings(**BASE, **values, env="prod", cookie_secure=True)
+
+
+def test_prod_refuses_the_committed_dev_public_key_under_any_kid() -> None:
+    [dev_key] = DEV_SEAL_PUBLIC_KEYS
+    values = {**PROD_TI, "ti_seal_public_keys": {"prod-1": dev_key}}
+    with pytest.raises(ValidationError, match="committed dev seal key"):
+        Settings(**BASE, **values, env="prod", cookie_secure=True)
+    extra = {**PROD_TI, "ti_seal_public_keys": {"prod-1": PUBLIC, "old": dev_key}}
+    with pytest.raises(ValidationError, match="committed dev seal key"):
+        Settings(**BASE, **extra, env="prod", cookie_secure=True)
+    # Dev keeps working with it.
+    assert Settings(**BASE, ti_seal_active_kid="dev-1", ti_seal_public_keys={"dev-1": dev_key})
+
+
+@pytest.mark.parametrize("kid", ["bad kid", "a/b", "x" * 65, "ü"])
+def test_kids_must_match_the_seal_pattern(kid: str) -> None:
+    with pytest.raises(ValidationError, match="TI_SEAL_ACTIVE_KID"):
+        Settings(**BASE, ti_seal_active_kid=kid, ti_seal_public_keys={"k1": PUBLIC})
+    with pytest.raises(ValidationError, match="invalid kid"):
+        Settings(**BASE, ti_seal_public_keys={kid: PUBLIC})

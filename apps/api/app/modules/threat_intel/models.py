@@ -1,4 +1,4 @@
-"""Threat intel tables (migration 0009, frozen in M4 phase 1).
+"""Threat intel tables (migration 0009, frozen in M4 phase 1; 0010 hardens two grants/FKs).
 
 - `ti_provider_configs`: one row per (org, provider); the sealed key columns are written by
   the API (seal only) and opened by the enrich worker only. `key_version` is monotonic (DB
@@ -166,13 +166,17 @@ class TiRunIndex(Base):
 
     __tablename__ = "ti_run_index"
     __table_args__ = (
+        # Composite (migration 0010, review L8): an index row can only name its run's org.
+        ForeignKeyConstraint(
+            ["run_id", "organization_id"],
+            ["ti_enrichment_runs.id", "ti_enrichment_runs.organization_id"],
+            ondelete="CASCADE",
+        ),
         CheckConstraint(_in("status", RUN_STATUSES), name="status"),
         Index(None, "status", "resume_at"),
     )
 
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("ti_enrichment_runs.id", ondelete="CASCADE"), primary_key=True
-    )
+    run_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
     status: Mapped[str] = mapped_column(String(16))
     resume_at: Mapped[datetime | None]

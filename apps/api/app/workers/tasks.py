@@ -54,3 +54,4 @@ def ingest_event(message: dict[str, Any]) -> None:
 @celery_app.task(name=REAP)  # type: ignore[untyped-decorator]
 def reap() -> None:
     run(reaper.reap())
+    run(reaper.reap_ti_runs())

@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.modules.threat_intel.catalog import CATALOG, ProviderLimits
 from app.modules.threat_intel.providers.base import ProviderName
+from app.modules.threat_intel.seal import KID_PATTERN
 
 ProcessRole = Literal["api", "ingest", "enrich"]
 
@@ -20,6 +21,9 @@ ENRICH_FORBIDDEN = (
     "minio_secret_key",
     "redis_url",
 )
+# The committed dev-only seal key pair (infra/ti/dev-seal-private.json, kid dev-1): its
+# private half is public, so prod refuses its public key under any kid (review L6).
+DEV_SEAL_PUBLIC_KEYS = frozenset({"yzkMNEv4XawVLz1SuyMqEqSDdzMc1QpC7ERo9zFe7Gs="})
 RequiredSetting = Literal[
     "jwt_secret", "minio_endpoint", "minio_access_key", "minio_secret_key", "redis_url"
 ]
@@ -160,6 +164,8 @@ class Settings(BaseSettings):
     @classmethod
     def _public_keys(cls, value: dict[str, str]) -> dict[str, str]:
         for kid, encoded in value.items():
+            if not KID_PATTERN.fullmatch(kid):
+                raise ValueError("TI_SEAL_PUBLIC_KEYS has an invalid kid")
             try:
                 raw = base64.b64decode(encoded, validate=True)
             except (binascii.Error, ValueError):
@@ -174,6 +180,13 @@ class Settings(BaseSettings):
     @classmethod
     def _blank_ti_is_unset(cls, value: object) -> object:
         return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("ti_seal_active_kid")
+    @classmethod
+    def _active_kid(cls, value: str | None) -> str | None:
+        if value is not None and not KID_PATTERN.fullmatch(value):
+            raise ValueError("TI_SEAL_ACTIVE_KID must match [A-Za-z0-9._-]{1,64}")
+        return value
 
     @model_validator(mode="after")
     def _role_guards(self) -> Self:
@@ -199,7 +212,9 @@ class Settings(BaseSettings):
     def _prod_guards(self) -> Self:
         if self.env != "prod":
             return self
-        if not self.cookie_secure:
+        # Only the API sets cookies; the workers (ingest, enrich) never receive COOKIE_SECURE
+        # (the prod enrich worker has no such variable at all, review H1).
+        if self.process_role == "api" and not self.cookie_secure:
             raise ValueError("COOKIE_SECURE must be true when ENV=prod")
         placeholders = [
             name
@@ -219,10 +234,24 @@ class Settings(BaseSettings):
             kid = self.ti_seal_active_kid
             if not kid or kid not in self.ti_seal_public_keys:
                 raise ValueError("TI_SEAL_ACTIVE_KID must name a key in TI_SEAL_PUBLIC_KEYS")
-            if kid.startswith("dev-"):
+            if kid.lower().startswith("dev-"):
                 # The committed dev key pair is public: never seal production keys with it.
                 raise ValueError("TI_SEAL_ACTIVE_KID: dev- seal keys are not allowed in prod")
+        if any(_key_bytes(v) in _DEV_KEY_BYTES for v in self.ti_seal_public_keys.values()):
+            raise ValueError(
+                "TI_SEAL_PUBLIC_KEYS: the committed dev seal key is not allowed in prod"
+            )
         return self
+
+
+def _key_bytes(encoded: str) -> bytes:
+    try:
+        return base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError):
+        return b""
+
+
+_DEV_KEY_BYTES = frozenset(_key_bytes(k) for k in DEV_SEAL_PUBLIC_KEYS)
 
 
 @lru_cache

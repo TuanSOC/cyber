@@ -1,4 +1,7 @@
-"""Celery task entry points of the enrich worker (sync) bridging into `enrich.py`."""
+"""Celery task entry points of the enrich worker (sync) bridging into `enrich.py`.
+
+Return values are always None (Celery would log them).
+"""
 
 import asyncio
 import logging
@@ -6,7 +9,7 @@ from collections.abc import Coroutine
 from typing import Any
 
 from celery.signals import worker_init
-from cyberlab_jobs import TI_ENRICH
+from cyberlab_jobs import TI_ENRICH, TI_RESUME, TI_VERIFY
 
 import app.models  # noqa: F401  (register every mapper before the first query)
 from app.core.config import get_settings
@@ -45,3 +48,13 @@ def run[T](coro: Coroutine[Any, Any, T]) -> T:
 @celery_app.task(name=TI_ENRICH)  # type: ignore[untyped-decorator]
 def ti_enrich(message: dict[str, Any]) -> None:
     run(enrich.handle_enrich(message))
+
+
+@celery_app.task(name=TI_RESUME)  # type: ignore[untyped-decorator]
+def ti_resume(message: dict[str, Any] | None = None) -> None:
+    run(enrich.handle_resume(message))
+
+
+@celery_app.task(name=TI_VERIFY)  # type: ignore[untyped-decorator]
+def ti_verify(message: dict[str, Any]) -> None:
+    run(enrich.handle_verify(message))
