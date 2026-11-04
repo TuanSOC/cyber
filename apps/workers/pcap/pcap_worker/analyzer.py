@@ -14,10 +14,13 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from cyberlab_jobs import JobLimits, PcapJobV1
 from cyberlab_jobs.capture import CaptureFormat, capture_format, compression
 from cyberlab_jobs.results import (
+    RECORD_ADAPTER,
+    AlertRecord,
     CaptureStats,
     FlowRecord,
     HostStat,
@@ -29,6 +32,7 @@ from pydantic import BaseModel
 
 from pcap_worker import sandbox
 from pcap_worker.config import tool_versions
+from pcap_worker.detections.run import Detection
 from pcap_worker.engines import capture_info, suricata, zeek
 from pcap_worker.engines.common import RECORD_ERRORS, JsonLines
 from pcap_worker.errors import JobFailed
@@ -220,9 +224,10 @@ class Collected:
     spools: dict[str, Spool]
     truncated: dict[str, bool]
     skipped: Counter[str]
+    detection: Detection
 
 
-def _collect(dirs: sandbox.JobDirs, limits: JobLimits) -> Collected:
+def _collect(dirs: sandbox.JobDirs, job_id: uuid.UUID, limits: JobLimits) -> Collected:
     per_kind = limits.max_records_per_kind
     truncated: dict[str, bool] = {}
     skipped: Counter[str] = Counter()
@@ -230,9 +235,11 @@ def _collect(dirs: sandbox.JobDirs, limits: JobLimits) -> Collected:
     # Flows: one pass, fixed-size heap of the largest flows, statistics over all of them.
     conn = JsonLines(dirs, "conn.log", max_lines=limits.max_flows * 4)
     stats = StatsAccumulator()
+    detection = Detection(job_id, ioc_limit=per_kind)
     heap: list[tuple[int, int, FlowRecord]] = []
     for seq, flow in enumerate(zeek.flows(conn)):
         stats.add(flow)
+        detection.flow(flow)  # detectors see every flow, not just the ones kept
         item = (flow.orig_bytes + flow.resp_bytes, -seq, flow)
         if len(heap) < limits.max_flows:
             heapq.heappush(heap, item)
@@ -273,17 +280,27 @@ def _collect(dirs: sandbox.JobDirs, limits: JobLimits) -> Collected:
         "http": ("http.log", zeek.http),
         "tls": ("ssl.log", lambda source: zeek.tls(source, certs, ja3)),
     }
+    observe: dict[str, Callable[[Any], None]] = {
+        "dns": detection.dns,
+        "http": detection.http,
+        "tls": detection.tls,
+    }
     for kind, (log, parse) in parsers.items():
         source = JsonLines(dirs, log, max_lines=per_kind * 2)
         out = spools[kind] = spool(kind)
         for record in parse(source):
+            observe[kind](record)
             out.add(record)
         truncated[f"{kind}_log"] = source.capped
         skipped[kind] = source.skipped
+    files = JsonLines(dirs, "files.log", max_lines=per_kind * 2)
+    detection.files(files)
+    truncated["files_log"] = files.capped
     for kind, out in spools.items():
         out.finish()
         truncated[kind] = out.truncated
-    return Collected(flows, stats, spools, truncated, skipped)
+    truncated["detector_state"] = detection.capped
+    return Collected(flows, stats, spools, truncated, skipped, detection)
 
 
 def analyze_file(
@@ -299,9 +316,22 @@ def analyze_file(
         raise JobFailed("unparseable_capture", exc.stderr_tail[-200:]) from exc
     errors: list[str] = ["capture_cut_short"] if meta.cut_short else []
     hierarchy = _run_engines(dirs, budget, errors, cut_short=meta.cut_short)
-    got = _collect(dirs, limits)
+    got = _collect(dirs, job_id, limits)
+
+    findings, got.truncated["findings"] = got.detection.findings(limits.max_findings)
+    iocs = got.detection.ioc_records()
+    got.truncated["iocs"] = got.detection.iocs.capped
+    alerts = (
+        record
+        for line in got.spools["alert"].lines()
+        if isinstance(record := RECORD_ADAPTER.validate_json(line), AlertRecord)
+    )
+    timeline = got.detection.timeline(
+        meta.first_ts, meta.last_ts, findings, alerts, limits.max_records_per_kind
+    )
 
     counts = {"flows": got.stats.flows, **{k: s.count for k, s in got.spools.items()}}
+    counts |= {"findings": len(findings), "iocs": len(iocs), "timeline": len(timeline)}
     counts |= {f"skipped_{k}": v for k, v in got.skipped.items() if v}
     capture_stats = CaptureStats(
         packets=meta.packets,
@@ -332,6 +362,8 @@ def analyze_file(
         for kind in ("dns", "http", "tls", "alert"):
             for line in got.spools[kind].lines():
                 writer.write_line(line)
+        for line_model in (*findings, *iocs, *timeline):
+            writer.write(line_model)
     if result.stat().st_size > limits.max_result_bytes:
         raise JobFailed("result_too_large")
     return result
