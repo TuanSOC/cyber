@@ -23,9 +23,12 @@
    `waiting` with `resume_at` (never past the deadline); the lease is released first;
 9. nothing pending: finalize (`threat_intel.lifecycle`);
 10. a 429 whose cooldown ends after the deadline -> the provider's pending items
-   `abandoned/rate_limited`.
+   `abandoned/rate_limited`; VirusTotal's daily-quota 429 looks like its per-minute one, so
+   `QUOTA_STRIKES` consecutive 429s (bursts counted once, any real answer resets the count;
+   per provider and org, on the broker) are treated as an exhausted quota (6.).
 
-`ti.resume` re-sends due runs (RT8) and `ti.verify` checks one provider key. Task return
+`ti.resume` re-sends due runs (RT8) and `ti.verify` checks one provider key (a duplicate
+check of the same stored key within 60 s is skipped, broker SET NX). Task return
 values are always None. Logs carry ids, provider names, error kinds and counts only: never a
 key, a header, a provider body or an IOC value (RT11).
 """
@@ -110,6 +113,8 @@ PUBLISH_TIMEOUT_S = 15.0
 RETRYABLE = frozenset(
     {ProviderErrorKind.TIMEOUT, ProviderErrorKind.HTTP_5XX, ProviderErrorKind.TRANSPORT}
 )
+# Consecutive 429s after which a provider's quota is taken as spent for the day.
+QUOTA_STRIKES: dict[ProviderName, int] = {ProviderName.VIRUSTOTAL: 3}
 
 Publish = Callable[[TiRunMessage], Awaitable[None]]
 
@@ -132,6 +137,8 @@ def check_startup(settings: Settings) -> None:
     derived = base64.b64encode(raw_public(keys[kid].public_key())).decode()
     if published != derived:
         raise RuntimeError(f"TI_SEAL_PUBLIC_KEYS[{kid!r}] does not match the private key file")
+    if settings.ti_misp_insecure_tls:  # dev only: `_prod_guards` refuses it in prod
+        log.warning("TI_MISP_INSECURE_TLS is set: MISP TLS certificates are NOT verified")
 
 
 # --- dependencies (injectable for tests) ---------------------------------------------------
@@ -261,6 +268,8 @@ class _Lane:
     in_flight: set[str] = field(default_factory=set)
     verified: bool = False
     ready_at: float | None = None
+    # False until a real answer cleared this provider's 429 strikes (QUOTA_STRIKES only).
+    strikes_clear: bool = False
 
 
 async def _open_provider(
@@ -279,10 +288,18 @@ async def _open_provider(
         config.provider, registry.ProviderContext(deps.settings, base_url_norm)
     )
     org_host = urlsplit(base_url_norm).hostname if base_url_norm else None
+    transport = deps.transport
+    if config.provider is ProviderName.MISP:
+        # RT5: every MISP request (verify included) resolves the host, refuses any non-public
+        # answer and connects to the pinned IP with Host/SNI set to the hostname.
+        pin = getattr(adapter, "pinned_transport", None)
+        if pin is None:
+            raise ValueError("misp adapter without a pinned transport")
+        transport = pin(deps.transport)
     client = ti_client(
         adapter,
         auth=KeyAuth(registry.auth_header(config.provider), key),
-        transport=deps.transport,
+        transport=transport,
         org_host=org_host,
     )
     return adapter, client
@@ -458,6 +475,11 @@ class _Slice:
             except DBAPIError as exc:
                 log.warning("ti run %s: lease renewal failed (%s)", self.run_id, type(exc).__name__)
                 continue
+            except Exception as exc:  # noqa: BLE001 - never kill the slice; the lease expires
+                log.warning(
+                    "ti run %s: lease renewer stopped (%s)", self.run_id, type(exc).__name__
+                )
+                return
             if renewed is None:
                 log.warning("ti run %s: lease lost; stopping the slice", self.run_id)
                 self.lease_lost = True
@@ -467,11 +489,18 @@ class _Slice:
     # ---- lanes
 
     async def run_lanes(self, lanes: list[_Lane]) -> None:
+        # TaskGroup, not gather: if anything escapes a lane, every sibling is cancelled here
+        # instead of outliving the slice on the worker's persistent loop without a lease.
         try:
             async with asyncio.timeout(self.deps.settings.ti_slice_s + HARD_GRACE_S):
-                await asyncio.gather(*(self._run_lane(lane) for lane in lanes))
+                async with asyncio.TaskGroup() as group:
+                    for lane in lanes:
+                        group.create_task(self._run_lane(lane))
         except TimeoutError:
             log.warning("ti run %s: slice hard timeout", self.run_id)
+        except Exception as exc:  # noqa: BLE001 - an ExceptionGroup from a lane bug
+            log.error("ti run %s: lane failed (%s); slice halted", self.run_id, type(exc).__name__)
+            self.halted = True
         finally:
             for lane in lanes:
                 if lane.client is not None:
@@ -479,7 +508,9 @@ class _Slice:
 
     async def _run_lane(self, lane: _Lane) -> None:
         workers = max(1, min(lane.limits.concurrency, 4))
-        await asyncio.gather(*(self._lane_worker(lane) for _ in range(workers)))
+        async with asyncio.TaskGroup() as group:
+            for _ in range(workers):
+                group.create_task(self._lane_worker(lane))
 
     def _may_continue(self, lane: _Lane) -> bool:
         return not (lane.stopped or self.halted) and time.monotonic() < self.soft_end
@@ -487,8 +518,33 @@ class _Slice:
     async def _lane_worker(self, lane: _Lane) -> None:
         while lane.items and self._may_continue(lane):
             item = lane.items.popleft()
-            if await self._process(lane, item):
+            # <= GLOBAL_CONCURRENCY items in flight per slice: bounds the provider calls and
+            # the DB sessions (one per item at a time; the pool holds 20, the renewer one).
+            async with self.global_sem:
+                try:
+                    again = await self._process(lane, item)
+                except Exception as exc:  # noqa: BLE001 - contained per item, never escapes
+                    again = False
+                    await self._contain(lane, item, exc)
+            if again:
                 lane.items.appendleft(item)
+
+    async def _contain(self, lane: _Lane, item: _Item, exc: Exception) -> None:
+        """An unexpected failure (DB, pool timeout, bug) handling one item: record an
+        `internal_error` row for it; if even that fails, halt the slice (the item stays
+        pending and is retried by a later slice)."""
+        log.warning(
+            "ti run %s: %s item failed (%s)", self.run_id, lane.provider.value, type(exc).__name__
+        )
+        try:
+            await self._record(item, _error_result(lane.provider, "internal_error"), 0)
+        except Exception as again:  # noqa: BLE001
+            log.warning(
+                "ti run %s: cannot record the failure (%s); slice halted",
+                self.run_id,
+                type(again).__name__,
+            )
+            self.halted = True
 
     async def _process(self, lane: _Lane, item: _Item) -> bool:
         """Handle one item; True to put it back (still pending, try again later)."""
@@ -516,8 +572,7 @@ class _Slice:
                 return False
             started = time.monotonic()
             try:
-                async with self.global_sem:
-                    result = await lane.adapter.lookup(lane.client, item.ioc)
+                result = await lane.adapter.lookup(lane.client, item.ioc)
             except ProviderError as exc:
                 latency = int((time.monotonic() - started) * 1000)
                 if exc.kind in RETRYABLE and attempt + 1 < MAX_ATTEMPTS:
@@ -536,7 +591,15 @@ class _Slice:
             if result.provider is not lane.provider:
                 result = _error_result(lane.provider, "internal_error")
             await self._record(item, result, latency)
+            await self._clear_strikes(lane)
             return False
+
+    async def _clear_strikes(self, lane: _Lane) -> None:
+        if lane.strikes_clear or lane.provider not in QUOTA_STRIKES:
+            return
+        lane.strikes_clear = True
+        with contextlib.suppress(LimiterUnavailable):
+            await self.deps.limiter.clear_strikes(lane.provider, self.org_id)
 
     async def _acquire(self, lane: _Lane) -> bool:
         while True:
@@ -632,11 +695,28 @@ class _Slice:
         if kind is ProviderErrorKind.RATE_LIMITED:
             now = time.time()
             seconds = exc.retry_after_s or seconds_to_next_minute(now)
+            threshold = QUOTA_STRIKES.get(lane.provider)
+            strikes = 0
             try:
-                await self.deps.limiter.set_cooldown(lane.provider, self.org_id, seconds)
+                if threshold is None:
+                    await self.deps.limiter.set_cooldown(lane.provider, self.org_id, seconds)
+                else:
+                    lane.strikes_clear = False
+                    strikes = await self.deps.limiter.rate_limited(
+                        lane.provider, self.org_id, seconds
+                    )
             except LimiterUnavailable:
                 self.limiter_down = True
                 self.halted = True
+            if threshold is not None and strikes >= threshold:
+                log.warning(
+                    "ti run %s: %s answered 429 %d times in a row: daily quota assumed spent",
+                    self.run_id,
+                    lane.provider.value,
+                    strikes,
+                )
+                await self._quota(lane)
+                return True
             await self._cooldown(lane, now + seconds)
             return True
         if kind is ProviderErrorKind.QUOTA_EXHAUSTED:
@@ -897,7 +977,8 @@ async def handle_enrich(message: Mapping[str, Any], deps: Deps | None = None) ->
             await work.run_lanes(lanes)
         finally:
             renewer.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
+            # A failed renewer never skips finish(): it only stops renewing.
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await renewer
         if not work.lease_lost:
             await work.finish(lanes)
@@ -965,7 +1046,8 @@ async def handle_resume(message: Mapping[str, Any] | None = None, deps: Deps | N
 async def handle_verify(message: Mapping[str, Any], deps: Deps | None = None) -> None:
     """`ti.verify {org_id, provider}`: check a stored key, record `verify_status` (valid /
     invalid / error), `verified_at`, `last_error_code`, and audit it with a NULL actor.
-    MISP URL resolution and pinning before the call are added in phase 4."""
+    MISP: the pinned transport resolves the host first; a non-public answer is `invalid`
+    with `misp_url_not_public` (RT5)."""
     try:
         msg = TiVerifyMessage.model_validate(message)
         provider = ProviderName(msg.provider)
@@ -983,6 +1065,14 @@ async def handle_verify(message: Mapping[str, Any], deps: Deps | None = None) ->
         config = _Config.of(row) if row is not None else None
     if config is None or config.sealed is None:
         log.info("ti.verify: no key stored for %s", provider.value)
+        return
+    try:
+        claimed = await deps.limiter.claim_verify(provider, msg.org_id, config.sealed.key_version)
+    except LimiterUnavailable:
+        log.warning("ti.verify %s: limiter unavailable, check skipped", provider.value)
+        return
+    if not claimed:
+        log.info("ti.verify %s: duplicate check skipped", provider.value)
         return
     if not registry.available(provider, deps.settings):
         verdict = VerifyOutcome(VerifyStatus.ERROR, "provider_unavailable")

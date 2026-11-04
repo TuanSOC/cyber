@@ -438,6 +438,55 @@ async def test_daily_quota_abandons_quota_exhausted() -> None:
     assert await w.deps.limiter._redis.pttl(cool) > 0  # noqa: SLF001  cooldown to midnight
 
 
+async def test_consecutive_429s_are_taken_as_a_spent_daily_quota(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VirusTotal's daily-quota 429 is indistinguishable from its per-minute one: after
+    `QUOTA_STRIKES` consecutive 429s the provider is parked until 00:00 UTC (the mock stands
+    in for VirusTotal here)."""
+    monkeypatch.setitem(enrich.QUOTA_STRIKES, enrich.ProviderName.MOCK, 3)
+    w = await _world()
+    try:
+        redis = w.deps.limiter._redis  # noqa: SLF001
+        cool = w.deps.limiter.keys(enrich.ProviderName.MOCK, w.t.org_id)[2]
+        run_id = await w.run("ratelimit.example.com", "ratelimit2.example.com")
+        for _ in range(2):
+            await w.slice(run_id)
+            assert (await w.state(run_id))[0] == "waiting"
+            await redis.delete(cool)  # the per-minute cooldown ran out
+        await w.slice(run_id)  # the third 429 in a row
+        items = await w.items(run_id)
+        assert {v[:2] for v in items.values()} == {("abandoned", "quota_exhausted")}
+        assert (await w.state(run_id))[0] in ("failed", "partial")
+        assert w.sink.calls["ratelimit.example.com"] == 3
+        assert await redis.pttl(cool) > 0  # parked until midnight (or the 429's own wait)
+    finally:
+        await w.deps.limiter._redis.aclose()  # noqa: SLF001
+
+
+async def test_a_real_answer_resets_the_429_strikes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(enrich.QUOTA_STRIKES, enrich.ProviderName.MOCK, 3)
+    w = await _world()
+    try:
+        redis = w.deps.limiter._redis  # noqa: SLF001
+        cool = w.deps.limiter.keys(enrich.ProviderName.MOCK, w.t.org_id)[2]
+        strikes = w.deps.limiter.strikes_key(enrich.ProviderName.MOCK, w.t.org_id)
+        limited = await w.run("ratelimit.example.com")
+        for _ in range(2):
+            await w.slice(limited)
+            await redis.delete(cool)
+        assert await redis.get(strikes) == b"2"
+        hit = await w.run("hit.example.com")
+        await w.slice(hit)
+        assert (await w.state(hit))[0] == "completed"
+        assert await redis.get(strikes) is None  # not consecutive any more
+        await w.slice(limited)  # one more 429: strike 1, a plain per-minute wait
+        assert (await w.state(limited))[0] == "waiting"
+        assert (await w.items(limited))["ratelimit.example.com"][0] == "pending"
+    finally:
+        await w.deps.limiter._redis.aclose()  # noqa: SLF001
+
+
 async def test_limiter_outage_fails_closed() -> None:
     w = await _world()
     w.deps.limiter = Limiter(broker_redis("redis://127.0.0.1:1/1"), "test.")
@@ -501,3 +550,15 @@ async def test_verify_task(world: World) -> None:
     ):
         await enrich.handle_verify(message, world.deps)
     assert world.sink.calls["verify"] == 1
+
+
+async def test_duplicate_verify_of_the_same_key_is_skipped(world: World) -> None:
+    message = {"org_id": str(world.t.org_id), "provider": "mock"}
+    for _ in range(3):  # a burst of saves / POST .../verify for one stored key
+        await enrich.handle_verify(message, world.deps)
+    assert world.sink.calls["verify"] == 1
+    key = world.deps.limiter.verify_key(enrich.ProviderName.MOCK, world.t.org_id, 1)
+    assert 0 < await world.deps.limiter._redis.ttl(key) <= 60  # noqa: SLF001
+    await world.deps.limiter._redis.delete(key)  # noqa: SLF001  the 60 s window passed
+    await enrich.handle_verify(message, world.deps)
+    assert world.sink.calls["verify"] == 2
