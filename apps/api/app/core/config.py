@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     evidence_lock_days: int = 30
     upload_tmp_dir: str = "/var/lib/cyberlab/upload-tmp"
     max_concurrent_uploads_per_user: int = 2
+    # Per-org evidence storage (active + archived), unless organizations.storage_quota_bytes
+    # overrides it; and how many orgs one user may own (M3 RT8).
+    default_storage_quota_bytes: int = Field(default=20 * 1024**3, ge=0)
+    max_owned_orgs_per_user: int = Field(default=5, ge=1)
 
     # Analysis jobs (broker = separate Redis instance with ACL users; see infra/redis-broker).
     broker_url: str

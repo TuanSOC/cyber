@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import BigInteger, FetchedValue, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.models_base import Base, CreatedAt, Timestamps, UUIDPk, pg_enum
@@ -21,6 +21,12 @@ class Organization(UUIDPk, Timestamps, Base):
     slug: Mapped[str] = mapped_column(String(80), unique=True)
     next_case_number: Mapped[int] = mapped_column(server_default="1", default=1)
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    # NULL = the deployment default. Operator-managed: the app role may neither insert nor
+    # update it (column grants, 0008), so the ORM must never write it (FetchedValue keeps
+    # it out of every INSERT).
+    storage_quota_bytes: Mapped[int | None] = mapped_column(
+        BigInteger, server_default=FetchedValue()
+    )
 
 
 class OrganizationMember(UUIDPk, CreatedAt, Base):

@@ -35,6 +35,14 @@ class OrgUpdate(BaseModel):
     name: SafeName = Field(min_length=2, max_length=120)
 
 
+class StorageOut(BaseModel):
+    """Evidence storage of the org: active + archived evidence against its quota."""
+
+    used_bytes: int
+    quota_bytes: int
+    evidence_count: int
+
+
 class MemberOut(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID

@@ -3295,6 +3295,30 @@
         "title": "StaticReport",
         "type": "object"
       },
+      "StorageOut": {
+        "description": "Evidence storage of the org: active + archived evidence against its quota.",
+        "properties": {
+          "evidence_count": {
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "quota_bytes": {
+            "title": "Quota Bytes",
+            "type": "integer"
+          },
+          "used_bytes": {
+            "title": "Used Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "used_bytes",
+          "quota_bytes",
+          "evidence_count"
+        ],
+        "title": "StorageOut",
+        "type": "object"
+      },
       "StringEncoding": {
         "enum": [
           "ascii",
@@ -6733,6 +6757,49 @@
           }
         },
         "summary": "Change Role",
+        "tags": [
+          "organizations"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/storage": {
+      "get": {
+        "operationId": "get_storage_api_v1_orgs__org_id__storage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Storage",
         "tags": [
           "organizations"
         ]

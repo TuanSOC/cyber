@@ -7,8 +7,9 @@ import uuid
 from starlette.requests import HTTPConnection
 
 from app.core import rate_limit
+from app.core.config import get_settings
 from app.core.deps import CurrentUser
-from app.core.errors import NotFound
+from app.core.errors import Conflict, NotFound
 from app.core.pagination import PageParams
 from app.core.rbac import OrgContext
 from app.core.tenancy import tenant_session
@@ -39,7 +40,14 @@ async def create_org(user: CurrentUser, name: str, request: HTTPConnection) -> M
     await rate_limit.hit(f"org:create:{user.id}", ORG_CREATE_LIMIT_PER_HOUR, 3600)
     # A brand-new org id (never request input): the creator becomes its first owner.
     org_id = uuid.uuid4()
+    limit = get_settings().max_owned_orgs_per_user
     async with tenant_session(org_id, user.id) as session:
+        # RT8: bounds how much storage quota one account can claim by creating orgs.
+        await repo.lock_owner(session, user.id)
+        if await repo.count_owned(session, user.id) >= limit:
+            raise Conflict(
+                f"You already own the maximum of {limit} organizations", code="org_limit_reached"
+            )
         org = Organization(id=org_id, name=name, slug=slugify(name), created_by=user.id)
         session.add(org)
         await session.flush()

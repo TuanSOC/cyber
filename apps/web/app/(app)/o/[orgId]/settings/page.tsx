@@ -12,6 +12,8 @@ import { api, errorMessage, unwrap } from "@/lib/api";
 import { useOrg } from "@/lib/org-context";
 import { ME_QUERY_KEY } from "@/lib/use-me";
 
+import { StorageCard } from "./storage-card";
+
 export default function OrganizationSettingsPage() {
   const { orgId, orgName, can } = useOrg();
   const queryClient = useQueryClient();
@@ -34,41 +36,44 @@ export default function OrganizationSettingsPage() {
   });
 
   return (
-    <Card className="max-w-xl">
-      <CardHeader>
-        <CardTitle>Organization</CardTitle>
-        <CardDescription>
-          {editable ? "Rename your organization." : "Only owners and admins can change these settings."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            rename.mutate();
-          }}
-        >
-          <Label htmlFor="org-name">Name</Label>
-          <Input
-            id="org-name"
-            value={name}
-            disabled={!editable}
-            minLength={2}
-            maxLength={120}
-            onChange={(event) => setName(event.target.value)}
-          />
-          {editable && (
-            <Button
-              type="submit"
-              className="self-start"
-              disabled={rename.isPending || name.trim().length < 2 || name.trim() === orgName}
-            >
-              Save
-            </Button>
-          )}
-        </form>
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-6">
+      <Card className="max-w-xl">
+        <CardHeader>
+          <CardTitle>Organization</CardTitle>
+          <CardDescription>
+            {editable ? "Rename your organization." : "Only owners and admins can change these settings."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form
+            className="flex flex-col gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              rename.mutate();
+            }}
+          >
+            <Label htmlFor="org-name">Name</Label>
+            <Input
+              id="org-name"
+              value={name}
+              disabled={!editable}
+              minLength={2}
+              maxLength={120}
+              onChange={(event) => setName(event.target.value)}
+            />
+            {editable && (
+              <Button
+                type="submit"
+                className="self-start"
+                disabled={rename.isPending || name.trim().length < 2 || name.trim() === orgName}
+              >
+                Save
+              </Button>
+            )}
+          </form>
+        </CardContent>
+      </Card>
+      <StorageCard orgId={orgId} />
+    </div>
   );
 }

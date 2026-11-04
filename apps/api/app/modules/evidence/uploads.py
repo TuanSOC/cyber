@@ -24,6 +24,7 @@ from app.modules.evidence.locking import discard_version, lock_version
 from app.modules.evidence.models import CustodyAction, Evidence, EvidenceHash, HashAlgorithm
 from app.modules.evidence.schemas import EvidenceOut
 from app.modules.evidence.service import ensure_open_investigation, record_event, to_out
+from app.modules.organizations import storage as quota
 
 log = logging.getLogger(__name__)
 
@@ -55,13 +56,16 @@ def _sniff(head: bytes) -> tuple[str, str]:
         return "application/octet-stream", "unknown"
 
 
-def _check_request(request: Request) -> None:
+def _check_request(request: Request) -> int:
+    """Validates the headers; returns the declared length (0 when not declared)."""
     content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
     if content_type != "application/octet-stream":
         raise UnsupportedMediaType()
     declared = request.headers.get("content-length", "")
-    if declared.isdigit() and int(declared) > get_settings().max_evidence_bytes:
+    size = int(declared) if declared.isdigit() else 0
+    if size > get_settings().max_evidence_bytes:
         raise PayloadTooLarge()
+    return size
 
 
 async def _insert_records(
@@ -76,6 +80,9 @@ async def _insert_records(
     description: str,
 ) -> EvidenceOut:
     await ensure_open_investigation(ctx, investigation_id)
+    # Case (FOR SHARE) before org lock: a case update holding the case row then inserting
+    # its audit row (KEY SHARE on the org) can then never wait in a cycle with this upload.
+    await quota.reserve(ctx, spooled.size)
     mime, kind = _sniff(spooled.head)
     evidence = Evidence(
         organization_id=ctx.org_id,
@@ -129,9 +136,12 @@ async def upload(
     description: str,
 ) -> EvidenceOut:
     settings = get_settings()
-    _check_request(request)
+    declared = _check_request(request)
     async with org_session(org_id, user, Permission.EVIDENCE_WRITE) as ctx:
         await ensure_open_investigation(ctx, investigation_id)
+        # Early, unlocked: refuse a declared size that cannot fit before reading the body.
+        # Authoritative (actual size, org locked) again before the records commit.
+        await quota.check_fits(ctx, declared)
 
     async with slot("upload", user.id, settings.max_concurrent_uploads_per_user):
         try:

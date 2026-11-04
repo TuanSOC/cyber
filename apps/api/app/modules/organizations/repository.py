@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.pagination import PageParams
@@ -88,6 +88,22 @@ async def find_member_by_user(
         OrganizationMember.organization_id == org_id, OrganizationMember.user_id == user_id
     )
     return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def lock_owner(session: AsyncSession, user_id: uuid.UUID) -> None:
+    """Serialize org creation per user (transaction-scoped advisory lock, no table grant)."""
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"org-owner:{user_id}"},
+    )
+
+
+async def count_owned(session: AsyncSession, user_id: uuid.UUID) -> int:
+    """Orgs the user owns (members SELECT policy: the caller's own memberships)."""
+    stmt = select(func.count()).where(
+        OrganizationMember.user_id == user_id, OrganizationMember.role == MemberRole.OWNER
+    )
+    return (await session.execute(stmt)).scalar_one()
 
 
 async def count_owners(session: AsyncSession, org_id: uuid.UUID) -> int:

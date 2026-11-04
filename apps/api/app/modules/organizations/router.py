@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request, status
 from app.core.deps import CurrentUserDep
 from app.core.pagination import PageParamsDep
 from app.core.rbac import OrgContext, Permission, require
-from app.modules.organizations import members, service
+from app.modules.organizations import members, service, storage
 from app.modules.organizations.schemas import (
     MemberAdd,
     MemberOut,
@@ -16,6 +16,7 @@ from app.modules.organizations.schemas import (
     MyOrgPage,
     OrgCreate,
     OrgUpdate,
+    StorageOut,
 )
 
 router = APIRouter(prefix="/orgs", tags=["organizations"])
@@ -45,6 +46,11 @@ async def get_org(ctx: OrgRead) -> MyOrgOut:
 @router.patch("/{org_id}", response_model=MyOrgOut)
 async def update_org(body: OrgUpdate, ctx: OrgWrite, request: Request) -> MyOrgOut:
     return await service.rename_org(ctx, body.name, request)
+
+
+@router.get("/{org_id}/storage", response_model=StorageOut)
+async def get_storage(ctx: OrgRead) -> StorageOut:
+    return await storage.get_storage(ctx)
 
 
 @router.get("/{org_id}/members", response_model=MemberPage)

@@ -43,6 +43,7 @@ CaseBuilder = Callable[[Victim], Request]
 ROUTE_CASES: dict[tuple[str, str], CaseBuilder] = {
     ("GET", "/api/v1/orgs/{org_id}"): lambda v: {},
     ("PATCH", "/api/v1/orgs/{org_id}"): lambda v: {"json": {"name": "Hijacked"}},
+    ("GET", "/api/v1/orgs/{org_id}/storage"): lambda v: {},
     ("GET", "/api/v1/orgs/{org_id}/members"): lambda v: {},
     ("POST", "/api/v1/orgs/{org_id}/members"): lambda v: {
         "json": {"email": v.outsider_email, "role": "viewer"}

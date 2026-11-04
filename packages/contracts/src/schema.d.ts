@@ -658,6 +658,23 @@ export interface paths {
         patch: operations["change_role_api_v1_orgs__org_id__members__member_id__patch"];
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Storage */
+        get: operations["get_storage_api_v1_orgs__org_id__storage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1951,6 +1968,18 @@ export interface components {
             schema: "cyberlab.report.static.v1";
             sections: components["schemas"]["ReportSections"];
             signatures: components["schemas"]["ReportSignatures"];
+        };
+        /**
+         * StorageOut
+         * @description Evidence storage of the org: active + archived evidence against its quota.
+         */
+        StorageOut: {
+            /** Evidence Count */
+            evidence_count: number;
+            /** Quota Bytes */
+            quota_bytes: number;
+            /** Used Bytes */
+            used_bytes: number;
         };
         /**
          * StringEncoding
@@ -3560,6 +3589,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemberOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_storage_api_v1_orgs__org_id__storage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageOut"];
                 };
             };
             /** @description Validation Error */
