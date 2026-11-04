@@ -44,7 +44,12 @@ target-version = "py312"
 select = ["E", "F", "I", "B", "S", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
+# Tests use seeded PRNGs for reproducible mutations (not security-relevant randomness).
 "tests/**" = ["S101", "S603", "S607", "S108", "S311"]
+# Synthetic samples: seeded PRNG on purpose (reproducible set), asserts on builder invariants.
+"samples/**" = ["S311", "S101"]
+# Build scripts: pinned sha256 digests do not wrap.
+"docker/fetch_capa_assets.py" = ["E501"]
 
 [tool.mypy]
 strict = true

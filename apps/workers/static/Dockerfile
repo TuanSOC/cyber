@@ -45,9 +45,10 @@ RUN groupadd --system --gid 10003 tool \
     && useradd --system --uid 10003 --gid 10003 --no-create-home --shell /usr/sbin/nologin tool
 COPY --from=clamav-db /var/lib/clamav /var/lib/clamav
 COPY --from=capa-assets /opt/capa /opt/capa
-COPY rules/yara /opt/yara/rules
 # capa uses $XDG_CACHE_HOME itself (no /capa suffix) as its rule-cache dir; the cache is
 # precomputed at build (finalize_image.py) so capa only reads it on the read-only rootfs.
+# Probes run as `python -I -m static_worker.probe` (isolated mode ignores PYTHONPATH and the
+# cwd), so the dev/prod stages add /srv/workers/static to the venv via a root-owned .pth file.
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -89,13 +90,24 @@ RUN apt-get update \
        gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=venv-dev /opt/venv /opt/venv
-RUN python /usr/local/lib/cyberlab/finalize_image.py
+RUN python /usr/local/lib/cyberlab/finalize_image.py \
+    && echo /srv/workers/static > "$(python -c 'import site; print(site.getsitepackages()[0])')/cyberlab_static.pth"
+# Rules last: editing a rule never rebuilds the virtualenvs.
+COPY rules/yara /opt/yara/rules
 COPY static_worker ./static_worker
-CMD ["python", "-c", "print('static worker skeleton')"]
+COPY tests ./tests
+COPY samples ./samples
+CMD ["celery", "-A", "static_worker.celery_app", "worker", "--concurrency", "1", \
+     "--max-tasks-per-child", "1", "--without-gossip", "--without-mingle", \
+     "--without-heartbeat", "--loglevel", "INFO"]
 
 # --- production image ----------------------------------------------------------------------
 FROM base AS prod
 COPY --from=venv-prod /opt/venv /opt/venv
-RUN python /usr/local/lib/cyberlab/finalize_image.py
+RUN python /usr/local/lib/cyberlab/finalize_image.py \
+    && echo /srv/workers/static > "$(python -c 'import site; print(site.getsitepackages()[0])')/cyberlab_static.pth"
+COPY rules/yara /opt/yara/rules
 COPY static_worker ./static_worker
-CMD ["python", "-c", "print('static worker skeleton')"]
+CMD ["celery", "-A", "static_worker.celery_app", "worker", "--concurrency", "1", \
+     "--max-tasks-per-child", "1", "--without-gossip", "--without-mingle", \
+     "--without-heartbeat", "--loglevel", "INFO"]

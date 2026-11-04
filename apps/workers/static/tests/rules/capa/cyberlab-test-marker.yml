@@ -1,0 +1,16 @@
+rule:
+  meta:
+    name: contain CyberLab test marker
+    namespace: anti-analysis/cyberlab-test
+    authors:
+      - CyberLab
+    description: Test-only fixture rule that matches the CyberLab synthetic test marker string.
+    scopes:
+      static: file
+      dynamic: file
+    att&ck:
+      - Defense Evasion::Obfuscated Files or Information [T1027]
+    mbc:
+      - Anti-Static Analysis::Executable Code Obfuscation [B0032]
+  features:
+    - string: "CYBERLAB-STATIC-TEST-MARKER-7f3a"

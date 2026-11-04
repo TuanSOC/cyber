@@ -37,7 +37,7 @@ PR_SET_DUMPABLE = 4
 
 TOOL_UID = 10003
 TOOL_GID = 10003
-TOOL_PATH = "/usr/local/zeek/bin:/usr/bin:/bin"
+TOOL_PATH = "/usr/local/zeek/bin:/usr/local/bin:/usr/bin:/bin"
 MAX_OUTPUT_FILE = 2 * 1024**3
 
 
@@ -119,6 +119,7 @@ def run_tool(
     stdout_name: str | None = None,
     extra_env: dict[str, str] | None = None,
     memory_bytes: int | None = None,
+    cwd: Path | None = None,
 ) -> None:
     """Run one tool as the tool uid in out/. Raises ToolTimeout / ToolFailed.
 
@@ -143,7 +144,9 @@ def run_tool(
     ):
         proc = subprocess.Popen(
             argv,
-            cwd=dirs.out,
+            # Default: the tool's own out/ dir. Python probes pass a root-owned read-only
+            # dir so nothing a tool wrote can shadow their imports (sys.path[0] = cwd).
+            cwd=cwd or dirs.out,
             env=env,
             stdin=subprocess.DEVNULL,
             stdout=stdout,

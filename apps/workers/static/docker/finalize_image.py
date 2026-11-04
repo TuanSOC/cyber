@@ -33,7 +33,8 @@ def build_capa_cache() -> None:
 
 
 def cvd_header(path: Path) -> list[str]:
-    # CVD/CLD header: 512 bytes "ClamAV-VDB:<build time>:<version>:<sigs>:<flevel>:<md5>:<dsig>:<builder>:<stime>"
+    # CVD/CLD header, 512 bytes:
+    # "ClamAV-VDB:<build time>:<version>:<sigs>:<flevel>:<md5>:<dsig>:<builder>:<stime>"
     with path.open("rb") as fh:
         return fh.read(512).decode("ascii", "replace").rstrip("\x00 ").split(":")
 
