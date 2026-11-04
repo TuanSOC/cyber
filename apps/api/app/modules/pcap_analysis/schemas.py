@@ -6,6 +6,7 @@ from typing import Annotated, Any
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from app.core.pagination import MAX_OFFSET, Page
+from app.modules.threat_intel.schemas import IocEnrichmentOut
 
 # asyncpg returns inet values as ipaddress objects; the API speaks plain strings.
 IpText = Annotated[str | None, BeforeValidator(lambda v: None if v is None else str(v))]
@@ -120,6 +121,14 @@ class IocOut(_Row):
     source: str
 
 
+class EnrichedIocOut(IocOut):
+    """An IOC row; with `include=enrichment`, the latest threat intel answer per provider
+    (M4) and, for values no provider would receive, the reason."""
+
+    enrichment: list[IocEnrichmentOut] | None = None
+    enrichment_skip: str | None = None
+
+
 class TimelineOut(_Row):
     id: uuid.UUID
     ts: datetime
@@ -160,7 +169,7 @@ class FindingPage(CappedPage[FindingOut]):
     pass
 
 
-class IocPage(CappedPage[IocOut]):
+class IocPage(CappedPage[EnrichedIocOut]):
     pass
 
 

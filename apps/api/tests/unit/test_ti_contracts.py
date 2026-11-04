@@ -211,6 +211,9 @@ def test_provider_result_permalinks_are_https_only() -> None:
         "https://example.com/a b",
         "data:text/html,x",
         "https:///nohost",
+        "https://www.virustotal.com/gui/file/‮exe.pdf",  # hidden bidi override
+        "https://www.virustotal.com/gui/​file/abc",
+        "https://www.virustotal.cоm/gui/file/abc",  # Cyrillic homoglyph
     ):
         with pytest.raises(ValidationError):
             _result(permalink=bad)

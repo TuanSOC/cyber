@@ -1,6 +1,135 @@
 {
   "components": {
     "schemas": {
+      "AbuseIpdbSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "abuse_confidence_score": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abuse Confidence Score"
+          },
+          "categories": {
+            "default": [],
+            "items": {
+              "maximum": 255.0,
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "is_tor": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Tor"
+          },
+          "is_whitelisted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Whitelisted"
+          },
+          "isp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isp"
+          },
+          "last_reported_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Reported At"
+          },
+          "num_distinct_users": {
+            "anyOf": [
+              {
+                "maximum": 1000000000000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Num Distinct Users"
+          },
+          "provider": {
+            "const": "abuseipdb",
+            "default": "abuseipdb",
+            "title": "Provider",
+            "type": "string"
+          },
+          "total_reports": {
+            "anyOf": [
+              {
+                "maximum": 1000000000000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Reports"
+          },
+          "usage_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Type"
+          }
+        },
+        "title": "AbuseIpdbSummary",
+        "type": "object"
+      },
       "AlertOut": {
         "properties": {
           "category": {
@@ -837,6 +966,37 @@
         "title": "CustodyPage",
         "type": "object"
       },
+      "Detections": {
+        "additionalProperties": false,
+        "description": "VirusTotal's own engine counts (shown attributed, never as our verdict).",
+        "properties": {
+          "malicious": {
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
+            "title": "Malicious",
+            "type": "integer"
+          },
+          "suspicious": {
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
+            "title": "Suspicious",
+            "type": "integer"
+          },
+          "total": {
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "malicious",
+          "suspicious",
+          "total"
+        ],
+        "title": "Detections",
+        "type": "object"
+      },
       "ElfOut": {
         "properties": {
           "elf_class": {
@@ -888,6 +1048,100 @@
           "stripped"
         ],
         "title": "ElfOut",
+        "type": "object"
+      },
+      "EnrichedIocOut": {
+        "description": "An IOC row; with `include=enrichment`, the latest threat intel answer per provider\n(M4) and, for values no provider would receive, the reason.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "enrichment": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/IocEnrichmentOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrichment"
+          },
+          "enrichment_skip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrichment Skip"
+          },
+          "first_seen": {
+            "format": "date-time",
+            "title": "First Seen",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_seen": {
+            "format": "date-time",
+            "title": "Last Seen",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/app__modules__pcap_analysis__schemas__IocType"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "value",
+          "first_seen",
+          "last_seen",
+          "count",
+          "source"
+        ],
+        "title": "EnrichedIocOut",
+        "type": "object"
+      },
+      "EnrichmentCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "providers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ProviderName"
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providers"
+          }
+        },
+        "title": "EnrichmentCreate",
         "type": "object"
       },
       "EvidenceOut": {
@@ -1487,6 +1741,83 @@
         "title": "HealthOut",
         "type": "object"
       },
+      "HistoryOut": {
+        "description": "Every stored answer for one normalized indicator (all providers, newest first).",
+        "properties": {
+          "ioc_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ioc Key"
+          },
+          "ioc_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/app__modules__threat_intel__providers__base__IocType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ResultOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "skipped": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "value_norm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Norm"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "ioc_type",
+          "value_norm",
+          "ioc_key",
+          "notes",
+          "skipped"
+        ],
+        "title": "HistoryOut",
+        "type": "object"
+      },
       "ImportOut": {
         "properties": {
           "function": {
@@ -1591,6 +1922,390 @@
           "notable_truncated"
         ],
         "title": "ImportsSummary",
+        "type": "object"
+      },
+      "IntegrationOut": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "ceilings": {
+            "$ref": "#/components/schemas/LimitsOut"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "default_limits": {
+            "$ref": "#/components/schemas/LimitsOut"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "key_last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Last4"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LimitsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "needs_base_url": {
+            "title": "Needs Base Url",
+            "type": "boolean"
+          },
+          "privacy_note": {
+            "title": "Privacy Note",
+            "type": "string"
+          },
+          "supported_types": {
+            "items": {
+              "$ref": "#/components/schemas/app__modules__threat_intel__providers__base__IocType"
+            },
+            "title": "Supported Types",
+            "type": "array"
+          },
+          "terms_ack_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms Ack At"
+          },
+          "tos_note": {
+            "title": "Tos Note",
+            "type": "string"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          },
+          "verify_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerifyStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "supported_types",
+          "tos_note",
+          "privacy_note",
+          "needs_base_url",
+          "default_limits",
+          "ceilings",
+          "available",
+          "configured",
+          "enabled",
+          "key_last4",
+          "verify_status",
+          "verified_at",
+          "last_error_code",
+          "terms_ack_at",
+          "base_url",
+          "limits"
+        ],
+        "title": "IntegrationOut",
+        "type": "object"
+      },
+      "IntegrationPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/IntegrationOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "ti_enabled": {
+            "title": "Ti Enabled",
+            "type": "boolean"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "ti_enabled"
+        ],
+        "title": "IntegrationPage",
+        "type": "object"
+      },
+      "IntegrationSaved": {
+        "description": "A PUT's answer: the read model plus whether a key check (`ti.verify`) was queued. It\nis not when nothing verifiable changed (no new key, no new base URL), when the\nper-provider verify limit (shared with POST .../verify) is spent, or when the broker is\nunreachable; the save itself stands in every case.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "ceilings": {
+            "$ref": "#/components/schemas/LimitsOut"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "default_limits": {
+            "$ref": "#/components/schemas/LimitsOut"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "key_last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Last4"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LimitsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "needs_base_url": {
+            "title": "Needs Base Url",
+            "type": "boolean"
+          },
+          "privacy_note": {
+            "title": "Privacy Note",
+            "type": "string"
+          },
+          "supported_types": {
+            "items": {
+              "$ref": "#/components/schemas/app__modules__threat_intel__providers__base__IocType"
+            },
+            "title": "Supported Types",
+            "type": "array"
+          },
+          "terms_ack_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms Ack At"
+          },
+          "tos_note": {
+            "title": "Tos Note",
+            "type": "string"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          },
+          "verify_queued": {
+            "title": "Verify Queued",
+            "type": "boolean"
+          },
+          "verify_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerifyStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "supported_types",
+          "tos_note",
+          "privacy_note",
+          "needs_base_url",
+          "default_limits",
+          "ceilings",
+          "available",
+          "configured",
+          "enabled",
+          "key_last4",
+          "verify_status",
+          "verified_at",
+          "last_error_code",
+          "terms_ack_at",
+          "base_url",
+          "limits",
+          "verify_queued"
+        ],
+        "title": "IntegrationSaved",
+        "type": "object"
+      },
+      "IntegrationUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledge_terms": {
+            "default": false,
+            "title": "Acknowledge Terms",
+            "type": "boolean"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LimitsIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "IntegrationUpdate",
         "type": "object"
       },
       "InvestigationCreate": {
@@ -1784,6 +2499,136 @@
         "title": "InvestigationUpdate",
         "type": "object"
       },
+      "IocEnrichmentOut": {
+        "description": "The latest answer of one provider for one IOC row (`include=enrichment`).",
+        "properties": {
+          "attack_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Attack Ids",
+            "type": "array"
+          },
+          "detections": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Detections"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "families": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Families",
+            "type": "array"
+          },
+          "fetched_at": {
+            "format": "date-time",
+            "title": "Fetched At",
+            "type": "string"
+          },
+          "found": {
+            "title": "Found",
+            "type": "boolean"
+          },
+          "permalink": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permalink"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "result_id": {
+            "format": "uuid",
+            "title": "Result Id",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "score_scale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Scale"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ResultStatus"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "provider",
+          "status",
+          "found",
+          "score",
+          "score_scale",
+          "detections",
+          "tags",
+          "families",
+          "attack_ids",
+          "fetched_at",
+          "expires_at",
+          "stale",
+          "permalink",
+          "result_id"
+        ],
+        "title": "IocEnrichmentOut",
+        "type": "object"
+      },
+      "IocInclude": {
+        "enum": [
+          "enrichment"
+        ],
+        "title": "IocInclude",
+        "type": "string"
+      },
       "IocOut": {
         "properties": {
           "count": {
@@ -1810,7 +2655,7 @@
             "type": "string"
           },
           "type": {
-            "$ref": "#/components/schemas/IocType"
+            "$ref": "#/components/schemas/app__modules__pcap_analysis__schemas__IocType"
           },
           "value": {
             "title": "Value",
@@ -1833,7 +2678,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/IocOut"
+              "$ref": "#/components/schemas/EnrichedIocOut"
             },
             "title": "Items",
             "type": "array"
@@ -1852,7 +2697,7 @@
         "title": "IocPage",
         "type": "object"
       },
-      "IocType": {
+      "IocType-Input": {
         "description": "Every IOC type of the result contracts (cyberlab_jobs.results.IocType).",
         "enum": [
           "ip",
@@ -1889,6 +2734,72 @@
         "title": "LibraryCount",
         "type": "object"
       },
+      "LimitsIn": {
+        "additionalProperties": false,
+        "description": "Self-imposed limits; an org may lower them, never raise them above the ceilings.",
+        "properties": {
+          "per_day": {
+            "anyOf": [
+              {
+                "maximum": 100000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Day"
+          },
+          "per_minute": {
+            "anyOf": [
+              {
+                "maximum": 1000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Minute"
+          }
+        },
+        "title": "LimitsIn",
+        "type": "object"
+      },
+      "LimitsOut": {
+        "properties": {
+          "per_day": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Day"
+          },
+          "per_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Minute"
+          }
+        },
+        "required": [
+          "per_minute",
+          "per_day"
+        ],
+        "title": "LimitsOut",
+        "type": "object"
+      },
       "LoginIn": {
         "properties": {
           "email": {
@@ -1908,6 +2819,190 @@
           "password"
         ],
         "title": "LoginIn",
+        "type": "object"
+      },
+      "LookupCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "providers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ProviderName"
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providers"
+          },
+          "values": {
+            "items": {
+              "$ref": "#/components/schemas/LookupValueIn"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "values"
+        ],
+        "title": "LookupCreate",
+        "type": "object"
+      },
+      "LookupType": {
+        "enum": [
+          "ip",
+          "ipv4",
+          "ipv6",
+          "domain",
+          "url",
+          "email",
+          "md5",
+          "sha1",
+          "sha256"
+        ],
+        "title": "LookupType",
+        "type": "string"
+      },
+      "LookupValueIn": {
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LookupType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "value": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "LookupValueIn",
+        "type": "object"
+      },
+      "MalwareBazaarSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "file_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Type"
+          },
+          "first_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen"
+          },
+          "imphash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imphash"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "provider": {
+            "const": "malwarebazaar",
+            "default": "malwarebazaar",
+            "title": "Provider",
+            "type": "string"
+          },
+          "signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature"
+          },
+          "ssdeep": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssdeep"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "tlsh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tlsh"
+          },
+          "vendor_intel": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Vendor Intel",
+            "type": "array"
+          }
+        },
+        "title": "MalwareBazaarSummary",
         "type": "object"
       },
       "MeOut": {
@@ -2054,6 +3149,208 @@
         "title": "MembershipOut",
         "type": "object"
       },
+      "MispAttribute": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "event_info": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Info"
+          },
+          "event_uuid": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Uuid"
+          },
+          "first_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          },
+          "to_ids": {
+            "default": false,
+            "title": "To Ids",
+            "type": "boolean"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "MispAttribute",
+        "type": "object"
+      },
+      "MispSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "attribute_count": {
+            "default": 0,
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
+            "title": "Attribute Count",
+            "type": "integer"
+          },
+          "attributes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MispAttribute"
+            },
+            "title": "Attributes",
+            "type": "array"
+          },
+          "provider": {
+            "const": "misp",
+            "default": "misp",
+            "title": "Provider",
+            "type": "string"
+          },
+          "tlp": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tlp",
+            "type": "array"
+          }
+        },
+        "title": "MispSummary",
+        "type": "object"
+      },
+      "MockSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "behaviour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Behaviour"
+          },
+          "hits": {
+            "anyOf": [
+              {
+                "maximum": 1000000000000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hits"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "provider": {
+            "const": "mock",
+            "default": "mock",
+            "title": "Provider",
+            "type": "string"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "title": "MockSummary",
+        "type": "object"
+      },
       "MyOrgOut": {
         "description": "An org as seen by the caller, including the caller's role in it.",
         "properties": {
@@ -2163,6 +3460,151 @@
           "name"
         ],
         "title": "OrgUpdate",
+        "type": "object"
+      },
+      "OtxPulse": {
+        "additionalProperties": false,
+        "properties": {
+          "attack_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Attack Ids",
+            "type": "array"
+          },
+          "malware_families": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Malware Families",
+            "type": "array"
+          },
+          "modified": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "OtxPulse",
+        "type": "object"
+      },
+      "OtxSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "const": "otx",
+            "default": "otx",
+            "title": "Provider",
+            "type": "string"
+          },
+          "pulse_count": {
+            "anyOf": [
+              {
+                "maximum": 1000000000000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pulse Count"
+          },
+          "pulses": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/OtxPulse"
+            },
+            "title": "Pulses",
+            "type": "array"
+          },
+          "reputation": {
+            "anyOf": [
+              {
+                "maximum": 1000000000000.0,
+                "minimum": -1000000000000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reputation"
+          },
+          "validation": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/OtxValidation"
+            },
+            "title": "Validation",
+            "type": "array"
+          }
+        },
+        "title": "OtxSummary",
+        "type": "object"
+      },
+      "OtxValidation": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "title": "OtxValidation",
         "type": "object"
       },
       "PeOut": {
@@ -2299,6 +3741,19 @@
           "av"
         ],
         "title": "Profile",
+        "type": "string"
+      },
+      "ProviderName": {
+        "enum": [
+          "virustotal",
+          "abuseipdb",
+          "urlhaus",
+          "malwarebazaar",
+          "otx",
+          "misp",
+          "mock"
+        ],
+        "title": "ProviderName",
         "type": "string"
       },
       "RecordKind": {
@@ -3061,6 +4516,660 @@
         "title": "ResourcePage",
         "type": "object"
       },
+      "ResultOut": {
+        "description": "One provider answer (verdict-free, source-attributed).",
+        "properties": {
+          "attack_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Attack Ids",
+            "type": "array"
+          },
+          "detections": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Detections"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "families": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Families",
+            "type": "array"
+          },
+          "fetched_at": {
+            "format": "date-time",
+            "title": "Fetched At",
+            "type": "string"
+          },
+          "first_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen"
+          },
+          "found": {
+            "title": "Found",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "ioc_key": {
+            "title": "Ioc Key",
+            "type": "string"
+          },
+          "ioc_type": {
+            "$ref": "#/components/schemas/app__modules__threat_intel__providers__base__IocType"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "permalink": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permalink"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "score_scale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Scale"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ResultStatus"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "abuseipdb": "#/components/schemas/AbuseIpdbSummary",
+                    "malwarebazaar": "#/components/schemas/MalwareBazaarSummary",
+                    "misp": "#/components/schemas/MispSummary",
+                    "mock": "#/components/schemas/MockSummary",
+                    "otx": "#/components/schemas/OtxSummary",
+                    "urlhaus": "#/components/schemas/UrlhausSummary",
+                    "virustotal": "#/components/schemas/VirusTotalSummary"
+                  },
+                  "propertyName": "provider"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/VirusTotalSummary"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AbuseIpdbSummary"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UrlhausSummary"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MalwareBazaarSummary"
+                  },
+                  {
+                    "$ref": "#/components/schemas/OtxSummary"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MispSummary"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MockSummary"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "value_norm": {
+            "title": "Value Norm",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "run_id",
+          "provider",
+          "ioc_type",
+          "value_norm",
+          "ioc_key",
+          "status",
+          "found",
+          "score",
+          "score_scale",
+          "detections",
+          "tags",
+          "families",
+          "attack_ids",
+          "first_seen",
+          "last_seen",
+          "summary",
+          "permalink",
+          "error_code",
+          "fetched_at",
+          "expires_at",
+          "stale"
+        ],
+        "title": "ResultOut",
+        "type": "object"
+      },
+      "ResultStatus": {
+        "description": "What a provider said. Rate-limit, quota and deadline outcomes are run-item states,\nnever results (the history shows only real provider answers).",
+        "enum": [
+          "ok",
+          "not_found",
+          "error",
+          "auth_failed"
+        ],
+        "title": "ResultStatus",
+        "type": "string"
+      },
+      "RunDetailOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deadline_at": {
+            "format": "date-time",
+            "title": "Deadline At",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "$ref": "#/components/schemas/RunItemPage"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "providers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "requested_by": {
+            "format": "uuid",
+            "title": "Requested By",
+            "type": "string"
+          },
+          "requested_by_name": {
+            "title": "Requested By Name",
+            "type": "string"
+          },
+          "resume_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume At"
+          },
+          "scope": {
+            "enum": [
+              "manual",
+              "job"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "completed",
+              "partial",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "scope",
+          "job_id",
+          "status",
+          "providers",
+          "summary",
+          "deadline_at",
+          "resume_at",
+          "requested_by",
+          "requested_by_name",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "items"
+        ],
+        "title": "RunDetailOut",
+        "type": "object"
+      },
+      "RunItemOut": {
+        "properties": {
+          "from_cache": {
+            "title": "From Cache",
+            "type": "boolean"
+          },
+          "ioc_key": {
+            "title": "Ioc Key",
+            "type": "string"
+          },
+          "ioc_type": {
+            "$ref": "#/components/schemas/app__modules__threat_intel__providers__base__IocType"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "rate_limited",
+                  "quota_exhausted",
+                  "deadline",
+                  "auth_failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResultOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "done",
+              "cached",
+              "abandoned"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "value_norm": {
+            "title": "Value Norm",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "provider",
+          "ioc_type",
+          "value_norm",
+          "ioc_key",
+          "state",
+          "reason",
+          "result",
+          "from_cache"
+        ],
+        "title": "RunItemOut",
+        "type": "object"
+      },
+      "RunItemPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "RunItemPage",
+        "type": "object"
+      },
+      "RunOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deadline_at": {
+            "format": "date-time",
+            "title": "Deadline At",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "providers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "requested_by": {
+            "format": "uuid",
+            "title": "Requested By",
+            "type": "string"
+          },
+          "requested_by_name": {
+            "title": "Requested By Name",
+            "type": "string"
+          },
+          "resume_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume At"
+          },
+          "scope": {
+            "enum": [
+              "manual",
+              "job"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "completed",
+              "partial",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "scope",
+          "job_id",
+          "status",
+          "providers",
+          "summary",
+          "deadline_at",
+          "resume_at",
+          "requested_by",
+          "requested_by_name",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "RunOut",
+        "type": "object"
+      },
+      "RunPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "RunPage",
+        "type": "object"
+      },
+      "RunRequestOut": {
+        "description": "202: a new run; 200: an active run of the same job (`deduplicated`) or nothing\neligible (`run` is null, the report explains why).",
+        "properties": {
+          "deduplicated": {
+            "title": "Deduplicated",
+            "type": "boolean"
+          },
+          "items": {
+            "title": "Items",
+            "type": "integer"
+          },
+          "report": {
+            "items": {
+              "$ref": "#/components/schemas/ValueReportOut"
+            },
+            "title": "Report",
+            "type": "array"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "additionalProperties": true,
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "required": [
+          "run",
+          "deduplicated",
+          "items",
+          "summary",
+          "report"
+        ],
+        "title": "RunRequestOut",
+        "type": "object"
+      },
       "SampleOut": {
         "description": "Sample facts. `size` and the md5/sha1/sha256 hashes are the evidence record's\n(computed at upload; ingest refuses a result whose sample differs).",
         "properties": {
@@ -3542,6 +5651,54 @@
         "title": "StringPage",
         "type": "object"
       },
+      "TiSettingsOut": {
+        "properties": {
+          "excluded_suffixes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded Suffixes",
+            "type": "array"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "excluded_suffixes",
+          "updated_at"
+        ],
+        "title": "TiSettingsOut",
+        "type": "object"
+      },
+      "TiSettingsUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "excluded_suffixes": {
+            "items": {
+              "maxLength": 255,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Excluded Suffixes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "excluded_suffixes"
+        ],
+        "title": "TiSettingsUpdate",
+        "type": "object"
+      },
       "TimelineOut": {
         "properties": {
           "dst_ip": {
@@ -3642,6 +5799,176 @@
         "title": "TimelinePage",
         "type": "object"
       },
+      "UrlhausBlacklists": {
+        "additionalProperties": false,
+        "properties": {
+          "spamhaus_dbl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spamhaus Dbl"
+          },
+          "surbl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Surbl"
+          }
+        },
+        "title": "UrlhausBlacklists",
+        "type": "object"
+      },
+      "UrlhausSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "blacklists": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UrlhausBlacklists"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "date_added": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Added"
+          },
+          "first_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen"
+          },
+          "last_online": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Online"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "lookup": {
+            "anyOf": [
+              {
+                "enum": [
+                  "url",
+                  "host",
+                  "payload"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lookup"
+          },
+          "provider": {
+            "const": "urlhaus",
+            "default": "urlhaus",
+            "title": "Provider",
+            "type": "string"
+          },
+          "signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "threat": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threat"
+          },
+          "url_count": {
+            "anyOf": [
+              {
+                "maximum": 1000000000000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url Count"
+          },
+          "url_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url Status"
+          }
+        },
+        "title": "UrlhausSummary",
+        "type": "object"
+      },
       "UserOut": {
         "properties": {
           "display_name": {
@@ -3706,6 +6033,92 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "ValueReportOut": {
+        "description": "How one manual lookup value was normalized, and who (if anyone) receives it.",
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "ioc_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ioc Key"
+          },
+          "ioc_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ioc Type"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "provider_skips": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Provider Skips",
+            "type": "object"
+          },
+          "providers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "skipped": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped"
+          },
+          "value_norm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Norm"
+          }
+        },
+        "required": [
+          "index",
+          "ioc_type",
+          "value_norm",
+          "ioc_key",
+          "notes",
+          "skipped",
+          "providers",
+          "provider_skips"
+        ],
+        "title": "ValueReportOut",
+        "type": "object"
+      },
       "VerifyOut": {
         "properties": {
           "actual": {
@@ -3758,6 +6171,275 @@
         ],
         "title": "VerifyOut",
         "type": "object"
+      },
+      "VerifyQueued": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "status": {
+            "const": "queued",
+            "default": "queued",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "VerifyQueued",
+        "type": "object"
+      },
+      "VerifyStatus": {
+        "enum": [
+          "unverified",
+          "valid",
+          "invalid",
+          "error"
+        ],
+        "title": "VerifyStatus",
+        "type": "string"
+      },
+      "VirusTotalSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "as_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Owner"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "first_submission_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Submission Date"
+          },
+          "last_analysis_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Analysis Date"
+          },
+          "last_analysis_stats": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VtAnalysisStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_submission_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Submission Date"
+          },
+          "meaningful_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meaningful Name"
+          },
+          "provider": {
+            "const": "virustotal",
+            "default": "virustotal",
+            "title": "Provider",
+            "type": "string"
+          },
+          "reputation": {
+            "anyOf": [
+              {
+                "maximum": 1000000000000.0,
+                "minimum": -1000000000000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reputation"
+          },
+          "suggested_threat_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Threat Label"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "total_votes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VtVotes"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type Tag"
+          }
+        },
+        "title": "VirusTotalSummary",
+        "type": "object"
+      },
+      "VtAnalysisStats": {
+        "additionalProperties": false,
+        "properties": {
+          "harmless": {
+            "default": 0,
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
+            "title": "Harmless",
+            "type": "integer"
+          },
+          "malicious": {
+            "default": 0,
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
+            "title": "Malicious",
+            "type": "integer"
+          },
+          "suspicious": {
+            "default": 0,
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
+            "title": "Suspicious",
+            "type": "integer"
+          },
+          "timeout": {
+            "default": 0,
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
+            "title": "Timeout",
+            "type": "integer"
+          },
+          "undetected": {
+            "default": 0,
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
+            "title": "Undetected",
+            "type": "integer"
+          }
+        },
+        "title": "VtAnalysisStats",
+        "type": "object"
+      },
+      "VtVotes": {
+        "additionalProperties": false,
+        "properties": {
+          "harmless": {
+            "default": 0,
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
+            "title": "Harmless",
+            "type": "integer"
+          },
+          "malicious": {
+            "default": 0,
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
+            "title": "Malicious",
+            "type": "integer"
+          }
+        },
+        "title": "VtVotes",
+        "type": "object"
+      },
+      "app__modules__pcap_analysis__schemas__IocType": {
+        "description": "Every IOC type of the result contracts (cyberlab_jobs.results.IocType).",
+        "enum": [
+          "ip",
+          "domain",
+          "url",
+          "email",
+          "ja3",
+          "ja3s",
+          "cert_sha256",
+          "file_md5",
+          "file_sha1",
+          "file_sha256",
+          "registry_key",
+          "file_path"
+        ],
+        "title": "IocType",
+        "type": "string"
+      },
+      "app__modules__threat_intel__providers__base__IocType": {
+        "enum": [
+          "ipv4",
+          "ipv6",
+          "domain",
+          "url",
+          "md5",
+          "sha1",
+          "sha256",
+          "email"
+        ],
+        "title": "IocType",
+        "type": "string"
       }
     }
   },
@@ -4536,6 +7218,80 @@
         ]
       }
     },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/enrichments": {
+      "post": {
+        "description": "Enrich a succeeded analysis job's IOC set (sample hashes first, then by count).",
+        "operationId": "request_job_enrichment_api_v1_orgs__org_id__analyses__job_id__enrichments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichmentCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunRequestOut"
+                }
+              }
+            },
+            "description": "Deduplicated or nothing eligible"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunRequestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Job Enrichment",
+        "tags": [
+          "threat-intel"
+        ]
+      }
+    },
     "/api/v1/orgs/{org_id}/analyses/{job_id}/exports": {
       "get": {
         "operationId": "list_exports_api_v1_orgs__org_id__analyses__job_id__exports_get",
@@ -5023,7 +7779,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/IocType"
+                  "$ref": "#/components/schemas/IocType-Input"
                 },
                 {
                   "type": "null"
@@ -5048,6 +7804,22 @@
                 }
               ],
               "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/IocInclude"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Include"
             }
           },
           {
@@ -6319,6 +9091,208 @@
         ]
       }
     },
+    "/api/v1/orgs/{org_id}/integrations": {
+      "get": {
+        "description": "The provider catalog with this org's configuration status (never a key).",
+        "operationId": "list_integrations_api_v1_orgs__org_id__integrations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Integrations",
+        "tags": [
+          "threat-intel"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/integrations/{provider}": {
+      "put": {
+        "description": "Store a key (sealed, write-only), enable/disable, acknowledge terms, set limits or the\nMISP base URL. A new key is checked after the commit (`ti.verify`) within the same\nper-provider limit as POST .../verify; `verify_queued` says whether it was.",
+        "operationId": "update_integration_api_v1_orgs__org_id__integrations__provider__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProviderName"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntegrationUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationSaved"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Integration",
+        "tags": [
+          "threat-intel"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/integrations/{provider}/key": {
+      "delete": {
+        "operationId": "remove_integration_key_api_v1_orgs__org_id__integrations__provider__key_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProviderName"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Integration Key",
+        "tags": [
+          "threat-intel"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/integrations/{provider}/verify": {
+      "post": {
+        "description": "Queue a check of the stored key (the enrich worker calls the provider).",
+        "operationId": "verify_integration_api_v1_orgs__org_id__integrations__provider__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProviderName"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Integration",
+        "tags": [
+          "threat-intel"
+        ]
+      }
+    },
     "/api/v1/orgs/{org_id}/investigations": {
       "get": {
         "operationId": "list_investigations_api_v1_orgs__org_id__investigations_get",
@@ -7039,6 +10013,552 @@
         "summary": "Get Storage",
         "tags": [
           "organizations"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ti/lookups": {
+      "post": {
+        "description": "Manual IOC lookup: a per-value normalization report plus the run (if any value is\neligible for a requested provider).",
+        "operationId": "request_lookup_api_v1_orgs__org_id__ti_lookups_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunRequestOut"
+                }
+              }
+            },
+            "description": "Nothing eligible (report only)"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunRequestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Lookup",
+        "tags": [
+          "threat-intel"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ti/results": {
+      "get": {
+        "description": "Every stored answer for the normalized indicator, newest first (400 `invalid_ioc`\nwhen the value cannot be normalized; `skipped` says why no provider would receive it).",
+        "operationId": "get_history_api_v1_orgs__org_id__ti_results_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value",
+            "required": true,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "title": "Value",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/LookupType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ProviderName"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get History",
+        "tags": [
+          "threat-intel"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ti/results/{result_id}": {
+      "get": {
+        "operationId": "get_result_api_v1_orgs__org_id__ti_results__result_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Result",
+        "tags": [
+          "threat-intel"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ti/runs": {
+      "get": {
+        "operationId": "list_runs_api_v1_orgs__org_id__ti_runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "job_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "waiting",
+                    "completed",
+                    "partial",
+                    "failed"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runs",
+        "tags": [
+          "threat-intel"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ti/runs/{run_id}": {
+      "get": {
+        "description": "The run with one page of its items, each with its result (`from_cache` when the\nanswer came from an earlier run).",
+        "operationId": "get_run_api_v1_orgs__org_id__ti_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "provider",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ProviderName"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending",
+                    "done",
+                    "cached",
+                    "abandoned"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Run",
+        "tags": [
+          "threat-intel"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ti/settings": {
+      "get": {
+        "operationId": "get_ti_settings_api_v1_orgs__org_id__ti_settings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TiSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ti Settings",
+        "tags": [
+          "threat-intel"
+        ]
+      },
+      "put": {
+        "operationId": "update_ti_settings_api_v1_orgs__org_id__ti_settings_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TiSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TiSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Ti Settings",
+        "tags": [
+          "threat-intel"
         ]
       }
     }

@@ -21,6 +21,7 @@ from app.modules.organizations.models import MemberRole
 from tests import static_results
 from tests.factories import Registered, add_member, csrf, make_user, new_client, register
 from tests.pcap_results import seed_results
+from tests.ti_api_helpers import add_result, capture_sends, enable, lookup
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,9 @@ class Victim:
     job_id: str  # an analysis job (on a second evidence, so the first can still be analyzed)
     static_job_id: str  # the second evidence's automatic static job, with results
     outsider_email: str  # a real user who is not a member of the victim org
+    run_id: str  # a threat intel enrichment run
+    result_id: str  # one of its provider answers
+    provider: str = "mock"  # a configured, enabled provider (not an org-owned id)
 
 
 Request = dict[str, Any]
@@ -105,6 +109,25 @@ ROUTE_CASES: dict[tuple[str, str], CaseBuilder] = {
         "params": {"namespace": "host-interaction", "attack": "T1055"}
     },
     ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/report"): lambda v: {},
+    # Threat intel (M4).
+    ("GET", "/api/v1/orgs/{org_id}/integrations"): lambda v: {},
+    ("PUT", "/api/v1/orgs/{org_id}/integrations/{provider}"): lambda v: {
+        "json": {"limits": {"per_minute": 5}, "enabled": False}
+    },
+    ("DELETE", "/api/v1/orgs/{org_id}/integrations/{provider}/key"): lambda v: {},
+    ("POST", "/api/v1/orgs/{org_id}/integrations/{provider}/verify"): lambda v: {},
+    ("GET", "/api/v1/orgs/{org_id}/ti/settings"): lambda v: {},
+    ("PUT", "/api/v1/orgs/{org_id}/ti/settings"): lambda v: {
+        "json": {"excluded_suffixes": ["hijacked.example.net"]}
+    },
+    ("POST", "/api/v1/orgs/{org_id}/analyses/{job_id}/enrichments"): lambda v: {"json": {}},
+    ("POST", "/api/v1/orgs/{org_id}/ti/lookups"): lambda v: {
+        "json": {"values": [{"value": "hit.example.com"}]}
+    },
+    ("GET", "/api/v1/orgs/{org_id}/ti/runs"): lambda v: {"params": {"status": "queued"}},
+    ("GET", "/api/v1/orgs/{org_id}/ti/runs/{run_id}"): lambda v: {},
+    ("GET", "/api/v1/orgs/{org_id}/ti/results"): lambda v: {"params": {"value": "hit.example.com"}},
+    ("GET", "/api/v1/orgs/{org_id}/ti/results/{result_id}"): lambda v: {},
 }
 # Routes of static jobs only: replayed against the victim's static job.
 STATIC_JOB_ROUTES = {
@@ -124,7 +147,14 @@ STATIC_JOB_ROUTES = {
 
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
-RESOURCE_PARAMS = ("{member_id}", "{investigation_id}", "{evidence_id}", "{job_id}")
+RESOURCE_PARAMS = (
+    "{member_id}",
+    "{investigation_id}",
+    "{evidence_id}",
+    "{job_id}",
+    "{run_id}",
+    "{result_id}",
+)
 APP_DIR = Path(__file__).resolve().parents[2] / "app"
 
 
@@ -137,6 +167,13 @@ def org_scoped_routes() -> set[tuple[str, str]]:
         for method in item
         if method in HTTP_METHODS
     }
+
+
+@pytest.fixture(autouse=True)
+def _no_publish(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Threat intel publishes (`ti.enrich`, `ti.verify`) are captured: no live enrich worker
+    takes part in these tests (analysis jobs are still queued for real, as before)."""
+    capture_sends(monkeypatch, analyses=False)
 
 
 def test_route_enumeration_is_not_empty() -> None:
@@ -206,6 +243,18 @@ async def _victim() -> tuple[Registered, Victim]:
     jobs = (await c.get(f"/api/v1/orgs/{owner.org_id}/evidence/{second['id']}/analyses")).json()
     [static_job] = [j for j in jobs["items"] if j["analyzer"] == "static"]
     await static_results.seed_results(owner.org_id, uuid.UUID(static_job["id"]))
+    # Threat intel: a configured provider, settings, a run and one of its answers.
+    await enable(c, owner.org_id)
+    settings = await c.put(
+        f"/api/v1/orgs/{owner.org_id}/ti/settings",
+        json={"excluded_suffixes": ["victim-corp.net"]},
+        headers=csrf(c),
+    )
+    assert settings.status_code == 200, settings.text
+    run = await lookup(c, owner.org_id, "hit.example.com")
+    assert run.status_code == 202, run.text
+    run_id = run.json()["run"]["id"]
+    result_id = await add_result(owner.org_id, run_id)
     return owner, Victim(
         owner.org_id,
         member["id"],
@@ -214,6 +263,8 @@ async def _victim() -> tuple[Registered, Victim]:
         job["id"],
         static_job["id"],
         outsider_email=outsider.email,
+        run_id=run_id,
+        result_id=str(result_id),
     )
 
 
@@ -225,6 +276,9 @@ def _url(template: str, org_id: uuid.UUID, victim: Victim) -> str:
         investigation_id=victim.investigation_id,
         evidence_id=victim.evidence_id,
         job_id=victim.static_job_id if static else victim.job_id,
+        run_id=victim.run_id,
+        result_id=victim.result_id,
+        provider=victim.provider,
     )
 
 
@@ -252,7 +306,16 @@ async def _victim_state(owner: Registered, victim: Victim) -> dict[str, Any]:
     ).json()
     evidence = (await c.get(f"{base}/evidence/{victim.evidence_id}")).json()
     jobs = (await c.get(f"{base}/analyses")).json()
+    integrations = (await c.get(f"{base}/integrations")).json()
+    ti_settings = (await c.get(f"{base}/ti/settings")).json()
+    ti_runs = (await c.get(f"{base}/ti/runs")).json()
     return {
+        "integrations": sorted(
+            (i["name"], i["configured"], i["enabled"], i["key_last4"], str(i["limits"]))
+            for i in integrations["items"]
+        ),
+        "ti_settings": ti_settings["excluded_suffixes"],
+        "ti_runs": sorted((r["id"], r["status"]) for r in ti_runs["items"]),
         "jobs": sorted((j["id"], j["evidence_id"]) for j in jobs["items"]),
         "name": org["name"],
         "members": sorted((m["email"], m["role"]) for m in members["items"]),

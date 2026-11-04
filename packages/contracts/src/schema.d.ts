@@ -234,6 +234,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/enrichments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Job Enrichment
+         * @description Enrich a succeeded analysis job's IOC set (sample hashes first, then by count).
+         */
+        post: operations["request_job_enrichment_api_v1_orgs__org_id__analyses__job_id__enrichments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/analyses/{job_id}/exports": {
         parameters: {
             query?: never;
@@ -585,6 +605,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/integrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Integrations
+         * @description The provider catalog with this org's configuration status (never a key).
+         */
+        get: operations["list_integrations_api_v1_orgs__org_id__integrations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/integrations/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Integration
+         * @description Store a key (sealed, write-only), enable/disable, acknowledge terms, set limits or the
+         *     MISP base URL. A new key is checked after the commit (`ti.verify`) within the same
+         *     per-provider limit as POST .../verify; `verify_queued` says whether it was.
+         */
+        put: operations["update_integration_api_v1_orgs__org_id__integrations__provider__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/integrations/{provider}/key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Integration Key */
+        delete: operations["remove_integration_key_api_v1_orgs__org_id__integrations__provider__key_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/integrations/{provider}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Integration
+         * @description Queue a check of the stored key (the enrich worker calls the provider).
+         */
+        post: operations["verify_integration_api_v1_orgs__org_id__integrations__provider__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/investigations": {
         parameters: {
             query?: never;
@@ -695,10 +794,156 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/ti/lookups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Lookup
+         * @description Manual IOC lookup: a per-value normalization report plus the run (if any value is
+         *     eligible for a requested provider).
+         */
+        post: operations["request_lookup_api_v1_orgs__org_id__ti_lookups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ti/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get History
+         * @description Every stored answer for the normalized indicator, newest first (400 `invalid_ioc`
+         *     when the value cannot be normalized; `skipped` says why no provider would receive it).
+         */
+        get: operations["get_history_api_v1_orgs__org_id__ti_results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ti/results/{result_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Result */
+        get: operations["get_result_api_v1_orgs__org_id__ti_results__result_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ti/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Runs */
+        get: operations["list_runs_api_v1_orgs__org_id__ti_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ti/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Run
+         * @description The run with one page of its items, each with its result (`from_cache` when the
+         *     answer came from an earlier run).
+         */
+        get: operations["get_run_api_v1_orgs__org_id__ti_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ti/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ti Settings */
+        get: operations["get_ti_settings_api_v1_orgs__org_id__ti_settings_get"];
+        /** Update Ti Settings */
+        put: operations["update_ti_settings_api_v1_orgs__org_id__ti_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AbuseIpdbSummary */
+        AbuseIpdbSummary: {
+            /** Abuse Confidence Score */
+            abuse_confidence_score?: number | null;
+            /**
+             * Categories
+             * @default []
+             */
+            categories: number[];
+            /** Country Code */
+            country_code?: string | null;
+            /** Is Tor */
+            is_tor?: boolean | null;
+            /** Is Whitelisted */
+            is_whitelisted?: boolean | null;
+            /** Isp */
+            isp?: string | null;
+            /** Last Reported At */
+            last_reported_at?: string | null;
+            /** Num Distinct Users */
+            num_distinct_users?: number | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            provider: "abuseipdb";
+            /** Total Reports */
+            total_reports?: number | null;
+            /** Usage Type */
+            usage_type?: string | null;
+        };
         /** AlertOut */
         AlertOut: {
             /** Category */
@@ -993,6 +1238,18 @@ export interface components {
             /** Total */
             total: number;
         };
+        /**
+         * Detections
+         * @description VirusTotal's own engine counts (shown attributed, never as our verdict).
+         */
+        Detections: {
+            /** Malicious */
+            malicious: number;
+            /** Suspicious */
+            suspicious: number;
+            /** Total */
+            total: number;
+        };
         /** ElfOut */
         ElfOut: {
             /** Elf Class */
@@ -1009,6 +1266,44 @@ export interface components {
             needed: string[];
             /** Stripped */
             stripped: boolean;
+        };
+        /**
+         * EnrichedIocOut
+         * @description An IOC row; with `include=enrichment`, the latest threat intel answer per provider
+         *     (M4) and, for values no provider would receive, the reason.
+         */
+        EnrichedIocOut: {
+            /** Count */
+            count: number;
+            /** Enrichment */
+            enrichment?: components["schemas"]["IocEnrichmentOut"][] | null;
+            /** Enrichment Skip */
+            enrichment_skip?: string | null;
+            /**
+             * First Seen
+             * Format: date-time
+             */
+            first_seen: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Seen
+             * Format: date-time
+             */
+            last_seen: string;
+            /** Source */
+            source: string;
+            type: components["schemas"]["app__modules__pcap_analysis__schemas__IocType"];
+            /** Value */
+            value: string;
+        };
+        /** EnrichmentCreate */
+        EnrichmentCreate: {
+            /** Providers */
+            providers?: components["schemas"]["ProviderName"][] | null;
         };
         /**
          * EvidenceOut
@@ -1239,6 +1534,25 @@ export interface components {
              */
             redis: "ok" | "error";
         };
+        /**
+         * HistoryOut
+         * @description Every stored answer for one normalized indicator (all providers, newest first).
+         */
+        HistoryOut: {
+            /** Ioc Key */
+            ioc_key: string | null;
+            ioc_type: components["schemas"]["app__modules__threat_intel__providers__base__IocType"] | null;
+            /** Items */
+            items: components["schemas"]["ResultOut"][];
+            /** Notes */
+            notes: string[];
+            /** Skipped */
+            skipped: string | null;
+            /** Total */
+            total: number;
+            /** Value Norm */
+            value_norm: string | null;
+        };
         /** ImportOut */
         ImportOut: {
             /** Function */
@@ -1278,6 +1592,106 @@ export interface components {
             top_libraries: components["schemas"]["LibraryCount"][];
             /** Total */
             total: number;
+        };
+        /** IntegrationOut */
+        IntegrationOut: {
+            /** Available */
+            available: boolean;
+            /** Base Url */
+            base_url: string | null;
+            ceilings: components["schemas"]["LimitsOut"];
+            /** Configured */
+            configured: boolean;
+            default_limits: components["schemas"]["LimitsOut"];
+            /** Enabled */
+            enabled: boolean;
+            /** Key Last4 */
+            key_last4: string | null;
+            /** Label */
+            label: string;
+            /** Last Error Code */
+            last_error_code: string | null;
+            limits: components["schemas"]["LimitsOut"] | null;
+            name: components["schemas"]["ProviderName"];
+            /** Needs Base Url */
+            needs_base_url: boolean;
+            /** Privacy Note */
+            privacy_note: string;
+            /** Supported Types */
+            supported_types: components["schemas"]["app__modules__threat_intel__providers__base__IocType"][];
+            /** Terms Ack At */
+            terms_ack_at: string | null;
+            /** Tos Note */
+            tos_note: string;
+            /** Verified At */
+            verified_at: string | null;
+            verify_status: components["schemas"]["VerifyStatus"] | null;
+        };
+        /** IntegrationPage */
+        IntegrationPage: {
+            /** Items */
+            items: components["schemas"]["IntegrationOut"][];
+            /** Ti Enabled */
+            ti_enabled: boolean;
+            /** Total */
+            total: number;
+        };
+        /**
+         * IntegrationSaved
+         * @description A PUT's answer: the read model plus whether a key check (`ti.verify`) was queued. It
+         *     is not when nothing verifiable changed (no new key, no new base URL), when the
+         *     per-provider verify limit (shared with POST .../verify) is spent, or when the broker is
+         *     unreachable; the save itself stands in every case.
+         */
+        IntegrationSaved: {
+            /** Available */
+            available: boolean;
+            /** Base Url */
+            base_url: string | null;
+            ceilings: components["schemas"]["LimitsOut"];
+            /** Configured */
+            configured: boolean;
+            default_limits: components["schemas"]["LimitsOut"];
+            /** Enabled */
+            enabled: boolean;
+            /** Key Last4 */
+            key_last4: string | null;
+            /** Label */
+            label: string;
+            /** Last Error Code */
+            last_error_code: string | null;
+            limits: components["schemas"]["LimitsOut"] | null;
+            name: components["schemas"]["ProviderName"];
+            /** Needs Base Url */
+            needs_base_url: boolean;
+            /** Privacy Note */
+            privacy_note: string;
+            /** Supported Types */
+            supported_types: components["schemas"]["app__modules__threat_intel__providers__base__IocType"][];
+            /** Terms Ack At */
+            terms_ack_at: string | null;
+            /** Tos Note */
+            tos_note: string;
+            /** Verified At */
+            verified_at: string | null;
+            /** Verify Queued */
+            verify_queued: boolean;
+            verify_status: components["schemas"]["VerifyStatus"] | null;
+        };
+        /** IntegrationUpdate */
+        IntegrationUpdate: {
+            /**
+             * Acknowledge Terms
+             * @default false
+             */
+            acknowledge_terms: boolean;
+            /** Api Key */
+            api_key?: string | null;
+            /** Base Url */
+            base_url?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            limits?: components["schemas"]["LimitsIn"] | null;
         };
         /** InvestigationCreate */
         InvestigationCreate: {
@@ -1350,6 +1764,48 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /**
+         * IocEnrichmentOut
+         * @description The latest answer of one provider for one IOC row (`include=enrichment`).
+         */
+        IocEnrichmentOut: {
+            /** Attack Ids */
+            attack_ids: string[];
+            detections: components["schemas"]["Detections"] | null;
+            /** Expires At */
+            expires_at: string | null;
+            /** Families */
+            families: string[];
+            /**
+             * Fetched At
+             * Format: date-time
+             */
+            fetched_at: string;
+            /** Found */
+            found: boolean;
+            /** Permalink */
+            permalink: string | null;
+            provider: components["schemas"]["ProviderName"];
+            /**
+             * Result Id
+             * Format: uuid
+             */
+            result_id: string;
+            /** Score */
+            score: number | null;
+            /** Score Scale */
+            score_scale: string | null;
+            /** Stale */
+            stale: boolean;
+            status: components["schemas"]["ResultStatus"];
+            /** Tags */
+            tags: string[];
+        };
+        /**
+         * IocInclude
+         * @enum {string}
+         */
+        IocInclude: "enrichment";
         /** IocOut */
         IocOut: {
             /** Count */
@@ -1371,14 +1827,14 @@ export interface components {
             last_seen: string;
             /** Source */
             source: string;
-            type: components["schemas"]["IocType"];
+            type: components["schemas"]["app__modules__pcap_analysis__schemas__IocType"];
             /** Value */
             value: string;
         };
         /** IocPage */
         IocPage: {
             /** Items */
-            items: components["schemas"]["IocOut"][];
+            items: components["schemas"]["EnrichedIocOut"][];
             /**
              * Total
              * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
@@ -1390,13 +1846,30 @@ export interface components {
          * @description Every IOC type of the result contracts (cyberlab_jobs.results.IocType).
          * @enum {string}
          */
-        IocType: "ip" | "domain" | "url" | "email" | "ja3" | "ja3s" | "cert_sha256" | "file_md5" | "file_sha1" | "file_sha256" | "registry_key" | "file_path";
+        "IocType-Input": "ip" | "domain" | "url" | "email" | "ja3" | "ja3s" | "cert_sha256" | "file_md5" | "file_sha1" | "file_sha256" | "registry_key" | "file_path";
         /** LibraryCount */
         LibraryCount: {
             /** Imports */
             imports: number;
             /** Library */
             library: string;
+        };
+        /**
+         * LimitsIn
+         * @description Self-imposed limits; an org may lower them, never raise them above the ceilings.
+         */
+        LimitsIn: {
+            /** Per Day */
+            per_day?: number | null;
+            /** Per Minute */
+            per_minute?: number | null;
+        };
+        /** LimitsOut */
+        LimitsOut: {
+            /** Per Day */
+            per_day: number | null;
+            /** Per Minute */
+            per_minute: number | null;
         };
         /** LoginIn */
         LoginIn: {
@@ -1407,6 +1880,56 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /** LookupCreate */
+        LookupCreate: {
+            /** Providers */
+            providers?: components["schemas"]["ProviderName"][] | null;
+            /** Values */
+            values: components["schemas"]["LookupValueIn"][];
+        };
+        /**
+         * LookupType
+         * @enum {string}
+         */
+        LookupType: "ip" | "ipv4" | "ipv6" | "domain" | "url" | "email" | "md5" | "sha1" | "sha256";
+        /** LookupValueIn */
+        LookupValueIn: {
+            type?: components["schemas"]["LookupType"] | null;
+            /** Value */
+            value: string;
+        };
+        /** MalwareBazaarSummary */
+        MalwareBazaarSummary: {
+            /** File Type */
+            file_type?: string | null;
+            /** First Seen */
+            first_seen?: string | null;
+            /** Imphash */
+            imphash?: string | null;
+            /** Last Seen */
+            last_seen?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            provider: "malwarebazaar";
+            /** Signature */
+            signature?: string | null;
+            /** Ssdeep */
+            ssdeep?: string | null;
+            /**
+             * Tags
+             * @default []
+             */
+            tags: string[];
+            /** Tlsh */
+            tlsh?: string | null;
+            /**
+             * Vendor Intel
+             * @default []
+             */
+            vendor_intel: string[];
         };
         /** MeOut */
         MeOut: {
@@ -1473,6 +1996,77 @@ export interface components {
             organization_name: string;
             role: components["schemas"]["MemberRole"];
         };
+        /** MispAttribute */
+        MispAttribute: {
+            /** Category */
+            category?: string | null;
+            /** Event Id */
+            event_id?: number | null;
+            /** Event Info */
+            event_info?: string | null;
+            /** Event Uuid */
+            event_uuid?: string | null;
+            /** First Seen */
+            first_seen?: string | null;
+            /** Last Seen */
+            last_seen?: string | null;
+            /**
+             * Tags
+             * @default []
+             */
+            tags: string[];
+            /** Timestamp */
+            timestamp?: string | null;
+            /**
+             * To Ids
+             * @default false
+             */
+            to_ids: boolean;
+            /** Type */
+            type: string;
+        };
+        /** MispSummary */
+        MispSummary: {
+            /**
+             * Attribute Count
+             * @default 0
+             */
+            attribute_count: number;
+            /**
+             * Attributes
+             * @default []
+             */
+            attributes: components["schemas"]["MispAttribute"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            provider: "misp";
+            /**
+             * Tlp
+             * @default []
+             */
+            tlp: string[];
+        };
+        /** MockSummary */
+        MockSummary: {
+            /** Behaviour */
+            behaviour?: string | null;
+            /** Hits */
+            hits?: number | null;
+            /** Label */
+            label?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            provider: "mock";
+            /**
+             * Tags
+             * @default []
+             */
+            tags: string[];
+        };
         /**
          * MyOrgOut
          * @description An org as seen by the caller, including the caller's role in it.
@@ -1519,6 +2113,59 @@ export interface components {
         OrgUpdate: {
             /** Name */
             name: string;
+        };
+        /** OtxPulse */
+        OtxPulse: {
+            /**
+             * Attack Ids
+             * @default []
+             */
+            attack_ids: string[];
+            /**
+             * Malware Families
+             * @default []
+             */
+            malware_families: string[];
+            /** Modified */
+            modified?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Tags
+             * @default []
+             */
+            tags: string[];
+        };
+        /** OtxSummary */
+        OtxSummary: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            provider: "otx";
+            /** Pulse Count */
+            pulse_count?: number | null;
+            /**
+             * Pulses
+             * @default []
+             */
+            pulses: components["schemas"]["OtxPulse"][];
+            /** Reputation */
+            reputation?: number | null;
+            /**
+             * Validation
+             * @default []
+             */
+            validation: components["schemas"]["OtxValidation"][];
+        };
+        /** OtxValidation */
+        OtxValidation: {
+            /** Message */
+            message?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Source */
+            source?: string | null;
         };
         /** PeOut */
         PeOut: {
@@ -1570,6 +2217,11 @@ export interface components {
          * @enum {string}
          */
         Profile: "full" | "av";
+        /**
+         * ProviderName
+         * @enum {string}
+         */
+        ProviderName: "virustotal" | "abuseipdb" | "urlhaus" | "malwarebazaar" | "otx" | "misp" | "mock";
         /**
          * RecordKind
          * @enum {string}
@@ -1896,6 +2548,220 @@ export interface components {
             total: number;
         };
         /**
+         * ResultOut
+         * @description One provider answer (verdict-free, source-attributed).
+         */
+        ResultOut: {
+            /** Attack Ids */
+            attack_ids: string[];
+            detections: components["schemas"]["Detections"] | null;
+            /** Error Code */
+            error_code: string | null;
+            /** Expires At */
+            expires_at: string | null;
+            /** Families */
+            families: string[];
+            /**
+             * Fetched At
+             * Format: date-time
+             */
+            fetched_at: string;
+            /** First Seen */
+            first_seen: string | null;
+            /** Found */
+            found: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ioc Key */
+            ioc_key: string;
+            ioc_type: components["schemas"]["app__modules__threat_intel__providers__base__IocType"];
+            /** Last Seen */
+            last_seen: string | null;
+            /** Permalink */
+            permalink: string | null;
+            provider: components["schemas"]["ProviderName"];
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Score */
+            score: number | null;
+            /** Score Scale */
+            score_scale: string | null;
+            /** Stale */
+            stale: boolean;
+            status: components["schemas"]["ResultStatus"];
+            /** Summary */
+            summary: (components["schemas"]["VirusTotalSummary"] | components["schemas"]["AbuseIpdbSummary"] | components["schemas"]["UrlhausSummary"] | components["schemas"]["MalwareBazaarSummary"] | components["schemas"]["OtxSummary"] | components["schemas"]["MispSummary"] | components["schemas"]["MockSummary"]) | null;
+            /** Tags */
+            tags: string[];
+            /** Value Norm */
+            value_norm: string;
+        };
+        /**
+         * ResultStatus
+         * @description What a provider said. Rate-limit, quota and deadline outcomes are run-item states,
+         *     never results (the history shows only real provider answers).
+         * @enum {string}
+         */
+        ResultStatus: "ok" | "not_found" | "error" | "auth_failed";
+        /** RunDetailOut */
+        RunDetailOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Deadline At
+             * Format: date-time
+             */
+            deadline_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            items: components["schemas"]["RunItemPage"];
+            /** Job Id */
+            job_id: string | null;
+            /** Providers */
+            providers: string[];
+            /**
+             * Requested By
+             * Format: uuid
+             */
+            requested_by: string;
+            /** Requested By Name */
+            requested_by_name: string;
+            /** Resume At */
+            resume_at: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "manual" | "job";
+            /** Started At */
+            started_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "waiting" | "completed" | "partial" | "failed";
+            /** Summary */
+            summary: {
+                [key: string]: unknown;
+            };
+        };
+        /** RunItemOut */
+        RunItemOut: {
+            /** From Cache */
+            from_cache: boolean;
+            /** Ioc Key */
+            ioc_key: string;
+            ioc_type: components["schemas"]["app__modules__threat_intel__providers__base__IocType"];
+            provider: components["schemas"]["ProviderName"];
+            /** Reason */
+            reason: ("rate_limited" | "quota_exhausted" | "deadline" | "auth_failed") | null;
+            result: components["schemas"]["ResultOut"] | null;
+            /** Seq */
+            seq: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "done" | "cached" | "abandoned";
+            /** Value Norm */
+            value_norm: string;
+        };
+        /** RunItemPage */
+        RunItemPage: {
+            /** Items */
+            items: components["schemas"]["RunItemOut"][];
+            /** Total */
+            total: number;
+        };
+        /** RunOut */
+        RunOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Deadline At
+             * Format: date-time
+             */
+            deadline_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Job Id */
+            job_id: string | null;
+            /** Providers */
+            providers: string[];
+            /**
+             * Requested By
+             * Format: uuid
+             */
+            requested_by: string;
+            /** Requested By Name */
+            requested_by_name: string;
+            /** Resume At */
+            resume_at: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "manual" | "job";
+            /** Started At */
+            started_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "waiting" | "completed" | "partial" | "failed";
+            /** Summary */
+            summary: {
+                [key: string]: unknown;
+            };
+        };
+        /** RunPage */
+        RunPage: {
+            /** Items */
+            items: components["schemas"]["RunOut"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * RunRequestOut
+         * @description 202: a new run; 200: an active run of the same job (`deduplicated`) or nothing
+         *     eligible (`run` is null, the report explains why).
+         */
+        RunRequestOut: {
+            /** Deduplicated */
+            deduplicated: boolean;
+            /** Items */
+            items: number;
+            /** Report */
+            report: components["schemas"]["ValueReportOut"][];
+            run: components["schemas"]["RunOut"] | null;
+            /** Summary */
+            summary: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * SampleOut
          * @description Sample facts. `size` and the md5/sha1/sha256 hashes are the evidence record's
          *     (computed at upload; ingest refuses a result whose sample differs).
@@ -2084,6 +2950,18 @@ export interface components {
              */
             total: number;
         };
+        /** TiSettingsOut */
+        TiSettingsOut: {
+            /** Excluded Suffixes */
+            excluded_suffixes: string[];
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /** TiSettingsUpdate */
+        TiSettingsUpdate: {
+            /** Excluded Suffixes */
+            excluded_suffixes: string[];
+        };
         /** TimelineOut */
         TimelineOut: {
             /** Dst Ip */
@@ -2118,6 +2996,45 @@ export interface components {
              */
             total: number;
         };
+        /** UrlhausBlacklists */
+        UrlhausBlacklists: {
+            /** Spamhaus Dbl */
+            spamhaus_dbl?: string | null;
+            /** Surbl */
+            surbl?: string | null;
+        };
+        /** UrlhausSummary */
+        UrlhausSummary: {
+            blacklists?: components["schemas"]["UrlhausBlacklists"] | null;
+            /** Date Added */
+            date_added?: string | null;
+            /** First Seen */
+            first_seen?: string | null;
+            /** Last Online */
+            last_online?: string | null;
+            /** Last Seen */
+            last_seen?: string | null;
+            /** Lookup */
+            lookup?: ("url" | "host" | "payload") | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            provider: "urlhaus";
+            /** Signature */
+            signature?: string | null;
+            /**
+             * Tags
+             * @default []
+             */
+            tags: string[];
+            /** Threat */
+            threat?: string | null;
+            /** Url Count */
+            url_count?: number | null;
+            /** Url Status */
+            url_status?: string | null;
+        };
         /** UserOut */
         UserOut: {
             /** Display Name */
@@ -2143,6 +3060,30 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /**
+         * ValueReportOut
+         * @description How one manual lookup value was normalized, and who (if anyone) receives it.
+         */
+        ValueReportOut: {
+            /** Index */
+            index: number;
+            /** Ioc Key */
+            ioc_key: string | null;
+            /** Ioc Type */
+            ioc_type: string | null;
+            /** Notes */
+            notes: string[];
+            /** Provider Skips */
+            provider_skips: {
+                [key: string]: string;
+            };
+            /** Providers */
+            providers: string[];
+            /** Skipped */
+            skipped: string | null;
+            /** Value Norm */
+            value_norm: string | null;
+        };
         /** VerifyOut */
         VerifyOut: {
             /** Actual */
@@ -2161,6 +3102,106 @@ export interface components {
             /** Size Bytes */
             size_bytes: number | null;
         };
+        /** VerifyQueued */
+        VerifyQueued: {
+            provider: components["schemas"]["ProviderName"];
+            /**
+             * Status
+             * @default queued
+             * @constant
+             */
+            status: "queued";
+        };
+        /**
+         * VerifyStatus
+         * @enum {string}
+         */
+        VerifyStatus: "unverified" | "valid" | "invalid" | "error";
+        /** VirusTotalSummary */
+        VirusTotalSummary: {
+            /** As Owner */
+            as_owner?: string | null;
+            /** Country */
+            country?: string | null;
+            /** First Submission Date */
+            first_submission_date?: string | null;
+            /** Last Analysis Date */
+            last_analysis_date?: string | null;
+            last_analysis_stats?: components["schemas"]["VtAnalysisStats"] | null;
+            /** Last Submission Date */
+            last_submission_date?: string | null;
+            /** Meaningful Name */
+            meaningful_name?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            provider: "virustotal";
+            /** Reputation */
+            reputation?: number | null;
+            /** Suggested Threat Label */
+            suggested_threat_label?: string | null;
+            /**
+             * Tags
+             * @default []
+             */
+            tags: string[];
+            total_votes?: components["schemas"]["VtVotes"] | null;
+            /** Type Tag */
+            type_tag?: string | null;
+        };
+        /** VtAnalysisStats */
+        VtAnalysisStats: {
+            /**
+             * Harmless
+             * @default 0
+             */
+            harmless: number;
+            /**
+             * Malicious
+             * @default 0
+             */
+            malicious: number;
+            /**
+             * Suspicious
+             * @default 0
+             */
+            suspicious: number;
+            /**
+             * Timeout
+             * @default 0
+             */
+            timeout: number;
+            /**
+             * Undetected
+             * @default 0
+             */
+            undetected: number;
+        };
+        /** VtVotes */
+        VtVotes: {
+            /**
+             * Harmless
+             * @default 0
+             */
+            harmless: number;
+            /**
+             * Malicious
+             * @default 0
+             */
+            malicious: number;
+        };
+        /**
+         * IocType
+         * @description Every IOC type of the result contracts (cyberlab_jobs.results.IocType).
+         * @enum {string}
+         */
+        app__modules__pcap_analysis__schemas__IocType: "ip" | "domain" | "url" | "email" | "ja3" | "ja3s" | "cert_sha256" | "file_md5" | "file_sha1" | "file_sha256" | "registry_key" | "file_path";
+        /**
+         * IocType
+         * @enum {string}
+         */
+        app__modules__threat_intel__providers__base__IocType: "ipv4" | "ipv6" | "domain" | "url" | "md5" | "sha1" | "sha256" | "email";
     };
     responses: never;
     parameters: never;
@@ -2616,6 +3657,51 @@ export interface operations {
             };
         };
     };
+    request_job_enrichment_api_v1_orgs__org_id__analyses__job_id__enrichments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnrichmentCreate"];
+            };
+        };
+        responses: {
+            /** @description Deduplicated or nothing eligible */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunRequestOut"];
+                };
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunRequestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_exports_api_v1_orgs__org_id__analyses__job_id__exports_get: {
         parameters: {
             query?: {
@@ -2768,8 +3854,9 @@ export interface operations {
     list_iocs_api_v1_orgs__org_id__analyses__job_id__iocs_get: {
         parameters: {
             query?: {
-                type?: components["schemas"]["IocType"] | null;
+                type?: components["schemas"]["IocType-Input"] | null;
                 q?: string | null;
+                include?: components["schemas"]["IocInclude"] | null;
                 limit?: number;
                 offset?: number;
             };
@@ -3360,6 +4447,135 @@ export interface operations {
             };
         };
     };
+    list_integrations_api_v1_orgs__org_id__integrations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_integration_api_v1_orgs__org_id__integrations__provider__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: components["schemas"]["ProviderName"];
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntegrationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationSaved"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_integration_key_api_v1_orgs__org_id__integrations__provider__key_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: components["schemas"]["ProviderName"];
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_integration_api_v1_orgs__org_id__integrations__provider__verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: components["schemas"]["ProviderName"];
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerifyQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_investigations_api_v1_orgs__org_id__investigations_get: {
         parameters: {
             query?: {
@@ -3728,6 +4944,258 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StorageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_lookup_api_v1_orgs__org_id__ti_lookups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LookupCreate"];
+            };
+        };
+        responses: {
+            /** @description Nothing eligible (report only) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunRequestOut"];
+                };
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunRequestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_history_api_v1_orgs__org_id__ti_results_get: {
+        parameters: {
+            query: {
+                value: string;
+                type?: components["schemas"]["LookupType"] | null;
+                provider?: components["schemas"]["ProviderName"] | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_result_api_v1_orgs__org_id__ti_results__result_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_runs_api_v1_orgs__org_id__ti_runs_get: {
+        parameters: {
+            query?: {
+                job_id?: string | null;
+                status?: ("queued" | "running" | "waiting" | "completed" | "partial" | "failed") | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_api_v1_orgs__org_id__ti_runs__run_id__get: {
+        parameters: {
+            query?: {
+                provider?: components["schemas"]["ProviderName"] | null;
+                state?: ("pending" | "done" | "cached" | "abandoned") | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ti_settings_api_v1_orgs__org_id__ti_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TiSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_ti_settings_api_v1_orgs__org_id__ti_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TiSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TiSettingsOut"];
                 };
             };
             /** @description Validation Error */

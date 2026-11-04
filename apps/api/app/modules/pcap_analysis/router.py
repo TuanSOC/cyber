@@ -13,6 +13,7 @@ from app.modules.pcap_analysis import repository as repo
 from app.modules.pcap_analysis.schemas import (
     AlertOut,
     AlertPage,
+    EnrichedIocOut,
     FindingOut,
     FindingPage,
     FindingSeverity,
@@ -20,7 +21,6 @@ from app.modules.pcap_analysis.schemas import (
     FlowPage,
     FlowProto,
     FlowSort,
-    IocOut,
     IocPage,
     IocType,
     RecordKind,
@@ -29,6 +29,8 @@ from app.modules.pcap_analysis.schemas import (
     TimelineOut,
     TimelinePage,
 )
+from app.modules.threat_intel import service_results as ti_results
+from app.modules.threat_intel.schemas import IocInclude
 
 router = APIRouter(prefix="/orgs/{org_id}/analyses/{job_id}", tags=["pcap-analysis"])
 
@@ -108,10 +110,14 @@ async def list_iocs(
     page: PageParamsDep,
     type: IocType | None = None,  # noqa: A002 - public query parameter name
     q: Annotated[SearchTerm | None, Query()] = None,
+    include: IocInclude | None = None,
 ) -> IocPage:
     await repo.ensure_job(ctx.session, ctx.org_id, job_id)
     rows, total = await repo.iocs(ctx.session, ctx.org_id, job_id, page, type_=type, q=q)
-    return IocPage(items=[IocOut.model_validate(r) for r in rows], total=total)
+    if include is IocInclude.ENRICHMENT:
+        enriched = await ti_results.enrich_iocs(ctx.session, ctx.org_id, rows)
+        return IocPage(items=[EnrichedIocOut.model_validate(r) for r in enriched], total=total)
+    return IocPage(items=[EnrichedIocOut.model_validate(r) for r in rows], total=total)
 
 
 @router.get("/timeline", response_model=TimelinePage)
