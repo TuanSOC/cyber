@@ -52,8 +52,9 @@ test("register, open a case, upload evidence, verify integrity", async ({ page }
   await expect(page.getByText(sha256, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Verify" }).click();
   await expect(page.getByText(/Integrity verified/).first()).toBeVisible();
-  await expect(page.getByText("2 events")).toBeVisible();
-  await expect(page.getByText("Uploaded", { exact: true })).toBeVisible();
+  // Uploads are also queued for an automatic analysis (AV scan), which adds custody events
+  // asynchronously: assert the events this flow produced rather than an exact count.
+  await expect(page.locator("p", { hasText: /^Uploaded$/ })).toBeVisible(); // custody entry
   await expect(page.getByText("Verified: hashes match")).toBeVisible();
 
   // Sign out -> protected pages redirect to login.

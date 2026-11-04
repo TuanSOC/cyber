@@ -180,6 +180,9 @@ export const IOC_TYPE_LABELS: Record<IocType, string> = {
   file_md5: "File MD5",
   file_sha1: "File SHA-1",
   file_sha256: "File SHA-256",
+  email: "Email",
+  registry_key: "Registry key",
+  file_path: "File path",
 };
 
 // ---------------------------------------------------------------------------------------------

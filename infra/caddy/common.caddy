@@ -1,6 +1,4 @@
-# Security headers. `?` only sets a header when the upstream did not (the API's download
-# responses keep their own `Content-Security-Policy: sandbox`). 'unsafe-inline' is needed by
-# the Next.js App Router without nonces; a strict nonce-based CSP is planned for M2.
+# Security headers shared by every response (CSP: see csp_fallback below).
 (security_headers) {
 	header {
 		X-Content-Type-Options nosniff
@@ -18,13 +16,16 @@
 	header Cross-Origin-Opener-Policy same-origin
 }
 
-(csp_prod) {
-	header ?Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
-}
-
-# Dev only: React needs eval for debug stacks; Turbopack HMR uses a websocket.
-(csp_dev) {
-	header ?Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+# Content-Security-Policy is owned by the upstreams:
+# - HTML pages: the web app (apps/web/proxy.ts) sets a per-request nonce policy; Caddy must not
+#   replace it (a static policy cannot carry the nonce, so it would either allow inline scripts
+#   or block Next.js's own).
+# - API downloads: FastAPI sets `Content-Security-Policy: sandbox`.
+# `?` only sets this fail-closed fallback when the upstream sent none: plain API/JSON responses,
+# gateway-generated errors, static assets and prefetch payloads (none of which need to run
+# anything). An HTML page that somehow lost the app policy renders inert instead of open.
+(csp_fallback) {
+	header ?Content-Security-Policy "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 }
 
 (cyberlab_routes) {

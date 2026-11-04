@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
-import { api } from "@/lib/api";
+import { api, endSession } from "@/lib/api";
 import { useMe } from "@/lib/use-me";
 
 export function UserMenu() {
@@ -23,6 +23,9 @@ export function UserMenu() {
   const user = me.data?.user;
 
   async function logout() {
+    // Stop every API call first (polling queries stay mounted until navigation completes).
+    endSession();
+    await queryClient.cancelQueries();
     // A 403 (no CSRF cookie) means the session is already gone: treat as logged out.
     await api.POST("/api/v1/auth/logout").catch(() => undefined);
     router.replace("/login");

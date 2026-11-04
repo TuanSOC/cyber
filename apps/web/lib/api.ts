@@ -71,12 +71,34 @@ export function refreshSession(): Promise<RefreshResult> {
   return refreshInFlight;
 }
 
+// Set on sign-out until the next successful login/register: polling queries still mounted
+// during the navigation must not hit the API (and log 401/403s) with a dead session.
+let signedOut = false;
+const SESSION_START = ["/api/v1/auth/login", "/api/v1/auth/register"];
+// Still allowed after endSession(): the logout call itself and starting a new session.
+const ALLOWED_SIGNED_OUT = [...SESSION_START, "/api/v1/auth/logout"];
+
+export function endSession(): void {
+  signedOut = true;
+}
+
+function signedOutResponse(): Response {
+  const body: ApiErrorBody = { error: { code: "unauthorized", message: "Signed out" } };
+  return new Response(JSON.stringify(body), {
+    status: 401,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 async function sessionFetch(input: Request): Promise<Response> {
+  const requestPath = new URL(input.url).pathname;
+  if (signedOut && !ALLOWED_SIGNED_OUT.includes(requestPath)) return signedOutResponse();
   // openapi-fetch only sends small JSON bodies, so keeping a replay copy is cheap. Large
   // evidence uploads go through XHR (lib/upload.ts) and never through here.
   const retry = input.clone();
   const response = await fetch(withCsrf(input));
   const path = new URL(input.url).pathname;
+  if (response.ok && SESSION_START.includes(path)) signedOut = false;
   if (response.status !== 401 || NO_REFRESH.includes(path)) return response;
 
   const refreshed = await refreshSession();
