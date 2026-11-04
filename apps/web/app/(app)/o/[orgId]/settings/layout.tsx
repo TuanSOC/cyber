@@ -14,6 +14,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   const tabs = [
     { href: orgPath(orgId, "settings"), label: "Organization" },
     { href: orgPath(orgId, "settings/members"), label: "Members" },
+    { href: orgPath(orgId, "settings/integrations"), label: "Integrations" },
     ...(can("audit.read") ? [{ href: orgPath(orgId, "settings/audit"), label: "Audit log" }] : []),
   ];
 

@@ -10,11 +10,12 @@ export type Permission =
   | "investigation.write"
   | "evidence.read"
   | "evidence.write"
-  | "audit.read";
+  | "audit.read"
+  | "integrations.manage";
 
 const READ: Permission[] = ["org.read", "members.read", "investigation.read", "evidence.read"];
 const ANALYST: Permission[] = [...READ, "investigation.write", "evidence.write"];
-const ADMIN: Permission[] = [...ANALYST, "org.update", "members.manage", "audit.read"];
+const ADMIN: Permission[] = [...ANALYST, "org.update", "members.manage", "audit.read", "integrations.manage"];
 
 const ROLE_PERMISSIONS: Record<MemberRole, ReadonlySet<Permission>> = {
   owner: new Set(ADMIN),

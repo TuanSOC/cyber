@@ -18,12 +18,13 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { NAV, orgPath } from "@/lib/nav";
+import { NAV, activeNavKey, orgPath } from "@/lib/nav";
 import { useOrg } from "@/lib/org-context";
 
 export function AppSidebar() {
   const { orgId } = useOrg();
   const pathname = usePathname();
+  const activeKey = activeNavKey(pathname, orgId);
 
   return (
     <Sidebar collapsible="icon">
@@ -40,9 +41,7 @@ export function AppSidebar() {
             <SidebarMenu>
               {NAV.map((item) => {
                 const href = orgPath(orgId, item.segment);
-                const active = item.segment
-                  ? pathname === href || pathname.startsWith(`${href}/`)
-                  : pathname === href;
+                const active = item.key === activeKey;
                 return (
                   <SidebarMenuItem key={item.key}>
                     <SidebarMenuButton asChild isActive={active} tooltip={item.label}>

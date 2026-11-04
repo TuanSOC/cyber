@@ -16,6 +16,7 @@ import {
   usePageOffset,
 } from "@/components/analysis/result-parts";
 import { SeverityBadge } from "@/components/severity-badge";
+import { type AttackLookup, AttackChips, MitreNotice, useAttackLookup } from "@/components/ti/attack-chips";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableHead } from "@/components/ui/table";
 import { api, unwrap } from "@/lib/api";
@@ -30,6 +31,7 @@ import {
   formatPercent,
 } from "@/lib/pcap-results";
 import { STATIC_FINDING_TYPES } from "@/lib/static-results";
+import { attackIdsFromAttributes } from "@/lib/ti";
 
 const SEVERITY_OPTIONS = FINDING_SEVERITIES.map((s) => [s, s[0].toUpperCase() + s.slice(1)] as const);
 
@@ -68,6 +70,9 @@ export function FindingsTab({
     placeholderData: keepPreviousData,
   });
   const filtered = severity !== ALL || type !== ALL;
+  // ATT&CK ids carried by findings (e.g. capa-derived static findings), labelled in one request.
+  const attackIdsOnPage = findings.data?.items.flatMap((f) => attackIdsFromAttributes(f.attributes)) ?? [];
+  const attackLookup = useAttackLookup(attackIdsOnPage);
 
   return (
     <ResultTable
@@ -83,11 +88,14 @@ export function FindingsTab({
             : "No findings. The heuristics and signature engines found nothing worth a closer look in this file."
       }
       note={
-        <p className="text-xs text-muted-foreground">
-          {isPcap
-            ? "Findings are heuristics that describe observed behaviour; they are leads to review, not verdicts."
-            : "Findings are heuristics and signature hits over the file's static features; they are leads to review, not verdicts."}
-        </p>
+        <div className="flex flex-col gap-1">
+          <p className="text-xs text-muted-foreground">
+            {isPcap
+              ? "Findings are heuristics that describe observed behaviour; they are leads to review, not verdicts."
+              : "Findings are heuristics and signature hits over the file's static features; they are leads to review, not verdicts."}
+          </p>
+          {attackIdsOnPage.length > 0 && <MitreNotice meta={attackLookup.meta} />}
+        </div>
       }
       filters={
         <>
@@ -125,7 +133,13 @@ export function FindingsTab({
     >
       {(items) =>
         items.map((f) => (
-          <FindingRow key={f.id} finding={f} columns={columns} onShowFlow={isPcap ? onShowFlow : undefined} />
+          <FindingRow
+            key={f.id}
+            finding={f}
+            columns={columns}
+            onShowFlow={isPcap ? onShowFlow : undefined}
+            attackLookup={attackLookup}
+          />
         ))
       }
     </ResultTable>
@@ -136,12 +150,15 @@ function FindingRow({
   finding: f,
   columns,
   onShowFlow,
+  attackLookup,
 }: {
   finding: Finding;
   columns: number;
   onShowFlow?: (link: FlowLink) => void;
+  attackLookup: AttackLookup;
 }) {
   const attributes = Object.entries(f.attributes ?? {});
+  const attack = attackIdsFromAttributes(f.attributes);
   return (
     <ExpandableRow
       columns={columns}
@@ -186,6 +203,12 @@ function FindingRow({
               <span className="text-muted-foreground">Protocol: </span>
               {f.protocol}
             </p>
+          )}
+          {attack.length > 0 && (
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">ATT&amp;CK techniques</p>
+              <AttackChips ids={attack} lookup={attackLookup} max={20} />
+            </div>
           )}
           <div>
             <p className="mb-1 text-xs font-medium text-muted-foreground">Measured values</p>

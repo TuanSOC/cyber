@@ -74,11 +74,10 @@ export const NAV: NavItem[] = [
   },
   {
     key: "ti",
-    label: "Threat Intelligence",
+    label: "Threat Intel",
     icon: ShieldAlert,
-    segment: "threat-intel",
-    plannedFor: "Milestone 4",
-    summary: "IOC enrichment with cached, rate-limited provider lookups.",
+    segment: "intel",
+    summary: "IOC lookups and enrichment history from your enabled providers, source-attributed.",
   },
   {
     key: "ai",
@@ -100,8 +99,7 @@ export const NAV: NavItem[] = [
     key: "integrations",
     label: "Integrations",
     icon: Plug,
-    segment: "integrations",
-    plannedFor: "Milestone 4",
+    segment: "settings/integrations",
     summary: "Threat intelligence provider keys and connectors.",
   },
   { key: "settings", label: "Settings", icon: Settings, segment: "settings", summary: "Organization and members." },
@@ -109,6 +107,17 @@ export const NAV: NavItem[] = [
 
 export function plannedModule(segment: string): NavItem | undefined {
   return NAV.find((item) => item.segment === segment && item.plannedFor);
+}
+
+/** The nav item for a path: the longest matching segment wins ("settings/integrations" over "settings"). */
+export function activeNavKey(pathname: string, orgId: string): string | undefined {
+  let best: NavItem | undefined;
+  for (const item of NAV) {
+    const href = orgPath(orgId, item.segment);
+    const match = item.segment ? pathname === href || pathname.startsWith(`${href}/`) : pathname === href;
+    if (match && (!best || item.segment.length > best.segment.length)) best = item;
+  }
+  return best?.key;
 }
 
 export function orgPath(orgId: string, segment = ""): string {
