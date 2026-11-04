@@ -17,6 +17,7 @@ from app.modules.evidence.router import router as evidence_router
 from app.modules.investigations.router import router as investigations_router
 from app.modules.organizations.router import router as orgs_router
 from app.modules.pcap_analysis.router import router as pcap_analysis_router
+from app.modules.static_analysis.router import router as static_analysis_router
 
 
 @asynccontextmanager
@@ -51,6 +52,7 @@ def create_app() -> FastAPI:
     v1.include_router(evidence_router)
     v1.include_router(analysis_router)
     v1.include_router(pcap_analysis_router)
+    v1.include_router(static_analysis_router)
     app.include_router(v1)
     return app
 

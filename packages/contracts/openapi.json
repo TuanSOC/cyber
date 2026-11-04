@@ -336,6 +336,51 @@
         "title": "Analyzer",
         "type": "string"
       },
+      "AnalyzerDerivedHashes": {
+        "description": "Computed by the (untrusted) analyzer from the sample; never used as identity.",
+        "properties": {
+          "imphash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imphash"
+          },
+          "rich_header_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rich Header Hash"
+          },
+          "ssdeep": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssdeep"
+          }
+        },
+        "required": [
+          "ssdeep",
+          "imphash",
+          "rich_header_hash"
+        ],
+        "title": "AnalyzerDerivedHashes",
+        "type": "object"
+      },
       "AuditLogOut": {
         "properties": {
           "action": {
@@ -462,6 +507,82 @@
         "title": "AuditLogPage",
         "type": "object"
       },
+      "CapabilityOut": {
+        "description": "A capa rule match: a static capability, not observed behaviour.",
+        "properties": {
+          "attack": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Attack",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "matches": {
+            "title": "Matches",
+            "type": "integer"
+          },
+          "mbc": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Mbc",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "namespace",
+          "attack",
+          "mbc",
+          "matches"
+        ],
+        "title": "CapabilityOut",
+        "type": "object"
+      },
+      "CapabilityPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).",
+            "maximum": 10001.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "CapabilityPage",
+        "type": "object"
+      },
       "CustodyAction": {
         "enum": [
           "uploaded",
@@ -560,6 +681,59 @@
           "total"
         ],
         "title": "CustodyPage",
+        "type": "object"
+      },
+      "ElfOut": {
+        "properties": {
+          "elf_class": {
+            "title": "Elf Class",
+            "type": "integer"
+          },
+          "elf_type": {
+            "title": "Elf Type",
+            "type": "string"
+          },
+          "entry_point": {
+            "title": "Entry Point",
+            "type": "integer"
+          },
+          "interpreter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interpreter"
+          },
+          "machine": {
+            "title": "Machine",
+            "type": "string"
+          },
+          "needed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Needed",
+            "type": "array"
+          },
+          "stripped": {
+            "title": "Stripped",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "elf_class",
+          "machine",
+          "elf_type",
+          "entry_point",
+          "interpreter",
+          "needed",
+          "stripped"
+        ],
+        "title": "ElfOut",
         "type": "object"
       },
       "EvidenceOut": {
@@ -665,6 +839,65 @@
         ],
         "title": "EvidenceStatus",
         "type": "string"
+      },
+      "ExportOut": {
+        "properties": {
+          "address": {
+            "title": "Address",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "ordinal",
+          "address"
+        ],
+        "title": "ExportOut",
+        "type": "object"
+      },
+      "ExportPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExportOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).",
+            "maximum": 10001.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ExportPage",
+        "type": "object"
       },
       "FindingOut": {
         "properties": {
@@ -1100,6 +1333,112 @@
         "title": "HealthOut",
         "type": "object"
       },
+      "ImportOut": {
+        "properties": {
+          "function": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Function"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "library": {
+            "title": "Library",
+            "type": "string"
+          },
+          "ordinal": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ordinal"
+          }
+        },
+        "required": [
+          "id",
+          "library",
+          "function",
+          "ordinal"
+        ],
+        "title": "ImportOut",
+        "type": "object"
+      },
+      "ImportPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImportOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).",
+            "maximum": 10001.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ImportPage",
+        "type": "object"
+      },
+      "ImportsSummary": {
+        "properties": {
+          "libraries": {
+            "title": "Libraries",
+            "type": "integer"
+          },
+          "notable_functions": {
+            "description": "Imported API names that often deserve a closer look (injection, anti-debugging, networking, ...). Common in benign software too: presence alone is no verdict.",
+            "items": {
+              "$ref": "#/components/schemas/NotableFunction"
+            },
+            "title": "Notable Functions",
+            "type": "array"
+          },
+          "notable_truncated": {
+            "title": "Notable Truncated",
+            "type": "boolean"
+          },
+          "top_libraries": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryCount"
+            },
+            "title": "Top Libraries",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "libraries",
+          "top_libraries",
+          "notable_functions",
+          "notable_truncated"
+        ],
+        "title": "ImportsSummary",
+        "type": "object"
+      },
       "InvestigationCreate": {
         "additionalProperties": false,
         "properties": {
@@ -1360,19 +1699,41 @@
         "type": "object"
       },
       "IocType": {
+        "description": "Every IOC type of the result contracts (cyberlab_jobs.results.IocType).",
         "enum": [
           "ip",
           "domain",
           "url",
+          "email",
           "ja3",
           "ja3s",
           "cert_sha256",
           "file_md5",
           "file_sha1",
-          "file_sha256"
+          "file_sha256",
+          "registry_key",
+          "file_path"
         ],
         "title": "IocType",
         "type": "string"
+      },
+      "LibraryCount": {
+        "properties": {
+          "imports": {
+            "title": "Imports",
+            "type": "integer"
+          },
+          "library": {
+            "title": "Library",
+            "type": "string"
+          }
+        },
+        "required": [
+          "library",
+          "imports"
+        ],
+        "title": "LibraryCount",
+        "type": "object"
       },
       "LoginIn": {
         "properties": {
@@ -1595,6 +1956,29 @@
         "title": "MyOrgPage",
         "type": "object"
       },
+      "NotableFunction": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "function": {
+            "title": "Function",
+            "type": "string"
+          },
+          "library": {
+            "title": "Library",
+            "type": "string"
+          }
+        },
+        "required": [
+          "library",
+          "function",
+          "category"
+        ],
+        "title": "NotableFunction",
+        "type": "object"
+      },
       "OrgCreate": {
         "properties": {
           "name": {
@@ -1625,6 +2009,134 @@
           "name"
         ],
         "title": "OrgUpdate",
+        "type": "object"
+      },
+      "PeOut": {
+        "properties": {
+          "bits": {
+            "title": "Bits",
+            "type": "integer"
+          },
+          "characteristics": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Characteristics",
+            "type": "array"
+          },
+          "compile_timestamp": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Raw TimeDateStamp as found in the header (often forged; shown as-is).",
+            "title": "Compile Timestamp"
+          },
+          "dll_characteristics": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dll Characteristics",
+            "type": "array"
+          },
+          "entry_point": {
+            "title": "Entry Point",
+            "type": "integer"
+          },
+          "entry_section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Section"
+          },
+          "has_authenticode": {
+            "description": "Presence only: the chain is not validated.",
+            "title": "Has Authenticode",
+            "type": "boolean"
+          },
+          "image_base": {
+            "title": "Image Base",
+            "type": "integer"
+          },
+          "imphash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Analyzer-derived.",
+            "title": "Imphash"
+          },
+          "is_dll": {
+            "title": "Is Dll",
+            "type": "boolean"
+          },
+          "machine": {
+            "title": "Machine",
+            "type": "string"
+          },
+          "overlay_size": {
+            "title": "Overlay Size",
+            "type": "integer"
+          },
+          "rich_header_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Analyzer-derived.",
+            "title": "Rich Header Hash"
+          },
+          "subsystem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subsystem"
+          },
+          "tls_callbacks": {
+            "title": "Tls Callbacks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "machine",
+          "bits",
+          "is_dll",
+          "subsystem",
+          "compile_timestamp",
+          "entry_point",
+          "entry_section",
+          "image_base",
+          "imphash",
+          "rich_header_hash",
+          "tls_callbacks",
+          "has_authenticode",
+          "overlay_size",
+          "characteristics",
+          "dll_characteristics"
+        ],
+        "title": "PeOut",
         "type": "object"
       },
       "Profile": {
@@ -1799,6 +2311,797 @@
         "title": "RegisterIn",
         "type": "object"
       },
+      "ReportAnalysis": {
+        "properties": {
+          "analyzer": {
+            "$ref": "#/components/schemas/Analyzer"
+          },
+          "auto": {
+            "title": "Auto",
+            "type": "boolean"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "engine_errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Engine Errors",
+            "type": "array"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "requested_by": {
+            "format": "uuid",
+            "title": "Requested By",
+            "type": "string"
+          },
+          "requested_by_name": {
+            "title": "Requested By Name",
+            "type": "string"
+          },
+          "result_schema": {
+            "title": "Result Schema",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AnalysisStatus"
+          },
+          "tool_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Engine, signature database and rule versions reported by the analyzer.",
+            "title": "Tool Versions",
+            "type": "object"
+          },
+          "truncated": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Truncated",
+            "type": "object"
+          },
+          "worker_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Version"
+          }
+        },
+        "required": [
+          "job_id",
+          "analyzer",
+          "profile",
+          "status",
+          "auto",
+          "requested_by",
+          "requested_by_name",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "worker_version",
+          "result_schema",
+          "tool_versions",
+          "engine_errors",
+          "truncated",
+          "counts"
+        ],
+        "title": "ReportAnalysis",
+        "type": "object"
+      },
+      "ReportCapabilities": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "All rows of this kind for the job.",
+            "title": "Total",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "True when `items` holds fewer than `total`.",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "truncated"
+        ],
+        "title": "ReportCapabilities",
+        "type": "object"
+      },
+      "ReportCustody": {
+        "properties": {
+          "count": {
+            "description": "Every custody event of the evidence.",
+            "title": "Count",
+            "type": "integer"
+          },
+          "recent": {
+            "description": "The latest events, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/ReportCustodyEvent"
+            },
+            "title": "Recent",
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "recent"
+        ],
+        "title": "ReportCustody",
+        "type": "object"
+      },
+      "ReportCustodyEvent": {
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/CustodyAction"
+          },
+          "actor_id": {
+            "format": "uuid",
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "actor_name": {
+            "title": "Actor Name",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "occurred_at",
+          "actor_id",
+          "actor_name"
+        ],
+        "title": "ReportCustodyEvent",
+        "type": "object"
+      },
+      "ReportEvidence": {
+        "properties": {
+          "detected_mime": {
+            "title": "Detected Mime",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "hashes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Trusted: computed by the API at upload.",
+            "title": "Hashes",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "uploaded_at": {
+            "format": "date-time",
+            "title": "Uploaded At",
+            "type": "string"
+          },
+          "uploaded_by": {
+            "format": "uuid",
+            "title": "Uploaded By",
+            "type": "string"
+          },
+          "uploaded_by_name": {
+            "title": "Uploaded By Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "size_bytes",
+          "hashes",
+          "detected_mime",
+          "uploaded_at",
+          "uploaded_by",
+          "uploaded_by_name"
+        ],
+        "title": "ReportEvidence",
+        "type": "object"
+      },
+      "ReportFindings": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FindingOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "All rows of this kind for the job.",
+            "title": "Total",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "True when `items` holds fewer than `total`.",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "truncated"
+        ],
+        "title": "ReportFindings",
+        "type": "object"
+      },
+      "ReportInvestigation": {
+        "properties": {
+          "case_ref": {
+            "title": "Case Ref",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "case_ref",
+          "title"
+        ],
+        "title": "ReportInvestigation",
+        "type": "object"
+      },
+      "ReportIocs": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/IocOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "All rows of this kind for the job.",
+            "title": "Total",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "True when `items` holds fewer than `total`.",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "truncated"
+        ],
+        "title": "ReportIocs",
+        "type": "object"
+      },
+      "ReportOrganization": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ReportOrganization",
+        "type": "object"
+      },
+      "ReportSample": {
+        "description": "Trusted size and hashes (evidence record) plus the analyzer's file facts.",
+        "properties": {
+          "analyzer_derived": {
+            "$ref": "#/components/schemas/AnalyzerDerivedHashes"
+          },
+          "entropy": {
+            "title": "Entropy",
+            "type": "number"
+          },
+          "file_format": {
+            "enum": [
+              "pe",
+              "elf",
+              "other"
+            ],
+            "title": "File Format",
+            "type": "string"
+          },
+          "file_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Type"
+          },
+          "md5": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Md5"
+          },
+          "mime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime"
+          },
+          "sha1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha1"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "size",
+          "md5",
+          "sha1",
+          "sha256",
+          "file_type",
+          "mime",
+          "entropy",
+          "file_format",
+          "analyzer_derived"
+        ],
+        "title": "ReportSample",
+        "type": "object"
+      },
+      "ReportSections": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SectionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "All rows of this kind for the job.",
+            "title": "Total",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "True when `items` holds fewer than `total`.",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "truncated"
+        ],
+        "title": "ReportSections",
+        "type": "object"
+      },
+      "ReportSignatures": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SignatureOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "All rows of this kind for the job.",
+            "title": "Total",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "True when `items` holds fewer than `total`.",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "truncated"
+        ],
+        "title": "ReportSignatures",
+        "type": "object"
+      },
+      "ResourceOut": {
+        "properties": {
+          "entropy": {
+            "title": "Entropy",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "name",
+          "language",
+          "size",
+          "entropy",
+          "sha256"
+        ],
+        "title": "ResourceOut",
+        "type": "object"
+      },
+      "ResourcePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).",
+            "maximum": 10001.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ResourcePage",
+        "type": "object"
+      },
+      "SampleOut": {
+        "description": "Sample facts. `size` and the md5/sha1/sha256 hashes are the evidence record's\n(computed at upload; ingest refuses a result whose sample differs).",
+        "properties": {
+          "analyzer_derived": {
+            "$ref": "#/components/schemas/AnalyzerDerivedHashes"
+          },
+          "elf": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ElfOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "entropy": {
+            "title": "Entropy",
+            "type": "number"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "file_format": {
+            "enum": [
+              "pe",
+              "elf",
+              "other"
+            ],
+            "title": "File Format",
+            "type": "string"
+          },
+          "file_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Type"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "md5": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Md5"
+          },
+          "mime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime"
+          },
+          "pe": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sha1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha1"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "job_id",
+          "evidence_id",
+          "size",
+          "md5",
+          "sha1",
+          "sha256",
+          "file_type",
+          "mime",
+          "entropy",
+          "file_format",
+          "analyzer_derived",
+          "pe",
+          "elf"
+        ],
+        "title": "SampleOut",
+        "type": "object"
+      },
+      "SectionOut": {
+        "properties": {
+          "entropy": {
+            "title": "Entropy",
+            "type": "number"
+          },
+          "flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "raw_size": {
+            "title": "Raw Size",
+            "type": "integer"
+          },
+          "virtual_address": {
+            "title": "Virtual Address",
+            "type": "integer"
+          },
+          "virtual_size": {
+            "title": "Virtual Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "index",
+          "name",
+          "virtual_address",
+          "virtual_size",
+          "raw_size",
+          "entropy",
+          "flags"
+        ],
+        "title": "SectionOut",
+        "type": "object"
+      },
+      "SectionPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SectionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).",
+            "maximum": 10001.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "SectionPage",
+        "type": "object"
+      },
       "Severity": {
         "enum": [
           "low",
@@ -1809,6 +3112,87 @@
         "title": "Severity",
         "type": "string"
       },
+      "SignatureEngine": {
+        "enum": [
+          "clamav",
+          "yara"
+        ],
+        "title": "SignatureEngine",
+        "type": "string"
+      },
+      "SignatureOut": {
+        "description": "An engine signature/rule matched; the name is the engine's, verbatim.",
+        "properties": {
+          "engine": {
+            "$ref": "#/components/schemas/SignatureEngine"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "title": "Meta",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "engine",
+          "name",
+          "namespace",
+          "tags",
+          "meta"
+        ],
+        "title": "SignatureOut",
+        "type": "object"
+      },
+      "SignaturePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SignatureOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).",
+            "maximum": 10001.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "SignaturePage",
+        "type": "object"
+      },
       "SortKey": {
         "enum": [
           "created_at",
@@ -1818,6 +3202,167 @@
         ],
         "title": "SortKey",
         "type": "string"
+      },
+      "StaticReport": {
+        "description": "Summary-level, capped report of one succeeded static analysis (no string dump).",
+        "properties": {
+          "analysis": {
+            "$ref": "#/components/schemas/ReportAnalysis"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/ReportCapabilities"
+          },
+          "custody": {
+            "$ref": "#/components/schemas/ReportCustody"
+          },
+          "elf": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ElfOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/ReportEvidence"
+          },
+          "findings": {
+            "$ref": "#/components/schemas/ReportFindings"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "imports_summary": {
+            "$ref": "#/components/schemas/ImportsSummary"
+          },
+          "investigation": {
+            "$ref": "#/components/schemas/ReportInvestigation"
+          },
+          "iocs": {
+            "$ref": "#/components/schemas/ReportIocs"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/ReportOrganization"
+          },
+          "pe": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sample": {
+            "$ref": "#/components/schemas/ReportSample"
+          },
+          "schema": {
+            "const": "cyberlab.report.static.v1",
+            "default": "cyberlab.report.static.v1",
+            "title": "Schema",
+            "type": "string"
+          },
+          "sections": {
+            "$ref": "#/components/schemas/ReportSections"
+          },
+          "signatures": {
+            "$ref": "#/components/schemas/ReportSignatures"
+          }
+        },
+        "required": [
+          "schema",
+          "generated_at",
+          "organization",
+          "investigation",
+          "evidence",
+          "custody",
+          "analysis",
+          "sample",
+          "pe",
+          "elf",
+          "findings",
+          "signatures",
+          "capabilities",
+          "iocs",
+          "imports_summary",
+          "sections"
+        ],
+        "title": "StaticReport",
+        "type": "object"
+      },
+      "StringEncoding": {
+        "enum": [
+          "ascii",
+          "utf16le",
+          "floss_decoded",
+          "floss_stack",
+          "floss_tight"
+        ],
+        "title": "StringEncoding",
+        "type": "string"
+      },
+      "StringOut": {
+        "properties": {
+          "encoding": {
+            "$ref": "#/components/schemas/StringEncoding"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offset"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "value",
+          "encoding",
+          "offset"
+        ],
+        "title": "StringOut",
+        "type": "object"
+      },
+      "StringPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StringOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).",
+            "maximum": 10001.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "StringPage",
+        "type": "object"
       },
       "TimelineOut": {
         "properties": {
@@ -2617,6 +4162,214 @@
         ]
       }
     },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/capabilities": {
+      "get": {
+        "description": "`namespace`: that capa namespace or below; `attack`: an ATT&CK technique id (its\nsub-techniques included) or sub-technique id.",
+        "operationId": "list_capabilities_api_v1_orgs__org_id__analyses__job_id__capabilities_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "namespace",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "pattern": "^[^\\x00]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Namespace"
+            }
+          },
+          {
+            "in": "query",
+            "name": "attack",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^T\\d{4}(\\.\\d{3})?$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Attack"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Capabilities",
+        "tags": [
+          "static-analysis"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/exports": {
+      "get": {
+        "operationId": "list_exports_api_v1_orgs__org_id__analyses__job_id__exports_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "pattern": "^[^\\x00]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Exports",
+        "tags": [
+          "static-analysis"
+        ]
+      }
+    },
     "/api/v1/orgs/{org_id}/analyses/{job_id}/findings": {
       "get": {
         "operationId": "list_findings_api_v1_orgs__org_id__analyses__job_id__findings_get",
@@ -2864,6 +4617,120 @@
         ]
       }
     },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/imports": {
+      "get": {
+        "description": "`library`: case-insensitive exact DLL name; `q`: substring of function or library.",
+        "operationId": "list_imports_api_v1_orgs__org_id__analyses__job_id__imports_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "library",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "pattern": "^[^\\x00]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Library"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "pattern": "^[^\\x00]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Imports",
+        "tags": [
+          "static-analysis"
+        ]
+      }
+    },
     "/api/v1/orgs/{org_id}/analyses/{job_id}/iocs": {
       "get": {
         "operationId": "list_iocs_api_v1_orgs__org_id__analyses__job_id__iocs_get",
@@ -3083,6 +4950,474 @@
         "summary": "List Records",
         "tags": [
           "pcap-analysis"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/report": {
+      "get": {
+        "description": "Versioned JSON report of a succeeded static analysis (an audited download; the\nevidence custody chain is unchanged: the evidence bytes are not read).",
+        "operationId": "download_report_api_v1_orgs__org_id__analyses__job_id__report_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaticReport"
+                }
+              }
+            },
+            "description": "The `cyberlab.report.static.v1` document, as an attachment."
+          },
+          "409": {
+            "description": "Not a static analysis, or it has not succeeded."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Report",
+        "tags": [
+          "static-analysis"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/resources": {
+      "get": {
+        "operationId": "list_resources_api_v1_orgs__org_id__analyses__job_id__resources_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourcePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Resources",
+        "tags": [
+          "static-analysis"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/sample": {
+      "get": {
+        "operationId": "get_sample_api_v1_orgs__org_id__analyses__job_id__sample_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SampleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Sample",
+        "tags": [
+          "static-analysis"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/sections": {
+      "get": {
+        "operationId": "list_sections_api_v1_orgs__org_id__analyses__job_id__sections_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SectionPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Sections",
+        "tags": [
+          "static-analysis"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/signatures": {
+      "get": {
+        "operationId": "list_signatures_api_v1_orgs__org_id__analyses__job_id__signatures_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "engine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SignatureEngine"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Engine"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignaturePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Signatures",
+        "tags": [
+          "static-analysis"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/strings": {
+      "get": {
+        "operationId": "list_strings_api_v1_orgs__org_id__analyses__job_id__strings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "encoding",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StringEncoding"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Encoding"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "pattern": "^[^\\x00]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StringPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Strings",
+        "tags": [
+          "static-analysis"
         ]
       }
     },

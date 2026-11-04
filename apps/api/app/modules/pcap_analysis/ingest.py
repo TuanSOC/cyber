@@ -1,20 +1,16 @@
-"""Write a validated result stream into the tenant tables (inside the caller's transaction).
+"""Write a validated `pcap.v1` stream into the tenant tables (inside the caller's transaction).
 
-Postgres refuses COPY into tables with row-level security, so rows go in as batched
-multi-row executemany INSERTs through the RLS-bound session. The stream is re-read from the
-local file in batches (parsed in a worker thread), so memory stays bounded by one batch
-(BATCH_LINES records or BATCH_BYTES of raw lines, whichever comes first) no matter how many
-flows the result holds or how long its lines are.
+Batched as described in `app.modules.analysis.result_rows` (BATCH_LINES records or
+BATCH_BYTES of raw lines per batch).
 """
 
 import uuid
-from collections import Counter, defaultdict
+from collections import Counter
 from collections.abc import Iterator
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import Any, cast
 
-import anyio
 from cyberlab_jobs.results import (
     AlertRecord,
     DnsRecord,
@@ -26,9 +22,10 @@ from cyberlab_jobs.results import (
     TimelineEvent,
     TlsRecord,
 )
-from sqlalchemy import Table, insert
+from sqlalchemy import Table
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.analysis import result_rows
 from app.modules.pcap_analysis import stream
 from app.modules.pcap_analysis.models import (
     AnalysisFinding,
@@ -167,23 +164,12 @@ def to_row(record: RecordLine) -> tuple[Table, dict[str, Any]]:
     raise TypeError(f"no table for record kind {record.kind!r}")
 
 
-Batch = dict[Table, list[dict[str, Any]]]
-
-
 def _next_batch(
     records: Iterator[tuple[RecordLine, int]], scope: dict[str, Any], written: Counter[str]
-) -> Batch:
-    """Parse records into rows grouped by table until a batch cap is hit (worker thread)."""
-    batch: Batch = defaultdict(list)
-    size = 0
-    for count, (record, line_bytes) in enumerate(records, start=1):
-        table, row = to_row(record)
-        batch[table].append({**row, **scope})
-        written[record.kind] += 1
-        size += line_bytes
-        if count >= BATCH_LINES or size >= BATCH_BYTES:
-            break
-    return batch
+) -> result_rows.Batch:
+    return result_rows.next_batch(
+        records, scope, written, to_row, max_lines=BATCH_LINES, max_bytes=BATCH_BYTES
+    )
 
 
 async def insert_rows(
@@ -194,13 +180,8 @@ async def insert_rows(
     caps: stream.Caps,
 ) -> Counter[str]:
     """Insert every record of a validated stream; returns the rows written per kind."""
-    written: Counter[str] = Counter()
     records = stream.records(path, caps)
-    scope = {"organization_id": org_id, "job_id": job_id}
-    while batch := await anyio.to_thread.run_sync(_next_batch, records, scope, written):
-        for table, rows in batch.items():
-            await session.execute(insert(table), rows)  # executemany (pipelined by asyncpg)
-    return written
+    return await result_rows.insert_batches(session, org_id, job_id, records, _next_batch)
 
 
 def build_summary(result: stream.Validated, written: Counter[str]) -> dict[str, Any]:

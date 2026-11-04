@@ -193,6 +193,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Capabilities
+         * @description `namespace`: that capa namespace or below; `attack`: an ATT&CK technique id (its
+         *     sub-techniques included) or sub-technique id.
+         */
+        get: operations["list_capabilities_api_v1_orgs__org_id__analyses__job_id__capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Exports */
+        get: operations["list_exports_api_v1_orgs__org_id__analyses__job_id__exports_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/analyses/{job_id}/findings": {
         parameters: {
             query?: never;
@@ -227,6 +265,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Imports
+         * @description `library`: case-insensitive exact DLL name; `q`: substring of function or library.
+         */
+        get: operations["list_imports_api_v1_orgs__org_id__analyses__job_id__imports_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/analyses/{job_id}/iocs": {
         parameters: {
             query?: never;
@@ -253,6 +311,112 @@ export interface paths {
         };
         /** List Records */
         get: operations["list_records_api_v1_orgs__org_id__analyses__job_id__records_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Report
+         * @description Versioned JSON report of a succeeded static analysis (an audited download; the
+         *     evidence custody chain is unchanged: the evidence bytes are not read).
+         */
+        get: operations["download_report_api_v1_orgs__org_id__analyses__job_id__report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Resources */
+        get: operations["list_resources_api_v1_orgs__org_id__analyses__job_id__resources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/sample": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Sample */
+        get: operations["get_sample_api_v1_orgs__org_id__analyses__job_id__sample_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Sections */
+        get: operations["list_sections_api_v1_orgs__org_id__analyses__job_id__sections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/signatures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Signatures */
+        get: operations["list_signatures_api_v1_orgs__org_id__analyses__job_id__signatures_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/strings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Strings */
+        get: operations["list_strings_api_v1_orgs__org_id__analyses__job_id__strings_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -615,6 +779,18 @@ export interface components {
          * @enum {string}
          */
         Analyzer: "pcap" | "static";
+        /**
+         * AnalyzerDerivedHashes
+         * @description Computed by the (untrusted) analyzer from the sample; never used as identity.
+         */
+        AnalyzerDerivedHashes: {
+            /** Imphash */
+            imphash: string | null;
+            /** Rich Header Hash */
+            rich_header_hash: string | null;
+            /** Ssdeep */
+            ssdeep: string | null;
+        };
         /** AuditLogOut */
         AuditLogOut: {
             /** Action */
@@ -651,6 +827,37 @@ export interface components {
             /** Items */
             items: components["schemas"]["AuditLogOut"][];
             /** Total */
+            total: number;
+        };
+        /**
+         * CapabilityOut
+         * @description A capa rule match: a static capability, not observed behaviour.
+         */
+        CapabilityOut: {
+            /** Attack */
+            attack: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Matches */
+            matches: number;
+            /** Mbc */
+            mbc: string[];
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string | null;
+        };
+        /** CapabilityPage */
+        CapabilityPage: {
+            /** Items */
+            items: components["schemas"]["CapabilityOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
             total: number;
         };
         /**
@@ -693,6 +900,23 @@ export interface components {
             items: components["schemas"]["CustodyEventOut"][];
             /** Total */
             total: number;
+        };
+        /** ElfOut */
+        ElfOut: {
+            /** Elf Class */
+            elf_class: number;
+            /** Elf Type */
+            elf_type: string;
+            /** Entry Point */
+            entry_point: number;
+            /** Interpreter */
+            interpreter: string | null;
+            /** Machine */
+            machine: string;
+            /** Needed */
+            needed: string[];
+            /** Stripped */
+            stripped: boolean;
         };
         /**
          * EvidenceOut
@@ -749,6 +973,30 @@ export interface components {
          * @enum {string}
          */
         EvidenceStatus: "active" | "archived";
+        /** ExportOut */
+        ExportOut: {
+            /** Address */
+            address: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string | null;
+            /** Ordinal */
+            ordinal: number;
+        };
+        /** ExportPage */
+        ExportPage: {
+            /** Items */
+            items: components["schemas"]["ExportOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
         /** FindingOut */
         FindingOut: {
             /** Attributes */
@@ -899,6 +1147,46 @@ export interface components {
              */
             redis: "ok" | "error";
         };
+        /** ImportOut */
+        ImportOut: {
+            /** Function */
+            function: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Library */
+            library: string;
+            /** Ordinal */
+            ordinal: number | null;
+        };
+        /** ImportPage */
+        ImportPage: {
+            /** Items */
+            items: components["schemas"]["ImportOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
+        /** ImportsSummary */
+        ImportsSummary: {
+            /** Libraries */
+            libraries: number;
+            /**
+             * Notable Functions
+             * @description Imported API names that often deserve a closer look (injection, anti-debugging, networking, ...). Common in benign software too: presence alone is no verdict.
+             */
+            notable_functions: components["schemas"]["NotableFunction"][];
+            /** Notable Truncated */
+            notable_truncated: boolean;
+            /** Top Libraries */
+            top_libraries: components["schemas"]["LibraryCount"][];
+            /** Total */
+            total: number;
+        };
         /** InvestigationCreate */
         InvestigationCreate: {
             /**
@@ -1007,9 +1295,17 @@ export interface components {
         };
         /**
          * IocType
+         * @description Every IOC type of the result contracts (cyberlab_jobs.results.IocType).
          * @enum {string}
          */
-        IocType: "ip" | "domain" | "url" | "ja3" | "ja3s" | "cert_sha256" | "file_md5" | "file_sha1" | "file_sha256";
+        IocType: "ip" | "domain" | "url" | "email" | "ja3" | "ja3s" | "cert_sha256" | "file_md5" | "file_sha1" | "file_sha256" | "registry_key" | "file_path";
+        /** LibraryCount */
+        LibraryCount: {
+            /** Imports */
+            imports: number;
+            /** Library */
+            library: string;
+        };
         /** LoginIn */
         LoginIn: {
             /**
@@ -1113,6 +1409,15 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** NotableFunction */
+        NotableFunction: {
+            /** Category */
+            category: string;
+            /** Function */
+            function: string;
+            /** Library */
+            library: string;
+        };
         /** OrgCreate */
         OrgCreate: {
             /** Name */
@@ -1122,6 +1427,51 @@ export interface components {
         OrgUpdate: {
             /** Name */
             name: string;
+        };
+        /** PeOut */
+        PeOut: {
+            /** Bits */
+            bits: number;
+            /** Characteristics */
+            characteristics: string[];
+            /**
+             * Compile Timestamp
+             * @description Raw TimeDateStamp as found in the header (often forged; shown as-is).
+             */
+            compile_timestamp: number | null;
+            /** Dll Characteristics */
+            dll_characteristics: string[];
+            /** Entry Point */
+            entry_point: number;
+            /** Entry Section */
+            entry_section: string | null;
+            /**
+             * Has Authenticode
+             * @description Presence only: the chain is not validated.
+             */
+            has_authenticode: boolean;
+            /** Image Base */
+            image_base: number;
+            /**
+             * Imphash
+             * @description Analyzer-derived.
+             */
+            imphash: string | null;
+            /** Is Dll */
+            is_dll: boolean;
+            /** Machine */
+            machine: string;
+            /** Overlay Size */
+            overlay_size: number;
+            /**
+             * Rich Header Hash
+             * @description Analyzer-derived.
+             */
+            rich_header_hash: string | null;
+            /** Subsystem */
+            subsystem: string | null;
+            /** Tls Callbacks */
+            tls_callbacks: number;
         };
         /**
          * Profile
@@ -1187,16 +1537,449 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** ReportAnalysis */
+        ReportAnalysis: {
+            analyzer: components["schemas"]["Analyzer"];
+            /** Auto */
+            auto: boolean;
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Engine Errors */
+            engine_errors: string[];
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Profile */
+            profile: string | null;
+            /**
+             * Requested By
+             * Format: uuid
+             */
+            requested_by: string;
+            /** Requested By Name */
+            requested_by_name: string;
+            /** Result Schema */
+            result_schema: string;
+            /** Started At */
+            started_at: string | null;
+            status: components["schemas"]["AnalysisStatus"];
+            /**
+             * Tool Versions
+             * @description Engine, signature database and rule versions reported by the analyzer.
+             */
+            tool_versions: {
+                [key: string]: string;
+            };
+            /** Truncated */
+            truncated: {
+                [key: string]: boolean;
+            };
+            /** Worker Version */
+            worker_version: string | null;
+        };
+        /** ReportCapabilities */
+        ReportCapabilities: {
+            /** Items */
+            items: components["schemas"]["CapabilityOut"][];
+            /**
+             * Total
+             * @description All rows of this kind for the job.
+             */
+            total: number;
+            /**
+             * Truncated
+             * @description True when `items` holds fewer than `total`.
+             */
+            truncated: boolean;
+        };
+        /** ReportCustody */
+        ReportCustody: {
+            /**
+             * Count
+             * @description Every custody event of the evidence.
+             */
+            count: number;
+            /**
+             * Recent
+             * @description The latest events, oldest first.
+             */
+            recent: components["schemas"]["ReportCustodyEvent"][];
+        };
+        /** ReportCustodyEvent */
+        ReportCustodyEvent: {
+            action: components["schemas"]["CustodyAction"];
+            /**
+             * Actor Id
+             * Format: uuid
+             */
+            actor_id: string;
+            /** Actor Name */
+            actor_name: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+        };
+        /** ReportEvidence */
+        ReportEvidence: {
+            /** Detected Mime */
+            detected_mime: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Hashes
+             * @description Trusted: computed by the API at upload.
+             */
+            hashes: {
+                [key: string]: string;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /**
+             * Uploaded At
+             * Format: date-time
+             */
+            uploaded_at: string;
+            /**
+             * Uploaded By
+             * Format: uuid
+             */
+            uploaded_by: string;
+            /** Uploaded By Name */
+            uploaded_by_name: string;
+        };
+        /** ReportFindings */
+        ReportFindings: {
+            /** Items */
+            items: components["schemas"]["FindingOut"][];
+            /**
+             * Total
+             * @description All rows of this kind for the job.
+             */
+            total: number;
+            /**
+             * Truncated
+             * @description True when `items` holds fewer than `total`.
+             */
+            truncated: boolean;
+        };
+        /** ReportInvestigation */
+        ReportInvestigation: {
+            /** Case Ref */
+            case_ref: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+        };
+        /** ReportIocs */
+        ReportIocs: {
+            /** Items */
+            items: components["schemas"]["IocOut"][];
+            /**
+             * Total
+             * @description All rows of this kind for the job.
+             */
+            total: number;
+            /**
+             * Truncated
+             * @description True when `items` holds fewer than `total`.
+             */
+            truncated: boolean;
+        };
+        /** ReportOrganization */
+        ReportOrganization: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * ReportSample
+         * @description Trusted size and hashes (evidence record) plus the analyzer's file facts.
+         */
+        ReportSample: {
+            analyzer_derived: components["schemas"]["AnalyzerDerivedHashes"];
+            /** Entropy */
+            entropy: number;
+            /**
+             * File Format
+             * @enum {string}
+             */
+            file_format: "pe" | "elf" | "other";
+            /** File Type */
+            file_type: string | null;
+            /** Md5 */
+            md5: string | null;
+            /** Mime */
+            mime: string | null;
+            /** Sha1 */
+            sha1: string | null;
+            /** Sha256 */
+            sha256: string;
+            /** Size */
+            size: number;
+        };
+        /** ReportSections */
+        ReportSections: {
+            /** Items */
+            items: components["schemas"]["SectionOut"][];
+            /**
+             * Total
+             * @description All rows of this kind for the job.
+             */
+            total: number;
+            /**
+             * Truncated
+             * @description True when `items` holds fewer than `total`.
+             */
+            truncated: boolean;
+        };
+        /** ReportSignatures */
+        ReportSignatures: {
+            /** Items */
+            items: components["schemas"]["SignatureOut"][];
+            /**
+             * Total
+             * @description All rows of this kind for the job.
+             */
+            total: number;
+            /**
+             * Truncated
+             * @description True when `items` holds fewer than `total`.
+             */
+            truncated: boolean;
+        };
+        /** ResourceOut */
+        ResourceOut: {
+            /** Entropy */
+            entropy: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Language */
+            language: string | null;
+            /** Name */
+            name: string | null;
+            /** Sha256 */
+            sha256: string | null;
+            /** Size */
+            size: number;
+            /** Type */
+            type: string;
+        };
+        /** ResourcePage */
+        ResourcePage: {
+            /** Items */
+            items: components["schemas"]["ResourceOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
+        /**
+         * SampleOut
+         * @description Sample facts. `size` and the md5/sha1/sha256 hashes are the evidence record's
+         *     (computed at upload; ingest refuses a result whose sample differs).
+         */
+        SampleOut: {
+            analyzer_derived: components["schemas"]["AnalyzerDerivedHashes"];
+            elf: components["schemas"]["ElfOut"] | null;
+            /** Entropy */
+            entropy: number;
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /**
+             * File Format
+             * @enum {string}
+             */
+            file_format: "pe" | "elf" | "other";
+            /** File Type */
+            file_type: string | null;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Md5 */
+            md5: string | null;
+            /** Mime */
+            mime: string | null;
+            pe: components["schemas"]["PeOut"] | null;
+            /** Sha1 */
+            sha1: string | null;
+            /** Sha256 */
+            sha256: string;
+            /** Size */
+            size: number;
+        };
+        /** SectionOut */
+        SectionOut: {
+            /** Entropy */
+            entropy: number;
+            /** Flags */
+            flags: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Index */
+            index: number;
+            /** Name */
+            name: string;
+            /** Raw Size */
+            raw_size: number;
+            /** Virtual Address */
+            virtual_address: number;
+            /** Virtual Size */
+            virtual_size: number;
+        };
+        /** SectionPage */
+        SectionPage: {
+            /** Items */
+            items: components["schemas"]["SectionOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
         /**
          * Severity
          * @enum {string}
          */
         Severity: "low" | "medium" | "high" | "critical";
         /**
+         * SignatureEngine
+         * @enum {string}
+         */
+        SignatureEngine: "clamav" | "yara";
+        /**
+         * SignatureOut
+         * @description An engine signature/rule matched; the name is the engine's, verbatim.
+         */
+        SignatureOut: {
+            engine: components["schemas"]["SignatureEngine"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Meta */
+            meta: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string | null;
+            /** Tags */
+            tags: string[];
+        };
+        /** SignaturePage */
+        SignaturePage: {
+            /** Items */
+            items: components["schemas"]["SignatureOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
+        /**
          * SortKey
          * @enum {string}
          */
         SortKey: "created_at" | "-created_at" | "severity" | "-severity";
+        /**
+         * StaticReport
+         * @description Summary-level, capped report of one succeeded static analysis (no string dump).
+         */
+        StaticReport: {
+            analysis: components["schemas"]["ReportAnalysis"];
+            capabilities: components["schemas"]["ReportCapabilities"];
+            custody: components["schemas"]["ReportCustody"];
+            elf: components["schemas"]["ElfOut"] | null;
+            evidence: components["schemas"]["ReportEvidence"];
+            findings: components["schemas"]["ReportFindings"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            imports_summary: components["schemas"]["ImportsSummary"];
+            investigation: components["schemas"]["ReportInvestigation"];
+            iocs: components["schemas"]["ReportIocs"];
+            organization: components["schemas"]["ReportOrganization"];
+            pe: components["schemas"]["PeOut"] | null;
+            sample: components["schemas"]["ReportSample"];
+            /**
+             * Schema
+             * @default cyberlab.report.static.v1
+             * @constant
+             */
+            schema: "cyberlab.report.static.v1";
+            sections: components["schemas"]["ReportSections"];
+            signatures: components["schemas"]["ReportSignatures"];
+        };
+        /**
+         * StringEncoding
+         * @enum {string}
+         */
+        StringEncoding: "ascii" | "utf16le" | "floss_decoded" | "floss_stack" | "floss_tight";
+        /** StringOut */
+        StringOut: {
+            encoding: components["schemas"]["StringEncoding"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Offset */
+            offset: number | null;
+            /** Value */
+            value: string;
+        };
+        /** StringPage */
+        StringPage: {
+            /** Items */
+            items: components["schemas"]["StringOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
         /** TimelineOut */
         TimelineOut: {
             /** Dst Ip */
@@ -1659,6 +2442,79 @@ export interface operations {
             };
         };
     };
+    list_capabilities_api_v1_orgs__org_id__analyses__job_id__capabilities_get: {
+        parameters: {
+            query?: {
+                namespace?: string | null;
+                attack?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_exports_api_v1_orgs__org_id__analyses__job_id__exports_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_findings_api_v1_orgs__org_id__analyses__job_id__findings_get: {
         parameters: {
             query?: {
@@ -1735,6 +2591,43 @@ export interface operations {
             };
         };
     };
+    list_imports_api_v1_orgs__org_id__analyses__job_id__imports_get: {
+        parameters: {
+            query?: {
+                library?: string | null;
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_iocs_api_v1_orgs__org_id__analyses__job_id__iocs_get: {
         parameters: {
             query?: {
@@ -1796,6 +2689,220 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecordPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_report_api_v1_orgs__org_id__analyses__job_id__report_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The `cyberlab.report.static.v1` document, as an attachment. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaticReport"];
+                };
+            };
+            /** @description Not a static analysis, or it has not succeeded. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_resources_api_v1_orgs__org_id__analyses__job_id__resources_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourcePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sample_api_v1_orgs__org_id__analyses__job_id__sample_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SampleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sections_api_v1_orgs__org_id__analyses__job_id__sections_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_signatures_api_v1_orgs__org_id__analyses__job_id__signatures_get: {
+        parameters: {
+            query?: {
+                engine?: components["schemas"]["SignatureEngine"] | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignaturePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_strings_api_v1_orgs__org_id__analyses__job_id__strings_get: {
+        parameters: {
+            query?: {
+                encoding?: components["schemas"]["StringEncoding"] | null;
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StringPage"];
                 };
             };
             /** @description Validation Error */

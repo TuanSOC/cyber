@@ -18,6 +18,7 @@ from httpx import AsyncClient
 
 from app.main import app
 from app.modules.organizations.models import MemberRole
+from tests import static_results
 from tests.factories import Registered, add_member, csrf, make_user, new_client, register
 from tests.pcap_results import seed_results
 
@@ -31,6 +32,7 @@ class Victim:
     investigation_id: str
     evidence_id: str
     job_id: str  # an analysis job (on a second evidence, so the first can still be analyzed)
+    static_job_id: str  # the second evidence's automatic static job, with results
     outsider_email: str  # a real user who is not a member of the victim org
 
 
@@ -85,6 +87,38 @@ ROUTE_CASES: dict[tuple[str, str], CaseBuilder] = {
     ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/alerts"): lambda v: {},
     ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/iocs"): lambda v: {"params": {"q": "192"}},
     ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/timeline"): lambda v: {},
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/sample"): lambda v: {},
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/sections"): lambda v: {},
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/imports"): lambda v: {
+        "params": {"library": "kernel32.dll", "q": "Virtual"}
+    },
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/exports"): lambda v: {"params": {"q": "Dll"}},
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/resources"): lambda v: {},
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/strings"): lambda v: {
+        "params": {"encoding": "ascii", "q": "http"}
+    },
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/signatures"): lambda v: {
+        "params": {"engine": "yara"}
+    },
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/capabilities"): lambda v: {
+        "params": {"namespace": "host-interaction", "attack": "T1055"}
+    },
+    ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/report"): lambda v: {},
+}
+# Routes of static jobs only: replayed against the victim's static job.
+STATIC_JOB_ROUTES = {
+    f"/api/v1/orgs/{{org_id}}/analyses/{{job_id}}/{name}"
+    for name in (
+        "sample",
+        "sections",
+        "imports",
+        "exports",
+        "resources",
+        "strings",
+        "signatures",
+        "capabilities",
+        "report",
+    )
 }
 
 
@@ -167,23 +201,29 @@ async def _victim() -> tuple[Registered, Victim]:
     ).json()
     # The job has persisted results, so the result routes have real rows to leak.
     await seed_results(owner.org_id, uuid.UUID(job["id"]))
+    # The upload of the second evidence queued a static `av` run: give it results too.
+    jobs = (await c.get(f"/api/v1/orgs/{owner.org_id}/evidence/{second['id']}/analyses")).json()
+    [static_job] = [j for j in jobs["items"] if j["analyzer"] == "static"]
+    await static_results.seed_results(owner.org_id, uuid.UUID(static_job["id"]))
     return owner, Victim(
         owner.org_id,
         member["id"],
         case["id"],
         evidence["id"],
         job["id"],
+        static_job["id"],
         outsider_email=outsider.email,
     )
 
 
 def _url(template: str, org_id: uuid.UUID, victim: Victim) -> str:
+    static = template in STATIC_JOB_ROUTES
     return template.format(
         org_id=org_id,
         member_id=victim.member_id,
         investigation_id=victim.investigation_id,
         evidence_id=victim.evidence_id,
-        job_id=victim.job_id,
+        job_id=victim.static_job_id if static else victim.job_id,
     )
 
 

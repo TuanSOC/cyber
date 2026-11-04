@@ -21,25 +21,16 @@ from app.modules.analysis import dispatch, lifecycle
 from app.modules.analysis.models import AnalysisJob, AnalysisJobIndex, Analyzer
 from app.modules.audit.models import AuditLog
 from app.modules.pcap_analysis.models import (
-    AnalysisFinding,
-    Ioc,
     NetworkAlert,
     NetworkFlow,
     NetworkRecord,
     TimelineEntry,
 )
+from app.modules.static_analysis.models import MalwareSample
 from app.workers import ingest
-from tests.analysis_helpers import SentJobs, jobs_for, new_case, tiny_pcap, upload
+from tests import static_results as sr
+from tests.analysis_helpers import SentJobs, jobs_for, new_case, pe_bytes, tiny_pcap, upload
 from tests.factories import Registered, csrf, register
-
-
-def pe_bytes(e_lfanew: int = 0x80, size: int = 0x400) -> bytes:
-    """MZ header pointing at an in-bounds `PE\\0\\0` signature (never a runnable program)."""
-    data = bytearray(size)
-    data[0:2] = b"MZ"
-    data[0x3C:0x40] = e_lfanew.to_bytes(4, "little")
-    data[e_lfanew : e_lfanew + 4] = b"PE\0\0"
-    return bytes(data)
 
 
 def elf_bytes(e_type: int) -> bytes:
@@ -320,7 +311,7 @@ def _store_result(item: dispatch.DispatchInput, data: bytes) -> str:
     return str(stored.version_id)
 
 
-async def test_static_success_is_recorded_without_rows(sent: SentJobs) -> None:
+async def test_static_success_is_recorded_once(sent: SentJobs) -> None:
     reg = await register()
     evidence = await upload(reg.client, reg.org_id, await new_case(reg), pe_bytes(), "s.exe")
     [item] = sent
@@ -335,12 +326,14 @@ async def test_static_success_is_recorded_without_rows(sent: SentJobs) -> None:
     budget = timedelta(seconds=settings.analysis_static_timeout_s + ingest.RUNNING_GRACE_S)
     assert before + budget <= deadline <= lifecycle.now() + budget  # the static timeout
 
-    version = _store_result(item, gzip.compress(b"phase 1: not validated yet"))
+    data = sr.stream(item.job_id, sr.sample_for(pe_bytes()), records=[])
+    version = _store_result(item, data)
     await ingest.handle_event(
         _message(item, event="finished", outcome="succeeded", result_version_id=version)
     )
     job = await _job(item)
-    assert (job.status, job.result_version_id, job.summary) == ("succeeded", version, {})
+    assert (job.status, job.result_version_id) == ("succeeded", version)
+    assert job.summary["schema_version"] == "static.v1" and job.summary["profile"] == "full"
     assert job.worker_version == "static-worker/test"
 
     custody = (
@@ -353,16 +346,11 @@ async def test_static_success_is_recorded_without_rows(sent: SentJobs) -> None:
     assert succeeded.details["evidence_id"] == evidence["id"]
 
     async with tenant_session(reg.org_id, None) as session:
-        for model in (
-            NetworkFlow,
-            NetworkRecord,
-            NetworkAlert,
-            AnalysisFinding,
-            Ioc,
-            TimelineEntry,
-        ):
+        # The pcap-only tables stay empty (static rows: see test_static_results.py).
+        for model in (NetworkFlow, NetworkRecord, NetworkAlert, TimelineEntry):
             count = await session.scalar(select(func.count()).select_from(model))
             assert count == 0, model
+        assert await session.scalar(select(func.count()).select_from(MalwareSample)) == 1
 
     # A duplicate success report changes nothing.
     await ingest.handle_event(

@@ -15,6 +15,16 @@ from app.modules.pcap_analysis.models import (
     NetworkRecord,
     TimelineEntry,
 )
+from app.modules.static_analysis.models import (
+    MalwareCapability,
+    MalwareExport,
+    MalwareImport,
+    MalwareResource,
+    MalwareSample,
+    MalwareSection,
+    MalwareSignatureMatch,
+    MalwareString,
+)
 from app.modules.users.models import User
 
 __all__ = [
@@ -29,6 +39,14 @@ __all__ = [
     "EvidenceHash",
     "Investigation",
     "Ioc",
+    "MalwareCapability",
+    "MalwareExport",
+    "MalwareImport",
+    "MalwareResource",
+    "MalwareSample",
+    "MalwareSection",
+    "MalwareSignatureMatch",
+    "MalwareString",
     "NetworkAlert",
     "NetworkFlow",
     "NetworkRecord",

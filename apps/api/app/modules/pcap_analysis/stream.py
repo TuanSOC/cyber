@@ -11,10 +11,7 @@ not match.
 Only after that does `records()` read the same file again to feed the database writes.
 """
 
-import gzip
-import hashlib
 import uuid
-import zlib
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -28,24 +25,22 @@ from cyberlab_jobs.results import (
     IocRecord,
     RecordLine,
     ResultHeader,
-    ResultTrailer,
 )
 from pydantic import ValidationError
 
 from app.core.config import Settings
+from app.modules.analysis.result_stream import (
+    MAX_LINE_BYTES,
+    InvalidResult,
+    body_lines,
+    check_framing,
+    ioc_key,
+)
 
-# The largest legitimate line (stats: 200 protocol paths of 255 escaped chars) is far below.
-MAX_LINE_BYTES = 1024**2
+__all__ = ["MAX_LINE_BYTES", "Caps", "InvalidResult", "Validated", "ioc_key", "records", "validate"]
+
 # Record timestamps may sit this far outside [first_ts, last_ts] of the capture.
 TS_SLACK = timedelta(days=1)
-
-
-class InvalidResult(Exception):
-    """The stream is refused; `reason` is a short code for logs and tests."""
-
-    def __init__(self, reason: str) -> None:
-        self.reason = reason
-        super().__init__(reason)
 
 
 @dataclass(frozen=True)
@@ -74,32 +69,6 @@ class Validated:
     header: ResultHeader
     stats: CaptureStats
     counts: Counter[str] = field(default_factory=Counter)  # record kind -> lines
-
-
-def _lines(path: Path, max_decompressed: int) -> Iterator[bytes]:
-    total = 0
-    try:
-        with gzip.open(path, "rb") as stream:
-            while line := stream.readline(MAX_LINE_BYTES + 1):
-                total += len(line)
-                if total > max_decompressed:
-                    raise InvalidResult("decompressed_too_large")
-                if len(line) > MAX_LINE_BYTES:
-                    raise InvalidResult("line_too_long")
-                if not line.endswith(b"\n"):
-                    raise InvalidResult("unterminated_line")
-                yield line
-    except (OSError, EOFError, zlib.error) as exc:  # not gzip, truncated, corrupt
-        raise InvalidResult("bad_gzip") from exc
-
-
-def ioc_key(ioc_type: str, value: str) -> tuple[str, bytes]:
-    """Duplicate key of an IOC: exactly what the unique index compares (job, type, md5(value)).
-
-    Postgres md5(text) hashes the UTF-8 bytes (the database encoding), as this does, so the
-    validator refuses everything the index would and nothing it would accept.
-    """
-    return ioc_type, hashlib.md5(value.encode(), usedforsecurity=False).digest()
 
 
 def _record(line: bytes) -> RecordLine:
@@ -172,30 +141,15 @@ class _Checker:
 def validate(path: Path, job_id: uuid.UUID, caps: Caps) -> Validated:
     """Blocking (run in a worker thread). Raises InvalidResult; never touches the database."""
     check = _Checker(job_id, caps)
-    digest = hashlib.sha256()
-    lines = 0
-    pending: bytes | None = None  # the trailer is only known to be last at end of stream
-    for seen, line in enumerate(_lines(path, caps.max_decompressed_bytes), start=1):
-        if seen > caps.max_lines:
-            raise InvalidResult("too_many_lines")
-        if pending is not None:
-            digest.update(pending)
-            lines += 1
-            if lines == 1:
-                check.first(pending)
-            else:
-                check.middle(pending)
-        pending = line
-    if check.header is None or pending is None:
+    check_framing(
+        path,
+        max_decompressed=caps.max_decompressed_bytes,
+        max_lines=caps.max_lines,
+        first=check.first,
+        middle=check.middle,
+    )
+    if check.header is None:
         raise InvalidResult("missing_header")
-    try:
-        trailer = ResultTrailer.model_validate_json(pending)
-    except ValidationError as exc:
-        raise InvalidResult("invalid_trailer") from exc
-    if trailer.line_count != lines:
-        raise InvalidResult("trailer_count_mismatch")
-    if trailer.sha256 != digest.hexdigest():
-        raise InvalidResult("trailer_hash_mismatch")
     if check.stats is None:
         raise InvalidResult("missing_stats")
     check.window(check.stats)
@@ -205,10 +159,7 @@ def validate(path: Path, job_id: uuid.UUID, caps: Caps) -> Validated:
 def records(path: Path, caps: Caps) -> Iterator[tuple[RecordLine, int]]:
     """Every record of an already validated stream except stats (header/trailer skipped),
     with the size of its raw line in bytes."""
-    pending: bytes | None = None
-    for index, line in enumerate(_lines(path, caps.max_decompressed_bytes)):
-        if pending is not None:
-            record = _record(pending)
-            if not isinstance(record, CaptureStats):
-                yield record, len(pending)
-        pending = line if index > 0 else None
+    for line in body_lines(path, caps.max_decompressed_bytes):
+        record = _record(line)
+        if not isinstance(record, CaptureStats):
+            yield record, len(line)

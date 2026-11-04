@@ -16,6 +16,7 @@ import hmac
 import logging
 import shutil
 import tempfile
+from collections import Counter
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from pathlib import Path
@@ -27,7 +28,7 @@ from asyncpg.exceptions._base import DataError as ArgumentDataError
 from cyberlab_jobs import IngestEvent, IngestMessageV1, Outcome
 from minio.error import S3Error
 from pydantic import ValidationError
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,10 +46,18 @@ from app.modules.analysis.models import (
     AnalysisStatus,
     Analyzer,
 )
+from app.modules.analysis.result_stream import InvalidResult
 from app.modules.audit import service as audit
-from app.modules.evidence.models import CustodyAction, EvidenceCustodyEvent
+from app.modules.evidence.models import (
+    CustodyAction,
+    Evidence,
+    EvidenceCustodyEvent,
+    EvidenceHash,
+)
 from app.modules.pcap_analysis import ingest as pcap_ingest
 from app.modules.pcap_analysis import stream
+from app.modules.static_analysis import ingest as static_ingest
+from app.modules.static_analysis import stream as static_stream
 
 log = logging.getLogger(__name__)
 
@@ -266,12 +275,13 @@ async def _limit_transaction(session: AsyncSession, settings: Settings) -> None:
     )
 
 
-async def _persist(
-    job: AnalysisJob, msg: IngestMessageV1, path: Path, result: stream.Validated
-) -> None:
+# Writes a validated result's rows in the persist transaction; returns the job summary.
+Writer = Callable[[AsyncSession], Awaitable[dict[str, Any]]]
+
+
+async def _persist(job: AnalysisJob, msg: IngestMessageV1, write: Writer) -> None:
     """One transaction: rows, summary, final state, custody and audit, or nothing at all."""
     settings = get_settings()
-    caps = stream.Caps.from_settings(settings)
     async with tenant_session(job.organization_id, None) as session:
         await _limit_transaction(session, settings)
         # The guard runs under the row lock in this same transaction, so a redelivered
@@ -279,12 +289,20 @@ async def _persist(
         locked = await repo.get_for_update(session, job.organization_id, job.id)
         if locked is None or locked.status not in ACTIVE:
             return
-        written = await pcap_ingest.insert_rows(session, job.organization_id, job.id, path, caps)
-        expected = +result.counts
-        expected.pop("stats", None)
-        if written != expected:
-            raise RuntimeError(f"ingest wrote {dict(written)}, validated {dict(expected)}")
-        await _record_success(session, locked, msg, pcap_ingest.build_summary(result, written))
+        summary = await write(session)
+        await _record_success(session, locked, msg, summary)
+
+
+def _check_written(written: Counter[str], validated: Counter[str], *, skip: str = "") -> None:
+    expected = +validated
+    expected.pop(skip, None)
+    if written != expected:
+        raise RuntimeError(f"ingest wrote {dict(written)}, validated {dict(expected)}")
+
+
+async def _refuse(job: AnalysisJob, exc: InvalidResult) -> None:
+    log.warning("refusing the result of analysis job %s: %s", job.id, exc.reason)
+    await _fail_job(job, "invalid_result")
 
 
 async def _ingest_pcap(job: AnalysisJob, msg: IngestMessageV1, path: Path) -> None:
@@ -292,27 +310,61 @@ async def _ingest_pcap(job: AnalysisJob, msg: IngestMessageV1, path: Path) -> No
     caps = stream.Caps.from_settings(get_settings())
     try:
         result = await anyio.to_thread.run_sync(stream.validate, path, job.id, caps)
-    except stream.InvalidResult as exc:
-        log.warning("refusing the result of analysis job %s: %s", job.id, exc.reason)
-        await _fail_job(job, "invalid_result")
+    except InvalidResult as exc:
+        await _refuse(job, exc)
         return
-    await _persist(job, msg, path, result)
+
+    async def write(session: AsyncSession) -> dict[str, Any]:
+        written = await pcap_ingest.insert_rows(session, job.organization_id, job.id, path, caps)
+        _check_written(written, result.counts, skip="stats")
+        return pcap_ingest.build_summary(result, written)
+
+    await _persist(job, msg, write)
+
+
+async def _evidence_facts(job: AnalysisJob) -> static_stream.Expected:
+    """The trusted record of the analyzed evidence (size + hashes computed at upload)."""
+    async with tenant_session(job.organization_id, None) as session:
+        size = await session.scalar(
+            select(Evidence.size_bytes).where(
+                Evidence.id == job.evidence_id, Evidence.organization_id == job.organization_id
+            )
+        )
+        rows = await session.execute(
+            select(EvidenceHash.algorithm, EvidenceHash.value).where(
+                EvidenceHash.evidence_id == job.evidence_id,
+                EvidenceHash.organization_id == job.organization_id,
+            )
+        )
+        hashes = {algorithm.value: value for algorithm, value in rows}
+    if size is None or "sha256" not in hashes:
+        raise RuntimeError(f"evidence record of analysis job {job.id} is incomplete")
+    return static_stream.Expected(
+        sha256=hashes["sha256"], size=size, md5=hashes.get("md5"), sha1=hashes.get("sha1")
+    )
 
 
 async def _ingest_static(job: AnalysisJob, msg: IngestMessageV1, path: Path) -> None:
-    """`static.v1`, M3 phase 1: the exact result version exists within its size cap (it was
-    downloaded to `path`); the job succeeds without storing any rows.
+    """`static.v1`: validate the whole stream, incl. the sample against the evidence record
+    (worker thread), then write it in one transaction."""
+    caps = static_stream.Caps.from_settings(get_settings())
+    expected = await _evidence_facts(job)
+    try:
+        result = await anyio.to_thread.run_sync(
+            static_stream.validate, path, job.id, expected, caps
+        )
+    except InvalidResult as exc:
+        await _refuse(job, exc)
+        return
 
-    Phase 4 replaces this with full stream validation (incl. the sample hashes against the
-    evidence record) and persistence, keeping the same one-transaction shape as pcap.
-    """
-    settings = get_settings()
-    async with tenant_session(job.organization_id, None) as session:
-        await _limit_transaction(session, settings)
-        locked = await repo.get_for_update(session, job.organization_id, job.id)
-        if locked is None or locked.status not in ACTIVE:
-            return
-        await _record_success(session, locked, msg, {})
+    async def write(session: AsyncSession) -> dict[str, Any]:
+        written = await static_ingest.insert_rows(
+            session, job.organization_id, job.id, path, result, caps
+        )
+        _check_written(written, result.counts)
+        return static_ingest.build_summary(result, written, expected)
+
+    await _persist(job, msg, write)
 
 
 # One success handler per analyzer: (job, report, downloaded result file) -> None.

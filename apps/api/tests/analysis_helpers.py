@@ -28,6 +28,15 @@ def tiny_pcap(packets: int = 3) -> bytes:
     return header + records
 
 
+def pe_bytes(e_lfanew: int = 0x80, size: int = 0x400) -> bytes:
+    """MZ header pointing at an in-bounds `PE\0\0` signature (never a runnable program)."""
+    data = bytearray(size)
+    data[0:2] = b"MZ"
+    data[0x3C:0x40] = e_lfanew.to_bytes(4, "little")
+    data[e_lfanew : e_lfanew + 4] = b"PE\0\0"
+    return bytes(data)
+
+
 async def new_case(reg: Registered) -> str:
     response = await reg.client.post(
         f"/api/v1/orgs/{reg.org_id}/investigations",

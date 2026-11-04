@@ -41,15 +41,20 @@ class FindingSeverity(enum.StrEnum):
 
 
 class IocType(enum.StrEnum):
+    """Every IOC type of the result contracts (cyberlab_jobs.results.IocType)."""
+
     IP = "ip"
     DOMAIN = "domain"
     URL = "url"
+    EMAIL = "email"
     JA3 = "ja3"
     JA3S = "ja3s"
     CERT_SHA256 = "cert_sha256"
     FILE_MD5 = "file_md5"
     FILE_SHA1 = "file_sha1"
     FILE_SHA256 = "file_sha256"
+    REGISTRY_KEY = "registry_key"
+    FILE_PATH = "file_path"
 
 
 class _Endpoints(_Row):

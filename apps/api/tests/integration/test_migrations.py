@@ -52,12 +52,12 @@ async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine)
         _alembic("downgrade", "base")
         assert await _scalars(owner_engine, "SELECT to_regtype('analyzer')::text") == [None]
 
-        _alembic("upgrade", "head")  # one run: 0001..0006 (0006's ALTER TYPE autocommits)
+        _alembic("upgrade", "head")  # one run: 0001..0007 (0006's ALTER TYPE autocommits)
     finally:
         _alembic("upgrade", "head")  # never leave the shared test database half-migrated
         await get_engine().dispose()
 
-    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0006"]
+    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0007"]
     assert await _scalars(owner_engine, ANALYZER_VALUES) == ["pcap", "static"]
     assert await _scalars(owner_engine, PROFILE_COLUMN) == ["profile"]
     assert await _scalars(owner_engine, "SELECT 'static'::analyzer::text") == ["static"]
