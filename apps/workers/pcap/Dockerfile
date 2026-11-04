@@ -29,6 +29,7 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     PYTHONDONTWRITEBYTECODE=1
 WORKDIR /srv/workers/pcap
 COPY --from=jobs . /packages/py-jobs
+COPY --from=worker_kit . /packages/py-worker-kit
 COPY pyproject.toml uv.lock ./
 
 FROM base AS dev

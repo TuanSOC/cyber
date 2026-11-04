@@ -39,6 +39,7 @@ x-pcap-worker: &pcap-worker
     target: dev
     additional_contexts:
       jobs: ./packages/py-jobs
+      worker_kit: ./packages/py-worker-kit
   # tini as PID 1 reaps the orphaned tool processes the worker kills.
   init: true
   read_only: true
@@ -241,6 +242,7 @@ services:
     volumes:
       - ./apps/workers/pcap/pcap_worker:/srv/workers/pcap/pcap_worker:ro
       - ./packages/py-jobs:/packages/py-jobs:ro
+      - ./packages/py-worker-kit:/packages/py-worker-kit:ro
       - pcap_work:/work
     depends_on:
       redis-broker:
@@ -339,12 +341,14 @@ services:
       QUEUE_PREFIX: "test."
       # Small local rule file: loading ET Open takes ~40 s per job (one test covers it).
       SURICATA_RULES: /srv/workers/pcap/tests/rules/local-test.rules
+      WORKER_QUEUE: pcap
       # Read-only rootfs: lint/type caches go to the tmpfs.
       RUFF_CACHE_DIR: /tmp/ruff
       MYPY_CACHE_DIR: /tmp/mypy
     volumes:
       - ./apps/workers/pcap/pcap_worker:/srv/workers/pcap/pcap_worker:ro
       - ./packages/py-jobs:/packages/py-jobs:ro
+      - ./packages/py-worker-kit:/packages/py-worker-kit:ro
       - ./apps/workers/pcap/tests:/srv/workers/pcap/tests:ro
       - ./apps/workers/pcap/dataset:/srv/workers/pcap/dataset:ro
       - ./apps/workers/pcap/pyproject.toml:/srv/workers/pcap/pyproject.toml:ro

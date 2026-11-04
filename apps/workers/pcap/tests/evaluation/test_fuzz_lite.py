@@ -15,10 +15,11 @@ from pathlib import Path
 
 import pytest
 from cyberlab_jobs import JobLimits
+from cyberlab_worker import sandbox
+from cyberlab_worker.errors import JobFailed
 
 from dataset.generate import generate
-from pcap_worker import analyzer, sandbox
-from pcap_worker.errors import JobFailed
+from pcap_worker import analyzer
 from tests.integration.test_engines import TEST_RULES, parse
 
 MUTANTS = 50

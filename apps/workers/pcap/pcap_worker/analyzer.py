@@ -28,16 +28,16 @@ from cyberlab_jobs.results import (
     ProtocolStat,
     ResultHeader,
 )
+from cyberlab_worker import sandbox
+from cyberlab_worker.errors import JobFailed
+from cyberlab_worker.parsing import RECORD_ERRORS, JsonLines
+from cyberlab_worker.result_writer import ResultWriter, Spool
+from cyberlab_worker.transfer import download
 from pydantic import BaseModel
 
-from pcap_worker import sandbox
 from pcap_worker.config import tool_versions
 from pcap_worker.detections.run import Detection
 from pcap_worker.engines import capture_info, suricata, zeek
-from pcap_worker.engines.common import RECORD_ERRORS, JsonLines
-from pcap_worker.errors import JobFailed
-from pcap_worker.result_writer import ResultWriter, Spool
-from pcap_worker.transfer import download
 
 # Slack for housekeeping after the last tool (normalize, write, upload, report).
 RESERVE_S = 30
@@ -166,7 +166,14 @@ class JA3Lookup:
 
 def analyze(job: PcapJobV1, dirs: sandbox.JobDirs) -> Path:
     budget = Budget(job.limits)
-    download(job, dirs.capture)
+    download(
+        job.evidence_url,
+        dirs.capture,
+        expected_sha256=job.expected_sha256,
+        size_bytes=job.size_bytes,
+        max_bytes=job.limits.max_bytes,
+        too_large_code="capture_too_large",
+    )
     return analyze_file(dirs, job.job_id, job.limits, budget)
 
 

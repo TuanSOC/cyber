@@ -5,22 +5,30 @@ import os
 from pathlib import Path
 
 import httpx
-from cyberlab_jobs import PcapJobV1, PresignedPost
+from cyberlab_jobs import PresignedPost
 
-from pcap_worker.errors import JobFailed
+from cyberlab_worker.errors import JobFailed
 
 CHUNK = 1024 * 1024
 TIMEOUT = httpx.Timeout(30.0, read=120.0)
 
 
-def download(job: PcapJobV1, dest: Path) -> None:
+def download(
+    url: str,
+    dest: Path,
+    *,
+    expected_sha256: str,
+    size_bytes: int,
+    max_bytes: int,
+    too_large_code: str,
+) -> None:
     """Stream the exact evidence version to `dest`; refuse anything but the expected bytes."""
-    if job.size_bytes > job.limits.max_bytes:
-        raise JobFailed("capture_too_large")
+    if size_bytes > max_bytes:
+        raise JobFailed(too_large_code)
     digest = hashlib.sha256()
     received = 0
     try:
-        with httpx.stream("GET", job.evidence_url, timeout=TIMEOUT) as response:
+        with httpx.stream("GET", url, timeout=TIMEOUT) as response:
             if response.status_code != 200:
                 body = response.read()[:4096].decode("utf-8", "replace")
                 code = "url_expired" if "expired" in body.lower() else "evidence_unavailable"
@@ -28,13 +36,13 @@ def download(job: PcapJobV1, dest: Path) -> None:
             with open(dest, "xb") as f:
                 for chunk in response.iter_bytes(CHUNK):
                     received += len(chunk)
-                    if received > job.size_bytes:
+                    if received > size_bytes:
                         raise JobFailed("integrity_mismatch", "more bytes than recorded")
                     digest.update(chunk)
                     f.write(chunk)
     except httpx.HTTPError as exc:
         raise JobFailed("evidence_unavailable", type(exc).__name__) from exc
-    if received != job.size_bytes or digest.hexdigest() != job.expected_sha256:
+    if received != size_bytes or digest.hexdigest() != expected_sha256:
         raise JobFailed("integrity_mismatch", "sha256 or size differs from the evidence record")
     os.chmod(dest, 0o444)
 

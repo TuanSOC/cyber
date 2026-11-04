@@ -5,13 +5,13 @@ from collections.abc import Callable
 
 from celery.exceptions import SoftTimeLimitExceeded
 from cyberlab_jobs import IngestEvent, IngestMessageV1, Outcome, PcapJobV1
+from cyberlab_worker import sandbox
+from cyberlab_worker.errors import JobFailed
+from cyberlab_worker.transfer import upload
 from pydantic import ValidationError
 
-from pcap_worker import sandbox
 from pcap_worker.analyzer import analyze
 from pcap_worker.config import WORKER_VERSION, Config
-from pcap_worker.errors import JobFailed
-from pcap_worker.transfer import upload
 
 log = logging.getLogger(__name__)
 

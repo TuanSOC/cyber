@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from pcap_worker import sandbox
+from cyberlab_worker import sandbox
 
 
 def _read(dirs: sandbox.JobDirs, name: str) -> str:

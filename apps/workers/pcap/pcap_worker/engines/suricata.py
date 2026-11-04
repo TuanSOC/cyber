@@ -8,9 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from cyberlab_jobs.results import AlertRecord
-
-from pcap_worker import sandbox
-from pcap_worker.engines.common import clip, ip, iso, port
+from cyberlab_worker import sandbox
+from cyberlab_worker.parsing import clip, ip, iso, port
 
 DEFAULT_RULES = "/var/lib/suricata/rules/suricata.rules"
 OVERRIDES = Path(__file__).with_name("suricata-cyberlab.yaml")

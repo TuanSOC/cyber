@@ -1,0 +1,25 @@
+[project]
+name = "cyberlab-worker"
+version = "1.0.0"
+description = "Sandboxed tool execution, presigned transfers and bounded result I/O for CyberLab analysis workers"
+requires-python = ">=3.12"
+dependencies = ["httpx>=0.28", "pydantic>=2.9", "cyberlab-jobs"]
+
+[build-system]
+requires = ["uv_build>=0.9,<0.10"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "S", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S603", "S607", "S108", "S311"]
+# Tool invocations use fixed argv lists, never a shell.
+"src/cyberlab_worker/sandbox.py" = ["S603"]

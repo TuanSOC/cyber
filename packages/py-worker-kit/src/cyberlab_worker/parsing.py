@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any, BinaryIO
 
-from pcap_worker import sandbox
+from cyberlab_worker import sandbox
 
 log = logging.getLogger(__name__)
 

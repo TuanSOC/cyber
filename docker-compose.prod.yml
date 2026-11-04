@@ -41,6 +41,9 @@ services:
     build:
       context: ./apps/workers/pcap
       target: prod
+      additional_contexts:
+        jobs: ./packages/py-jobs
+        worker_kit: ./packages/py-worker-kit
     volumes: !override
       - pcap_work:/work
 

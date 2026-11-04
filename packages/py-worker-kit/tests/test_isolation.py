@@ -75,4 +75,4 @@ def test_broker_acl_confines_the_analyzer_to_its_keys() -> None:
         _denied(client, *command)
     # What it legitimately needs still works.
     assert client.smembers(f"_kombu.binding.{ingest}") is not None
-    assert client.llen(f"{prefix}pcap") >= 0
+    assert client.llen(f"{prefix}{os.environ.get('WORKER_QUEUE', 'pcap')}") >= 0

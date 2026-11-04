@@ -20,9 +20,10 @@ from typing import Any
 
 import pytest
 from cyberlab_jobs import JobLimits
+from cyberlab_worker import sandbox
 
 from dataset.generate import generate
-from pcap_worker import analyzer, sandbox
+from pcap_worker import analyzer
 from tests.integration.test_engines import LIMITS, TEST_RULES, parse
 
 FLOORS = {"precision": 0.9, "recall": 0.9}

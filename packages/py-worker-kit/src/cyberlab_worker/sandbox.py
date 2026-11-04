@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
 
-from pcap_worker import seccomp
+from cyberlab_worker import seccomp
 
 log = logging.getLogger(__name__)
 

@@ -4,8 +4,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-
-from pcap_worker import sandbox
+from cyberlab_worker import sandbox
 
 
 @pytest.fixture

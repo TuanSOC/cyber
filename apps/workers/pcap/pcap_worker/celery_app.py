@@ -10,9 +10,10 @@ from typing import Any
 from celery import Celery
 from celery.signals import worker_process_init
 from cyberlab_jobs import INGEST_EVENT, PCAP_ANALYZE, IngestMessageV1, Queues
+from cyberlab_worker import sandbox
 from kombu import Exchange, Queue  # type: ignore[attr-defined]
 
-from pcap_worker import config, pipeline, sandbox
+from pcap_worker import config, pipeline
 
 # httpx logs full request URLs at INFO: presigned URLs are bearer credentials.
 logging.getLogger("httpx").setLevel(logging.WARNING)

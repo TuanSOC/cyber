@@ -16,12 +16,12 @@ from cyberlab_jobs.results import (
     TimelineEvent,
     TlsRecord,
 )
+from cyberlab_worker.parsing import JsonLines
 
 from pcap_worker.detections.base import Finding, is_local
 from pcap_worker.detections.flow_detectors import BeaconDetector, ScanDetector
 from pcap_worker.detections.iocs import IocCollector
 from pcap_worker.detections.record_detectors import DnsDetector, SuspiciousTraffic
-from pcap_worker.engines.common import JsonLines
 
 SEVERITY_RANK = {"high": 3, "medium": 2, "low": 1, "info": 0}
 ALERT_SEVERITY = {1: "high", 2: "medium", 3: "low", 4: "info"}

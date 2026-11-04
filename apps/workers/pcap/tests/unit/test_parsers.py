@@ -5,9 +5,10 @@ import json
 import os
 from pathlib import Path
 
-from pcap_worker import sandbox
+from cyberlab_worker import sandbox
+from cyberlab_worker.parsing import MAX_LINE_BYTES, JsonLines, clip, epoch, ip, iso
+
 from pcap_worker.engines import zeek
-from pcap_worker.engines.common import MAX_LINE_BYTES, JsonLines, clip, epoch, ip, iso
 
 GOOD = {
     "ts": 1767225600.5,

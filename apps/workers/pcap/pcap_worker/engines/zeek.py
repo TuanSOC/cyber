@@ -10,9 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from cyberlab_jobs.results import DnsRecord, FlowRecord, HttpRecord, TlsRecord
-
-from pcap_worker import sandbox
-from pcap_worker.engines.common import (
+from cyberlab_worker import sandbox
+from cyberlab_worker.parsing import (
     RECORD_ERRORS,
     JsonLines,
     clip,

@@ -14,11 +14,12 @@ from typing import Any
 import pytest
 from cyberlab_jobs import JobLimits
 from cyberlab_jobs.results import LINE_ADAPTER, ResultHeader, ResultTrailer
+from cyberlab_worker import sandbox
+from cyberlab_worker.errors import JobFailed
 
 from dataset.generate import generate
-from pcap_worker import analyzer, sandbox
+from pcap_worker import analyzer
 from pcap_worker.engines.zeek import community_id
-from pcap_worker.errors import JobFailed
 
 TEST_RULES = str(Path(__file__).parents[1] / "rules" / "local-test.rules")
 LIMITS = JobLimits(

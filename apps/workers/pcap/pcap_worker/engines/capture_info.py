@@ -6,9 +6,8 @@ from datetime import datetime
 from pathlib import Path
 
 from cyberlab_jobs.results import ProtocolStat
-
-from pcap_worker import sandbox
-from pcap_worker.engines.common import RECORD_ERRORS, clip, epoch, seconds
+from cyberlab_worker import sandbox
+from cyberlab_worker.parsing import RECORD_ERRORS, clip, epoch, seconds
 
 PHS_LINE = re.compile(
     r"^(?P<indent> *)(?P<proto>[A-Za-z0-9_.\-]+)\s+frames:(?P<f>\d+)\s+bytes:(?P<b>\d+)\s*$"

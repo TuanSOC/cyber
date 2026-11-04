@@ -8,6 +8,7 @@ dependencies = [
     "httpx>=0.28",
     "pydantic>=2.9",
     "cyberlab-jobs",
+    "cyberlab-worker",
 ]
 
 [dependency-groups]
@@ -22,6 +23,7 @@ dev = [
 [tool.uv.sources]
 # The image places the contracts at /packages/py-jobs (same relative path as here).
 cyberlab-jobs = { path = "../../../packages/py-jobs", editable = true }
+cyberlab-worker = { path = "../../../packages/py-worker-kit", editable = true }
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

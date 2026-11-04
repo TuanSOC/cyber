@@ -7,7 +7,7 @@ from pathlib import Path
 from cyberlab_jobs.capture import CaptureFormat
 from cyberlab_jobs.results import ResultHeader, ResultTrailer
 
-from pcap_worker.result_writer import ResultWriter
+from cyberlab_worker.result_writer import ResultWriter
 
 
 def test_trailer_covers_every_prior_byte(tmp_path: Path) -> None:

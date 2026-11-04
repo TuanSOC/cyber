@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from cyberlab_jobs.results import DnsRecord, FlowRecord, HttpRecord, TlsRecord
+from cyberlab_worker.parsing import JsonLines, clip, epoch
 
 from pcap_worker.detections.base import is_local
-from pcap_worker.engines.common import JsonLines, clip, epoch
 
 HEX = set("0123456789abcdef")
 
