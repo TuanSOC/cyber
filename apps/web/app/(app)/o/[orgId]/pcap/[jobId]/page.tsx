@@ -4,16 +4,16 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { Suspense } from "react";
 
-import { AnalysisOverview } from "@/components/analysis/analysis-overview";
+import { AnalysisResults } from "@/components/analysis/analysis-results";
 import { AnalysisStatusBadge } from "@/components/analysis/analysis-status-badge";
 import { NotFoundCard } from "@/components/not-found-card";
 import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   type AnalysisJob,
   analysisErrorText,
@@ -21,25 +21,15 @@ import {
   jobDurationText,
   justSucceeded,
   pollWhileActive,
-  toolVersions,
 } from "@/lib/analysis";
 import { ApiError, api, unwrap } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { orgPath } from "@/lib/nav";
 import { useOrg } from "@/lib/org-context";
+import { formatCount, parseOverview } from "@/lib/pcap-results";
 import { useNow } from "@/lib/use-now";
 
-// Result views arrive with the read API (phase 4); no requests are made for them yet.
-const RESULT_TABS = [
-  ["findings", "Findings"],
-  ["alerts", "Alerts"],
-  ["flows", "Flows"],
-  ["dns", "DNS"],
-  ["http", "HTTP"],
-  ["tls", "TLS"],
-  ["iocs", "IOCs"],
-  ["timeline", "Timeline"],
-] as const;
+const HEADLINE_COUNTS = new Set(["findings", "alerts", "flows"]);
 
 export default function AnalysisPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -75,7 +65,7 @@ export default function AnalysisPage() {
   if (!j) return <p className="text-sm text-muted-foreground">Loading analysis…</p>;
 
   const error = analysisErrorText(j.error_code);
-  const versions = toolVersions(j.summary);
+  const counts = parseOverview(j.summary).counts.filter((row) => HEADLINE_COUNTS.has(row.key));
   const active = isActiveStatus(j.status);
   const timings: [string, string | null][] = [
     ["Requested", j.created_at],
@@ -149,54 +139,26 @@ export default function AnalysisPage() {
             </Badge>
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">Tool versions</p>
-            {versions.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Results</p>
+            {counts.length === 0 ? (
               <p className="text-muted-foreground">—</p>
             ) : (
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 text-xs">
-                {versions.map(([name, version]) => (
-                  <div key={name} className="contents">
-                    <dt className="truncate text-muted-foreground" title={name}>
-                      {name}
-                    </dt>
-                    <dd className="truncate font-mono" title={version}>
-                      {version}
-                    </dd>
-                  </div>
+              <p className="tabular-nums">
+                {counts.map((row, index) => (
+                  <span key={row.key}>
+                    {index > 0 && <span className="text-muted-foreground"> · </span>}
+                    {formatCount(row.stored)} {row.label.toLowerCase()}
+                  </span>
                 ))}
-              </dl>
+              </p>
             )}
           </div>
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="overview">
-        <TabsList aria-label="Analysis results">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          {RESULT_TABS.map(([value, label]) => (
-            <TabsTrigger key={value} value={value}>
-              {label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        <TabsContent value="overview">
-          <AnalysisOverview job={j} />
-        </TabsContent>
-        {RESULT_TABS.map(([value, label]) => (
-          <TabsContent key={value} value={value}>
-            <Card>
-              <CardHeader>
-                <CardTitle>{label}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  The {label} view is coming in the next step of the PCAP Analyzer.
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        ))}
-      </Tabs>
+      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading results…</p>}>
+        <AnalysisResults orgId={orgId} job={j} />
+      </Suspense>
     </>
   );
 }

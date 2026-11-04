@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
 import { AnalysisStatusBadge } from "@/components/analysis/analysis-status-badge";
+import { FindingCount } from "@/components/analysis/finding-count";
 import { QueryError } from "@/components/query-error";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { analysisErrorText, latestPerEvidence, pollWhileActive } from "@/lib/analysis";
@@ -66,6 +67,7 @@ export function InvestigationAnalyses({ orgId, investigationId }: { orgId: strin
                   <span className="text-xs text-muted-foreground" title={created.utc}>
                     {created.local}
                   </span>
+                  {job.status === "succeeded" && <FindingCount job={job} />}
                   <Link className="ml-auto text-xs underline underline-offset-4" href={orgPath(orgId, `pcap/${job.id}`)}>
                     Details
                   </Link>

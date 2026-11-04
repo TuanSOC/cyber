@@ -8,6 +8,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { AnalysisStatusBadge } from "@/components/analysis/analysis-status-badge";
+import { FindingCount } from "@/components/analysis/finding-count";
 import { Pager } from "@/components/pager";
 import { QueryError } from "@/components/query-error";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -168,6 +169,7 @@ function JobRow({ orgId, job, now }: { orgId: string; job: AnalysisJob; now: num
         {job.auto ? "automatic" : <>by {job.requested_by_name}</>}
       </span>
       <span className="text-muted-foreground tabular-nums">{jobDurationText(job, now)}</span>
+      {job.status === "succeeded" && <FindingCount job={job} />}
       <Link className="ml-auto text-xs underline underline-offset-4" href={orgPath(orgId, `pcap/${job.id}`)}>
         Details
       </Link>

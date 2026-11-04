@@ -113,37 +113,6 @@ export function toolVersions(summary: Summary | null | undefined): [string, stri
     .map(([name, version]) => [name, String(version)]);
 }
 
-export function humanizeKey(key: string): string {
-  const words = key.replace(/[_-]+/g, " ").trim();
-  return words ? words[0].toUpperCase() + words.slice(1) : key;
-}
-
-export type SummaryEntry = { key: string; label: string; value: string };
-
-/**
- * Top-level summary fields rendered defensively as text: scalars verbatim, arrays/objects only
- * as a size hint (the structured views come with the result tabs). tool_versions is shown apart.
- */
-export function summaryEntries(summary: Summary | null | undefined): SummaryEntry[] {
-  if (!isRecord(summary)) return [];
-  return Object.entries(summary)
-    .filter(([key]) => key !== "tool_versions")
-    .map(([key, value]) => ({ key, label: humanizeKey(key), value: describeValue(value) }));
-}
-
-function describeValue(value: unknown): string {
-  if (value === null || value === undefined) return "—";
-  if (typeof value === "string") return value;
-  if (typeof value === "number") return Number.isFinite(value) ? value.toLocaleString("en-US") : "—";
-  if (typeof value === "boolean") return value ? "yes" : "no";
-  if (Array.isArray(value)) return `${value.length} ${value.length === 1 ? "item" : "items"}`;
-  if (isRecord(value)) {
-    const size = Object.keys(value).length;
-    return `${size} ${size === 1 ? "field" : "fields"}`;
-  }
-  return "—";
-}
-
 export function hasSummary(summary: Summary | null | undefined): boolean {
   return isRecord(summary) && Object.keys(summary).length > 0;
 }

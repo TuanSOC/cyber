@@ -6,14 +6,12 @@ import {
   anyActive,
   formatDuration,
   hasSummary,
-  humanizeKey,
   isActiveStatus,
   jobDurationMs,
   jobDurationText,
   justSucceeded,
   latestPerEvidence,
   pollWhileActive,
-  summaryEntries,
   toolVersions,
 } from "./analysis";
 
@@ -95,7 +93,6 @@ describe("summary helpers", () => {
     expect(hasSummary({})).toBe(false);
     expect(hasSummary(undefined)).toBe(false);
     expect(hasSummary({ packets: 1 })).toBe(true);
-    expect(summaryEntries({})).toEqual([]);
   });
 
   it("extracts tool versions and skips malformed values", () => {
@@ -105,31 +102,6 @@ describe("summary helpers", () => {
     ]);
     expect(toolVersions({ tool_versions: ["zeek"] })).toEqual([]);
     expect(toolVersions({})).toEqual([]);
-  });
-
-  it("describes values as text and leaves tool versions out", () => {
-    expect(
-      summaryEntries({
-        capture_format: "pcapng",
-        packets: 12345,
-        truncated: {},
-        engine_errors: ["a", "b"],
-        ok: true,
-        tool_versions: { zeek: "7" },
-      }),
-    ).toEqual([
-      { key: "capture_format", label: "Capture format", value: "pcapng" },
-      { key: "packets", label: "Packets", value: "12,345" },
-      { key: "truncated", label: "Truncated", value: "0 fields" },
-      { key: "engine_errors", label: "Engine errors", value: "2 items" },
-      { key: "ok", label: "Ok", value: "yes" },
-    ]);
-  });
-
-  it("humanizes keys", () => {
-    expect(humanizeKey("top_talkers")).toBe("Top talkers");
-    expect(humanizeKey("rule-version")).toBe("Rule version");
-    expect(humanizeKey("__")).toBe("__");
   });
 });
 

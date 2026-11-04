@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { AnalysisStatusBadge } from "@/components/analysis/analysis-status-badge";
+import { FindingCount } from "@/components/analysis/finding-count";
 import { PageHeader } from "@/components/page-header";
 import { PAGE_SIZE, Pager } from "@/components/pager";
 import { QueryError } from "@/components/query-error";
@@ -38,7 +39,7 @@ import { useOrg } from "@/lib/org-context";
 import { useNow } from "@/lib/use-now";
 
 const ALL = "all";
-const COLUMNS = 8;
+const COLUMNS = 9;
 
 export default function PcapAnalysesPage() {
   const { orgId } = useOrg();
@@ -93,6 +94,7 @@ export default function PcapAnalysesPage() {
             <TableRow>
               <TableHead className="w-32">Status</TableHead>
               <TableHead>Evidence</TableHead>
+              <TableHead className="w-32">Findings</TableHead>
               <TableHead className="w-24">Case</TableHead>
               <TableHead className="w-24">Trigger</TableHead>
               <TableHead className="w-40">Requested by</TableHead>
@@ -120,6 +122,9 @@ export default function PcapAnalysesPage() {
                     <Link className="hover:underline" href={orgPath(orgId, `evidence/${job.evidence_id}`)}>
                       {job.evidence_filename}
                     </Link>
+                  </TableCell>
+                  <TableCell>
+                    <FindingCount job={job} />
                   </TableCell>
                   <TableCell>
                     <Link

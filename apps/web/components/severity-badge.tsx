@@ -1,8 +1,9 @@
 import { cn } from "@/lib/utils";
 
-export type Severity = "low" | "medium" | "high" | "critical";
+export type Severity = "info" | "low" | "medium" | "high" | "critical";
 
 const STYLES: Record<Severity, string> = {
+  info: "border-border bg-muted text-muted-foreground",
   low: "border-sev-low/40 bg-sev-low/15 text-sev-low",
   medium: "border-sev-medium/40 bg-sev-medium/15 text-sev-medium",
   high: "border-sev-high/40 bg-sev-high/15 text-sev-high",
