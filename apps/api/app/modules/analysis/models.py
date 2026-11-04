@@ -3,7 +3,9 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from cyberlab_jobs.static import Profile
 from sqlalchemy import (
+    Enum,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -19,6 +21,7 @@ from app.core.models_base import Base, UUIDPk, pg_enum
 
 class Analyzer(enum.StrEnum):
     PCAP = "pcap"
+    STATIC = "static"
 
 
 class AnalysisStatus(enum.StrEnum):
@@ -27,6 +30,15 @@ class AnalysisStatus(enum.StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
 
+
+# Stored as text with a CHECK (not a Postgres enum): new profiles need no ALTER TYPE.
+PROFILE = Enum(
+    Profile,
+    native_enum=False,
+    create_constraint=False,
+    length=16,
+    values_callable=lambda e: [m.value for m in e],
+)
 
 ACTIVE = (AnalysisStatus.QUEUED, AnalysisStatus.RUNNING)
 TERMINAL = (AnalysisStatus.SUCCEEDED, AnalysisStatus.FAILED)
@@ -56,6 +68,8 @@ class AnalysisJob(UUIDPk, Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
     evidence_id: Mapped[uuid.UUID]
     analyzer: Mapped[Analyzer] = mapped_column(pg_enum(Analyzer, "analyzer"))
+    # Static runs only (`full` or `av`); NULL for every other analyzer (DB check).
+    profile: Mapped[Profile | None] = mapped_column(PROFILE)
     status: Mapped[AnalysisStatus] = mapped_column(
         pg_enum(AnalysisStatus, "analysis_status"),
         server_default=AnalysisStatus.QUEUED.value,
@@ -81,11 +95,16 @@ class AnalysisJobIndex(Base):
     """
 
     __tablename__ = "analysis_job_index"
-    __table_args__ = (Index(None, "status", "deadline_at"),)
+    __table_args__ = (
+        Index(None, "status", "deadline_at"),
+        Index(None, "analyzer", "status"),
+    )
 
     job_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("analysis_jobs.id", ondelete="CASCADE"), primary_key=True
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
+    # Routing data, not tenant data: lets the global per-analyzer cap count without RLS.
+    analyzer: Mapped[Analyzer] = mapped_column(pg_enum(Analyzer, "analyzer"))
     status: Mapped[AnalysisStatus] = mapped_column(pg_enum(AnalysisStatus, "analysis_status"))
     deadline_at: Mapped[datetime]

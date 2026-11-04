@@ -549,6 +549,7 @@ export interface components {
         AnalysisCreate: {
             /** @default pcap */
             analyzer: components["schemas"]["Analyzer"];
+            profile?: components["schemas"]["Profile"] | null;
         };
         /** AnalysisJobOut */
         AnalysisJobOut: {
@@ -581,6 +582,7 @@ export interface components {
              * Format: uuid
              */
             investigation_id: string;
+            profile: components["schemas"]["Profile"] | null;
             /**
              * Requested By
              * Format: uuid
@@ -612,7 +614,7 @@ export interface components {
          * Analyzer
          * @enum {string}
          */
-        Analyzer: "pcap";
+        Analyzer: "pcap" | "static";
         /** AuditLogOut */
         AuditLogOut: {
             /** Action */
@@ -1121,6 +1123,11 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * Profile
+         * @enum {string}
+         */
+        Profile: "full" | "av";
         /**
          * RecordKind
          * @enum {string}

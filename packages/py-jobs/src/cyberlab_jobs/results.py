@@ -206,7 +206,18 @@ class FindingRecord(_Endpoints):
 
 
 IocType = Literal[
-    "ip", "domain", "url", "ja3", "ja3s", "cert_sha256", "file_md5", "file_sha1", "file_sha256"
+    "ip",
+    "domain",
+    "url",
+    "email",
+    "ja3",
+    "ja3s",
+    "cert_sha256",
+    "file_md5",
+    "file_sha1",
+    "file_sha256",
+    "registry_key",
+    "file_path",
 ]
 
 

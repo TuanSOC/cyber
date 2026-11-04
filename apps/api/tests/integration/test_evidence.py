@@ -85,7 +85,8 @@ async def test_upload_hashes_stores_and_records_custody() -> None:
     custody = (
         await reg.client.get(f"/api/v1/orgs/{reg.org_id}/evidence/{body['id']}/custody")
     ).json()
-    assert [e["action"] for e in custody["items"]] == ["uploaded"]
+    # Any non-empty upload within the static cap is queued for an AV scan after it commits.
+    assert [e["action"] for e in custody["items"]] == ["uploaded", "analysis_requested"]
     assert _tmp_files() == []
 
     case = (await reg.client.get(f"/api/v1/orgs/{reg.org_id}/investigations/{case_id}")).json()
@@ -248,7 +249,7 @@ async def test_download_headers_body_and_custody() -> None:
         assert streamed.status_code == 200
         # Custody is already committed before any body byte has been read.
         early = (await reg.client.get(f"{url}/custody")).json()["items"]
-        assert [e["action"] for e in early] == ["uploaded", "downloaded"]
+        assert [e["action"] for e in early] == ["uploaded", "analysis_requested", "downloaded"]
         await streamed.aread()
     response = await reg.client.get(f"{url}/download")
     assert response.content == data
@@ -261,7 +262,12 @@ async def test_download_headers_body_and_custody() -> None:
     assert h["content-disposition"].startswith("attachment;")
     assert "filename*=UTF-8''b%C3%A1o%20c%C3%A1o%3Cscript%3E.pdf" in h["content-disposition"]
     custody = (await reg.client.get(f"{url}/custody")).json()["items"]
-    assert [e["action"] for e in custody] == ["uploaded", "downloaded", "downloaded"]
+    assert [e["action"] for e in custody] == [
+        "uploaded",
+        "analysis_requested",
+        "downloaded",
+        "downloaded",
+    ]
 
 
 async def test_eicar_is_stored_inert_with_detected_type() -> None:

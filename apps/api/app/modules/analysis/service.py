@@ -6,18 +6,19 @@ import secrets
 import uuid
 from datetime import timedelta
 
-from cyberlab_jobs.capture import capture_format
+from cyberlab_jobs.capture import capture_format, executable_format
+from cyberlab_jobs.static import Profile
 from sqlalchemy import func, select
 from starlette.requests import HTTPConnection
 
 from app.core import rate_limit
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.deps import CurrentUser
 from app.core.errors import AppError, Conflict, NotFound, TooManyRequests
 from app.core.pagination import PageParams
 from app.core.rbac import OrgContext, Permission, org_session
 from app.core.tenancy import tenant_session
-from app.modules.analysis import dispatch, lifecycle
+from app.modules.analysis import analyzers, dispatch, lifecycle
 from app.modules.analysis import repository as repo
 from app.modules.analysis.models import (
     ACTIVE,
@@ -51,6 +52,19 @@ class CaptureTooLarge(AppError):
     message = "Evidence is larger than the analyzer accepts"
 
 
+class SampleTooLarge(AppError):
+    status_code = 413
+    code = "sample_too_large"
+    message = "Evidence is larger than the static analyzer accepts"
+
+
+TOO_LARGE: dict[Analyzer, type[AppError]] = {
+    Analyzer.PCAP: CaptureTooLarge,
+    Analyzer.STATIC: SampleTooLarge,
+}
+SKIPPABLE = (AnalysisActive, AnalysisQueueFull, CaptureTooLarge, SampleTooLarge, TooManyRequests)
+
+
 def to_out(row: repo.JobRow) -> AnalysisJobOut:
     job = row.job
     return AnalysisJobOut(
@@ -59,6 +73,7 @@ def to_out(row: repo.JobRow) -> AnalysisJobOut:
         investigation_id=row.investigation_id,
         evidence_filename=row.evidence_filename,
         analyzer=job.analyzer,
+        profile=job.profile,
         status=job.status,
         error_code=job.error_code,
         auto=job.auto,
@@ -71,17 +86,26 @@ def to_out(row: repo.JobRow) -> AnalysisJobOut:
     )
 
 
-async def _global_queue_full() -> bool:
-    """All orgs share one analyzer queue; cap it so no org can starve the others for long."""
+async def _global_queue_full(analyzer: Analyzer) -> bool:
+    """All orgs share each analyzer's queue; cap it so no org can starve the others for long."""
     async with tenant_session(None, None) as session:
         active = await session.scalar(
-            select(func.count()).where(AnalysisJobIndex.status.in_(ACTIVE))
+            select(func.count()).where(
+                AnalysisJobIndex.analyzer == analyzer, AnalysisJobIndex.status.in_(ACTIVE)
+            )
         )
     return int(active or 0) >= get_settings().max_active_analyses_global
 
 
 async def _create(
-    ctx: OrgContext, evidence_id: uuid.UUID, request: HTTPConnection, *, auto: bool, token: str
+    ctx: OrgContext,
+    evidence_id: uuid.UUID,
+    request: HTTPConnection,
+    *,
+    analyzer: Analyzer,
+    profile: Profile | None,
+    auto: bool,
+    token: str,
 ) -> dispatch.DispatchInput:
     settings = get_settings()
     row = await evidence_service.get_row(ctx, evidence_id, for_update=True)
@@ -89,27 +113,29 @@ async def _create(
     if evidence.status == EvidenceStatus.ARCHIVED:
         raise Conflict("Archived evidence cannot be analyzed", code="evidence_archived")
     await evidence_service.ensure_open_investigation(ctx, evidence.investigation_id)
-    if evidence.size_bytes > settings.pcap_max_bytes:
-        raise CaptureTooLarge()
+    if evidence.size_bytes > analyzers.max_bytes(settings, analyzer):
+        raise TOO_LARGE[analyzer]()
 
     await repo.lock_org_queue(ctx.session, ctx.org_id)
     active = await ctx.session.execute(
         select(AnalysisJob.id).where(
             AnalysisJob.organization_id == ctx.org_id,
             AnalysisJob.evidence_id == evidence_id,
-            AnalysisJob.analyzer == Analyzer.PCAP,
+            AnalysisJob.analyzer == analyzer,
             AnalysisJob.status.in_(ACTIVE),
         )
     )
     if active.first() is not None:
         raise AnalysisActive()
-    if await repo.count_active(ctx.session, ctx.org_id) >= settings.max_active_analyses_per_org:
+    active_count = await repo.count_active(ctx.session, ctx.org_id, analyzer)
+    if active_count >= settings.max_active_analyses_per_org:
         raise AnalysisQueueFull()
 
     job = AnalysisJob(
         organization_id=ctx.org_id,
         evidence_id=evidence_id,
-        analyzer=Analyzer.PCAP,
+        analyzer=analyzer,
+        profile=profile,
         requested_by=ctx.user.id,
         auto=auto,
         ingest_token_sha256=hashlib.sha256(token.encode()).hexdigest(),
@@ -120,11 +146,14 @@ async def _create(
         AnalysisJobIndex(
             job_id=job.id,
             organization_id=ctx.org_id,
+            analyzer=analyzer,
             status=AnalysisStatus.QUEUED,
             deadline_at=lifecycle.now() + timedelta(seconds=settings.analysis_queue_ttl_s),
         )
     )
-    details = {"job_id": str(job.id), "analyzer": Analyzer.PCAP.value, "auto": auto}
+    details: dict[str, object] = {"job_id": str(job.id), "analyzer": analyzer.value, "auto": auto}
+    if profile is not None:
+        details["profile"] = profile.value
     evidence_service.record_event(
         ctx,
         evidence_id=evidence_id,
@@ -144,6 +173,8 @@ async def _create(
         sha256=row.hashes["sha256"],
         size_bytes=evidence.size_bytes,
         ingest_token=token,
+        analyzer=analyzer,
+        profile=profile,
     )
 
 
@@ -174,14 +205,20 @@ async def request_analysis(
     evidence_id: uuid.UUID,
     request: HTTPConnection,
     *,
+    analyzer: Analyzer = Analyzer.PCAP,
+    profile: Profile | None = None,
     auto: bool = False,
 ) -> AnalysisJobOut:
     """Create the job (committed first), then enqueue it. A lost enqueue is a failed job."""
-    if await _global_queue_full():
+    if (profile is not None) != (analyzer == Analyzer.STATIC):
+        raise ValueError("static jobs need a profile; other analyzers take none")
+    if await _global_queue_full(analyzer):
         raise AnalysisQueueFull()
     token = secrets.token_urlsafe(32)
     async with org_session(org_id, user, Permission.EVIDENCE_WRITE) as ctx:
-        item = await _create(ctx, evidence_id, request, auto=auto, token=token)
+        item = await _create(
+            ctx, evidence_id, request, analyzer=analyzer, profile=profile, auto=auto, token=token
+        )
     # The job is committed: nothing below may turn this request into an error.
     try:
         await dispatch.send(item)
@@ -195,23 +232,47 @@ async def request_analysis(
         return await get_job(ctx, item.job_id)
 
 
+def auto_choice(
+    head: bytes, size: int, settings: Settings
+) -> tuple[Analyzer, Profile | None] | None:
+    """Which analysis an upload gets automatically (from its first bytes), if any.
+
+    - pcap / pcapng magic: the pcap analyzer (an oversized capture is refused and audited);
+    - PE (in-bounds PE header) or non-core ELF: static `full` (oversized: refused, audited);
+    - any other non-empty file within the static size cap: static `av` (ClamAV + YARA).
+    Empty files and other files over the cap get nothing.
+    """
+    if capture_format(head) is not None:
+        return Analyzer.PCAP, None
+    if executable_format(head) is not None:
+        return Analyzer.STATIC, Profile.FULL
+    if 0 < size <= settings.static_max_bytes:
+        return Analyzer.STATIC, Profile.AV
+    return None
+
+
 async def auto_request(
     org_id: uuid.UUID,
     user: CurrentUser,
     evidence_id: uuid.UUID,
     head: bytes,
+    size: int,
     request: HTTPConnection,
 ) -> None:
-    """After an upload commits: analyze captures automatically. Never raises."""
-    if capture_format(head) is None:
-        return
+    """After an upload commits: analyze it automatically when it qualifies. Never raises."""
     settings = get_settings()
+    choice = auto_choice(head, size, settings)
+    if choice is None:
+        return
+    analyzer, profile = choice
     try:
         await rate_limit.hit(
             f"analysis:auto:{user.id}", settings.auto_analyses_per_user_per_10min, 600
         )
-        await request_analysis(org_id, user, evidence_id, request, auto=True)
-    except (AnalysisActive, AnalysisQueueFull, CaptureTooLarge, TooManyRequests) as exc:
+        await request_analysis(
+            org_id, user, evidence_id, request, analyzer=analyzer, profile=profile, auto=True
+        )
+    except SKIPPABLE as exc:
         try:
             async with org_session(org_id, user, Permission.EVIDENCE_READ) as ctx:
                 audit.record(
@@ -221,7 +282,7 @@ async def auto_request(
                     actor_id=user.id,
                     target_type="evidence",
                     target_id=evidence_id,
-                    details={"reason": exc.code},
+                    details={"reason": exc.code, "analyzer": analyzer.value},
                     request=request,
                 )
         except Exception:

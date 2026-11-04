@@ -41,14 +41,30 @@ class Settings(BaseSettings):
     analysis_tool_timeout_s: int = 600
     # Presigned URL lifetime == Celery `expires` == reaper's queued deadline.
     analysis_queue_ttl_s: int = 6 * 3600
+    # Both caps apply per analyzer (each has its own queue and workers): a full pcap queue
+    # never blocks static analyses, and the other way round.
     max_active_analyses_per_org: int = 5
-    # Single FIFO, one job at a time: bounds how long any org can be starved by others.
+    # Single FIFO per analyzer, one job at a time: bounds how long any org can be starved.
     max_active_analyses_global: int = 50
     auto_analyses_per_user_per_10min: int = 30
     analysis_max_flows: int = 100_000
     analysis_max_records_per_kind: int = 100_000
     analysis_max_findings: int = 5_000
     analysis_max_result_bytes: int = 256 * 1024**2
+    # Static analysis of one file (never executed): sample size cap and per-kind result caps.
+    static_max_bytes: int = 64 * 1024**2
+    analysis_static_timeout_s: int = 600
+    analysis_static_tool_timeout_s: int = 300
+    static_max_sections: int = 2_000
+    static_max_imports: int = 20_000
+    static_max_exports: int = 20_000
+    static_max_resources: int = 5_000
+    static_max_strings: int = 20_000
+    static_max_signature_matches: int = 1_000
+    static_max_capabilities: int = 1_000
+    static_max_findings: int = 1_000
+    static_max_iocs: int = 5_000
+    static_max_result_bytes: int = 64 * 1024**2
     # Ingest: zip-bomb guard on the inflated stream and a cap on its lines (all kinds).
     analysis_max_result_decompressed_bytes: int = 1024**3
     analysis_max_result_lines: int = 400_000

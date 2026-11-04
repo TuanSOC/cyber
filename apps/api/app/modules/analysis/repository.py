@@ -5,7 +5,7 @@ from sqlalchemy import Select, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.pagination import PageParams
-from app.modules.analysis.models import ACTIVE, AnalysisJob, AnalysisStatus
+from app.modules.analysis.models import ACTIVE, AnalysisJob, AnalysisStatus, Analyzer
 from app.modules.evidence.models import Evidence
 from app.modules.users.models import User
 
@@ -71,9 +71,12 @@ async def lock_org_queue(session: AsyncSession, org_id: uuid.UUID) -> None:
     )
 
 
-async def count_active(session: AsyncSession, org_id: uuid.UUID) -> int:
+async def count_active(session: AsyncSession, org_id: uuid.UUID, analyzer: Analyzer) -> int:
+    """Active jobs of one analyzer in one org (each analyzer has its own queue and cap)."""
     stmt = select(func.count(AnalysisJob.id)).where(
-        AnalysisJob.organization_id == org_id, AnalysisJob.status.in_(ACTIVE)
+        AnalysisJob.organization_id == org_id,
+        AnalysisJob.analyzer == analyzer,
+        AnalysisJob.status.in_(ACTIVE),
     )
     return (await session.execute(stmt)).scalar_one()
 

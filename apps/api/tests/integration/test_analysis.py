@@ -78,14 +78,10 @@ async def test_capture_upload_queues_an_automatic_job(sent: SentJobs) -> None:
     assert sorted(e["action"] for e in custody) == ["analysis_requested", "uploaded"]
 
 
-@pytest.mark.parametrize(
-    "content",
-    [b"not a capture", b"\x1f\x8b\x08\x00" + tiny_pcap(), b""],
-    ids=["text", "gzip-wrapped", "empty"],
-)
-async def test_non_capture_upload_queues_nothing(sent: SentJobs, content: bytes) -> None:
+async def test_empty_upload_queues_nothing(sent: SentJobs) -> None:
+    """Other non-capture uploads get a static `av` run (see test_analysis_static.py)."""
     reg = await register()
-    evidence = await upload(reg.client, reg.org_id, await new_case(reg), content)
+    evidence = await upload(reg.client, reg.org_id, await new_case(reg), b"")
     assert await jobs_for(reg.client, reg.org_id, evidence["id"]) == []
     assert sent == []
 
@@ -99,7 +95,8 @@ async def test_manual_run_and_active_job_conflict(sent: SentJobs) -> None:
     assert first.json()["auto"] is False and first.json()["status"] == "queued"
     again = await _run(reg, evidence["id"])
     assert again.status_code == 409 and again.json()["error"]["code"] == "analysis_active"
-    assert len(sent) == 1
+    # The upload's automatic static `av` run is another analyzer: it does not conflict.
+    assert [(i.analyzer, i.profile) for i in sent] == [("static", "av"), ("pcap", None)]
 
 
 async def test_rerun_after_final_state_keeps_history(sent: SentJobs) -> None:
@@ -148,7 +145,8 @@ async def test_queue_cap_per_org(sent: SentJobs, monkeypatch: pytest.MonkeyPatch
         skipped = await session.scalar(
             select(AuditLog).where(AuditLog.action == "analysis.skipped")
         )
-    assert skipped is not None and skipped.details == {"reason": "analysis_queue_full"}
+    assert skipped is not None
+    assert skipped.details == {"reason": "analysis_queue_full", "analyzer": "pcap"}
 
 
 async def test_oversized_capture_is_refused(

@@ -162,3 +162,92 @@ def test_result_lines_reject_hostile_values(overrides: dict[str, object]) -> Non
 
     with pytest.raises(ValidationError):
         RECORD_ADAPTER.validate_python({**RECORD, **overrides})
+
+
+# --- static.v1 -----------------------------------------------------------------------------
+
+STATIC_LIMITS = {
+    "max_bytes": 1024,
+    "timeout_s": 60,
+    "tool_timeout_s": 30,
+    "max_sections": 10,
+    "max_imports": 10,
+    "max_exports": 10,
+    "max_resources": 10,
+    "max_strings": 10,
+    "max_signature_matches": 10,
+    "max_capabilities": 10,
+    "max_findings": 10,
+    "max_iocs": 10,
+    "max_result_bytes": 1024,
+}
+
+
+def _pe_head(e_lfanew: int = 0x80, size: int = 0x200) -> bytes:
+    head = bytearray(size)
+    head[0:2] = b"MZ"
+    head[0x3C:0x40] = e_lfanew.to_bytes(4, "little")
+    if e_lfanew + 4 <= size:
+        head[e_lfanew : e_lfanew + 4] = b"PE" + bytes(2)
+    return bytes(head)
+
+
+def _elf_head(e_type: int, little: bool = True) -> bytes:
+    head = bytearray(64)
+    head[0:4] = bytes.fromhex("7f454c46")
+    head[4], head[5] = 2, 1 if little else 2
+    head[16:18] = e_type.to_bytes(2, "little" if little else "big")
+    return bytes(head)
+
+
+def test_static_job_requires_profile_and_limits() -> None:
+    from cyberlab_jobs.static import Profile, StaticJobV1
+
+    job = StaticJobV1.model_validate(
+        {**_job(limits=STATIC_LIMITS), "schema_version": "static.v1", "profile": "av"}
+    )
+    assert job.profile == Profile.AV
+    with pytest.raises(ValidationError):
+        StaticJobV1.model_validate({**_job(limits=STATIC_LIMITS), "schema_version": "static.v1"})
+    with pytest.raises(ValidationError):  # a pcap job is not a static job
+        StaticJobV1.model_validate({**_job(), "profile": "full"})
+
+
+@pytest.mark.parametrize(
+    ("head", "expected"),
+    [
+        (_pe_head(), "pe"),
+        (_pe_head(e_lfanew=0x1000), None),  # header beyond the inspected bytes
+        (_pe_head(e_lfanew=0x10), None),  # inside the DOS header
+        (b"MZ" + bytes(10), None),
+        (_elf_head(2), "elf"),  # ET_EXEC
+        (_elf_head(3, little=False), "elf"),  # ET_DYN, big endian
+        (_elf_head(4), None),  # core dump
+        (bytes.fromhex("cafebabe") + bytes(60), None),  # Mach-O fat / Java class: ignored
+        (b"", None),
+    ],
+)
+def test_executable_format(head: bytes, expected: str | None) -> None:
+    from cyberlab_jobs.capture import executable_format
+
+    assert executable_format(head) == expected
+
+
+def test_static_lines_validate_and_reject_hostile_values() -> None:
+    from cyberlab_jobs.static import STATIC_LINE_ADAPTER, SectionRecord
+
+    good = {"kind": "section", "index": 0, "name": ".text", "virtual_address": 4096,
+            "virtual_size": 10, "raw_size": 512, "entropy": 6.1, "flags": ["execute"]}  # fmt: skip
+    assert isinstance(STATIC_LINE_ADAPTER.validate_python(good), SectionRecord)
+    for bad in (
+        {**good, "entropy": 8.5},
+        {**good, "entropy": float("nan")},
+        {**good, "name": "a" + chr(0)},
+        {**good, "virtual_address": 2**64},
+        {**good, "unexpected": 1},
+        {"kind": "signature_match", "engine": "virustotal", "name": "x"},
+        {"kind": "capability", "name": "x", "attack": ["T99"]},
+        {"kind": "sample", "size": 1, "md5": "x", "sha1": "y", "sha256": "z", "entropy": 1},
+    ):
+        with pytest.raises(ValidationError):
+            STATIC_LINE_ADAPTER.validate_python(bad)

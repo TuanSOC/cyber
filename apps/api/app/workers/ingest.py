@@ -6,7 +6,8 @@ stored digest, and only state-valid transitions apply.
 
 A success report is only accepted with its result: the exact reported version is
 downloaded, fully validated outside any transaction, then written together with the final
-state in one transaction (all rows or none).
+state in one transaction (all rows or none). What "validated" and "written" mean depends on
+the job's analyzer (one ingester per analyzer, see SUCCESS_INGESTERS).
 """
 
 import errno
@@ -15,6 +16,7 @@ import hmac
 import logging
 import shutil
 import tempfile
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -33,10 +35,16 @@ from app.core.clients import get_minio
 from app.core.config import Settings, get_settings
 from app.core.tenancy import tenant_session
 from app.core.threads import evidence_io_limiter
-from app.modules.analysis import lifecycle
+from app.modules.analysis import analyzers, lifecycle
 from app.modules.analysis import repository as repo
 from app.modules.analysis.dispatch import result_key
-from app.modules.analysis.models import ACTIVE, AnalysisJob, AnalysisJobIndex, AnalysisStatus
+from app.modules.analysis.models import (
+    ACTIVE,
+    AnalysisJob,
+    AnalysisJobIndex,
+    AnalysisStatus,
+    Analyzer,
+)
 from app.modules.audit import service as audit
 from app.modules.evidence.models import CustodyAction, EvidenceCustodyEvent
 from app.modules.pcap_analysis import ingest as pcap_ingest
@@ -130,7 +138,7 @@ async def _download_result(job: AnalysisJob, version_id: str, dest: Path) -> Non
         result_key(job.organization_id, job.id),
         version_id,
         dest,
-        settings.analysis_max_result_bytes,
+        analyzers.max_result_bytes(settings, job.analyzer),
         settings.ingest_min_free_bytes,
         limiter=evidence_io_limiter(),
     )
@@ -179,7 +187,7 @@ async def _apply(session: AsyncSession, job: AnalysisJob, msg: IngestMessageV1) 
             AnalysisStatus.RUNNING,
             allowed_from=(AnalysisStatus.QUEUED,),
             deadline_at=lifecycle.now()
-            + timedelta(seconds=settings.analysis_timeout_s + RUNNING_GRACE_S),
+            + timedelta(seconds=analyzers.timeout_s(settings, job.analyzer) + RUNNING_GRACE_S),
         ):
             job.worker_version = msg.worker_version
         return
@@ -204,6 +212,60 @@ async def _fail_job(job: AnalysisJob, code: str) -> None:
             await _fail(session, locked, code)
 
 
+async def _record_success(
+    session: AsyncSession, locked: AnalysisJob, msg: IngestMessageV1, summary: dict[str, Any]
+) -> None:
+    """Final state, result version, summary, `analyzed` custody event and audit entry.
+
+    `locked` is the job loaded FOR UPDATE in `session`, still active.
+    """
+    if not await lifecycle.transition(
+        session, locked, AnalysisStatus.SUCCEEDED, allowed_from=ACTIVE
+    ):
+        raise RuntimeError("job left the active states under its row lock")
+    locked.result_version_id = msg.result_version_id
+    locked.worker_version = msg.worker_version
+    locked.summary = summary
+    custody: dict[str, Any] = {
+        "job_id": str(locked.id),
+        "system": True,
+        "worker": msg.worker_version,
+    }
+    if "tool_versions" in summary:
+        custody["tool_versions"] = summary["tool_versions"]
+    session.add(
+        EvidenceCustodyEvent(
+            organization_id=locked.organization_id,
+            evidence_id=locked.evidence_id,
+            action=CustodyAction.ANALYZED,
+            # The requester is accountable for the run; the worker acted for them.
+            actor_id=locked.requested_by,
+            details=custody,
+        )
+    )
+    _audit(
+        session,
+        locked,
+        "analysis.succeeded",
+        worker=msg.worker_version,
+        counts=summary.get("counts", {}),
+    )
+
+
+async def _limit_transaction(session: AsyncSession, settings: Settings) -> None:
+    # Transaction-local (SET LOCAL): both revert to the role defaults at commit/rollback.
+    await session.execute(
+        text(
+            "SELECT set_config('statement_timeout', :statement, true), "
+            "set_config('idle_in_transaction_session_timeout', :idle, true)"
+        ),
+        {
+            "statement": f"{settings.ingest_statement_timeout_s}s",
+            "idle": f"{settings.ingest_idle_in_transaction_timeout_s}s",
+        },
+    )
+
+
 async def _persist(
     job: AnalysisJob, msg: IngestMessageV1, path: Path, result: stream.Validated
 ) -> None:
@@ -211,17 +273,7 @@ async def _persist(
     settings = get_settings()
     caps = stream.Caps.from_settings(settings)
     async with tenant_session(job.organization_id, None) as session:
-        # Transaction-local (SET LOCAL): both revert to the role defaults at commit/rollback.
-        await session.execute(
-            text(
-                "SELECT set_config('statement_timeout', :statement, true), "
-                "set_config('idle_in_transaction_session_timeout', :idle, true)"
-            ),
-            {
-                "statement": f"{settings.ingest_statement_timeout_s}s",
-                "idle": f"{settings.ingest_idle_in_transaction_timeout_s}s",
-            },
-        )
+        await _limit_transaction(session, settings)
         # The guard runs under the row lock in this same transaction, so a redelivered
         # report after success (or after the reaper) can never insert a second copy.
         locked = await repo.get_for_update(session, job.organization_id, job.id)
@@ -232,61 +284,67 @@ async def _persist(
         expected.pop("stats", None)
         if written != expected:
             raise RuntimeError(f"ingest wrote {dict(written)}, validated {dict(expected)}")
-        if not await lifecycle.transition(
-            session, locked, AnalysisStatus.SUCCEEDED, allowed_from=ACTIVE
-        ):
-            raise RuntimeError("job left the active states under its row lock")
-        summary = pcap_ingest.build_summary(result, written)
-        locked.result_version_id = msg.result_version_id
-        locked.worker_version = msg.worker_version
-        locked.summary = summary
-        session.add(
-            EvidenceCustodyEvent(
-                organization_id=locked.organization_id,
-                evidence_id=locked.evidence_id,
-                action=CustodyAction.ANALYZED,
-                # The requester is accountable for the run; the worker acted for them.
-                actor_id=locked.requested_by,
-                details={
-                    "job_id": str(locked.id),
-                    "system": True,
-                    "worker": msg.worker_version,
-                    "tool_versions": summary["tool_versions"],
-                },
-            )
-        )
-        _audit(
-            session,
-            locked,
-            "analysis.succeeded",
-            worker=msg.worker_version,
-            counts=summary["counts"],
-        )
+        await _record_success(session, locked, msg, pcap_ingest.build_summary(result, written))
+
+
+async def _ingest_pcap(job: AnalysisJob, msg: IngestMessageV1, path: Path) -> None:
+    """`pcap.v1`: validate the whole stream (worker thread), then write it in one transaction."""
+    caps = stream.Caps.from_settings(get_settings())
+    try:
+        result = await anyio.to_thread.run_sync(stream.validate, path, job.id, caps)
+    except stream.InvalidResult as exc:
+        log.warning("refusing the result of analysis job %s: %s", job.id, exc.reason)
+        await _fail_job(job, "invalid_result")
+        return
+    await _persist(job, msg, path, result)
+
+
+async def _ingest_static(job: AnalysisJob, msg: IngestMessageV1, path: Path) -> None:
+    """`static.v1`, M3 phase 1: the exact result version exists within its size cap (it was
+    downloaded to `path`); the job succeeds without storing any rows.
+
+    Phase 4 replaces this with full stream validation (incl. the sample hashes against the
+    evidence record) and persistence, keeping the same one-transaction shape as pcap.
+    """
+    settings = get_settings()
+    async with tenant_session(job.organization_id, None) as session:
+        await _limit_transaction(session, settings)
+        locked = await repo.get_for_update(session, job.organization_id, job.id)
+        if locked is None or locked.status not in ACTIVE:
+            return
+        await _record_success(session, locked, msg, {})
+
+
+# One success handler per analyzer: (job, report, downloaded result file) -> None.
+Ingester = Callable[[AnalysisJob, IngestMessageV1, Path], Awaitable[None]]
+SUCCESS_INGESTERS: dict[Analyzer, Ingester] = {
+    Analyzer.PCAP: _ingest_pcap,
+    Analyzer.STATIC: _ingest_static,
+}
 
 
 async def ingest_success(job: AnalysisJob, msg: IngestMessageV1) -> None:
-    """Download and fully validate the result (no transaction open), then persist it.
+    """Download the exact reported result (no transaction open), then hand it to the
+    analyzer's ingester, which validates and persists it.
 
-    `job` must already be authenticated for `msg`. Any defect in the stream (including a
+    `job` must already be authenticated for `msg`. Any defect in the result (including a
     value the database refuses despite validation) fails the job with `invalid_result` and
     writes no rows.
     """
     if job.status not in ACTIVE or not msg.result_version_id:
-        return  # already final (unlocked read; _persist re-checks under the row lock)
+        return  # already final (unlocked read; ingesters re-check under the row lock)
+    ingester = SUCCESS_INGESTERS[job.analyzer]
     settings = get_settings()
-    caps = stream.Caps.from_settings(settings)
     with tempfile.TemporaryDirectory(prefix=TMP_PREFIX, dir=settings.ingest_tmp_dir) as tmp:
         path = Path(tmp) / "result.ndjson.gz"
         try:
             await _download_result(job, msg.result_version_id, path)
-            result = await anyio.to_thread.run_sync(stream.validate, path, job.id, caps)
-        except (ResultMissing, ResultTooLarge, stream.InvalidResult) as exc:
-            reason = exc.reason if isinstance(exc, stream.InvalidResult) else type(exc).__name__
-            log.warning("refusing the result of analysis job %s: %s", job.id, reason)
+        except (ResultMissing, ResultTooLarge) as exc:
+            log.warning("refusing the result of analysis job %s: %s", job.id, type(exc).__name__)
             await _fail_job(job, "invalid_result")
             return
         try:
-            await _persist(job, msg, path, result)
+            await ingester(job, msg, path)
         except DBAPIError as exc:
             if not _refused_by_database(exc):
                 raise

@@ -166,6 +166,16 @@
           "analyzer": {
             "$ref": "#/components/schemas/Analyzer",
             "default": "pcap"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Profile"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "AnalysisCreate",
@@ -227,6 +237,16 @@
             "title": "Investigation Id",
             "type": "string"
           },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Profile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "requested_by": {
             "format": "uuid",
             "title": "Requested By",
@@ -263,6 +283,7 @@
           "investigation_id",
           "evidence_filename",
           "analyzer",
+          "profile",
           "status",
           "error_code",
           "auto",
@@ -309,7 +330,8 @@
       },
       "Analyzer": {
         "enum": [
-          "pcap"
+          "pcap",
+          "static"
         ],
         "title": "Analyzer",
         "type": "string"
@@ -1604,6 +1626,14 @@
         ],
         "title": "OrgUpdate",
         "type": "object"
+      },
+      "Profile": {
+        "enum": [
+          "full",
+          "av"
+        ],
+        "title": "Profile",
+        "type": "string"
       },
       "RecordKind": {
         "enum": [

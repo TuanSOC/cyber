@@ -36,6 +36,17 @@ services:
       COOKIE_SECURE: "true"
     volumes: !reset []
 
+  static-worker:
+    image: cyberlab/static-worker:prod
+    build:
+      context: ./apps/workers/static
+      target: prod
+      additional_contexts:
+        jobs: ./packages/py-jobs
+        worker_kit: ./packages/py-worker-kit
+    volumes: !override
+      - static_work:/work
+
   pcap-worker:
     image: cyberlab/pcap-worker:prod
     build:

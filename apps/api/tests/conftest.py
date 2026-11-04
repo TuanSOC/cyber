@@ -15,6 +15,7 @@ from app.core.clients import get_redis
 from app.core.config import get_settings
 from app.core.db import get_engine
 from app.models import Base
+from tests.analysis_helpers import purge_test_queues
 from tests.storage_helpers import purge_test_bucket
 
 API_ROOT = Path(__file__).resolve().parents[1]
@@ -80,6 +81,9 @@ async def _session_state(
     purge_test_bucket()
     yield
     purge_test_bucket()
+    # Uploads queue analyses for real (only test_analysis.py captures dispatch); drop the
+    # ones no test worker consumed so the broker does not grow across runs.
+    purge_test_queues()
     await get_engine().dispose()
 
 

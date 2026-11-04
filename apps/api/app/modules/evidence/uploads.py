@@ -167,6 +167,6 @@ async def upload(
                 raise
         finally:
             spooled.path.unlink(missing_ok=True)
-    # Best effort, after commit: captures are analyzed automatically (never fails the upload).
-    await analysis_service.auto_request(org_id, user, out.id, spooled.head, request)
+    # Best effort, after commit: uploads are analyzed automatically (never fails the upload).
+    await analysis_service.auto_request(org_id, user, out.id, spooled.head, spooled.size, request)
     return out

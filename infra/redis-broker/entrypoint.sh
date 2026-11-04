@@ -5,27 +5,33 @@
 set -eu
 
 : "${BROKER_API_PASSWORD:?}" "${BROKER_INGEST_PASSWORD:?}" "${BROKER_PCAP_PASSWORD:?}"
+: "${BROKER_STATIC_PASSWORD:?}"
 
 # Commands no component needs and that would let one inspect or disrupt others' queues.
 DENY="-@dangerous -@admin -keys -scan -randomkey -sort -dump -object"
+READ_DENY="-lrange -lindex -hgetall -hscan -hkeys -hvals -hrandfield"
 
-# The untrusted analyzer's user only touches keys it must (dev queues + "test." queues):
+# An untrusted analyzer user only touches keys it must (dev queues + "test." queues):
 #   its own queue and unacked keys (read/write), the ingest queue (write only: it can add
 #   reports but never read others'), and kombu bindings (its own read/write, ingest's read).
-PCAP_KEYS="resetkeys ~pcap* ~test.pcap*"
-for q in pcap test.pcap; do
-  PCAP_KEYS="$PCAP_KEYS ~_kombu.binding.$q ~_kombu.binding_permanent.$q"
-done
-PCAP_KEYS="$PCAP_KEYS %W~ingest* %W~test.ingest*"
-for q in ingest test.ingest; do
-  PCAP_KEYS="$PCAP_KEYS %R~_kombu.binding.$q %R~_kombu.binding_permanent.$q"
-done
+analyzer_keys() {
+  keys="resetkeys ~$1* ~test.$1*"
+  for q in "$1" "test.$1"; do
+    keys="$keys ~_kombu.binding.$q ~_kombu.binding_permanent.$q"
+  done
+  keys="$keys %W~ingest* %W~test.ingest*"
+  for q in ingest test.ingest; do
+    keys="$keys %R~_kombu.binding.$q %R~_kombu.binding_permanent.$q"
+  done
+  echo "$keys"
+}
 
 cat >/tmp/users.acl <<EOF
 user default off
 user api on >${BROKER_API_PASSWORD} ~* resetchannels +@all ${DENY}
 user ingest on >${BROKER_INGEST_PASSWORD} ~* resetchannels +@all ${DENY}
-user pcap on >${BROKER_PCAP_PASSWORD} ${PCAP_KEYS} resetchannels +@all ${DENY} -lrange -lindex -hgetall -hscan -hkeys -hvals -hrandfield
+user pcap on >${BROKER_PCAP_PASSWORD} $(analyzer_keys pcap) resetchannels +@all ${DENY} ${READ_DENY}
+user static on >${BROKER_STATIC_PASSWORD} $(analyzer_keys static) resetchannels +@all ${DENY} ${READ_DENY}
 user healthcheck on nopass resetkeys +ping
 EOF
 chmod 600 /tmp/users.acl

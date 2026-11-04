@@ -31,7 +31,9 @@ async def run_analysis(
 ) -> AnalysisJobOut:
     """Queue an analyzer run over the evidence (re-runs keep earlier jobs as history)."""
     await rate_limit.hit(f"analysis:run:{user.id}", MANUAL_RUNS_PER_10MIN, 600)
-    return await service.request_analysis(org_id, user, evidence_id, request)
+    return await service.request_analysis(
+        org_id, user, evidence_id, request, analyzer=body.analyzer, profile=body.profile
+    )
 
 
 @router.get("/evidence/{evidence_id}/analyses", response_model=AnalysisJobPage)

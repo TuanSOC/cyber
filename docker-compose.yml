@@ -58,6 +58,29 @@ x-pcap-worker: &pcap-worker
   restart: unless-stopped
   networks: [analysis]
 
+# Untrusted static analyzer: same isolation as the pcap worker; more memory (ClamAV DB).
+x-static-worker: &static-worker
+  image: cyberlab/static-worker:dev
+  build:
+    context: ./apps/workers/static
+    target: dev
+    additional_contexts:
+      jobs: ./packages/py-jobs
+      worker_kit: ./packages/py-worker-kit
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  cap_add: [SETUID, SETGID, KILL, CHOWN, DAC_OVERRIDE, FOWNER]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 256
+  mem_limit: 3g
+  cpus: 2
+  tmpfs:
+    - /tmp:size=64m,mode=1700
+    - /dev/shm:size=1m,mode=1700
+  restart: unless-stopped
+  networks: [analysis]
+
 x-api-healthcheck: &api-healthcheck
   test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=4)"]
   interval: 5s
@@ -149,6 +172,7 @@ services:
       BROKER_API_PASSWORD: ${BROKER_API_PASSWORD}
       BROKER_INGEST_PASSWORD: ${BROKER_INGEST_PASSWORD}
       BROKER_PCAP_PASSWORD: ${BROKER_PCAP_PASSWORD}
+      BROKER_STATIC_PASSWORD: ${BROKER_STATIC_PASSWORD}
     volumes:
       - ./infra/redis-broker:/init:ro
     networks: [backend, analysis]
@@ -231,6 +255,19 @@ services:
     tmpfs:
       - /tmp:size=16m
     networks: [backend]
+    depends_on:
+      redis-broker:
+        condition: service_healthy
+
+  static-worker:
+    <<: *static-worker
+    environment:
+      BROKER_URL: redis://static:${BROKER_STATIC_PASSWORD}@redis-broker:6379/0
+    volumes:
+      - ./apps/workers/static/static_worker:/srv/workers/static/static_worker:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+      - ./packages/py-worker-kit:/packages/py-worker-kit:ro
+      - static_work:/work
     depends_on:
       redis-broker:
         condition: service_healthy
@@ -333,6 +370,27 @@ services:
       pcap-worker-test:
         condition: service_started
 
+  static-worker-test:
+    <<: *static-worker
+    profiles: ["test"]
+    environment:
+      BROKER_URL: redis://static:${BROKER_STATIC_PASSWORD}@redis-broker:6379/1
+      QUEUE_PREFIX: "test."
+      WORKER_QUEUE: static
+      RUFF_CACHE_DIR: /tmp/ruff
+      MYPY_CACHE_DIR: /tmp/mypy
+    volumes:
+      - ./apps/workers/static/static_worker:/srv/workers/static/static_worker:ro
+      - ./apps/workers/static/tests:/srv/workers/static/tests:ro
+      - ./apps/workers/static/samples:/srv/workers/static/samples:ro
+      - ./apps/workers/static/pyproject.toml:/srv/workers/static/pyproject.toml:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+      - ./packages/py-worker-kit:/packages/py-worker-kit:ro
+      - static_work_test:/work
+    depends_on:
+      redis-broker:
+        condition: service_healthy
+
   pcap-worker-test:
     <<: *pcap-worker
     profiles: ["test"]
@@ -382,3 +440,5 @@ volumes:
   pcap_work:
   pcap_work_test:
   ingest_tmp:
+  static_work:
+  static_work_test:

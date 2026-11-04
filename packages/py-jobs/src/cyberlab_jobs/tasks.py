@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 PCAP_ANALYZE = "pcap.analyze"
+STATIC_ANALYZE = "static.analyze"
 INGEST_EVENT = "ingest.event"
 REAP = "ingest.reap"
 
@@ -16,6 +17,10 @@ class Queues:
     @property
     def pcap(self) -> str:
         return f"{self.prefix}pcap"
+
+    @property
+    def static(self) -> str:
+        return f"{self.prefix}static"
 
     @property
     def ingest(self) -> str:

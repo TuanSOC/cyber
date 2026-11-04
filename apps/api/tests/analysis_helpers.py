@@ -37,10 +37,16 @@ async def new_case(reg: Registered) -> str:
     return str(response.json()["id"])
 
 
-async def upload(client: AsyncClient, org_id: uuid.UUID, case_id: str, content: bytes) -> Any:
+async def upload(
+    client: AsyncClient,
+    org_id: uuid.UUID,
+    case_id: str,
+    content: bytes,
+    filename: str = "capture.pcap",
+) -> Any:
     response = await client.post(
         f"/api/v1/orgs/{org_id}/investigations/{case_id}/evidence",
-        params={"filename": "capture.pcap"},
+        params={"filename": filename},
         content=content,
         headers={"Content-Type": "application/octet-stream", **csrf(client)},
     )
@@ -63,7 +69,7 @@ def broker_queue(name: str) -> str:
 
 def purge_test_queues() -> None:
     with Connection(get_settings().broker_url) as conn:
-        for name in ("pcap", "ingest"):
+        for name in ("pcap", "static", "ingest"):
             conn.default_channel.client.delete(broker_queue(name))
         # Declare the ingest binding (as the trusted side does in production): the analyzer
         # may only publish to it, never declare it.
@@ -104,7 +110,11 @@ async def run_ingest_until(job_id: str, statuses: set[str], timeout_s: float = 9
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         for message in drain_ingest(1.0):
-            seen.append(f"{message['event']}:{message.get('outcome')}:{message.get('error_code')}")
+            # Every report is handled; only this job's are recorded (other analyzers' test
+            # workers may report on the same queue).
+            if message.get("job_id") == job_id:
+                event = message["event"]
+                seen.append(f"{event}:{message.get('outcome')}:{message.get('error_code')}")
             await ingest.handle_event(message)
         if await job_status(job_id) in statuses:
             return seen
