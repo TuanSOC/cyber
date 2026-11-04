@@ -1,0 +1,123 @@
+---
+phase: 1
+title: "Contracts data model crypto and network hardening"
+status: pending
+priority: P1
+effort: "14h"
+dependencies: []
+---
+
+# Phase 1: Contracts data model crypto and network hardening
+
+## Overview
+Lay the frozen foundations: the TI tables, the sealed-key crypto, the new permission, wider
+audit redaction, the provider interface, every per-provider summary model and the provider
+catalog, the `enrich` queue and ACL user, the least-privilege enrich-worker, and the network
+change (`backend` internal, new `egress` network). After this phase the stack runs as before
+with no egress from `backend`; no TI feature is user-visible yet.
+
+## Requirements
+- **Dependencies:** `cryptography` added to the api runtime dependencies; `httpx` moved from dev to runtime.
+- **Migration 0009** (owner role; FORCE RLS on every tenant table; grants as in the plan):
+  - `ti_provider_configs`, `ti_org_settings`, `ti_enrichment_runs`, `ti_run_items`, `ti_run_index`, `ti_results`.
+  - Constraints:
+    - provider check (`virustotal`, `abuseipdb`, `urlhaus`, `malwarebazaar`, `otx`, `misp`, `mock`);
+    - `base_url` NOT NULL iff misp;
+    - the sealed columns are all NULL or all set;
+    - `key_last4` is 4 characters;
+    - `enabled = true` requires `terms_ack_at` set (RT16);
+    - `scope` in (`manual`, `job`); `job_id` NOT NULL iff `scope = 'job'`;
+    - `summary` ≤ 16 KiB (`octet_length`);
+    - `ti_results.status` in (`ok`, `not_found`, `error`, `auth_failed`);
+    - `ti_run_items.state` in (`pending`, `done`, `cached`, `abandoned`), `reason` NOT NULL iff `abandoned`.
+  - `ti_provider_configs` trigger (RT18): when any sealed column changes, the new `key_version` must be higher, or equal with a different `key_kid` (re-seal); `key_version` never decreases.
+  - Run status-transition trigger: queued → running ⇄ waiting → completed / partial / failed, plus queued / waiting → partial / failed (deadline and fallback reaper); final states are immutable.
+  - `ti_results`: `forbid_mutation` trigger, unique (run_id, provider, ioc_key), lookup index (organization_id, ioc_key, provider, fetched_at DESC).
+  - `ti_run_items`: PK (run_id, provider, ioc_key); index (run_id, state, seq); the app role may UPDATE only `state`, `result_id`, `reason`.
+  - `ti_run_index` (RT25: the real `analysis_job_index` pattern from 0002/0003):
+    - RLS `app_org_id() IS NULL OR organization_id = app_org_id()`; written by the API in the run-creating transaction; read by the trusted workers in a `tenant_session(None, None)` system session;
+    - column-level UPDATE only on `status`, `resume_at`, `deadline_at`, `dispatched_at`, `lease_until`, `lease_owner`;
+    - index on (status, resume_at).
+  - Column grants: the app role cannot UPDATE `organization_id`, `provider` or `created_at` anywhere.
+- **RBAC:** `Permission.INTEGRATIONS_MANAGE = "integrations.manage"` in `_ADMIN` only. `test_rbac.py` matrix updated.
+- **Audit:** `_SENSITIVE_KEY` widened to `password|token|secret|api[_-]?key|authorization|auth[_-]?key|x-apikey|(^|_)key$`, with an explicit allowlist (`key_last4`, `key_kid`, `key_version`, `ioc_key`). Nested dicts and lists of dicts are sanitized too. Existing audit and auth-event details are re-checked (none currently uses a `_key` field).
+- **Crypto, split by capability (RT21):**
+  - `app/modules/threat_intel/seal.py`: `seal(plaintext, org_id, provider, kid, key_version, base_url_norm, public_key) -> SealedKey`; imported by the API;
+  - `app/modules/threat_intel/unseal.py`: `open_sealed(sealed, org_id, provider, base_url_norm, private_keys)`; only the enrich worker may import it;
+  - X25519 + HKDF-SHA256 + AES-256-GCM with a 96-bit random nonce;
+  - AAD as in the plan, including `base_url_norm` for MISP (RT1);
+  - `last4` is computed before sealing; plaintext only in `SecretStr` / local variables; `SealedKey` and errors never carry plaintext.
+- **Settings** (`core/config.py`):
+  - `PROCESS_ROLE` (`api` default, `ingest`, `enrich`). For `enrich`, `jwt_secret`, the MinIO fields and `redis_url` must be **absent** and become optional at type level; for every other role they stay required, as today (RT2);
+  - `TI_ENABLED` (default true);
+  - `TI_SEAL_PUBLIC_KEYS` (JSON kid → base64 key);
+  - `TI_SEAL_ACTIVE_KID`;
+  - `TI_SEAL_PRIVATE_KEYS_FILE` (accepted only when `PROCESS_ROLE=enrich`, in every env);
+  - `TI_MOCK_ENABLED`, `TI_MOCK_BASE_URL`, `TI_MISP_ALLOW_PRIVATE`, `TI_MISP_INSECURE_TLS`, `TI_MISP_ALLOWED_PORTS`, `TI_MISP_CA_FILE`, `TI_MAX_IOCS_PER_RUN` (200), `TI_RUN_DEADLINE_S` (1800), `TI_SLICE_S` (20);
+  - the per-provider ceilings.
+
+  `_prod_guards` refuses:
+  - `TI_MOCK_ENABLED`, `TI_MISP_ALLOW_PRIVATE` or `TI_MISP_INSECURE_TLS` set to true;
+  - a missing public key for the active kid while `TI_ENABLED`;
+  - an active kid starting with `dev-` (RT12).
+- **Seal keys (RT12):**
+  - a committed dev-only pair: `infra/ti/dev-seal-private.json` (kid `dev-1`) and its public key in `.env.example`, so `pnpm dev` and CI work on a fresh clone;
+  - `scripts/gen_ti_seal_keys.py` writes `.secrets/ti_seal_private.json` (mode 0400; prints the `chown 10001:10001` needed for the prod image user) and prints the `.env` lines;
+  - `.secrets/` added to `.gitignore` and the root `.dockerignore`;
+  - the enrich worker refuses to start (exit 1, clear message) if the key file is unreadable or lacks the active kid.
+- **Interface, frozen at the end of the phase** (only the parent changes it afterwards):
+  - `threat_intel/providers/base.py`: `ProviderResult` (the normalized verdict-free model from the provider report plus `status`, `score_scale`), `Provider` protocol (`name`, `supported_types`, `allowed_paths`, `async lookup(client, ioc) -> ProviderResult`, `async verify(client) -> VerifyOutcome`), `IocType` enum, `ProviderError` kinds;
+  - `threat_intel/summaries.py` (RT14): every strict per-provider summary model, with the field lists from phase 3 and phase 4 (VT, AbuseIPDB, URLhaus, MalwareBazaar, OTX, MISP, mock), capped strings and lists, control and bidi characters stripped (RT19), ≤ 16 KiB serialized. Adapters only fill them; phase 5 builds the OpenAPI union from them;
+  - `threat_intel/catalog.py` (RT14): per provider `label`, `supported_types`, `tos_note`, `privacy_note`, `default_limits`, `ceilings`, `dev_only`. No adapter imports; adapters and the API both read it.
+- **Routers:** empty `threat_intel` and `attack` routers registered in `app/main.py` now, so phases 4 and 5 never edit `main.py` (RT14).
+- **`cyberlab_jobs`:** `Queues.enrich`; task names `ti.enrich`, `ti.resume`, `ti.verify`. They live in the shared package only so that the analyzer ACL tests can name the queue; analyzers never use them.
+- **Network** (`docker-compose.yml`, `.prod.yml`):
+  - `backend: internal: true`; new `egress` network (bridge, not internal);
+  - `x-enrich-env` anchor (RT2): `ENV`, `PROCESS_ROLE: enrich`, `DATABASE_URL`, `BROKER_URL: redis://enrich:…@redis-broker:6379/0`, `QUEUE_PREFIX`, `TI_*`. Never merged with `*api-env`;
+  - `enrich-worker` service (api image, `backend` + `egress`, `celery -A app.workers.enrich_app worker -Q enrich --pool solo --without-gossip --without-mingle --without-heartbeat --loglevel INFO`, read_only, cap_drop ALL, no-new-privileges, tmpfs `/tmp`, `restart: unless-stopped`, private key as a compose `secrets:` file pointing at `infra/ti/dev-seal-private.json`) (RT7);
+  - **prod override (RT3):** `enrich-worker` in `docker-compose.prod.yml` with `image: cyberlab/api:prod`, `ENV: prod`, `volumes: !reset []`, and the secret file overridden to `.secrets/ti_seal_private.json`;
+  - `enrich-worker-test` (test profile, `test.` prefix, broker db 1, test DB, `ENV=test`, `TI_MOCK_ENABLED=true`); `api-test` depends on it;
+  - `ti-mock` (test + e2e profiles, `egress` only, stdlib `python:3.12-alpine`, server in `infra/ti-mock/server.py`; it reads its own `TI_MOCK_EXPECTED_KEY`);
+  - dev `api` and `enrich-worker` get `TI_MOCK_ENABLED=${TI_MOCK_ENABLED:-true}` and `TI_MOCK_BASE_URL=http://ti-mock:8080` (the dev e2e uses them); the prod override sets `TI_MOCK_ENABLED: "false"` for both.
+
+  In phase 1 the worker starts and consumes nothing but a no-op `ti.enrich` that fails the run with `not_implemented`.
+- **Celery enrich app** (`app/workers/enrich_app.py`): `worker_enable_remote_control=False`, `worker_send_task_events=False`, `task_ignore_result=True`, `task_acks_late=True`, `worker_prefetch_multiplier=1`, unacked keys `{prefix}enrich.unacked*`, the same socket timeouts as `celery_app` (RT7).
+- **Egress check (documented):** go through every service on `backend` and confirm that it needs no runtime internet. Fix what breaks:
+  - drop the dev MinIO console port (unpublishable on internal networks), and document `docker compose exec minio …` / `mc` instead;
+  - set `UV_NO_SYNC=1` and `UV_OFFLINE=1` for `migrate`, `api`, `api-test`, `ingest-*` and `enrich-*`;
+  - confirm that `pnpm dev`, `pnpm test:api`, `pnpm test:workers`, `pnpm e2e` and `pnpm verify:prod` still pass.
+
+  Record the per-service table in DEPLOYMENT.md (phase 7 finalizes the text).
+- **Broker ACL** (`infra/redis-broker/entrypoint.sh`): `user enrich on >${BROKER_ENRICH_PASSWORD} resetkeys ~enrich* ~test.enrich*`, plus `~_kombu.binding.{q} ~_kombu.binding_permanent.{q}` for q in `enrich` and `test.enrich`, then `resetchannels +@all ${DENY} ${READ_DENY}`.
+  - Read/write `enrich*` covers its queue, its unacked keys, its slice re-publish and its limiter keys (`{prefix}enrich.ti:*`); `EVAL` with declared keys works under the ACL.
+  - It has no access to `ingest*` or `trusted.*`.
+  - The pcap and static patterns cannot match `enrich*` (asserted).
+- **Guard tests:**
+  - `test_tenant_session_guard.py` allowlists `app/workers/enrich.py` and the TI reaper fallback;
+  - a new AST test forbids importing the adapter modules and the registry under `app.modules.threat_intel.providers` (everything except `providers.base`, which the API and `normalize.py` share), `…threat_intel.http` and `…threat_intel.unseal` outside `app/workers/enrich*.py` and tests (any import form);
+  - the RLS-coverage and IDOR route enumerators pick up the new tables automatically (they fail until phase 5 adds routes, so register the tables now).
+
+## Implementation Steps
+1. Dependencies, settings (`PROCESS_ROLE` rules), prod guards, the dev key pair and the keygen script, with unit tests for the guards (enrich role rejects `JWT_SECRET` / MinIO / `REDIS_URL`; api role rejects the private-key file; prod rejects `dev-` kids).
+2. `seal.py` / `unseal.py` with unit tests:
+   - a round trip;
+   - a wrong org, provider, kid, key_version or MISP `base_url` fails;
+   - a flipped byte in ct, nonce or epk fails;
+   - an unknown kid fails;
+   - plaintext is absent from `repr` and from exceptions.
+3. Migration 0009 and the models. Tests: a fresh `upgrade head`, downgrade, RLS per table, append-only `ti_results`, the transition trigger, the `key_version` trigger, the column grants on `ti_run_items` and `ti_run_index`.
+4. Permission, audit-sanitize widening and allowlist (unit tests over nested and list details), and the RBAC matrix.
+5. `base.py`, `summaries.py`, `catalog.py`, the empty routers and `Queues.enrich`; freeze them.
+6. Compose: networks, `x-enrich-env`, `enrich-worker` (dev + prod override), test services, `ti-mock` skeleton, broker ACL user and password in `.env.example`. Add a broker ACL test, `test_enrich_acl.py`:
+   - `enrich` cannot read or write `ingest*`, `pcap*`, `static*` or `trusted.*`;
+   - `enrich` can `EVAL` a script on `test.enrich.ti:*` keys;
+   - `pcap` and `static` cannot touch `enrich*`;
+   - `api` can publish to `enrich`.
+7. Egress check: route-table assertions (no default route in `/proc/net/route`) for api-test; a fix list; the full test suites and e2e re-run; `docker compose -f … -f docker-compose.prod.yml config` shows `enrich-worker` with `ENV=prod` and no `JWT_SECRET`, `MINIO_*` or `REDIS_URL`.
+
+## Success Criteria
+- [ ] `pnpm verify` green with `backend` internal on a fresh clone (dev key pair); the api-test container has no default route.
+- [ ] Sealed ciphertext cannot be opened under another org's, provider's, version's or MISP URL's AAD; the api process cannot load a private key (settings test).
+- [ ] The enrich-worker env holds no JWT secret, MinIO credentials or app Redis URL, in dev and prod configs.
+- [ ] Broker ACL tests confine `enrich`; the analyzer users cannot reach `enrich*`.
+- [ ] `ProviderResult`, `Provider`, `summaries.py`, `catalog.py`, migration 0009 and the seal format are frozen and documented in the phase notes.
