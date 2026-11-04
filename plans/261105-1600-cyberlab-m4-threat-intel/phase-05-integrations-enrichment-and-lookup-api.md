@@ -77,7 +77,54 @@ It does not edit `providers/`, `summaries.py`, `catalog.py`, `runs.py`, `ssrf.py
 6. The OpenAPI typed unions; contracts regenerated.
 
 ## Success Criteria
-- [ ] The IDOR and RLS enumerators cover every new route and table, and they pass.
-- [ ] No response, audit detail, error or log line contains the sentinel key or its ciphertext.
-- [ ] A job enrichment request gives 202 → the worker runs it → `include=enrichment` shows per-provider results, history lists them, and a repeat run shows the cached items.
-- [ ] A MISP `base_url` change cannot reuse the stored key.
+- [x] The IDOR and RLS enumerators cover every new route and table, and they pass. — `security/test_idor_routes.py` (TI cases, 6b04ccc), `integration/test_rls_coverage.py` (1f94ac2); full API suite 2221 passed / 19 skipped at d3a93e1.
+- [x] No response, audit detail, error or log line contains the sentinel key or its ciphertext. — `test_ti_api_integrations.py::test_sentinel_key_never_leaks` (responses, audit rows, caplog, 422s), `test_ti_key_leak.py::test_no_api_response_carries_the_key`, `test_failed_puts_never_echo_the_key` (6b04ccc, a21c9d2). The container-log scan (`scripts/check-ti-key-leak.mjs`) is part of the phase-7 gate.
+- [ ] A job enrichment request gives 202 → the worker runs it → `include=enrichment` shows per-provider results, history lists them, and a repeat run shows the cached items. — **pending gate** (Playwright `threat-intel.spec.ts`, the only end-to-end proof of the whole chain); covered piecewise by `test_job_enrichment_creates_one_run_and_dedupes`, `test_ti_pipeline.py::test_hit_not_found_outage_and_cache`, `test_ioc_list_include_enrichment`, `test_history_lists_every_answer_newest_first`, `test_run_detail_shows_cached_items`.
+- [x] A MISP `base_url` change cannot reuse the stored key. — `test_ti_api_integrations.py::test_misp_url_is_bound_to_the_key`, `test_ti_key_leak.py::test_a_misp_key_does_not_follow_a_swapped_base_url`, `test_ti_ssrf_resolve.py::test_misp_key_sealed_for_url_a_does_not_open_for_url_b` (6b04ccc, a21c9d2, 913023d).
+
+## Implementation Notes (2026-11-05)
+- **Commits:** 6b04ccc (routes, services, contracts regenerated into `packages/contracts`).
+  - Follow-ups in a21c9d2: distinct `AnalysisIocType` / `TiIocType` OpenAPI names, optional `acknowledge_terms`, and 204 on the key DELETE (`unit/test_openapi_names.py`).
+- **Routes:**
+  - `router_integrations.py`: `GET` / `PUT /integrations[/{provider}]`, `DELETE …/{provider}/key`, `POST …/{provider}/verify`, `GET` / `PUT /ti/settings`;
+  - `router_runs.py`: `POST /analyses/{job}/enrichments`, `POST /ti/lookups`, `GET /ti/runs[/{run_id}]`;
+  - `router_results.py`: `GET /ti/results`, `GET /ti/results/{result_id}`;
+  - `include=enrichment` on the shared `GET …/analyses/{job}/iocs` (`pcap_analysis/router.py`).
+- **Integrations** (`service_integrations.py`):
+  - The catalog marks entries `available`: `mock` is unavailable in prod, and everything is unavailable when `TI_ENABLED=false`. Ciphertext columns are never in the read model.
+  - The org row is locked `FOR NO KEY UPDATE` during a PUT (`test_concurrent_puts_serialize`).
+  - Error codes: `terms_not_acknowledged`, `key_required_for_url_change`, `misp_url_invalid`, `limit_above_ceiling`, `provider_unavailable`.
+  - Tests: `test_enabling_requires_terms_acknowledgement`, `test_first_configuration_requires_a_key`, `test_limits_may_only_be_lowered`, `test_mock_is_unavailable_in_prod`, `test_ti_disabled_marks_everything_unavailable`, `test_ti_settings`.
+- **Keys:**
+  - A new key bumps the version; removing it is an UPDATE that keeps the version floor, because 0010 revoked DELETE (`test_replace_bumps_version_and_remove_keeps_it`).
+  - Keys are 8–256 printable ASCII characters. A 422 never echoes the value.
+- **Review (verify rate limit and dedupe):**
+  - `POST …/verify` answers 202 and is limited to 10 per 10 minutes per (org, provider) (`VERIFY_PER_10MIN`, `test_verify_is_queued_and_rate_limited`).
+  - A save queues `ti.verify` only when a new key or a new MISP URL was stored, and only within the same limit.
+  - The worker also dedupes the same key version (913023d).
+- **Runs** (`service_runs.py`):
+  - A job must be `succeeded` (`409 job_not_ready`).
+  - A lookup takes 1–20 values of at most 2048 characters each and returns a per-value report. When nothing is eligible, the answer is 200 with the report only (`test_nothing_eligible_answers_200_with_the_report_only`).
+  - Refusals: `409 no_provider_enabled`; per user 30 requests per 10 minutes (`test_per_user_rate_limit`).
+  - A publish failure still answers 202 (`test_publish_failure_still_answers_202`).
+- **Review (global advisory lock):**
+  - Creation is serialized per org with `pg_advisory_xact_lock(hashtextextended(…))`, then a global lock `ti-runs:global`, always taken after the org one. So neither the caps (3 active per org, 20 overall, `409 enrichment_busy`) nor the job dedupe can be raced.
+  - Tests: `test_global_cap_holds_under_concurrent_creation`, `test_enrichment_busy_per_org_and_global`.
+  - An active run of the same job is returned with `deduplicated: true` (`test_job_enrichment_creates_one_run_and_dedupes`).
+- **Results** (`service_results.py`):
+  - `include=enrichment` returns the latest row per provider, with `enrichment_skip` for ineligible IOCs (`test_ioc_list_include_enrichment`).
+  - History lists every answer, newest first, with a provider filter (`test_history_lists_every_answer_newest_first`). The single result route is covered by `test_single_result`.
+  - Run detail marks cached items `from_cache` (`test_run_detail_shows_cached_items`).
+- **Isolation:**
+  - `test_another_org_sees_nothing`, `test_results_are_append_only_for_the_app_role`.
+  - The IDOR enumerator `security/test_idor_routes.py` gained TI victim resources (`tests/ti_api_helpers.py`). The tables have been in the RLS coverage since phase 1 (`test_rls_coverage.py`).
+- **RBAC:** `test_ti_api_rbac.py::test_ti_role_matrix`; a viewer can read but cannot request (`test_viewer_cannot_request_but_can_read`).
+- **Sentinel key:**
+  - `test_sentinel_key_never_leaks` checks responses, audit rows and caplog, including the 422s for over-long and non-ASCII keys.
+  - Phase 7 adds a crawl of every route (`test_no_api_response_carries_the_key`) and `test_failed_puts_never_echo_the_key`.
+- **MISP URL binding:**
+  - API: `test_misp_url_is_bound_to_the_key`;
+  - DB-level swap: `test_a_misp_key_does_not_follow_a_swapped_base_url` (a21c9d2);
+  - crypto: `test_misp_key_sealed_for_url_a_does_not_open_for_url_b`.
+- **Deviation:** no read-index migration was added. 0010 went to the phase-1 review hardening, and 0009's lookup index `(organization_id, ioc_key, provider, fetched_at DESC)` serves the IOC join and the history (`test_cache_lookup_index_exists`).
+- **End to end:** the job-run chain (HTTP 202 → worker → `include=enrichment` → history → cached repeat) is covered piecewise here and in `test_ti_pipeline.py` (the worker side, via `runs.create_run`). The full chain is asserted only by the pending Playwright spec.

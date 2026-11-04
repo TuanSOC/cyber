@@ -5,6 +5,9 @@
 import { spawnSync } from "node:child_process";
 
 const PROD = process.argv.includes("--prod");
+// Live threat-intel tests (real providers, real keys) are never part of the gate: they are
+// skipped unless CYBERLAB_LIVE_TI=1, so make sure no child process inherits it.
+delete process.env.CYBERLAB_LIVE_TI;
 const COMPOSE_PROD = "docker compose -f docker-compose.yml -f docker-compose.prod.yml";
 const started = Date.now();
 
@@ -68,14 +71,26 @@ async function healthProblems(base) {
 
 // A crash-looping worker can look "running" between restarts: let it settle, then require
 // a running state and no restart at all (review H1: the prod enrich-worker crash-looped).
-async function workerProblems(service) {
+// `env` lists NAME=value pairs the running container must have (M4: the prod enrich-worker
+// runs ENV=prod, so the mock and the dev-only MISP flags are refused). Only those names are
+// compared: the container's other variables hold secrets and are never printed.
+async function workerProblems(service, env = {}, image = null) {
   await new Promise((resolve) => setTimeout(resolve, 15_000));
   const id = spawnSync(`${COMPOSE_PROD} ps -q ${service}`, { shell: true }).stdout.toString().trim();
   if (!id) return [`${service}: no container`];
-  const state = spawnSync(`docker inspect -f "{{.State.Status}} {{.RestartCount}}" ${id}`, { shell: true })
-    .stdout.toString()
-    .trim();
-  return state === "running 0" ? [] : [`${service}: ${state} (expected "running 0")`];
+  const inspect = spawnSync(`docker inspect ${id}`, { shell: true, maxBuffer: 16 * 1024 * 1024 });
+  const [container] = JSON.parse(inspect.stdout.toString() || "[{}]");
+  const problems = [];
+  const state = `${container?.State?.Status} ${container?.RestartCount}`;
+  if (state !== "running 0") problems.push(`${service}: ${state} (expected "running 0")`);
+  if (image && container?.Config?.Image !== image) problems.push(`${service}: image ${container?.Config?.Image}`);
+  const actual = new Map(
+    (container?.Config?.Env ?? []).map((pair) => [pair.slice(0, pair.indexOf("=")), pair.slice(pair.indexOf("=") + 1)]),
+  );
+  for (const [name, value] of Object.entries(env)) {
+    if (actual.get(name) !== value) problems.push(`${service}: ${name} is not ${value}`);
+  }
+  return problems;
 }
 
 async function verifyProd() {
@@ -84,7 +99,13 @@ async function verifyProd() {
     "node scripts/check-enrich-env.mjs",
   );
   run("Prod stack up", `${COMPOSE_PROD} up -d --build --wait --wait-timeout 400`);
-  await probe("Prod enrich-worker: running, never restarted", () => workerProblems("enrich-worker"));
+  await probe("Prod enrich-worker: running, never restarted, ENV=prod, no mock", () =>
+    workerProblems(
+      "enrich-worker",
+      { ENV: "prod", PROCESS_ROLE: "enrich", TI_MOCK_ENABLED: "false" },
+      "cyberlab/api:prod",
+    ),
+  );
   // The prod-like stack uses Caddy's internal CA: skip certificate checks for these probes.
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
   await probe("Prod health", () => healthProblems("https://localhost:8443"));
@@ -116,7 +137,8 @@ try {
   );
   run(
     "API: ruff, format, mypy --strict, pytest",
-    'docker compose --profile test run --rm api-test sh -c "uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest -q"',
+    // Includes tests/container/test_egress.py (api-test: no route, no ti-mock); live TI tests skip.
+    'docker compose --profile test run --rm -e CYBERLAB_LIVE_TI=0 api-test sh -c "uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest -q"',
   );
   run(
     "Enrich worker network: only Postgres, the broker and egress (review M2)",

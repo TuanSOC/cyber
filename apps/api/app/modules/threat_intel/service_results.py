@@ -198,7 +198,9 @@ async def enrich_iocs(
                 "count": row.count,
                 "source": row.source,
                 "enrichment": [_enrichment_out(r, now) for r in found],
-                "enrichment_skip": skip,
+                # A provider that may receive special-use names (the dev/test mock) can have
+                # answered a value the public providers skip: answers win over the skip note.
+                "enrichment_skip": None if found else skip,
             }
         )
     return out

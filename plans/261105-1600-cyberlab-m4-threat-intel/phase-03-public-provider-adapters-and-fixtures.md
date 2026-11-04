@@ -74,6 +74,56 @@ come from `plans/reports/researcher-261105-m4-providers.md`.
 5. Live smoke tests (opt-in). Then report verified numbers to the parent, who updates `catalog.py` and the plan's provider table if they differ.
 
 ## Success Criteria
-- [ ] Every adapter passes hit, not-found, 429 (both forms), 401, timeout, bad JSON, deep nesting, oversize and 5xx with the right status; hostile strings are sanitized.
-- [ ] No adapter can reach an upload, scan or download endpoint (allowlist test).
-- [ ] The sentinel key appears nowhere but the outbound auth header.
+- [x] Every adapter passes hit, not-found, 429 (both forms), 401, timeout, bad JSON, deep nesting, oversize and 5xx with the right status; hostile strings are sanitized. — `test_ti_provider_fixtures.py::test_manifest_case` (238 cases), `test_every_public_provider_case_is_covered`; `test_ti_provider_adapters.py::test_virustotal_hostile_values_are_dropped_or_cleaned`, `test_unexpected_shapes` (8f5e23b).
+- [x] No adapter can reach an upload, scan or download endpoint (allowlist test). — `test_forbidden_routes_match_no_allowlist`, `test_forbidden_routes_are_never_sent`, `test_allowlists_are_lookup_only`, `test_malwarebazaar_sends_only_get_info` (8f5e23b).
+- [x] The sentinel key appears nowhere but the outbound auth header. — `test_manifest_case` via `assert_key_only_in_header` (URL, body, headers, reprs, result, exception, caplog, key-echo fixtures); `test_ti_http.py::test_key_only_in_the_auth_header_and_never_in_reprs` (8f5e23b).
+
+## Implementation Notes (2026-11-05)
+- **Commits:** b83d6f2 committed the fixtures for all six providers early, together with the ATT&CK index; 8f5e23b holds the adapters (`virustotal.py`, `abuseipdb.py`, `abusech.py` for URLhaus + MalwareBazaar, `otx.py`). The registry loads them lazily (`test_registry_builds_every_public_adapter`).
+- **Allowlists (lookup only):**
+
+  | Provider | Allowed requests |
+  |---|---|
+  | VirusTotal | `GET /api/v3/{ip_addresses,domains,urls,files}/{id}` |
+  | AbuseIPDB | `GET /api/v2/check` (`maxAgeInDays=90`) |
+  | URLhaus | `POST /v1/{url,host,payload}/` |
+  | MalwareBazaar | `POST /api/v1/` with the `get_info` form only (`MALWAREBAZAAR_QUERIES`; anything else raises `PathNotAllowed`) |
+  | OTX | `GET /api/v1/indicators/{IPv4,IPv6,domain,url,file}/{value}/general` |
+
+  Tests: `test_forbidden_routes_match_no_allowlist`, `test_forbidden_routes_are_never_sent`, `test_allowlists_are_lookup_only`, `test_malwarebazaar_sends_only_get_info`.
+- **Fixtures** (`tests/fixtures/ti/manifest.json`):
+  - 238 public cases (VT 63, AbuseIPDB 17, URLhaus 68, MalwareBazaar 24, OTX 66) plus 42 MISP cases.
+  - Handcrafted, with documentation IPs, `example` domains and only the sentinel key.
+  - They cover: found, not found, sanitized, capped; auth, including key-echo bodies; 429 with and without `Retry-After`; 5xx; bad JSON and deep nesting; timeout (`httpx.ReadTimeout`); oversize (2 MiB); abuse.ch `bad_request`; AbuseIPDB 422 `invalid_input`.
+- **`test_manifest_case`** (one test per case, `unit/test_ti_provider_fixtures.py`) asserts:
+  - the exact request, on the allowlist;
+  - the key only in the auth header, via `assert_key_only_in_header`: not in the URL, the body, other headers, the request/client/auth reprs, the result, the exception or caplog (with httpx/httpcore at DEBUG);
+  - the expected status or error kind;
+  - a sanitized summary under 16 KiB.
+
+  `test_every_public_provider_case_is_covered` checks that every case runs.
+- **VirusTotal 429 (deviation):** VT's daily-quota 429 body is identical to the per-minute one.
+  - The adapter always raises `rate_limited` with no `Retry-After`, so the worker cools down to the next minute. The 4 `quota_exhausted` VT manifest cases expect `RATE_LIMITED`.
+  - The worker's own daily counter, or 3 consecutive 429s (`QUOTA_STRIKES`, 913023d), turns this into `quota_exhausted` until 00:00 UTC.
+- **abuse.ch:**
+  - A bad key is handled both ways: HTTP 401/403, or 200 with `query_status` `no_api_key` / `unknown_auth_key`.
+  - `invalid_*`, `illegal_hash`, `no_hash_provided` and `http_post_expected` map to `bad_request`.
+  - The status string is compared, never stored or logged.
+- **AbuseIPDB:** never answers "not found". A score of 0 with 0 reports becomes `not_found` and keeps `usageType`, `isp`, `isTor` and `isWhitelisted` (`test_abuseipdb_hit_and_not_found`, `test_abuseipdb_hostile_categories`).
+- **OTX:**
+  - A 404 or a quiet 200 (`pulse_info.count == 0`, no reputation) is `not_found`. Only the top 10 pulses are kept, and `attack_ids` are checked against the T-id pattern (`test_otx_hit_quiet_and_attack_ids`, `test_otx_huge_keeps_the_top_ten_pulses`).
+  - URLs with dot segments are refused before sending (`test_otx_url_dot_segments_are_refused_before_sending`).
+- **Permalinks:**
+  - Built from constants and the normalized value, `https:` only (ASCII-only after review).
+  - URLhaus' `urlhaus_reference` is used only on `https://urlhaus.abuse.ch/` (`test_provider_links_only_on_their_own_https_host`, the `url_spoofed_reference` fixture).
+  - The VT URL id is unpadded base64url (`test_virustotal_url_id_is_unpadded_base64url`).
+- **Verify (`test_verify`):**
+  - VT: a lookup of the EICAR sha256 (never `/users/{id}`, RT11);
+  - AbuseIPDB: a check of `8.8.8.8` (costs 1 check);
+  - URLhaus: a payload lookup of the EICAR sha256;
+  - MalwareBazaar: `get_info`;
+  - OTX: `/api/v1/user/me`.
+- **Other refusals:** unsupported types never leave (`test_unsupported_types_never_leave`), and unexpected response shapes become `bad_json` (`test_unexpected_shapes`). Hostile strings are cleaned (`test_virustotal_hostile_values_are_dropped_or_cleaned`).
+- **Live tests:** `unit/test_ti_provider_live.py` (`CYBERLAB_LIVE_TI=1` + `CYBERLAB_TI_KEY_<PROVIDER>`), never in the gate.
+- **Deviation: no live run was made.** The free-tier numbers, the real abuse.ch bad-key answer and the OTX 429 behaviour are unverified. THREAT_INTEL.md marks the quotas "unverified against the live API", and the catalog defaults are unchanged.
+- **Accepted residual (ToS):** the VT public tier and the abuse.ch free tier are non-commercial. Bring-your-own-key, plus a ToS note and a privacy note on each card.

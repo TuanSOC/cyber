@@ -16,3 +16,9 @@ names only; certificates are generated Ed25519 test certificates; the "executabl
 | port_scan | vertical (120 ports) + horizontal (25 hosts on 445) | 2 port_scan |
 | suspicious_http | IP-literal Host, executable MIME over cleartext HTTP | 2 suspicious_traffic |
 | mixed | all of the above, time-shifted | union |
+
+`ti_mock.py` writes `ti_iocs.pcap`, outside the labeled set: a few `example.com` names aimed at
+the dev/test `ti-mock` threat-intel sink (a hit, a URL with a query string, a rate-limited name
+with a per-run label, an NXDOMAIN). `scripts/e2e.mjs` generates it for `threat-intel.spec.ts`:
+
+    python -m dataset.ti_mock /path/to/out [run-label]

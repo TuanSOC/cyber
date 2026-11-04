@@ -81,7 +81,8 @@ async def test_ioc_list_include_enrichment(sent: Sent) -> None:
     ip = rows["192.0.2.1"]
     assert ip["enrichment"] == [] and ip["enrichment_skip"] == "not_global_ip"
     domain = rows["example.com"]
-    assert domain["enrichment_skip"] == "special_use_name"  # only the dev/test mock takes it
+    # Special-use: only the dev/test mock takes it. Its answers win over the skip note.
+    assert domain["enrichment_skip"] is None
     by_provider = {e["provider"]: e for e in domain["enrichment"]}
     assert set(by_provider) == {"mock", "virustotal"}
     mock = by_provider["mock"]
@@ -91,6 +92,34 @@ async def test_ioc_list_include_enrichment(sent: Sent) -> None:
     assert by_provider["virustotal"]["result_id"] == str(vt)
     assert by_provider["virustotal"]["stale"] is True
     assert (await owner.client.get(url, params={"include": "bogus"})).status_code == 422
+
+
+async def test_an_answered_special_use_value_shows_answers_not_the_skip(sent: Sent) -> None:
+    """`example.com` is special-use (never sent to public providers) but the mock may answer
+    it: once it has, the row carries the answer and no skip note; until then, the skip."""
+    owner = await _owner()
+    job_id = await succeeded_job(owner)
+    url = f"{API}/{owner.org_id}/analyses/{job_id}/iocs"
+
+    async def rows() -> dict[str, dict[str, object]]:
+        body = (await owner.client.get(url, params={"include": "enrichment"})).json()
+        return {i["value"]: i for i in body["items"]}
+
+    before = await rows()
+    assert before["example.com"]["enrichment"] == []
+    assert before["example.com"]["enrichment_skip"] == "special_use_name"
+
+    run = (await enrich_job(owner.client, owner.org_id, job_id)).json()["run"]["id"]
+    result = await add_result(owner.org_id, run, value_norm="example.com")
+    after = await rows()
+    domain = after["example.com"]
+    assert domain["enrichment_skip"] is None
+    answers = domain["enrichment"]
+    assert isinstance(answers, list) and len(answers) == 1
+    assert answers[0]["provider"] == "mock" and answers[0]["result_id"] == str(result)
+    # The unanswered, non-global address keeps its skip.
+    ip = after["192.0.2.1"]
+    assert ip["enrichment"] == [] and ip["enrichment_skip"] == "not_global_ip"
 
 
 async def test_history_lists_every_answer_newest_first(sent: Sent) -> None:

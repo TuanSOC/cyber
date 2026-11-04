@@ -63,6 +63,35 @@ ATT&CK chips label capa capabilities and findings. All wording is verdict-free a
 6. Wording and untrusted-text tests; typecheck, eslint, prod build.
 
 ## Success Criteria
-- [ ] An admin can acknowledge terms, configure, verify, replace and remove keys; no key value is ever rendered back (unit and e2e).
-- [ ] IOC rows show source-attributed chips and a history link; ineligible IOCs explain why they were not sent.
-- [ ] capa and finding ATT&CK ids show names and tactics with the MITRE notice; the wording test passes.
+- [ ] An admin can acknowledge terms, configure, verify, replace and remove keys; no key value is ever rendered back (unit and e2e). — **pending gate** (Playwright `threat-intel.spec.ts` + web step of `pnpm verify`); unit side: `integration-card.test.tsx` (7 cases, 3e1f686).
+- [ ] IOC rows show source-attributed chips and a history link; ineligible IOCs explain why they were not sent. — **pending gate** (Playwright `threat-intel.spec.ts`: chips, "View history"); templates unit-tested in `lib/ti.test.ts` ("titles every chip with its source and date", "explains why a value was never sent").
+- [ ] capa and finding ATT&CK ids show names and tactics with the MITRE notice; the wording test passes. — **pending gate** (Playwright "a Malware Lab job shows ATT&CK technique names for capa capabilities"; `lib/ti-wording.test.ts` and `lib/ti.test.ts` "labels known, revoked and unknown ids" run in the `pnpm verify` web step).
+
+## Implementation Notes (2026-11-05)
+- **Commits:** 3e1f686 (31 files, +3772). a21c9d2 made small follow-ups to `integration-card.tsx`, `lib/ti.ts` and `lib/pcap-results.ts` for the OpenAPI renames.
+- **Pages:**
+  - `/o/{org}/settings/integrations`, linked from the settings nav;
+  - `/o/{org}/intel`: the lookup form and recent runs, under the new "Threat Intel" module in `lib/nav.ts`;
+  - `/o/{org}/intel/ioc?type=&value=`: the indicator history.
+- **Components** (`components/ti/`): `integration-card`, `terms-ack`, `ti-settings-card`, `provider-chip`, `provider-picker`, `enrich-button`, `run-progress`, `run-results`, `result-panel`, `lookup-form`, `recent-runs`, `attack-chips`. The logic sits in `lib/ti.ts` and the hooks in `lib/use-ti.ts`.
+- **Key entry:**
+  - A password input with `autoComplete="off"`, empty and never pre-filled, cleared after submit. A stored key shows only as `••••last4`. The card has Replace, Remove (with a confirm dialog) and Verify.
+  - `components/ti/integration-card.test.tsx` has 7 cases, among them "shows the key only as ••••last4 and never renders a key value", "uses a write-only, empty password input with autocomplete off", "does not pre-fill the key field of an unconfigured provider", "is read-only without integrations.manage" and "shows invalid · misp_url_not_public…".
+- **Terms:** the dialog sends `acknowledge_terms: true` only after the checkbox is ticked ("blocks enabling until the acknowledgement is ticked"). Edit controls are hidden without `integrations.manage` (`lib/roles.ts`); the API still enforces it.
+- **IOC tab** (`components/analysis/iocs-tab.tsx`, shared by PCAP and Malware):
+  - "Enrich IOCs" opens the provider picker, then shows run progress (`waiting` until hh:mm, a partial explanation).
+  - Each row has chips titled "reported by <provider> on <date>". Expanding it shows a panel with the summary fields, the https permalink (`rel="noopener noreferrer"`) and "View history".
+- **Chip templates** (neutral styling, RT20): "VT 12/71 engines", "AbuseIPDB confidence 87/100", "URLhaus listed", "OTX 3 pulses", "MISP 2 events", "not found", "stale". VT category names appear only inside the single template "N engines: M report malicious" (`vtEnginesText`).
+- **Skip reasons:** "private address — not sent", "special-use or internal name — not sent", and so on, plus "query removed before lookup" (`ti.test.ts`: "explains why a value was never sent", "flags URLs whose query string is removed").
+- **Wording test** (`lib/ti-wording.test.ts`):
+  - forbids `\b(malicious|benign|clean|safe|verdict)\b` in every TI component and page, except the one allowed template;
+  - also checks the chip templates and the generated labels and notes.
+- **Polling:** `runPollMs` starts at 2 s, grows ×1.5 per update up to 10 s, and stops at a final state ("backs off polling from 2 s to 10 s and stops when final").
+- **ATT&CK chips** (`attack-chips.tsx`):
+  - Used in the capa capabilities (`signature-tabs.tsx`), `findings-tab.tsx` and `static-report-view.tsx`.
+  - Batched `/attack/techniques` calls with `staleTime: Infinity`. Only valid ids are sent, because the route rejects a whole batch over one bad id.
+  - Revoked and unknown ids get their own labels ("labels known, revoked and unknown ids").
+  - A footer shows the MITRE notice and "Enterprise v{version}".
+- **MISP and history:** MISP TLP labels are text badges, with TLP:RED and TLP:AMBER outlined ("highlights TLP:RED and TLP:AMBER"). History deltas are computed client-side ("compares consecutive ok answers of one provider").
+- **Untrusted text:** provider strings are rendered as text only. Links are https only, without credentials ("links only https URLs without credentials"). `mock` is shown as "Test provider", and only when the catalog says it is `available`.
+- **Pending gate:** the web unit tests above run in the `pnpm verify` "Web" step. The browser-level proof is `apps/web/e2e/threat-intel.spec.ts` (phase 7b, uncommitted, still running): Integrations → mock key → Enrich → cached → history → ATT&CK names on a Malware job.

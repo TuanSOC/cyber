@@ -106,6 +106,63 @@ whole path runs without real keys.
    - a wrong key → `auth_failed` and `verify_status=invalid`.
 
 ## Success Criteria
-- [ ] No ineligible value ever reaches a transport (asserted on every MockTransport request in the suite through a shared fixture), including `.arpa` names, embedded private IPv4 and URL query strings.
-- [ ] A pipeline run through `enrich-worker-test` and `ti-mock` ends `completed` / `partial` exactly as expected; a redelivered or duplicated message writes no duplicate rows and makes no duplicate provider call.
-- [ ] A long run yields the worker every `TI_SLICE_S`; rate-limited runs resume without Celery ETA; a lost message is recovered by `ti.resume`; past-deadline runs end `partial`.
+- [x] No ineligible value ever reaches a transport (asserted on every MockTransport request in the suite through a shared fixture), including `.arpa` names, embedded private IPv4 and URL query strings. — `tests/ti_helpers.py::SafeTransport` / `assert_eligible_request`; `test_ti_normalize.py::test_non_global_ips_are_skipped`, `test_special_use_names_are_skipped`, `test_url_query_and_fragment_are_removed`; metric: 0 of 245 ineligible values sent (5376596, a21c9d2).
+- [x] A pipeline run through `enrich-worker-test` and `ti-mock` ends `completed` / `partial` exactly as expected; a redelivered or duplicated message writes no duplicate rows and makes no duplicate provider call. — `test_ti_pipeline.py::test_hit_not_found_outage_and_cache`, `test_deadline_ends_partial`; `test_enrich_worker.py::test_redelivery_and_concurrent_duplicates_make_no_extra_calls` (5376596).
+- [x] A long run yields the worker every `TI_SLICE_S`; rate-limited runs resume without Celery ETA; a lost message is recovered by `ti.resume`; past-deadline runs end `partial`. — `test_enrich_worker.py::test_slice_budget_republishes_to_the_tail`, `test_token_far_away_waits_and_resumes`, `test_resume_does_not_resend_recent_queued_runs`, `test_deadline_ends_partial`; `test_ti_pipeline.py::test_429_waits_then_resumes` (5376596, d3a93e1).
+
+## Implementation Notes (2026-11-05)
+- **Commits:**
+  - 5376596: phase 2, plus the phase-1 review fixes;
+  - 7abb484: phase-2 review fixes;
+  - 913023d: the lane and renewer review fixes, which landed with phase 4;
+  - d3a93e1: retries carried over to the next slice.
+- **Slice loop** (`app/workers/enrich.py`):
+  - One `ti.enrich` is one slice of at most `TI_SLICE_S` (20 s), enforced with asyncio timeouts.
+  - Lease: `lease_until = now() + 60 s`, renewed every 20 s.
+  - Work left: the run is re-published to the queue tail if a token is ready within 2 s, otherwise it goes `waiting` with `resume_at`.
+  - The run's org in `ti_run_index` must match the message (`test_org_mismatch_and_bad_messages_are_dropped`). Duplicate slices exit (`test_redelivery_and_concurrent_duplicates_make_no_extra_calls`).
+- **Lanes (review, 913023d):**
+  - One lane per provider in an `asyncio.TaskGroup` (not `gather`), with semaphores of 4 per provider and 16 overall.
+  - An item failure is recorded and the lane goes on. A failure that cannot be recorded halts the slice, and a lane that raises cancels its siblings.
+  - `renew_forever` never raises.
+  - Tests: `unit/test_ti_misp_worker.py`, `test_the_lease_renewer_never_raises`.
+- **Retries:** 5xx, timeouts and transport errors get 3 attempts with full-jitter backoff (0.5 s base, 4 s cap), then an `error` row.
+  - **d3a93e1:** if a retry's backoff would cross the slice end, the item stays `pending` and its attempt count is carried in worker memory (bounded), instead of becoming a final `error`.
+  - Tests: `test_5xx_near_the_slice_end_stays_pending_for_the_next_slice`, `test_carried_over_retries_still_end_after_three_attempts`, `test_carried_over_item_still_ends_partial_at_the_deadline`.
+- **Resume, deadline and reaper:**
+  - `ti.resume` runs from ingest-beat every 30 s (batch ≤ 100). It re-sends `waiting` runs past `resume_at`, and `queued` / `running` runs with an expired lease dispatched more than 2 minutes ago, and bumps `dispatched_at` (`test_resume_does_not_resend_recent_queued_runs` also covers re-sending a lost message).
+  - Deadline (1800 s) at every slice: `test_deadline_ends_partial`, `test_deadline_with_nothing_attempted_fails`, `test_429_past_the_deadline_abandons_rate_limited`.
+  - The reaper fallback acts 10 minutes past the deadline under `FOR UPDATE`, audits `ti.run_deadline` and writes no result rows (`test_fallback_reaper`).
+- **401/403:**
+  - The provider's verify runs inline (RT23): `test_401_with_failing_verify_marks_invalid`, `test_403_with_passing_verify_stays_valid`.
+  - Lazy re-seal under the active kid at the same version (`test_lazy_reseal_under_the_active_kid`).
+  - `ti.verify` is deduped per (org, provider, key_version) for 60 s through `enrich.ti:verify:*` (`test_duplicate_verify_of_the_same_key_is_skipped`).
+- **Limiter** (`ratelimit.py`, broker keys `{prefix}enrich.ti:{rl,day,cool,strikes,verify}:*`):
+  - Lua token bucket; a UTC daily counter with a 48 h TTL; cooldowns that can only be extended.
+  - A broker outage raises `LimiterUnavailable`: no provider call, and the run waits 30 s (`test_broker_unavailable_fails_closed`, `test_limiter_outage_fails_closed`).
+  - Effective limits are capped by the ceilings (`test_effective_limits_never_exceed_the_ceiling`).
+- **`Retry-After`:** delta seconds or an HTTP date, clamped to 1–3600 s. **Review:** only ASCII digits count, so Unicode digits are malformed and get the default backoff (`test_retry_after_non_ascii_digits_are_malformed`, `test_429_with_unparsable_retry_after_gets_the_default_backoff`).
+- **HTTP client** (`http.py`), **review: decompression bomb (7abb484):**
+  - Requests send `Accept-Encoding: identity`. A gzip or deflate body is inflated incrementally, with the 1 MiB / 2 MiB cap applied to the inflated bytes; any other coding is refused. A 256 MiB bomb stays under 4 MiB (`test_gzip_bomb_is_refused_with_bounded_memory`, `test_inflater_never_produces_more_than_the_cap_plus_one`).
+  - The allowlist also checks scheme and port.
+  - Strict JSON: depth ≤ 64, integers ≤ 40 digits, no NaN; any failure is `bad_json`.
+- **Normalization** (`normalize.py`, pure), beyond the plan:
+  - more refang forms (`fxp`, `{.}`, `(dot)`, `(@)`, `[at]`) and a 2048-character cap (`too_long`);
+  - IPv4-compatible `::/96` and NAT64 local-use `64:ff9b:1::/48` are checked;
+  - `alt` and `example.com/net/org` count as special-use names.
+- **Review: hex-IPv4 eligibility:** a host whose last label is numeric or `0x`-hex is never a name, because WHATWG parses `10.0.0.0x1` and `misp.123` as IPs (`test_numeric_last_labels_are_never_names`, `test_hex_looking_labels_that_are_names`).
+- **Runs, cache and SSRF syntax:**
+  - `integration/test_ti_runs.py`: `test_job_plan_order_and_cap`, `test_nothing_eligible_creates_no_run`, `test_excluded_suffixes`, `test_dispatch_publishes_ids_only`.
+  - `integration/test_ti_cache.py`: `test_ttl_table`, `test_fresh_result_rules` (DB clock; errors are never hits).
+  - `unit/test_ti_ssrf.py` for `validate_base_url`.
+- **Mock provider:** `providers/mock.py` (6000/min) plus `infra/ti-mock/server.py`. Only `mock` accepts special-use names, and only under `example.com` (`test_only_mock_accepts_its_example_com_names`, `test_skips_never_become_eligible_for_real_providers`).
+- **Wire-level eligibility:** `tests/ti_helpers.py::SafeTransport` re-normalizes every IOC that reaches a MockTransport and fails on any ineligible value or query string.
+  - It is used by `test_enrich_worker.py`, `test_ti_http.py` and `test_ti_key_leak.py`.
+  - The phase-7 metric harness re-checks every request: 0 of 245 ineligible values were sent.
+- **Pipeline** (`integration/test_ti_pipeline.py`, the real `enrich-worker-test` → `egress` → `ti-mock`): `test_hit_not_found_outage_and_cache`, `test_429_waits_then_resumes`, `test_deadline_ends_partial`, `test_wrong_key_is_auth_failed_and_invalid`, `test_verify_task`.
+- **Other review fixes (7abb484):**
+  - SQLAlchemy `hide_parameters=True` (`core/db.py`), so a failed statement never puts bound values into a Celery traceback;
+  - keys with whitespace or non-printable characters are refused at seal time;
+  - protocol errors never carry the key;
+  - permalinks are ASCII-only.
+- **Deviations:** no Celery countdown or ETA anywhere (as planned); the VirusTotal 429-strike quota escalation was added in 913023d; `scripts/check-enrich-env.mjs` joined the gate in this phase.
