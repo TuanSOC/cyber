@@ -18,6 +18,13 @@ x-prod-ai: &prod-ai
   AI_SEAL_ACTIVE_KID: ${AI_PROD_SEAL_ACTIVE_KID:?run scripts/gen_ai_seal_keys.py and set AI_PROD_SEAL_ACTIVE_KID}
   AI_SEAL_PUBLIC_KEYS: ${AI_PROD_SEAL_PUBLIC_KEYS:?run scripts/gen_ai_seal_keys.py and set AI_PROD_SEAL_PUBLIC_KEYS}
 
+# Report signing in prod (M6): a real Ed25519 pair. scripts/gen_report_signing_keys.py writes
+# .secrets/report_signing_private.json (the api's secret) and prints the two REPORT_PROD_*
+# lines for .env. Settings refuses a `dev-` kid and the committed dev public key.
+x-prod-report-signing: &prod-report-signing
+  REPORT_SIGNING_ACTIVE_KID: ${REPORT_PROD_SIGNING_ACTIVE_KID:?run scripts/gen_report_signing_keys.py and set REPORT_PROD_SIGNING_ACTIVE_KID}
+  REPORT_SIGNING_PUBLIC_KEYS: ${REPORT_PROD_SIGNING_PUBLIC_KEYS:?run scripts/gen_report_signing_keys.py and set REPORT_PROD_SIGNING_PUBLIC_KEYS}
+
 services:
   minio:
     ports: !reset []
@@ -34,7 +41,7 @@ services:
       context: ./apps/api
       target: prod
     environment:
-      <<: [*prod-ti, *prod-ai]
+      <<: [*prod-ti, *prod-ai, *prod-report-signing]
       ENV: prod
       COOKIE_SECURE: "true"
     volumes: !override
@@ -81,6 +88,22 @@ services:
   redis-broker:
     environment:
       BROKER_ANALYST_PASSWORD: ${BROKER_ANALYST_PASSWORD:?set BROKER_ANALYST_PASSWORD}
+      BROKER_REPORT_PASSWORD: ${BROKER_REPORT_PASSWORD:?set BROKER_REPORT_PASSWORD}
+
+  # The report renderer in prod (M6): prod image, ENV=prod, its own broker password required;
+  # still no DB, MinIO credentials or signing material.
+  report-worker:
+    image: cyberlab/report-worker:prod
+    build:
+      context: ./apps/workers/report
+      target: prod
+      additional_contexts:
+        jobs: ./packages/py-jobs
+        worker_kit: ./packages/py-worker-kit
+    environment:
+      ENV: prod
+      BROKER_URL: redis://report:${BROKER_REPORT_PASSWORD:?set BROKER_REPORT_PASSWORD}@redis-broker:6379/0
+    volumes: !reset []
 
   static-worker:
     image: cyberlab/static-worker:prod
@@ -130,6 +153,9 @@ secrets:
   # From scripts/gen_ai_seal_keys.py (same rules).
   ai_seal_private:
     file: ./.secrets/ai_seal_private.json
+  # From scripts/gen_report_signing_keys.py (the api only; same rules).
+  report_signing_private:
+    file: ./.secrets/report_signing_private.json
 
 volumes:
   caddydata:

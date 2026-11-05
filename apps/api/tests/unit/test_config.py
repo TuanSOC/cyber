@@ -7,7 +7,12 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.core.config import DEV_AI_SEAL_PUBLIC_KEYS, DEV_SEAL_PUBLIC_KEYS, Settings
+from app.core.config import (
+    DEV_AI_SEAL_PUBLIC_KEYS,
+    DEV_REPORT_SIGNING_PUBLIC_KEYS,
+    DEV_SEAL_PUBLIC_KEYS,
+    Settings,
+)
 from app.modules.threat_intel.catalog import CATALOG
 from app.modules.threat_intel.providers.base import ProviderName
 
@@ -22,6 +27,7 @@ BASE = {
 PUBLIC = base64.b64encode(bytes(range(32))).decode()
 # The api-test container sets the dev TI values (mock on, dev- kid): prod cases override them.
 AI_PUBLIC = base64.b64encode(bytes(range(32, 64))).decode()
+REPORT_PUBLIC = base64.b64encode(bytes(range(64, 96))).decode()
 PROD_TI: dict[str, Any] = {
     "ti_mock_enabled": False,
     "ti_seal_active_kid": "prod-1",
@@ -30,6 +36,10 @@ PROD_TI: dict[str, Any] = {
     "ai_mock_enabled": False,
     "ai_seal_active_kid": "prod-ai-1",
     "ai_seal_public_keys": {"prod-ai-1": AI_PUBLIC},
+    # M6: the prod api signs reports with a real Ed25519 key pair.
+    "report_signing_active_kid": "prod-report-1",
+    "report_signing_public_keys": {"prod-report-1": REPORT_PUBLIC},
+    "report_signing_keys_file": "/run/secrets/report_signing_private",
 }
 # The enrich worker gets none of the role-gated settings (explicit None beats the test env).
 ENRICH = {
@@ -50,6 +60,14 @@ def _no_env_seal_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     # public key would be merged into every `ti_seal_public_keys` passed here.
     monkeypatch.delenv("TI_SEAL_PUBLIC_KEYS", raising=False)
     monkeypatch.delenv("AI_SEAL_PUBLIC_KEYS", raising=False)
+    # M6: the same for the report signing settings (only the api service sets them).
+    for name in (
+        "REPORT_SIGNING_PUBLIC_KEYS",
+        "REPORT_SIGNING_ACTIVE_KID",
+        "REPORT_SIGNING_KEYS_FILE",
+        "PUBLIC_BASE_URL",
+    ):
+        monkeypatch.delenv(name, raising=False)
 
 
 def test_prod_requires_secure_cookies() -> None:
@@ -229,7 +247,8 @@ def test_the_cookie_guard_still_holds_for_the_api(monkeypatch: pytest.MonkeyPatc
 
 
 def test_prod_ingest_needs_no_cookie_flag() -> None:
-    settings = Settings(**BASE, **PROD_TI, env="prod", process_role="ingest", cookie_secure=False)
+    values = {**PROD_TI, "report_signing_keys_file": None}  # M6: the api role only
+    settings = Settings(**BASE, **values, env="prod", process_role="ingest", cookie_secure=False)
     assert settings.process_role == "ingest"
 
 
@@ -443,3 +462,98 @@ def test_the_rendered_prod_env_of_every_role_is_accepted(
         assert settings.broker_url.startswith("redis://analyst:")
     if role == "enrich":
         assert settings.ai_seal_private_keys_file is None and not settings.ai_seal_public_keys
+    # M6: only the api holds the report signing private key file.
+    if role == "api":
+        assert settings.report_signing_keys_file == "/run/secrets/report_signing_private"
+    else:
+        assert settings.report_signing_keys_file is None
+
+
+# --- report signing and reports (M6) ---------------------------------------------------
+
+
+@pytest.mark.parametrize("role", ["ingest", "enrich", "analyst"])
+def test_only_the_api_role_may_hold_the_signing_key_file(role: str) -> None:
+    base = {"ingest": {**BASE, "process_role": "ingest"}, "enrich": ENRICH, "analyst": ANALYST}
+    with pytest.raises(ValidationError, match="REPORT_SIGNING_KEYS_FILE"):
+        Settings(**base[role], report_signing_keys_file="/run/secrets/report_signing_private")
+
+
+def test_the_api_may_hold_the_signing_key_file_in_dev() -> None:
+    settings = Settings(**BASE, report_signing_keys_file="/run/secrets/report_signing_private")
+    assert settings.report_signing_keys_file == "/run/secrets/report_signing_private"
+
+
+@pytest.mark.parametrize("kid", ["dev-report-1", "DEV-x"])
+def test_prod_refuses_dev_signing_kids(kid: str) -> None:
+    values = {
+        **PROD_TI,
+        "report_signing_active_kid": kid,
+        "report_signing_public_keys": {kid: REPORT_PUBLIC},
+    }
+    with pytest.raises(ValidationError, match="dev- signing keys"):
+        Settings(**BASE, **values, env="prod", cookie_secure=True)
+
+
+def test_prod_refuses_the_committed_dev_signing_public_key() -> None:
+    [dev_key] = DEV_REPORT_SIGNING_PUBLIC_KEYS
+    values = {
+        **PROD_TI,
+        "report_signing_public_keys": {"prod-report-1": REPORT_PUBLIC, "old": dev_key},
+    }
+    with pytest.raises(ValidationError, match="committed dev signing key"):
+        Settings(**BASE, **values, env="prod", cookie_secure=True)
+
+
+def test_prod_api_needs_an_active_signing_kid_and_the_key_file() -> None:
+    with pytest.raises(ValidationError, match="REPORT_SIGNING_ACTIVE_KID"):
+        Settings(
+            **BASE, **{**PROD_TI, "report_signing_active_kid": None}, env="prod", cookie_secure=True
+        )
+    with pytest.raises(ValidationError, match="REPORT_SIGNING_KEYS_FILE is required"):
+        Settings(
+            **BASE, **{**PROD_TI, "report_signing_keys_file": None}, env="prod", cookie_secure=True
+        )
+
+
+def test_signing_public_keys_are_validated() -> None:
+    with pytest.raises(ValidationError, match="Ed25519"):
+        Settings(**BASE, report_signing_public_keys={"k1": "c2hvcnQ="})
+    with pytest.raises(ValidationError, match="invalid kid"):
+        Settings(**BASE, report_signing_public_keys={"bad kid": REPORT_PUBLIC})
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["ftp://x.example", "https://user:pw@x.example", "https://x.example/path", "https://x?q=1"],
+)
+def test_public_base_url_must_be_an_origin(url: str) -> None:
+    with pytest.raises(ValidationError, match="PUBLIC_BASE_URL"):
+        Settings(**BASE, public_base_url=url)
+
+
+def test_prod_public_base_url_needs_https_outside_localhost() -> None:
+    with pytest.raises(ValidationError, match="https in prod"):
+        Settings(
+            **BASE, **PROD_TI, public_base_url="http://cyberlab.example", env="prod",
+            cookie_secure=True,
+        )  # fmt: skip
+    for ok in ("https://cyberlab.example/", "http://localhost:8080"):
+        settings = Settings(
+            **BASE, **PROD_TI, public_base_url=ok, env="prod", cookie_secure=True
+        )
+        assert settings.public_base_url == ok.rstrip("/")
+
+
+def test_report_defaults() -> None:
+    settings = Settings(**BASE)
+    assert settings.reports_bucket == "reports"
+    assert settings.report_max_snapshot_bytes == 8 * 1024**2
+    assert settings.report_max_artifact_bytes == 32 * 1024**2
+    assert settings.report_max_pages == 300
+    assert (settings.report_render_deadline_s, settings.report_render_timeout_s) == (600, 120)
+    assert (settings.report_active_renders_per_org, settings.report_active_renders_global) == (
+        2,
+        4,
+    )
+    assert settings.timeline_export_max_rows == 50_000

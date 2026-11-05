@@ -6,6 +6,7 @@ set -eu
 
 : "${BROKER_API_PASSWORD:?}" "${BROKER_INGEST_PASSWORD:?}" "${BROKER_PCAP_PASSWORD:?}"
 : "${BROKER_STATIC_PASSWORD:?}" "${BROKER_ENRICH_PASSWORD:?}" "${BROKER_ANALYST_PASSWORD:?}"
+: "${BROKER_REPORT_PASSWORD:?}"
 
 # Commands no component needs and that would let one inspect or disrupt others' queues.
 DENY="-@dangerous -@admin -keys -scan -randomkey -sort -dump -object"
@@ -49,6 +50,9 @@ analyst_keys() {
   echo "$keys"
 }
 
+# The untrusted report renderer (M6) is analyzer-class: `analyzer_keys report` confines it to
+# report* / test.report* (queue, unacked keys, bindings), write-only to ingest. Only api and
+# ingest (`~*`) reach report*; no other user's patterns match it.
 cat >/tmp/users.acl <<EOF
 user default off
 user api on >${BROKER_API_PASSWORD} ~* resetchannels +@all ${DENY}
@@ -57,6 +61,7 @@ user pcap on >${BROKER_PCAP_PASSWORD} $(analyzer_keys pcap) resetchannels +@all 
 user static on >${BROKER_STATIC_PASSWORD} $(analyzer_keys static) resetchannels +@all ${DENY} ${READ_DENY}
 user enrich on >${BROKER_ENRICH_PASSWORD} $(enrich_keys) resetchannels +@all ${DENY} ${READ_DENY}
 user analyst on >${BROKER_ANALYST_PASSWORD} $(analyst_keys) resetchannels +@all ${DENY} ${READ_DENY}
+user report on >${BROKER_REPORT_PASSWORD} $(analyzer_keys report) resetchannels +@all ${DENY} ${READ_DENY}
 user healthcheck on nopass resetkeys +ping
 EOF
 chmod 600 /tmp/users.acl

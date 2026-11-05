@@ -9,8 +9,10 @@ from app.core.deps import CurrentUserDep
 from app.core.filenames import content_disposition
 from app.core.pagination import PageParamsDep
 from app.core.rbac import OrgContext, Permission, require
+from app.core.stubs import not_implemented
 from app.modules.evidence import service, transfer, uploads
 from app.modules.evidence.schemas import CustodyPage, EvidenceOut, EvidencePage, VerifyOut
+from app.modules.investigations.schemas import EvidenceSharePolicyIn, EvidenceSharePolicyOut
 
 router = APIRouter(prefix="/orgs/{org_id}", tags=["evidence"])
 
@@ -110,3 +112,21 @@ async def evidence_custody(
     evidence_id: uuid.UUID, ctx: EvidenceRead, page: PageParamsDep
 ) -> CustodyPage:
     return await service.custody(ctx, evidence_id, page)
+
+
+# --- share policy (M6 phase 2; frozen in phase 1, 501 until then) --------------------------
+
+
+@router.get("/evidence/{evidence_id}/share-policy", response_model=EvidenceSharePolicyOut)
+async def get_share_policy(evidence_id: uuid.UUID, ctx: EvidenceRead) -> EvidenceSharePolicyOut:
+    """The evidence's "do not send to AI / TI" flags and its effective policy."""
+    raise not_implemented()
+
+
+@router.put("/evidence/{evidence_id}/share-policy", response_model=EvidenceSharePolicyOut)
+async def put_share_policy(
+    evidence_id: uuid.UUID, body: EvidenceSharePolicyIn, ctx: EvidenceWrite, request: Request
+) -> EvidenceSharePolicyOut:
+    """Set the flags (turning one off needs `integrations.manage`); audited
+    `evidence.share_policy_updated`. The evidence row itself is never touched."""
+    raise not_implemented()

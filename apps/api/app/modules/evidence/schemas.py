@@ -23,6 +23,9 @@ class EvidenceOut(BaseModel):
     uploaded_by_name: str
     uploaded_at: datetime
     hashes: dict[str, str]
+    # M6: the evidence share-policy flags (`evidence_share_policies`; filled by phase 2).
+    ai_excluded: bool = False
+    ti_excluded: bool = False
 
 
 class EvidencePage(Page[EvidenceOut]):

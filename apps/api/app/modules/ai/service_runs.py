@@ -10,6 +10,7 @@ Checks of a run request, in order:
    (`409 no_provider_enabled`); the model is in its allowlist (`422 model_not_allowed`);
 3. the job exists (404) and succeeded (`409 job_not_ready`) and suits the task
    (`422 task_not_applicable`), or the investigation exists (404);
+3b. the share policy (M6, `investigations/policy.py`): `409 policy_blocked` with `reason`;
 4. per user `AI_RUNS_PER_USER_10MIN` (429);
 5. today's DB usage of the org below `daily_token_budget` (`409 budget_exhausted`, RT9);
 6. build the context (`ContextBuildError` -> 409 / 422);
@@ -69,6 +70,7 @@ from app.modules.ai.schemas import (
 from app.modules.ai.service_providers import ModelNotAllowed, ProviderUnavailable, keyed
 from app.modules.analysis.models import AnalysisJob, AnalysisStatus, Analyzer
 from app.modules.audit import service as audit
+from app.modules.investigations import policy
 from app.modules.investigations.models import Investigation
 
 PREVIEWS_PER_USER_PER_10MIN = 30
@@ -205,6 +207,19 @@ async def _check_target(ctx: OrgContext, req: AiRunRequest) -> None:
             raise NotFound()
 
 
+async def _check_policy(ctx: OrgContext, req: AiRunRequest) -> None:
+    """M6 (RT20): the case / evidence share policy. A job-scope run is refused when its
+    evidence or its case excludes AI (or the case is TLP:RED); a case-scope run when the
+    case does (its excluded evidence items are skipped by the builder instead)."""
+    if req.job_id is not None:
+        found = await policy.load_policy(ctx.session, ctx.org_id, job_ids=(req.job_id,))
+    else:
+        found = await policy.load_policy(
+            ctx.session, ctx.org_id, investigation_id=req.investigation_id
+        )
+    policy.raise_if_ai_blocked(found)
+
+
 async def _check_budget(ctx: OrgContext, row: AiOrgSettings) -> None:
     if await repository.tokens_today(ctx.session, ctx.org_id) >= row.daily_token_budget:
         raise BudgetExhausted()
@@ -217,6 +232,7 @@ async def _prepare(
     row = await _enabled_settings(ctx)
     provider, model = await _provider_and_model(ctx, body, row, settings)
     await _check_target(ctx, body)
+    await _check_policy(ctx, body)
     await rate_limit.hit(rate_key, limit, 600)
     # A plain AiRunRequest with the resolved provider and model (never the HTTP subclass).
     req = AiRunRequest.model_validate({**body.model_dump(), "provider": provider, "model": model})

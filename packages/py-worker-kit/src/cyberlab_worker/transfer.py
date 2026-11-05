@@ -47,14 +47,23 @@ def download(
     os.chmod(dest, 0o444)
 
 
-def upload(post: PresignedPost, path: Path) -> str:
-    """POST the result with the policy fields; returns the stored object's version id."""
+def upload(
+    post: PresignedPost,
+    path: Path,
+    *,
+    filename: str = "result.ndjson.gz",
+    content_type: str = "application/gzip",
+) -> str:
+    """POST the result with the policy fields; returns the stored object's version id.
+
+    M6: the report renderer passes its artifact's file name and content type (the policy
+    fixes the content type per format); the defaults are the analyzers' result stream."""
     try:
         with open(path, "rb") as f:
             response = httpx.post(
                 post.url,
                 data=post.fields,
-                files={"file": ("result.ndjson.gz", f, "application/gzip")},
+                files={"file": (filename, f, content_type)},
                 timeout=TIMEOUT,
             )
     except httpx.HTTPError as exc:

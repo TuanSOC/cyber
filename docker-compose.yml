@@ -53,6 +53,18 @@ x-api-env: &api-env
   GEMINI_BILLING_ENABLED: ${GEMINI_BILLING_ENABLED:-false}
   # Non-secret: which provider the dev-only platform key overlay covers (empty: none).
   AI_PLATFORM_PROVIDER: ${AI_PLATFORM_PROVIDER:-}
+  # Reports (M6): the object-locked report bucket (no default retention, RT6) and the origin
+  # printed in front of the internal citation paths (empty: none).
+  REPORTS_BUCKET: ${REPORTS_BUCKET:-reports}
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+
+# Report signing (M6): the public keys and the active kid, for the api service only (merged
+# into its env, never into *api-env: ingest, enrich, analyst and the report renderer carry no
+# signing material). The dev defaults are the committed dev pair
+# (infra/reports/dev-signing-private.json, kid dev-report-1), refused in prod.
+x-report-signing-env: &report-signing-env
+  REPORT_SIGNING_ACTIVE_KID: ${REPORT_SIGNING_ACTIVE_KID:-dev-report-1}
+  REPORT_SIGNING_PUBLIC_KEYS: '${REPORT_SIGNING_PUBLIC_KEYS:-{"dev-report-1":"zS2iP9napZDeshJwfCiTwYl8amzPuWJEJwHK8CpnF2k="}}'
 
 # Least-privilege env of the internet-facing enrich worker (M4 RT2). Never merged with
 # *api-env: no JWT secret, no MinIO credentials, no app Redis (Settings refuses them when
@@ -176,6 +188,35 @@ x-static-worker: &static-worker
   restart: unless-stopped
   networks: [analysis]
 
+# Untrusted report renderer (M6): renders a signed snapshot (attacker-controlled text from
+# captures, samples, TI, AI output and analysts) to PDF/A-3a, HTML and Markdown. The static
+# worker's isolation: root process with the analyzers' capabilities (it drops the render
+# subprocess to uid 10003, RT3), `analysis` only (broker + MinIO presigned URLs, no egress),
+# env BROKER_URL only (no DB, JWT, MinIO credentials, signing key or app Redis). The render
+# work dir is a root-owned tmpfs (`/work`, noexec, RT4).
+x-report-worker: &report-worker
+  image: cyberlab/report-worker:dev
+  build:
+    context: ./apps/workers/report
+    target: dev
+    additional_contexts:
+      jobs: ./packages/py-jobs
+      worker_kit: ./packages/py-worker-kit
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  cap_add: [SETUID, SETGID, KILL, CHOWN, DAC_OVERRIDE, FOWNER]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 128
+  mem_limit: 1g
+  cpus: 1
+  tmpfs:
+    - /tmp:size=16m,mode=1700
+    - /dev/shm:size=1m,mode=1700
+    - /work:size=96m,mode=0711,noexec
+  restart: unless-stopped
+  networks: [analysis]
+
 x-api-healthcheck: &api-healthcheck
   test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=4)"]
   interval: 5s
@@ -262,6 +303,8 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       RESULTS_BUCKET: ${RESULTS_BUCKET}
       RESULTS_TEST_BUCKET: ${RESULTS_TEST_BUCKET}
+      REPORTS_BUCKET: ${REPORTS_BUCKET:-reports}
+      REPORTS_TEST_BUCKET: ${REPORTS_TEST_BUCKET:-reports-test}
     volumes:
       - ./infra/minio:/init:ro
     networks: [backend]
@@ -280,6 +323,8 @@ services:
       BROKER_ENRICH_PASSWORD: ${BROKER_ENRICH_PASSWORD}
       # Default: an older .env without it must not crash the broker (RT25); prod requires it.
       BROKER_ANALYST_PASSWORD: ${BROKER_ANALYST_PASSWORD:-change-me-broker-analyst}
+      # M6 report renderer: the same default rule (an older .env still starts).
+      BROKER_REPORT_PASSWORD: ${BROKER_REPORT_PASSWORD:-change-me-broker-report}
     volumes:
       - ./infra/redis-broker:/init:ro
     networks: [backend, analysis, enrich]
@@ -308,7 +353,11 @@ services:
   api:
     image: cyberlab/api:dev
     build: *api-build
-    environment: *api-env
+    environment:
+      <<: [*api-env, *report-signing-env]
+      # The report signing private key (M6): a secret of the api role only.
+      REPORT_SIGNING_KEYS_FILE: /run/secrets/report_signing_private
+    secrets: [report_signing_private]
     volumes:
       - ./apps/api:/srv/api
       - ./packages/py-jobs:/packages/py-jobs
@@ -431,6 +480,20 @@ services:
       redis-broker:
         condition: service_healthy
 
+  # Report renderer (M6): consumes `report.render` (queue `report`), answers `report.rendered`
+  # on `ingest`. Phase 1 skeleton: every render fails `not_implemented`.
+  report-worker:
+    <<: *report-worker
+    environment:
+      BROKER_URL: redis://report:${BROKER_REPORT_PASSWORD:-change-me-broker-report}@redis-broker:6379/0
+    volumes:
+      - ./apps/workers/report/report_worker:/srv/workers/report/report_worker:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+      - ./packages/py-worker-kit:/packages/py-worker-kit:ro
+    depends_on:
+      redis-broker:
+        condition: service_healthy
+
   web:
     image: cyberlab/web:dev
     build:
@@ -508,6 +571,13 @@ services:
       # The key ai-mock expects (the AI pipeline tests seal it like an admin would).
       TEST_AI_MOCK_EXPECTED_KEY: ${AI_MOCK_EXPECTED_KEY:-cyberlab-ai-mock-key}
       TEST_AI_MOCK_STATE_FILE: /srv/ai-mock-state/ai-mock-last.json
+      # M6: reports go to the test bucket (lifecycle rule, purged by the tests, RT6); the
+      # signing public keys are the dev ones, and no private key file is set (the report
+      # tests install their own pair, tests/report_helpers.py: use_signing_keys).
+      REPORTS_BUCKET: ${REPORTS_TEST_BUCKET:-reports-test}
+      REPORT_SIGNING_ACTIVE_KID: dev-report-1
+      REPORT_SIGNING_PUBLIC_KEYS: '{"dev-report-1":"zS2iP9napZDeshJwfCiTwYl8amzPuWJEJwHK8CpnF2k="}'
+      TEST_BROKER_REPORT_URL: redis://report:${BROKER_REPORT_PASSWORD:-change-me-broker-report}@redis-broker:6379/${TEST_BROKER_DB:-1}
     volumes:
       - ./apps/api:/srv/api
       - ./packages/py-jobs:/packages/py-jobs
@@ -678,6 +748,28 @@ services:
       redis-broker:
         condition: service_healthy
 
+  # Report renderer tests (M6): run through `scripts/lane-test.sh <lane> --service
+  # report-worker-test pytest -q tests/` (same slot lock as api-test, RT21). Not a dependency
+  # of api-test (about 1 GB): the end-to-end render test starts it explicitly.
+  report-worker-test:
+    <<: *report-worker
+    profiles: ["test"]
+    environment:
+      BROKER_URL: redis://report:${BROKER_REPORT_PASSWORD:-change-me-broker-report}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      QUEUE_PREFIX: "test."
+      WORKER_QUEUE: report
+      RUFF_CACHE_DIR: /tmp/ruff
+      MYPY_CACHE_DIR: /tmp/mypy
+    volumes:
+      - ./apps/workers/report/report_worker:/srv/workers/report/report_worker:ro
+      - ./apps/workers/report/tests:/srv/workers/report/tests:ro
+      - ./apps/workers/report/pyproject.toml:/srv/workers/report/pyproject.toml:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+      - ./packages/py-worker-kit:/packages/py-worker-kit:ro
+    depends_on:
+      redis-broker:
+        condition: service_healthy
+
   # --- e2e profile: Playwright against the running stack through the gateway ---
   e2e:
     profiles: ["e2e"]
@@ -708,6 +800,10 @@ secrets:
   # Dev-only AI seal private key (committed kid dev-ai-1, refused in prod); same rules.
   ai_seal_private:
     file: ./infra/ai/dev-seal-private.json
+  # Dev-only report signing private key (committed kid dev-report-1, refused in prod); the
+  # api service only. The prod override swaps the file.
+  report_signing_private:
+    file: ./infra/reports/dev-signing-private.json
 
 volumes:
   pgdata:

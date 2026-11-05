@@ -23,7 +23,7 @@ import signal
 import stat
 import subprocess
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
@@ -39,6 +39,21 @@ TOOL_UID = 10003
 TOOL_GID = 10003
 TOOL_PATH = "/usr/local/zeek/bin:/usr/local/bin:/usr/bin:/bin"
 MAX_OUTPUT_FILE = 2 * 1024**3
+DEFAULT_NOFILE = 1024
+
+
+@dataclass(frozen=True)
+class Rlimits:
+    """Per-run resource limits of a tool (M6, RT3). None keeps the default of `run_tool`:
+    `cpu_s` = the timeout, `as_bytes` = `memory_bytes` (unlimited when that is None too),
+    `fsize_bytes` = 2 GiB, `nofile` = 1024, `nproc` = unlimited. `nproc` counts every
+    process of the tool uid (the worker's `reset` kills leftovers before each run)."""
+
+    as_bytes: int | None = None
+    cpu_s: int | None = None
+    fsize_bytes: int | None = None
+    nofile: int | None = None
+    nproc: int | None = None
 
 
 class ToolTimeout(Exception):
@@ -94,21 +109,34 @@ def prepare(work_dir: Path, job_id: str) -> JobDirs:
     return JobDirs(root=root, input=input_dir, out=out)
 
 
-def _child_setup(cpu_s: int, memory_bytes: int | None) -> None:
+def _child_setup(
+    cpu_s: int,
+    memory_bytes: int | None,
+    limits: Rlimits | None = None,
+    deny_extra_domains: Sequence[int] = (),
+    deny_io_uring: bool = False,
+) -> None:
     """Runs in the child after it dropped to the tool uid: limits, OOM priority, seccomp."""
-    resource.setrlimit(resource.RLIMIT_CPU, (cpu_s, cpu_s))
+    limits = limits or Rlimits()
+    cpu = limits.cpu_s if limits.cpu_s is not None else cpu_s
+    fsize = limits.fsize_bytes if limits.fsize_bytes is not None else MAX_OUTPUT_FILE
+    nofile = limits.nofile if limits.nofile is not None else DEFAULT_NOFILE
+    memory = limits.as_bytes if limits.as_bytes is not None else memory_bytes
+    resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_FILE, MAX_OUTPUT_FILE))
-    resource.setrlimit(resource.RLIMIT_NOFILE, (1024, 1024))
-    if memory_bytes is not None:
-        resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+    resource.setrlimit(resource.RLIMIT_FSIZE, (fsize, fsize))
+    resource.setrlimit(resource.RLIMIT_NOFILE, (nofile, nofile))
+    if memory is not None:
+        resource.setrlimit(resource.RLIMIT_AS, (memory, memory))
+    if limits.nproc is not None:
+        resource.setrlimit(resource.RLIMIT_NPROC, (limits.nproc, limits.nproc))
     # Under memory pressure the kernel kills the tool, never the worker that reports the job.
     # Dropping the uid made this process non-dumpable (root-owned /proc/self); restore the
     # flag so it may raise its own OOM score. exec() re-evaluates it as usual.
     _LIBC.prctl(PR_SET_DUMPABLE, 1, 0, 0, 0)
     with open("/proc/self/oom_score_adj", "w") as f:
         f.write("1000")
-    seccomp.deny_network()
+    seccomp.deny_network(extra_domains=deny_extra_domains, deny_io_uring=deny_io_uring)
 
 
 def run_tool(
@@ -120,12 +148,22 @@ def run_tool(
     extra_env: dict[str, str] | None = None,
     memory_bytes: int | None = None,
     cwd: Path | None = None,
+    rlimits: Rlimits | None = None,
+    deny_extra_domains: Sequence[int] = (),
+    deny_io_uring: bool = False,
 ) -> None:
     """Run one tool as the tool uid in out/. Raises ToolTimeout / ToolFailed.
 
     `memory_bytes` caps the tool's address space (RLIMIT_AS); size it per tool, since
     emulators and AV engines reserve far more virtual memory than they touch.
+
+    M6 (RT3): `rlimits` overrides the per-run limits (pass either it or `memory_bytes` for
+    the address space, not both); `deny_extra_domains` / `deny_io_uring` extend the seccomp
+    filter (`seccomp.deny_network`). The defaults keep the analyzers' behaviour unchanged.
     """
+    if rlimits is not None and rlimits.as_bytes is not None and memory_bytes is not None:
+        raise ValueError("pass the address-space limit once: rlimits.as_bytes or memory_bytes")
+    extra_domains = tuple(int(d) for d in deny_extra_domains)
     env = {
         "PATH": TOOL_PATH,
         "HOME": str(dirs.out),
@@ -157,7 +195,9 @@ def run_tool(
             umask=0o077,
             start_new_session=True,
             close_fds=True,
-            preexec_fn=lambda: _child_setup(cpu, memory_bytes),  # no locks taken
+            preexec_fn=lambda: _child_setup(  # no locks taken
+                cpu, memory_bytes, rlimits, extra_domains, deny_io_uring
+            ),
         )
         try:
             returncode = proc.wait(timeout=timeout_s)

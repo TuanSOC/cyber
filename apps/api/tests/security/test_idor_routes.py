@@ -13,6 +13,7 @@ parameters and state hooks; the cases and assertions below are unchanged.
 import ast
 import dataclasses
 import uuid
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +25,14 @@ from app.modules.organizations.models import MemberRole
 from tests import static_results
 from tests.factories import Registered, add_member, csrf, make_user, new_client, register
 from tests.pcap_results import seed_results
-from tests.security import idor_cases_ai, idor_cases_reads
+from tests.security import (
+    idor_cases_ai,
+    idor_cases_attack,
+    idor_cases_case,
+    idor_cases_reads,
+    idor_cases_renders,
+    idor_cases_reports,
+)
 from tests.security.idor_types import (
     PathOverrides,
     Request,
@@ -36,6 +44,14 @@ from tests.security.idor_types import (
 from tests.ti_api_helpers import add_result, capture_sends, enable, lookup
 
 CASE_MODULES = (idor_cases_reads, idor_cases_ai)
+# M6: the per-owner modules of phases 2-5. Each also exports `PENDING_ROUTES`: frozen 501
+# stubs whose cases land with their phase. They are skipped here and reported (never
+# silently passed); phase 9 asserts every set is empty.
+M6_CASE_MODULES = (idor_cases_case, idor_cases_reports, idor_cases_renders, idor_cases_attack)
+CASE_MODULES = (*CASE_MODULES, *M6_CASE_MODULES)
+PENDING_ROUTES: frozenset[tuple[str, str]] = frozenset().union(
+    *(module.PENDING_ROUTES for module in M6_CASE_MODULES)
+)
 
 # (method, path template) -> request kwargs that are valid for the resource owner.
 ROUTE_CASES: RouteCases = {
@@ -187,10 +203,24 @@ def test_route_enumeration_is_not_empty() -> None:
 
 
 def test_every_org_scoped_route_has_an_idor_case() -> None:
-    missing = org_scoped_routes() - set(ROUTE_CASES)
+    missing = org_scoped_routes() - set(ROUTE_CASES) - PENDING_ROUTES
     stale = set(ROUTE_CASES) - org_scoped_routes()
     assert missing == set(), f"add IDOR cases for: {sorted(missing)}"
     assert stale == set(), f"remove stale IDOR cases: {sorted(stale)}"
+
+
+def test_pending_routes_are_real_routes_without_cases() -> None:
+    """M6: a pending route must exist (a 501 stub) and must not also have a case; the count
+    is reported so a pending route is never silently passed."""
+    assert PENDING_ROUTES <= org_scoped_routes(), sorted(PENDING_ROUTES - org_scoped_routes())
+    assert PENDING_ROUTES.isdisjoint(ROUTE_CASES), sorted(PENDING_ROUTES & set(ROUTE_CASES))
+    for module in M6_CASE_MODULES:
+        assert module.PENDING_ROUTES.isdisjoint(module.ROUTE_CASES), module.__name__
+    if PENDING_ROUTES:
+        warnings.warn(
+            f"{len(PENDING_ROUTES)} M6 routes have no IDOR case yet (PENDING_ROUTES)",
+            stacklevel=1,
+        )
 
 
 def test_no_route_is_hidden_from_the_schema() -> None:

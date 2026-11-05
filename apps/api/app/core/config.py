@@ -2,6 +2,7 @@ import base64
 import binascii
 from functools import lru_cache
 from typing import Literal, Self
+from urllib.parse import urlsplit
 
 from pydantic import (
     BaseModel,
@@ -37,6 +38,11 @@ DEV_SEAL_PUBLIC_KEYS = frozenset({"yzkMNEv4XawVLz1SuyMqEqSDdzMc1QpC7ERo9zFe7Gs="
 ANALYST_FORBIDDEN = (*ENRICH_FORBIDDEN, "ti_seal_private_keys_file")
 # The committed dev-only AI seal key pair (infra/ai/dev-seal-private.json, kid dev-ai-1).
 DEV_AI_SEAL_PUBLIC_KEYS = frozenset({"YqrtDS8h4Q5PCQ0wa+0X7Qy72jDi3HYjQfotX+oH6io="})
+# The committed dev-only report signing pair (infra/reports/dev-signing-private.json, kid
+# dev-report-1, M6): its private half is public, so prod refuses its public key.
+DEV_REPORT_SIGNING_PUBLIC_KEYS = frozenset({"zS2iP9napZDeshJwfCiTwYl8amzPuWJEJwHK8CpnF2k="})
+# Report defaults shared with the renderer contract (`cyberlab_jobs.report`).
+REPORT_DEFAULT_MAX_RENDER_UNITS = 750_000  # ~250 A4 pages; phase 4 calibrates (RT1)
 # Per-org AI budget defaults (`ai_org_settings` server defaults, migration 0011, RT9).
 AI_DEFAULT_DAILY_TOKEN_BUDGET = 1_000_000
 AI_DEFAULT_RUN_TOKEN_CAP = 100_000
@@ -224,6 +230,33 @@ class Settings(BaseSettings):
     ai_active_runs_per_org: int = Field(default=12, ge=1)
     ai_active_runs_global: int = Field(default=40, ge=1)
 
+    # --- Reports and case management (M6) ---
+    # Object-locked, versioned, no default retention (per-object GOVERNANCE, RT6);
+    # api-test uses REPORTS_TEST_BUCKET (`reports-test`).
+    reports_bucket: str = "reports"
+    report_max_snapshot_bytes: int = Field(default=8 * 1024**2, ge=1024, le=8 * 1024**2)
+    report_max_artifact_bytes: int = Field(default=32 * 1024**2, ge=1024, le=32 * 1024**2)
+    # The render budget (`cyberlab_jobs.report.render_units`): finalize refuses above it (RT1).
+    report_max_render_units: int = Field(default=REPORT_DEFAULT_MAX_RENDER_UNITS, ge=1_000)
+    report_max_pages: int = Field(default=300, ge=1, le=300)
+    report_render_deadline_s: int = Field(default=600, ge=60)
+    report_render_timeout_s: int = Field(default=120, ge=10, le=600)
+    report_renders_per_user_10min: int = Field(default=20, ge=1)
+    report_finalize_per_user_10min: int = Field(default=10, ge=1)
+    report_preview_per_user_10min: int = Field(default=30, ge=1)
+    # One report-worker replica renders one report at a time: the global cap scales with
+    # the replicas (RT5).
+    report_active_renders_per_org: int = Field(default=2, ge=1)
+    report_active_renders_global: int = Field(default=4, ge=1)
+    timeline_export_max_rows: int = Field(default=50_000, ge=1, le=1_000_000)
+    # Origin printed in front of the citation appendix paths (internal profile only, RT8).
+    public_base_url: str | None = None
+    # Ed25519 report signing (M6): JSON {kid: base64 raw private key}, the api role only.
+    report_signing_keys_file: str | None = None
+    # kid -> base64 raw 32-byte Ed25519 public key (verification, the public keys route).
+    report_signing_public_keys: dict[str, str] = {}
+    report_signing_active_kid: str | None = None
+
     def need(self, name: RequiredSetting) -> str:
         """A setting every role but enrich and analyst requires (validated at startup)."""
         value: str | None = getattr(self, name)
@@ -262,13 +295,46 @@ class Settings(BaseSettings):
         "ai_platform_provider",
         "ai_anthropic_base_url",
         "ai_gemini_base_url",
+        "public_base_url",
+        "report_signing_keys_file",
+        "report_signing_active_kid",
         mode="before",
     )
     @classmethod
     def _blank_ti_is_unset(cls, value: object) -> object:
         return None if isinstance(value, str) and not value.strip() else value
 
-    @field_validator("ti_seal_active_kid", "ai_seal_active_kid")
+    @field_validator("report_signing_public_keys")
+    @classmethod
+    def _signing_public_keys(cls, value: dict[str, str]) -> dict[str, str]:
+        for kid, encoded in value.items():
+            if not KID_PATTERN.fullmatch(kid):
+                raise ValueError("REPORT_SIGNING_PUBLIC_KEYS has an invalid kid")
+            if len(_key_bytes(encoded)) != 32:
+                raise ValueError(
+                    f"REPORT_SIGNING_PUBLIC_KEYS[{kid!r}] is not a base64 Ed25519 public key"
+                )
+        return value
+
+    @field_validator("public_base_url")
+    @classmethod
+    def _public_base_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in ("http", "https")
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in ("", "/")
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("PUBLIC_BASE_URL must be an origin such as https://cyberlab.example")
+        return value.rstrip("/")
+
+    @field_validator("ti_seal_active_kid", "ai_seal_active_kid", "report_signing_active_kid")
     @classmethod
     def _active_kid(cls, value: str | None, info: ValidationInfo) -> str | None:
         if value is not None and not KID_PATTERN.fullmatch(value):
@@ -279,6 +345,10 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _role_guards(self) -> Self:
         role = self.process_role
+        # The report signing private key: the api role only (M6). Ingest, enrich, analyst
+        # and the report renderer never hold it.
+        if role != "api" and self.report_signing_keys_file is not None:
+            raise ValueError("REPORT_SIGNING_KEYS_FILE is only accepted with PROCESS_ROLE=api")
         # The AI private and platform keys: the analyst worker only (enrich and the API never
         # open AI keys).
         if role != "analyst":
@@ -359,7 +429,36 @@ class Settings(BaseSettings):
             raise ValueError(
                 "AI_SEAL_PUBLIC_KEYS: the committed dev seal key is not allowed in prod"
             )
+        self._report_prod_guards()
         return self
+
+    def _report_prod_guards(self) -> None:
+        """M6: prod signs with a real key pair, never the committed dev one, and prints
+        https links only (a plain-http PUBLIC_BASE_URL is allowed on localhost only)."""
+        if self.process_role == "api":
+            kid = self.report_signing_active_kid
+            if not kid or kid not in self.report_signing_public_keys:
+                raise ValueError(
+                    "REPORT_SIGNING_ACTIVE_KID must name a key in REPORT_SIGNING_PUBLIC_KEYS"
+                )
+            if self.report_signing_keys_file is None:
+                raise ValueError("REPORT_SIGNING_KEYS_FILE is required for the api in prod")
+        if any(kid.lower().startswith("dev-") for kid in self.report_signing_public_keys) or (
+            self.report_signing_active_kid or ""
+        ).lower().startswith("dev-"):
+            raise ValueError("REPORT_SIGNING_*: dev- signing keys are not allowed in prod")
+        if any(
+            _key_bytes(v) in _DEV_REPORT_KEY_BYTES
+            for v in self.report_signing_public_keys.values()
+        ):
+            raise ValueError(
+                "REPORT_SIGNING_PUBLIC_KEYS: the committed dev signing key is not allowed in prod"
+            )
+        url = self.public_base_url
+        if url is not None and url.startswith("http://"):
+            host = urlsplit(url).hostname or ""
+            if host not in ("localhost", "127.0.0.1", "::1"):
+                raise ValueError("PUBLIC_BASE_URL must use https in prod (except localhost)")
 
 
 def _key_bytes(encoded: str) -> bytes:
@@ -371,6 +470,7 @@ def _key_bytes(encoded: str) -> bytes:
 
 _DEV_KEY_BYTES = frozenset(_key_bytes(k) for k in DEV_SEAL_PUBLIC_KEYS)
 _DEV_AI_KEY_BYTES = frozenset(_key_bytes(k) for k in DEV_AI_SEAL_PUBLIC_KEYS)
+_DEV_REPORT_KEY_BYTES = frozenset(_key_bytes(k) for k in DEV_REPORT_SIGNING_PUBLIC_KEYS)
 
 
 @lru_cache

@@ -44,7 +44,8 @@ RUN_STATUSES = ("queued", "running", "waiting", "completed", "partial", "failed"
 RUN_ACTIVE = ("queued", "running", "waiting")
 RUN_FINAL = ("completed", "partial", "failed")
 ITEM_STATES = ("pending", "done", "cached", "abandoned")
-ITEM_REASONS = ("rate_limited", "quota_exhausted", "deadline", "auth_failed")
+# `policy_blocked` (M6, migration 0012): the case / evidence share policy forbids TI now.
+ITEM_REASONS = ("rate_limited", "quota_exhausted", "deadline", "auth_failed", "policy_blocked")
 RESULT_STATUSES = ("ok", "not_found", "error", "auth_failed")
 SUMMARY_MAX_BYTES = 16 * 1024
 MAX_VALUE_CHARS = 2048

@@ -63,6 +63,7 @@ from sqlalchemy.exc import DBAPIError
 from app.core.config import Settings, get_settings
 from app.core.tenancy import tenant_session
 from app.modules.audit import service as audit
+from app.modules.investigations import policy as share_policy
 from app.modules.threat_intel import cache, lifecycle
 from app.modules.threat_intel.catalog import ProviderLimits
 from app.modules.threat_intel.http import KeyAuth, ti_client
@@ -956,6 +957,25 @@ async def _save_verify(
         )
 
 
+async def _policy_blocked(org_id: uuid.UUID, run_id: uuid.UUID) -> bool:
+    """M6: the share policy of a job-scope run's evidence and case as it is now. Manual
+    lookups have no case scope and are never blocked here (documented residual)."""
+    async with tenant_session(org_id, None) as s:
+        run = (
+            await s.execute(
+                select(TiEnrichmentRun.scope, TiEnrichmentRun.job_id).where(
+                    TiEnrichmentRun.id == run_id, TiEnrichmentRun.organization_id == org_id
+                )
+            )
+        ).one_or_none()
+        if run is None or run.scope != "job" or run.job_id is None:
+            return False
+        found = await share_policy.load_policy(s, org_id, job_ids=(run.job_id,))
+    if found.ti_blocked:
+        log.info("ti run %s: blocked by the share policy (%s)", run_id, found.ti_reason)
+    return found.ti_blocked
+
+
 async def _finalize(org_id: uuid.UUID, run_id: uuid.UUID, reason: str | None) -> None:
     async with tenant_session(org_id, None) as s:
         status = await lifecycle.finalize_run(s, org_id, run_id, abandon_reason=reason)
@@ -1006,6 +1026,10 @@ async def handle_enrich(message: Mapping[str, Any], deps: Deps | None = None) ->
     try:
         if db_now >= deadline_at:
             await _finalize(org_id, msg.run_id, "deadline")
+            return
+        if await _policy_blocked(org_id, msg.run_id):
+            # M6 (RT20): re-checked before every slice; no provider is contacted.
+            await _finalize(org_id, msg.run_id, "policy_blocked")
             return
         work = _Slice(deps, org_id, msg.run_id, token, _epoch(deadline_at))
         lanes = await work.prepare()

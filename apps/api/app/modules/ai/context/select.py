@@ -645,9 +645,16 @@ async def case_timeline_items(
     investigation_id: uuid.UUID,
     *,
     cap: int = CAP_TIMELINE,
+    exclude_evidence: frozenset[uuid.UUID] = frozenset(),
 ) -> Selection:
+    """M6: `exclude_evidence` (the share policy's AI-excluded evidence) drops their entries
+    from the page; `total` then counts the remaining entries of the page as at least."""
     entries = await case_timeline.page(session, org_id, investigation_id, limit=cap)
     total = await case_timeline.count(session, org_id, investigation_id)
+    if exclude_evidence:
+        kept = [e for e in entries if e.evidence_id not in exclude_evidence]
+        total = max(total - (len(entries) - len(kept)), len(kept))
+        entries = kept
     items = [
         RawItem(
             RefKind.TIMELINE,
@@ -704,10 +711,14 @@ async def evidence_items(
     investigation_id: uuid.UUID,
     *,
     cap: int = CAP_EVIDENCE,
+    exclude: frozenset[uuid.UUID] = frozenset(),
 ) -> Selection:
-    """One `K` per evidence (upload order): file facts, its sha256 and a custody summary."""
+    """One `K` per evidence (upload order): file facts, its sha256 and a custody summary.
+    M6: evidence in `exclude` (AI-excluded by the share policy) is left out entirely."""
     e = Evidence
     scope = [e.organization_id == org_id, e.investigation_id == investigation_id]
+    if exclude:
+        scope.append(e.id.not_in(list(exclude)))
     rows = (
         await session.scalars(select(e).where(*scope).order_by(e.uploaded_at, e.id).limit(cap))
     ).all()

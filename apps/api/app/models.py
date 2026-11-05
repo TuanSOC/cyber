@@ -14,8 +14,15 @@ from app.modules.ai.models import (
 from app.modules.analysis.models import AnalysisJob, AnalysisJobIndex
 from app.modules.audit.models import AuditLog
 from app.modules.auth.models import AuthEvent, RefreshToken
+from app.modules.case_attack.models import CaseAttackMapping
 from app.modules.evidence.models import Evidence, EvidenceCustodyEvent, EvidenceHash
-from app.modules.investigations.models import Investigation
+from app.modules.investigations.models import (
+    EvidenceSharePolicy,
+    Investigation,
+    InvestigationStatusEvent,
+)
+from app.modules.ioc_collections.models import IocCollection, IocCollectionItem
+from app.modules.notes.models import AnalystNote, AnalystNoteVersion
 from app.modules.organizations.models import Organization, OrganizationMember
 from app.modules.pcap_analysis.models import (
     AnalysisFinding,
@@ -24,6 +31,13 @@ from app.modules.pcap_analysis.models import (
     NetworkFlow,
     NetworkRecord,
     TimelineEntry,
+)
+from app.modules.reports.models import (
+    Report,
+    ReportCitation,
+    ReportRender,
+    ReportRenderIndex,
+    ReportVersion,
 )
 from app.modules.static_analysis.models import (
     MalwareCapability,
@@ -57,14 +71,21 @@ __all__ = [
     "AnalysisFinding",
     "AnalysisJob",
     "AnalysisJobIndex",
+    "AnalystNote",
+    "AnalystNoteVersion",
     "AuditLog",
     "AuthEvent",
     "Base",
+    "CaseAttackMapping",
     "Evidence",
     "EvidenceCustodyEvent",
     "EvidenceHash",
+    "EvidenceSharePolicy",
     "Investigation",
+    "InvestigationStatusEvent",
     "Ioc",
+    "IocCollection",
+    "IocCollectionItem",
     "MalwareCapability",
     "MalwareExport",
     "MalwareImport",
@@ -79,6 +100,11 @@ __all__ = [
     "Organization",
     "OrganizationMember",
     "RefreshToken",
+    "Report",
+    "ReportCitation",
+    "ReportRender",
+    "ReportRenderIndex",
+    "ReportVersion",
     "TiEnrichmentRun",
     "TiOrgSettings",
     "TiProviderConfig",

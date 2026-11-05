@@ -42,6 +42,19 @@ async def test_every_tenant_table_has_forced_rls(owner_engine: AsyncEngine) -> N
         "ai_context_refs",
         "ai_outputs",
         "ai_citations",
+        # M6 (migration 0012)
+        "investigation_status_events",
+        "evidence_share_policies",
+        "analyst_notes",
+        "analyst_note_versions",
+        "ioc_collections",
+        "ioc_collection_items",
+        "case_attack_mappings",
+        "reports",
+        "report_versions",
+        "report_citations",
+        "report_renders",
+        "report_render_index",
     }
     unprotected = [r.relname for r in rows if not (r.relrowsecurity and r.relforcerowsecurity)]
     assert unprotected == []
@@ -104,6 +117,27 @@ async def test_system_visible_ai_run_index_holds_no_tenant_data(
         "lease_owner",
         "attempts",
         "calls",
+    }
+
+
+async def test_system_visible_report_render_index_holds_no_tenant_data(
+    owner_engine: AsyncEngine,
+) -> None:
+    """Same rule for the report render index (M6): ids and scheduling only, never the
+    format, the token, hashes or report content."""
+    query = text(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = 'public' AND table_name = 'report_render_index'"
+    )
+    async with owner_engine.connect() as conn:
+        columns = set((await conn.execute(query)).scalars())
+    assert columns == {
+        "render_id",
+        "organization_id",
+        "status",
+        "dispatched_at",
+        "deadline_at",
+        "attempts",
     }
 
 

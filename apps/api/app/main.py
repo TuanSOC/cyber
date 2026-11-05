@@ -15,10 +15,17 @@ from app.modules.analysis.router import router as analysis_router
 from app.modules.attack.router import router as attack_router
 from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
+from app.modules.case_attack.router import router as case_attack_router
+from app.modules.case_timeline.router import router as case_timeline_router
 from app.modules.evidence.router import router as evidence_router
 from app.modules.investigations.router import router as investigations_router
+from app.modules.ioc_collections.router import router as ioc_collections_router
+from app.modules.notes.router import router as notes_router
 from app.modules.organizations.router import router as orgs_router
 from app.modules.pcap_analysis.router import router as pcap_analysis_router
+from app.modules.reports.router import router as reports_router
+from app.modules.reports.router_keys import router as report_keys_router
+from app.modules.reports.router_renders import router as report_renders_router
 from app.modules.static_analysis.router import router as static_analysis_router
 from app.modules.threat_intel.router import router as threat_intel_router
 
@@ -59,6 +66,14 @@ def create_app() -> FastAPI:
     v1.include_router(threat_intel_router)
     v1.include_router(attack_router)
     v1.include_router(ai_router)
+    # M6: case management and reports.
+    v1.include_router(notes_router)
+    v1.include_router(ioc_collections_router)
+    v1.include_router(case_attack_router)
+    v1.include_router(case_timeline_router)
+    v1.include_router(reports_router)
+    v1.include_router(report_renders_router)
+    v1.include_router(report_keys_router)
     app.include_router(v1)
     return app
 

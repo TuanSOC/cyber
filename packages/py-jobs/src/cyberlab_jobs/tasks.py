@@ -15,6 +15,10 @@ TI_VERIFY = "ti.verify"
 AI_RUN = "ai.run"
 AI_RESUME = "ai.resume"
 AI_VERIFY = "ai.verify"
+# Reports (M6): `report.render` goes to the untrusted report renderer (queue `report`); its
+# answer `report.rendered` goes to the trusted ingest worker (queue `ingest`).
+REPORT_RENDER = "report.render"
+REPORT_RENDERED = "report.rendered"
 
 
 @dataclass(frozen=True)
@@ -42,3 +46,7 @@ class Queues:
     @property
     def analyst(self) -> str:
         return f"{self.prefix}analyst"
+
+    @property
+    def report(self) -> str:
+        return f"{self.prefix}report"

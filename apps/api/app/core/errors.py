@@ -23,11 +23,14 @@ class AppError(Exception):
         code: str | None = None,
         headers: dict[str, str] | None = None,
         clear_auth_cookies: bool = False,
+        extra: dict[str, object] | None = None,
     ) -> None:
         self.message = message or self.message
         self.code = code or self.code
         self.headers = headers or {}
         self.clear_auth_cookies = clear_auth_cookies
+        # M6: fixed, non-sensitive detail fields next to code / message (e.g. `reason`).
+        self.extra = extra or {}
         super().__init__(self.message)
 
 
@@ -87,7 +90,9 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _app_error(_: Request, exc: AppError) -> JSONResponse:
         response = JSONResponse(
-            error_body(exc.code, exc.message), status_code=exc.status_code, headers=exc.headers
+            error_body(exc.code, exc.message, **getattr(exc, "extra", {})),
+            status_code=exc.status_code,
+            headers=exc.headers,
         )
         if exc.clear_auth_cookies:
             clear_auth_cookies(response)

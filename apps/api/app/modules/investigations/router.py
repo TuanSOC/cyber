@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.core.pagination import PageParamsDep
 from app.core.rbac import OrgContext, Permission, require
+from app.core.stubs import not_implemented
 from app.core.validation import SearchTerm
 from app.modules.investigations import service
 from app.modules.investigations import timeline as case_timeline
@@ -16,6 +17,7 @@ from app.modules.investigations.schemas import (
     InvestigationPage,
     InvestigationTimelinePage,
     InvestigationUpdate,
+    StatusEventPage,
     TimelineEntryOut,
 )
 
@@ -64,15 +66,28 @@ async def get_investigation_timeline(
     ctx: EvidenceRead,
     cursor: Annotated[str | None, Query(max_length=512)] = None,
     limit: Annotated[int, Query(ge=1, le=case_timeline.MAX_PAGE)] = case_timeline.DEFAULT_PAGE,
+    kinds: Annotated[list[case_timeline.TimelineKind] | None, Query(max_length=16)] = None,
 ) -> InvestigationTimelinePage:
     """Merged case timeline: custody, job lifecycle, the latest pcap job's timeline and alerts
-    per evidence, and static findings at analysis time; sorted (ts, kind, ref_id)."""
+    per evidence, and static findings at analysis time; sorted (ts, kind, ref_id). M6: case
+    events (notes, status changes) have no `evidence_id`; `kinds` filters by ref kind."""
     await case_timeline.ensure_investigation(ctx.session, ctx.org_id, investigation_id)
     after = case_timeline.Cursor.decode(cursor) if cursor else None
     entries = await case_timeline.page(
-        ctx.session, ctx.org_id, investigation_id, limit=limit + 1, after=after
+        ctx.session, ctx.org_id, investigation_id, limit=limit + 1, after=after, kinds=kinds
     )
     return InvestigationTimelinePage(
         items=[TimelineEntryOut.model_validate(e, from_attributes=True) for e in entries[:limit]],
         next_cursor=case_timeline.next_cursor(entries, limit),
     )
+
+
+@router.get("/{investigation_id}/status-events", response_model=StatusEventPage)
+async def list_status_events(
+    investigation_id: uuid.UUID,
+    ctx: InvRead,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> StatusEventPage:
+    """Status history of the case, newest first (M6 phase 2; 501 until then)."""
+    raise not_implemented()

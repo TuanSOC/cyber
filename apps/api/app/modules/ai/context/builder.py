@@ -56,6 +56,7 @@ from app.modules.ai.contracts import (
 from app.modules.ai.labels import format_label
 from app.modules.ai.models import AiOrgSettings
 from app.modules.analysis.models import AnalysisJob, AnalysisStatus, Analyzer
+from app.modules.investigations import policy
 from app.modules.investigations.models import Investigation
 from app.modules.pcap_analysis.models import AnalysisFinding, NetworkAlert
 
@@ -388,24 +389,50 @@ async def _job_selections(
 # --- investigation scope -------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class _Case:
+    investigation: Investigation
+    jobs: list[AnalysisJob]
+    omitted: int
+    scope: RunScope
+    # M6: evidence AI-excluded by the share policy (skipped, counted in `policy_excluded`).
+    excluded: frozenset[uuid.UUID]
+
+
 async def _case_jobs(
     session: AsyncSession, org_id: uuid.UUID, investigation_id: uuid.UUID, opts: Options
-) -> tuple[Investigation, list[AnalysisJob], int, RunScope]:
+) -> _Case:
     investigation = await sel.get_investigation(session, org_id, investigation_id)
     if investigation is None:
         raise ContextBuildError("target_not_found")
-    jobs = await sel.latest_succeeded_jobs(session, org_id, investigation_id)
+    found = await policy.load_policy(session, org_id, investigation_id=investigation_id)
+    excluded = found.excluded_evidence_ids
+    jobs = [
+        j
+        for j in await sel.latest_succeeded_jobs(session, org_id, investigation_id)
+        if j.evidence_id not in excluded
+    ]
     if not jobs:
         raise ContextBuildError("context_empty")
     omitted = max(len(jobs) - opts.max_jobs, 0)
     jobs = jobs[: opts.max_jobs]
+    evidence_ids = await sel.evidence_ids(session, org_id, investigation_id)
     scope = RunScope(
         scope=AiScope.INVESTIGATION,
         job_ids=tuple(j.id for j in jobs),
         investigation_id=investigation_id,
-        evidence_ids=tuple(await sel.evidence_ids(session, org_id, investigation_id)),
+        evidence_ids=tuple(e for e in evidence_ids if e not in excluded),
     )
-    return investigation, jobs, omitted, scope
+    return _Case(investigation, jobs, omitted, scope, excluded)
+
+
+def _with_policy_count(ctx: FrozenContext, excluded: frozenset[uuid.UUID]) -> FrozenContext:
+    """`context_stats.policy_excluded` (stored, never rendered: the sha256 covers only the
+    items, and `prompt` has no phrase for it, so the pinned digests are unchanged)."""
+    if not excluded:
+        return ctx
+    stats = ctx.stats.model_copy(update={"policy_excluded": len(excluded)})
+    return ctx.model_copy(update={"stats": stats})
 
 
 async def _investigation_task(
@@ -416,17 +443,22 @@ async def _investigation_task(
     opts: Options,
     pz: Pseudonymizer,
 ) -> BuiltRun:
-    _, jobs, omitted, scope = await _case_jobs(session, org_id, investigation_id, opts)
+    case = await _case_jobs(session, org_id, investigation_id, opts)
     if task is AiTask.IOC_CORRELATION:
-        selections = await _correlation(session, org_id, jobs, opts)
+        selections = await _correlation(session, org_id, case.jobs, opts)
     elif task is AiTask.ATTACK_MAPPING:
-        selections = await _attack_mapping(session, org_id, jobs)
+        selections = await _attack_mapping(session, org_id, case.jobs)
     else:
         raise ContextBuildError("task_not_applicable")
     root = assemble(
-        task, scope, selections, pz, budget_tokens=opts.budget_tokens, jobs_omitted=omitted
+        task,
+        case.scope,
+        selections,
+        pz,
+        budget_tokens=opts.budget_tokens,
+        jobs_omitted=case.omitted,
     )
-    return BuiltRun(root=root)
+    return BuiltRun(root=_with_policy_count(root, case.excluded))
 
 
 async def _incident(
@@ -436,7 +468,8 @@ async def _incident(
     opts: Options,
     pz: Pseudonymizer,
 ) -> BuiltRun:
-    investigation, jobs, omitted, scope = await _case_jobs(session, org_id, investigation_id, opts)
+    case = await _case_jobs(session, org_id, investigation_id, opts)
+    jobs = case.jobs
     children = []
     for job in jobs:
         selections = await _digest_selections(session, org_id, job, opts)
@@ -447,17 +480,19 @@ async def _incident(
             )
         )
     root_selections = [
-        sel.investigation_item(investigation, include_text=opts.include_case_text),
-        await sel.evidence_items(session, org_id, investigation_id),
+        sel.investigation_item(case.investigation, include_text=opts.include_case_text),
+        await sel.evidence_items(session, org_id, investigation_id, exclude=case.excluded),
         await sel.job_items(session, org_id, jobs),
-        await sel.case_timeline_items(session, org_id, investigation_id),
+        await sel.case_timeline_items(
+            session, org_id, investigation_id, exclude_evidence=case.excluded
+        ),
     ]
     root = assemble(
         AiTask.INCIDENT_SUMMARY,
-        scope,
+        case.scope,
         root_selections,
         pz,
         budget_tokens=opts.budget_tokens,
-        jobs_omitted=omitted,
+        jobs_omitted=case.omitted,
     )
-    return BuiltRun(root=root, children=tuple(children))
+    return BuiltRun(root=_with_policy_count(root, case.excluded), children=tuple(children))

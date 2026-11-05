@@ -173,3 +173,10 @@ async def reap_ai_runs() -> int:
     if reaped:
         log.info("reaped %d stale ai runs", reaped)
     return reaped
+
+
+async def reap_report_renders() -> int:
+    """M6 (frozen entry point; implemented by phase 4): re-dispatch `queued` renders that
+    were never dispatched and fail renders past their deadline with `timeout`. Returns how
+    many it handled; 0 until phase 4."""
+    return 0

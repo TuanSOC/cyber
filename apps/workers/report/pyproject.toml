@@ -1,0 +1,57 @@
+[project]
+name = "cyberlab-report-worker"
+version = "0.1.0"
+description = "CyberLab report renderer (untrusted-input worker): signed snapshot -> PDF/A-3a, HTML, Markdown"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "celery[redis]>=5.5",
+    "httpx>=0.28",
+    "pydantic>=2.9",
+    "cyberlab-jobs",
+    "cyberlab-worker",
+    # Pinned below the next major (a new major is a parent decision). 70.0 fixes
+    # CVE-2026-55073 (stylesheets / xmp_metadata bypassed the fetcher) and CVE-2026-106443
+    # (EPS -> Ghostscript); 69.0 CVE-2026-49452; 68.0 CVE-2025-68616 (redirect SSRF). RT16.
+    "weasyprint>=70.0,<71",
+    # CVE-2025-66034.
+    "fonttools>=4.60.2",
+    "jinja2>=3.1.6",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "redis>=5.2",
+    # Tests only: per-page text extraction of rendered PDFs (phase 4).
+    "pypdf>=5.0",
+]
+
+[tool.uv.sources]
+# The image places the contracts at /packages/py-jobs (same relative path as here).
+cyberlab-jobs = { path = "../../../packages/py-jobs", editable = true }
+cyberlab-worker = { path = "../../../packages/py-worker-kit", editable = true }
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "S", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S603", "S607", "S108", "S311"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["celery.*", "kombu.*", "weasyprint.*", "pypdf.*"]
+ignore_missing_imports = true

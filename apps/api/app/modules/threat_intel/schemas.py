@@ -40,7 +40,9 @@ from app.modules.threat_intel.summaries import ProviderSummary
 RunScope = Literal["manual", "job"]
 RunStatus = Literal["queued", "running", "waiting", "completed", "partial", "failed"]
 ItemState = Literal["pending", "done", "cached", "abandoned"]
-ItemReason = Literal["rate_limited", "quota_exhausted", "deadline", "auth_failed"]
+ItemReason = Literal[
+    "rate_limited", "quota_exhausted", "deadline", "auth_failed", "policy_blocked"
+]
 # The contract name of the provider-side `IocType` (the analysis results have their own
 # `IocType`): a PEP 695 alias gives the OpenAPI component a stable, distinct name. Use it,
 # never the bare enum, in request/response models.

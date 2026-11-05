@@ -31,6 +31,7 @@ from app.core.rbac import OrgContext, Permission, org_session
 from app.core.tenancy import tenant_session
 from app.modules.analysis.models import AnalysisJob, AnalysisStatus
 from app.modules.audit import service as audit
+from app.modules.investigations import policy
 from app.modules.threat_intel import runs
 from app.modules.threat_intel.availability import provider_available
 from app.modules.threat_intel.catalog import CATALOG
@@ -342,6 +343,10 @@ async def _create(
             raise NotFound()
         if job_status != AnalysisStatus.SUCCEEDED:
             raise JobNotReady()
+        # M6 (RT20): the job's evidence and case may exclude threat intel (or be TLP:RED).
+        policy.raise_if_ti_blocked(
+            await policy.load_policy(ctx.session, ctx.org_id, job_ids=(job_id,))
+        )
         existing = (
             await ctx.session.execute(
                 _runs_query()

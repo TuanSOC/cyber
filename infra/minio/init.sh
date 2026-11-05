@@ -32,14 +32,34 @@ for bucket in "$RESULTS_BUCKET" "$RESULTS_TEST_BUCKET"; do
   mc version enable "local/$bucket"
 done
 
-# Test bucket only: expire leftover noncurrent versions. The evidence bucket gets no
-# lifecycle rule on purpose: a noncurrent version there may be original evidence that
-# was overwritten, and it must not be auto-deleted.
+# Reports (M6, RT6): object-locked and versioned like evidence, with NO bucket default
+# retention (it would make MinIO demand Content-MD5 on the renderer's presigned POST).
+# Retention is set per object (GOVERNANCE, EVIDENCE_LOCK_DAYS) by the API on the snapshot and
+# by the ingest worker on each artifact. An existing bucket without object lock is refused.
+REPORTS_BUCKET="${REPORTS_BUCKET:-reports}"
+REPORTS_TEST_BUCKET="${REPORTS_TEST_BUCKET:-reports-test}"
+for bucket in "$REPORTS_BUCKET" "$REPORTS_TEST_BUCKET"; do
+  if mc ls "local/$bucket" >/dev/null 2>&1; then
+    if ! mc retention info --default "local/$bucket" >/dev/null 2>&1; then
+      echo "ERROR: bucket $bucket exists without object lock. Recreate it (docker compose down -v)." >&2
+      exit 1
+    fi
+    echo "bucket $bucket ok (object lock enabled)"
+  else
+    mc mb --with-lock "local/$bucket"
+  fi
+done
+
+# Test buckets only: expire leftover noncurrent versions. The evidence and reports buckets
+# get no lifecycle rule on purpose: a noncurrent version there may be original evidence or a
+# signed report that was overwritten, and it must not be auto-deleted.
 mc ilm import "local/$MINIO_TEST_BUCKET" </init/test-lifecycle.json
+mc ilm import "local/$REPORTS_TEST_BUCKET" </init/reports-test-lifecycle.json
 
 # Policy is rendered from the bucket names in the environment.
 sed -e "s/__BUCKET__/$MINIO_BUCKET/g" -e "s/__TEST_BUCKET__/$MINIO_TEST_BUCKET/g" \
   -e "s/__RESULTS_BUCKET__/$RESULTS_BUCKET/g" -e "s/__RESULTS_TEST_BUCKET__/$RESULTS_TEST_BUCKET/g" \
+  -e "s/__REPORTS_BUCKET__/$REPORTS_BUCKET/g" -e "s/__REPORTS_TEST_BUCKET__/$REPORTS_TEST_BUCKET/g" \
   /init/api-policy.template.json >/tmp/api-policy.json
 mc admin policy create local cyberlab-api /tmp/api-policy.json
 mc admin user add local "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY"

@@ -7,6 +7,8 @@ from app.core.errors import Conflict, NotFound
 from app.core.pagination import PageParams
 from app.core.rbac import OrgContext
 from app.modules.audit import service as audit
+from app.core.stubs import not_implemented
+from app.modules.investigations import policy
 from app.modules.investigations import repository as repo
 from app.modules.investigations.models import Investigation, InvestigationStatus
 from app.modules.investigations.schemas import (
@@ -14,7 +16,14 @@ from app.modules.investigations.schemas import (
     InvestigationOut,
     InvestigationPage,
     InvestigationUpdate,
+    SharePolicyOut,
     case_ref,
+)
+
+# The M6 update fields (TLP, share-policy flags, status reasons): their rules land in
+# phase 2; until then a request that sets one answers 501 instead of bypassing them.
+M6_UPDATE_FIELDS = frozenset(
+    {"tlp", "ai_excluded", "ti_excluded", "status_reason", "acknowledge_tlp_downgrade"}
 )
 
 S = InvestigationStatus
@@ -43,6 +52,17 @@ def _to_out(row: repo.Row) -> InvestigationOut:
         evidence_count=row.evidence_count,
         created_at=inv.created_at,
         updated_at=inv.updated_at,
+        tlp=inv.tlp,
+        ai_excluded=inv.ai_excluded,
+        ti_excluded=inv.ti_excluded,
+        share_policy=_share_policy(inv),
+    )
+
+
+def _share_policy(inv: Investigation) -> SharePolicyOut:
+    case = policy.case_policy(inv.tlp, inv.ai_excluded, inv.ti_excluded)
+    return SharePolicyOut(
+        ai_blocked=case.ai_blocked, ti_blocked=case.ti_blocked, reasons=case.reasons
     )
 
 
@@ -94,6 +114,8 @@ async def update_investigation(
     row = await repo.get_row(ctx.session, ctx.org_id, investigation_id, for_update=True)
     if row is None:
         raise NotFound()
+    if data.model_fields_set & M6_UPDATE_FIELDS:
+        raise not_implemented()
     inv = row.investigation
     if inv.status == S.ARCHIVED:
         raise Conflict("Archived investigations are read-only", code="investigation_archived")

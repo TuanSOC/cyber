@@ -6,10 +6,11 @@ from collections.abc import Coroutine
 from typing import Any
 
 from celery.signals import worker_init
-from cyberlab_jobs import INGEST_EVENT, REAP
+from cyberlab_jobs import INGEST_EVENT, REAP, REPORT_RENDERED
 
 import app.models  # noqa: F401  (register every mapper before the first query)
 from app.core.config import get_settings
+from app.modules.reports import render_ingest
 from app.workers import ingest, reaper
 from app.workers.celery_app import celery_app
 
@@ -56,3 +57,10 @@ def reap() -> None:
     run(reaper.reap())
     run(reaper.reap_ti_runs())
     run(reaper.reap_ai_runs())
+    run(reaper.reap_report_renders())
+
+
+# M6: the report renderer's answer (per-render token; phase 4 implements the ingest).
+@celery_app.task(name=REPORT_RENDERED)  # type: ignore[untyped-decorator]
+def report_rendered(message: dict[str, Any]) -> None:
+    run(render_ingest.handle_rendered_message(message))

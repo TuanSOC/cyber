@@ -105,6 +105,8 @@ class AiErrorCode(enum.StrEnum):
     CANARY_LEAK = "canary_leak"
     NO_DIGEST = "no_digest"
     REFUSED = "refused"
+    # M6: the case / evidence share policy forbids AI now (worker re-check, no call made).
+    POLICY_BLOCKED = "policy_blocked"
 
 
 class RefKind(enum.StrEnum):
@@ -331,6 +333,9 @@ class ContextStats(BaseModel):
     neutralized: int = Field(default=0, ge=0)  # planted pseudonym-shaped tokens (RT15)
     stripped: dict[str, int] = {}  # StripCounts by category
     jobs_omitted: int = Field(default=0, ge=0)  # incident: jobs over AI_MAX_JOBS_PER_INCIDENT
+    # M6 (additive, approved by the parent): evidence items of the case skipped by the share
+    # policy. Stored only, never rendered into the prompt (the prompt digests stay pinned).
+    policy_excluded: int = Field(default=0, ge=0)
 
 
 CONTEXT_VERSION = "ctx.v1"

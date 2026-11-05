@@ -1,5 +1,5 @@
-"""Migrations replay from scratch in one alembic run (M3 RT7); 0011, 0010, 0009 and 0006
-downgrade cleanly.
+"""Migrations replay from scratch in one alembic run (M3 RT7); 0012, 0011, 0010, 0009 and
+0006 downgrade cleanly.
 
 `env.py` applies every pending revision in a single transaction; 0006 adds an enum value,
 which Postgres will not let that same transaction use. The session fixture already upgrades
@@ -88,9 +88,43 @@ async def _ti_tables(engine: AsyncEngine) -> list[object]:
         return [t for t in (await conn.execute(text(TI_REGCLASSES))).one() if t is not None]
 
 
+M6_TABLES = (
+    "investigation_status_events",
+    "evidence_share_policies",
+    "analyst_notes",
+    "analyst_note_versions",
+    "ioc_collections",
+    "ioc_collection_items",
+    "case_attack_mappings",
+    "reports",
+    "report_versions",
+    "report_citations",
+    "report_renders",
+    "report_render_index",
+)
+M6_REGCLASSES = "SELECT " + ", ".join(f"to_regclass('{t}')::text" for t in M6_TABLES)
+M6_FUNCTIONS = (
+    "SELECT proname::text FROM pg_proc WHERE proname IN ('analyst_note_guard', "
+    "'ioc_collection_item_guard', 'report_guard', 'report_render_transition') ORDER BY proname"
+)
+M6_CASE_COLUMNS = (
+    "SELECT column_name FROM information_schema.columns WHERE table_name = 'investigations' "
+    "AND column_name IN ('tlp', 'ai_excluded', 'ti_excluded') ORDER BY column_name"
+)
+
+
+async def _m6_tables(engine: AsyncEngine) -> list[object]:
+    async with engine.connect() as conn:
+        return [t for t in (await conn.execute(text(M6_REGCLASSES))).one() if t is not None]
+
+
 async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine) -> None:
     await get_engine().dispose()
     try:
+        _alembic("downgrade", "0011")  # 0012 (M6 reports + case management) goes away
+        assert await _m6_tables(owner_engine) == []
+        assert await _scalars(owner_engine, M6_FUNCTIONS) == []
+        assert await _scalars(owner_engine, M6_CASE_COLUMNS) == []
         _alembic("downgrade", "0010")  # 0011 (M5 AI analyst) goes away completely
         assert await _ai_tables(owner_engine) == []
         assert await _scalars(owner_engine, AI_FUNCTIONS) == []
@@ -116,7 +150,15 @@ async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine)
         _alembic("upgrade", "head")  # never leave the shared test database half-migrated
         await get_engine().dispose()
 
-    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0011"]
+    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0012"]
+    assert await _m6_tables(owner_engine) == list(M6_TABLES)
+    assert await _scalars(owner_engine, M6_CASE_COLUMNS) == ["ai_excluded", "ti_excluded", "tlp"]
+    assert await _scalars(owner_engine, M6_FUNCTIONS) == [
+        "analyst_note_guard",
+        "ioc_collection_item_guard",
+        "report_guard",
+        "report_render_transition",
+    ]
     assert await _ai_tables(owner_engine) == list(AI_TABLES)
     assert await _ti_tables(owner_engine) == list(TI_TABLES)
     assert await _scalars(owner_engine, RUN_INDEX_FKS) == [

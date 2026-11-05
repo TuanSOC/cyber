@@ -174,3 +174,118 @@ def test_memory_limit_is_enforced(dirs: sandbox.JobDirs) -> None:
         sandbox.run_tool(["python3", "-c", hog], dirs, timeout_s=10, memory_bytes=256 * 1024 * 1024)
     sandbox.run_tool(["python3", "-c", "x = bytearray(16)"], dirs, timeout_s=10,
                      memory_bytes=256 * 1024 * 1024)  # fmt: skip
+
+
+# --- M6 (RT3): per-run rlimits and the extended network deny -------------------------------
+
+# io_uring_setup is syscall 425 on x86_64 and aarch64 (the unified syscall table).
+_IO_URING_PROBE = (
+    "import ctypes, errno, socket\n"
+    "libc = ctypes.CDLL(None, use_errno=True)\n"
+    "params = ctypes.create_string_buffer(120)\n"
+    "fd = libc.syscall(425, 1, params)\n"
+    "err = ctypes.get_errno()\n"
+    "print('io_uring', 'ok' if fd >= 0 else errno.errorcode.get(err, str(err)))\n"
+    "for name in ('AF_INET', 'AF_INET6', 'AF_NETLINK', 'AF_PACKET'):\n"
+    "    try:\n"
+    "        socket.socket(getattr(socket, name), socket.SOCK_DGRAM).close()\n"
+    "        print(name, 'ok')\n"
+    "    except OSError as exc:\n"
+    "        print(name, errno.errorcode.get(exc.errno, str(exc.errno)))\n"
+    "socket.socket(socket.AF_UNIX, socket.SOCK_STREAM).close()\n"
+    "print('AF_UNIX', 'ok')\n"
+)
+
+
+def _probe(dirs: sandbox.JobDirs, name: str, **kw: object) -> dict[str, str]:
+    sandbox.run_tool(["python3", "-c", _IO_URING_PROBE], dirs, timeout_s=10, stdout_name=name,
+                     **kw)  # type: ignore[arg-type]  # fmt: skip
+    return dict(line.split(" ", 1) for line in _read(dirs, name).splitlines())
+
+
+def test_extended_deny_refuses_netlink_packet_and_io_uring_with_eacces(
+    dirs: sandbox.JobDirs,
+) -> None:
+    import socket
+
+    seen = _probe(
+        dirs, "deny.txt", deny_extra_domains=(socket.AF_NETLINK,), deny_io_uring=True
+    )
+    assert seen["AF_INET"] == "EACCES" and seen["AF_INET6"] == "EACCES"
+    assert seen["AF_NETLINK"] == "EACCES" and seen["AF_PACKET"] == "EACCES"
+    assert seen["io_uring"] == "EACCES"
+    assert seen["AF_UNIX"] == "ok"
+
+
+def test_default_filter_is_unchanged_for_the_analyzers(dirs: sandbox.JobDirs) -> None:
+    """Without the M6 options a tool keeps netlink (and io_uring is whatever the container
+    runtime decides): the analyzers' filter is exactly the M2/M3 one."""
+    seen = _probe(dirs, "default.txt")
+    assert seen["AF_INET"] == "EACCES" and seen["AF_INET6"] == "EACCES"
+    assert seen["AF_NETLINK"] == "ok"
+    assert seen["io_uring"] != "EACCES"
+
+
+def test_rlimits_are_applied(dirs: sandbox.JobDirs) -> None:
+    probe = (
+        "import resource\n"
+        "names = ('RLIMIT_AS', 'RLIMIT_CPU', 'RLIMIT_FSIZE', 'RLIMIT_NOFILE', 'RLIMIT_NPROC')\n"
+        "for name in names:\n"
+        "    print(name, resource.getrlimit(getattr(resource, name))[1])\n"
+    )
+    limits = sandbox.Rlimits(
+        as_bytes=768 * 1024**2, cpu_s=90, fsize_bytes=32 * 1024**2, nofile=64, nproc=16
+    )
+    sandbox.run_tool(["python3", "-c", probe], dirs, timeout_s=10, stdout_name="rl.txt",
+                     rlimits=limits)  # fmt: skip
+    seen = dict(line.split(" ", 1) for line in _read(dirs, "rl.txt").splitlines())
+    assert seen == {
+        "RLIMIT_AS": str(768 * 1024**2),
+        "RLIMIT_CPU": "90",
+        "RLIMIT_FSIZE": str(32 * 1024**2),
+        "RLIMIT_NOFILE": "64",
+        "RLIMIT_NPROC": "16",
+    }
+
+
+def test_default_rlimits_are_unchanged(dirs: sandbox.JobDirs) -> None:
+    probe = (
+        "import resource\n"
+        "print(resource.getrlimit(resource.RLIMIT_NOFILE)[1],"
+        " resource.getrlimit(resource.RLIMIT_FSIZE)[1])\n"
+    )
+    sandbox.run_tool(["python3", "-c", probe], dirs, timeout_s=10, stdout_name="d.txt")
+    assert _read(dirs, "d.txt") == f"1024 {sandbox.MAX_OUTPUT_FILE}"
+
+
+def test_file_size_limit_stops_oversized_output(dirs: sandbox.JobDirs) -> None:
+    writer = "open('big', 'wb').write(b'x' * (2 * 1024 * 1024))"
+    with pytest.raises(sandbox.ToolFailed):
+        sandbox.run_tool(["python3", "-c", writer], dirs, timeout_s=10,
+                         rlimits=sandbox.Rlimits(fsize_bytes=1024 * 1024))  # fmt: skip
+
+
+def test_nproc_limit_stops_fork_bombs(dirs: sandbox.JobDirs) -> None:
+    bomb = (
+        "import os, sys\n"
+        "pids = []\n"
+        "try:\n"
+        "    for _ in range(64):\n"
+        "        pid = os.fork()\n"
+        "        if pid == 0:\n"
+        "            import time; time.sleep(5); os._exit(0)\n"
+        "        pids.append(pid)\n"
+        "except OSError:\n"
+        "    sys.exit(3)\n"
+    )
+    with pytest.raises(sandbox.ToolFailed) as failed:
+        sandbox.run_tool(["python3", "-c", bomb], dirs, timeout_s=10,
+                         rlimits=sandbox.Rlimits(nproc=8))  # fmt: skip
+    assert failed.value.returncode == 3
+    sandbox.cleanup(None)
+
+
+def test_memory_limit_is_given_once(dirs: sandbox.JobDirs) -> None:
+    with pytest.raises(ValueError, match="once"):
+        sandbox.run_tool(["true"], dirs, timeout_s=5, memory_bytes=1024**3,
+                         rlimits=sandbox.Rlimits(as_bytes=1024**3))  # fmt: skip

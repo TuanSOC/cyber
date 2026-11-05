@@ -19,7 +19,12 @@ ALLOWED = {
     "workers/reaper.py": "org from the non-tenant job index (system data, no request input)",
     "workers/enrich.py": "org from the non-tenant ti_run_index; the message org must match",
     "workers/analyst.py": "org from the non-tenant ai_run_index; the message org must match",
+    # M6 phase 4: the trusted `report.rendered` ingest (org from report_render_index).
+    "modules/reports/render_ingest.py": "org from the non-tenant report_render_index + token",
 }
+# Allowlisted ahead of their implementation (M6 phase 1 stubs): exempt from the "still
+# needed" check until the owning phase lands. Phase 9 asserts this set is empty.
+PENDING_ALLOWED = frozenset({"modules/reports/render_ingest.py"})
 
 
 def _org_argument_is_set(call: ast.Call) -> bool:
@@ -57,4 +62,6 @@ def test_org_scoped_tenant_sessions_only_in_vetted_modules() -> None:
 
 def test_allowlist_entries_still_exist() -> None:
     for rel in ALLOWED:
+        if rel in PENDING_ALLOWED and not _org_scoped_calls(APP / rel):
+            continue  # a phase-1 stub; its phase adds the vetted call
         assert _org_scoped_calls(APP / rel), f"{rel} no longer needs an allowlist entry"

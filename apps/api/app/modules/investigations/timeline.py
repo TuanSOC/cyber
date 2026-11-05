@@ -59,7 +59,14 @@ class RefKindName(enum.StrEnum):
     TIMELINE = "timeline"
     ALERT = "alert"
     FINDING = "finding"
+    # M6 (RT10): case events without evidence (`Entry.evidence_id` is None); phase 5 adds
+    # their rows to the union.
+    NOTE = "note"
+    STATUS = "status"
 
+
+# The `kinds` filter of `page()` (accepted from phase 1, applied from phase 5): ref kinds.
+TimelineKind = RefKindName
 
 REF_TABLES = {
     RefKindName.CUSTODY: "evidence_custody_events",
@@ -67,6 +74,8 @@ REF_TABLES = {
     RefKindName.TIMELINE: "analysis_timeline",
     RefKindName.ALERT: "network_alerts",
     RefKindName.FINDING: "analysis_findings",
+    RefKindName.NOTE: "analyst_notes",
+    RefKindName.STATUS: "investigation_status_events",
 }
 _ANALYZER_TITLE = {"pcap": "PCAP analysis", "static": "Static analysis"}
 _CUSTODY_TITLE = {
@@ -93,7 +102,8 @@ class Entry:
     kind: str
     title: str
     severity: str | None
-    evidence_id: uuid.UUID
+    # None for case events (notes, status changes; M6 RT10).
+    evidence_id: uuid.UUID | None
     job_id: uuid.UUID | None
     ref_kind: str
     ref_id: uuid.UUID
@@ -294,8 +304,12 @@ async def page(
     *,
     limit: int = DEFAULT_PAGE,
     after: Cursor | None = None,
+    kinds: Sequence[TimelineKind] | None = None,
 ) -> list[Entry]:
-    """Up to `limit` entries after the cursor (fetch `limit + 1` to know if more exist)."""
+    """Up to `limit` entries after the cursor (fetch `limit + 1` to know if more exist).
+
+    `kinds` (M6, RT10) restricts the ref kinds; accepted and ignored until phase 5."""
+    del kinds  # phase 5 applies it (the signature is frozen from phase 1)
     u = _union(org_id, investigation_id)
     stmt = select(u)
     if after is not None:
