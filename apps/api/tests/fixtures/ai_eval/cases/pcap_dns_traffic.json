@@ -6,49 +6,52 @@
   {
    "analyzer": "pcap",
    "created_at": "2026-01-01T00:06:51.100000Z",
-   "evidence": {"description":"pcap capture file, microsecond ts (little-endian) - version 2.4","filename":"dns_traffic.pcap","mime":"application/vnd.tcpdump.pcap","size_bytes":6112,"uploaded_at":"2026-01-01T00:05:51.100000Z"},
+   "evidence": {"description":"pcap capture file, microsecond ts (little-endian) - version 2.4","filename":"dns_traffic.pcap","mime":"application/vnd.tcpdump.pcap","size_bytes":1618,"uploaded_at":"2026-01-01T00:05:51.100000Z"},
    "finished_at": "2026-01-01T00:07:51.100000Z",
    "key": "j1",
    "profile": null,
-   "summary": {"capture":{"bytes":1040,"duration_s":51.1,"first_ts":"2026-01-01T00:00:00Z","last_ts":"2026-01-01T00:00:51.100000Z","link_type":"Ethernet","packets":72,"protocol_hierarchy":[],"top_destinations":[],"top_ports":[],"top_sources":[]},"capture_format":"pcap","counts":{"alerts":0,"dns":8,"findings":0,"flows":8,"http":0,"iocs":3,"timeline":2,"tls":0},"engine_counts":{},"engine_errors":[],"schema_version":"pcap.v1","tool_versions":{"suricata":"7.0.10","tshark":"4.4.0","zeek":"8.0.10"},"truncated":{}},
+   "summary": {"capture":{"bytes":1338,"duration_s":51.12,"first_ts":"2026-01-01T00:00:00Z","last_ts":"2026-01-01T00:00:51.120000Z","link_type":"ether","packets":16,"protocol_hierarchy":[{"bytes":1338,"frames":16,"path":"eth"},{"bytes":1338,"frames":16,"path":"eth:ip"},{"bytes":1338,"frames":16,"path":"eth:ip:udp"},{"bytes":1338,"frames":16,"path":"eth:ip:udp:dns"}],"top_destinations":[{"bytes":666,"flows":8,"ip":"10.0.0.53","packets":16}],"top_ports":[{"bytes":666,"flows":8,"port":53,"proto":"udp"}],"top_sources":[{"bytes":666,"flows":8,"ip":"10.0.1.11","packets":16}]},"capture_format":"pcap","counts":{"alerts":0,"dns":8,"findings":0,"flows":8,"http":0,"iocs":6,"timeline":2,"tls":0},"engine_counts":{"alert":0,"dns":8,"findings":0,"flows":8,"http":0,"iocs":6,"timeline":2,"tls":0},"engine_errors":[],"schema_version":"pcap.v1","tool_versions":{"rules_sha256":"4f9dcad0748e038f96edceb83ac53debf5ecd81bbdba8d9f1d359fb4c7206851","suricata":"7.0.10","tshark":"4.4.19","zeek":"8.0.10"},"truncated":{}},
    "tables": {
     "analysis_timeline": [
-     {"dst_ip":null,"event":"capture_start","ref":null,"severity":null,"src_ip":null,"title":"Capture start","ts":"2026-01-01T00:00:00Z"},
-     {"dst_ip":null,"event":"capture_end","ref":null,"severity":null,"src_ip":null,"title":"Capture end","ts":"2026-01-01T00:00:51.100000Z"}
+     {"dst_ip":null,"event":"capture_start","ref":null,"severity":null,"src_ip":null,"title":"Capture starts","ts":"2026-01-01T00:00:00Z"},
+     {"dst_ip":null,"event":"capture_end","ref":null,"severity":null,"src_ip":null,"title":"Capture ends","ts":"2026-01-01T00:00:51.120000Z"}
     ],
     "iocs": [
-     {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"dns","type":"domain","value":"example.org"},
-     {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"dns","type":"domain","value":"wiki.example.org"},
-     {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"dns","type":"domain","value":"docs.example.org"}
+     {"count":1,"first_seen":"2026-01-01T00:00:43.800000Z","last_seen":"2026-01-01T00:00:43.800000Z","source":"dns","type":"domain","value":"docs.example.org"},
+     {"count":3,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:21.900000Z","source":"dns","type":"domain","value":"example.org"},
+     {"count":1,"first_seen":"2026-01-01T00:00:51.100000Z","last_seen":"2026-01-01T00:00:51.100000Z","source":"dns","type":"domain","value":"intranet.example.org"},
+     {"count":1,"first_seen":"2026-01-01T00:00:14.600000Z","last_seen":"2026-01-01T00:00:14.600000Z","source":"dns","type":"domain","value":"mail.example.org"},
+     {"count":1,"first_seen":"2026-01-01T00:00:36.500000Z","last_seen":"2026-01-01T00:00:36.500000Z","source":"dns","type":"domain","value":"nonexistent.example.org"},
+     {"count":1,"first_seen":"2026-01-01T00:00:29.200000Z","last_seen":"2026-01-01T00:00:29.200000Z","source":"dns","type":"domain","value":"wiki.example.org"}
     ],
     "network_flows": [
-     {"community_id":"1:adc55db02f924fc9270722468bd=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.06,"flow_ref":"Cd0ffe3aab32f0c569","orig_bytes":40,"orig_pkts":5,"proto":"udp","resp_bytes":90,"resp_pkts":4,"service":"dns","src_ip":"10.0.1.11","src_port":52669,"total_bytes":130,"ts":"2026-01-01T00:00:00Z"},
-     {"community_id":"1:c046bbdfe120500eae152a9aa4d=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.06,"flow_ref":"C9821f028f9896551f","orig_bytes":40,"orig_pkts":5,"proto":"udp","resp_bytes":90,"resp_pkts":4,"service":"dns","src_ip":"10.0.1.11","src_port":44123,"total_bytes":130,"ts":"2026-01-01T00:00:07.300000Z"},
-     {"community_id":"1:603ae1aecd1156460cbc13edb00=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.06,"flow_ref":"Ccd6066752b46178c5","orig_bytes":40,"orig_pkts":5,"proto":"udp","resp_bytes":90,"resp_pkts":4,"service":"dns","src_ip":"10.0.1.11","src_port":42841,"total_bytes":130,"ts":"2026-01-01T00:00:14.600000Z"},
-     {"community_id":"1:c0db37e84a5796423c286c45c4a=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.06,"flow_ref":"C4988d844b3440fa86","orig_bytes":40,"orig_pkts":5,"proto":"udp","resp_bytes":90,"resp_pkts":4,"service":"dns","src_ip":"10.0.1.11","src_port":54150,"total_bytes":130,"ts":"2026-01-01T00:00:21.900000Z"},
-     {"community_id":"1:2df2eaebd62f3c391fb99e08a9f=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.06,"flow_ref":"Cfc3eb033447726c71","orig_bytes":40,"orig_pkts":5,"proto":"udp","resp_bytes":90,"resp_pkts":4,"service":"dns","src_ip":"10.0.1.11","src_port":49567,"total_bytes":130,"ts":"2026-01-01T00:00:29.200000Z"},
-     {"community_id":"1:7ef85500d49e88dfef97b75d744=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.06,"flow_ref":"C2001a4059a36972e6","orig_bytes":40,"orig_pkts":5,"proto":"udp","resp_bytes":90,"resp_pkts":4,"service":"dns","src_ip":"10.0.1.11","src_port":48250,"total_bytes":130,"ts":"2026-01-01T00:00:36.500000Z"},
-     {"community_id":"1:811e5633d0dc60728535d08b895=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.06,"flow_ref":"Cc9943d3677af556f5","orig_bytes":40,"orig_pkts":5,"proto":"udp","resp_bytes":90,"resp_pkts":4,"service":"dns","src_ip":"10.0.1.11","src_port":52309,"total_bytes":130,"ts":"2026-01-01T00:00:43.800000Z"},
-     {"community_id":"1:e07d9e7eb5073aee5927fb1a5fe=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.06,"flow_ref":"Ced725bb3bd287a57e","orig_bytes":40,"orig_pkts":5,"proto":"udp","resp_bytes":90,"resp_pkts":4,"service":"dns","src_ip":"10.0.1.11","src_port":41473,"total_bytes":130,"ts":"2026-01-01T00:00:51.100000Z"}
+     {"community_id":"1:GlNZc+eTWaX0q8dQLfIKDKP97+s=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.019999980926513672,"flow_ref":"CQJjx04n9LCxyi5Bdf","orig_bytes":34,"orig_pkts":1,"proto":"udp","resp_bytes":66,"resp_pkts":1,"service":"dns","src_ip":"10.0.1.11","src_port":44337,"total_bytes":100,"ts":"2026-01-01T00:00:29.200000Z"},
+     {"community_id":"1:Mh3XrietYKBaQYbqdrPfv/3h+YI=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.019999980926513672,"flow_ref":"ClmvCa48RGZ77QLVch","orig_bytes":34,"orig_pkts":1,"proto":"udp","resp_bytes":66,"resp_pkts":1,"service":"dns","src_ip":"10.0.1.11","src_port":51081,"total_bytes":100,"ts":"2026-01-01T00:00:43.800000Z"},
+     {"community_id":"1:UpNzoMmQMhYpxyGUQuwv8cDdbag=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.019999980926513672,"flow_ref":"CIczUTjCUGzQYrfi8","orig_bytes":29,"orig_pkts":1,"proto":"udp","resp_bytes":68,"resp_pkts":1,"service":"dns","src_ip":"10.0.1.11","src_port":41368,"total_bytes":97,"ts":"2026-01-01T00:00:07.300000Z"},
+     {"community_id":"1:yM1VdPbYNAPytdGCHh0fjuHZWM4=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.019999980926513672,"flow_ref":"CmgKeaM2Dzn4HuMkh","orig_bytes":29,"orig_pkts":1,"proto":"udp","resp_bytes":56,"resp_pkts":1,"service":"dns","src_ip":"10.0.1.11","src_port":55504,"total_bytes":85,"ts":"2026-01-01T00:00:00Z"},
+     {"community_id":"1:cvuf0/A9Y6aV3zu5PYL2LSk0ea8=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.019999980926513672,"flow_ref":"CfdGG44jWBeYockVf7","orig_bytes":41,"orig_pkts":1,"proto":"udp","resp_bytes":41,"resp_pkts":1,"service":"dns","src_ip":"10.0.1.11","src_port":47510,"total_bytes":82,"ts":"2026-01-01T00:00:36.500000Z"},
+     {"community_id":"1:fRmZlQk8WC0b38phtniB4pmmOTo=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.019999980926513672,"flow_ref":"CgEW8u1Ee65H71E2Pj","orig_bytes":38,"orig_pkts":1,"proto":"udp","resp_bytes":38,"resp_pkts":1,"service":"dns","src_ip":"10.0.1.11","src_port":55081,"total_bytes":76,"ts":"2026-01-01T00:00:51.100000Z"},
+     {"community_id":"1:jj+1k2yPtGMk9R9wv4g8VoOpWVE=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.019999980926513672,"flow_ref":"CLkoZN381czp8jtYn5","orig_bytes":34,"orig_pkts":1,"proto":"udp","resp_bytes":34,"resp_pkts":1,"service":"dns","src_ip":"10.0.1.11","src_port":58186,"total_bytes":68,"ts":"2026-01-01T00:00:14.600000Z"},
+     {"community_id":"1:/KpWRsybkze42dvu4o8Ki1CrfoY=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.019999980926513672,"flow_ref":"CRx4l6ndHxx8upo01","orig_bytes":29,"orig_pkts":1,"proto":"udp","resp_bytes":29,"resp_pkts":1,"service":"dns","src_ip":"10.0.1.11","src_port":60922,"total_bytes":58,"ts":"2026-01-01T00:00:21.900000Z"}
     ],
     "network_records": [
-     {"details":{"answers":["198.51.100.30"],"qtype":"A","query":"example.org","rcode":"NOERROR","ttls":[]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"Cd0ffe3aab32f0c569","kind":"dns","src_ip":"10.0.1.11","src_port":53000,"summary":"A example.org NOERROR 198.51.100.30","ts":"2026-01-01T00:00:00Z"},
-     {"details":{"answers":["2001:db8::30"],"qtype":"AAAA","query":"example.org","rcode":"NOERROR","ttls":[]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"C9821f028f9896551f","kind":"dns","src_ip":"10.0.1.11","src_port":53000,"summary":"AAAA example.org NOERROR 2001:db8::30","ts":"2026-01-01T00:00:07.300000Z"},
-     {"details":{"answers":[],"qtype":"MX","query":"mail.example.org","rcode":"NOERROR","ttls":[]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"Ccd6066752b46178c5","kind":"dns","src_ip":"10.0.1.11","src_port":53000,"summary":"MX mail.example.org NOERROR","ts":"2026-01-01T00:00:14.600000Z"},
-     {"details":{"answers":[],"qtype":"TXT","query":"example.org","rcode":"NOERROR","ttls":[]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"C4988d844b3440fa86","kind":"dns","src_ip":"10.0.1.11","src_port":53000,"summary":"TXT example.org NOERROR","ts":"2026-01-01T00:00:21.900000Z"},
-     {"details":{"answers":["198.51.100.31"],"qtype":"A","query":"wiki.example.org","rcode":"NOERROR","ttls":[]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"Cfc3eb033447726c71","kind":"dns","src_ip":"10.0.1.11","src_port":53000,"summary":"A wiki.example.org NOERROR 198.51.100.31","ts":"2026-01-01T00:00:29.200000Z"},
-     {"details":{"answers":[],"qtype":"A","query":"nonexistent.example.org","rcode":"NXDOMAIN","ttls":[]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"C2001a4059a36972e6","kind":"dns","src_ip":"10.0.1.11","src_port":53000,"summary":"A nonexistent.example.org NXDOMAIN","ts":"2026-01-01T00:00:36.500000Z"},
-     {"details":{"answers":["198.51.100.32"],"qtype":"A","query":"docs.example.org","rcode":"NOERROR","ttls":[]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"Cc9943d3677af556f5","kind":"dns","src_ip":"10.0.1.11","src_port":53000,"summary":"A docs.example.org NOERROR 198.51.100.32","ts":"2026-01-01T00:00:43.800000Z"},
-     {"details":{"answers":[],"qtype":"A","query":"intranet.example.org","rcode":"NXDOMAIN","ttls":[]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"Ced725bb3bd287a57e","kind":"dns","src_ip":"10.0.1.11","src_port":53000,"summary":"A intranet.example.org NXDOMAIN","ts":"2026-01-01T00:00:51.100000Z"}
+     {"details":{"answers":["198.51.100.30"],"qtype":"A","query":"example.org","rcode":"NOERROR","ttls":[300.0]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"CmgKeaM2Dzn4HuMkh","kind":"dns","src_ip":"10.0.1.11","src_port":55504,"summary":"A example.org NOERROR 198.51.100.30","ts":"2026-01-01T00:00:00Z"},
+     {"details":{"answers":["2001:db8::30"],"qtype":"AAAA","query":"example.org","rcode":"NOERROR","ttls":[300.0]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"CIczUTjCUGzQYrfi8","kind":"dns","src_ip":"10.0.1.11","src_port":41368,"summary":"AAAA example.org NOERROR 2001:db8::30","ts":"2026-01-01T00:00:07.300000Z"},
+     {"details":{"answers":[],"qtype":"MX","query":"mail.example.org","rcode":"NOERROR","ttls":[]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"CLkoZN381czp8jtYn5","kind":"dns","src_ip":"10.0.1.11","src_port":58186,"summary":"MX mail.example.org NOERROR","ts":"2026-01-01T00:00:14.600000Z"},
+     {"details":{"answers":[],"qtype":"TXT","query":"example.org","rcode":"NOERROR","ttls":[]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"CRx4l6ndHxx8upo01","kind":"dns","src_ip":"10.0.1.11","src_port":60922,"summary":"TXT example.org NOERROR","ts":"2026-01-01T00:00:21.900000Z"},
+     {"details":{"answers":["198.51.100.31"],"qtype":"A","query":"wiki.example.org","rcode":"NOERROR","ttls":[300.0]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"CQJjx04n9LCxyi5Bdf","kind":"dns","src_ip":"10.0.1.11","src_port":44337,"summary":"A wiki.example.org NOERROR 198.51.100.31","ts":"2026-01-01T00:00:29.200000Z"},
+     {"details":{"answers":[],"qtype":"A","query":"nonexistent.example.org","rcode":"NXDOMAIN","ttls":[]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"CfdGG44jWBeYockVf7","kind":"dns","src_ip":"10.0.1.11","src_port":47510,"summary":"A nonexistent.example.org NXDOMAIN","ts":"2026-01-01T00:00:36.500000Z"},
+     {"details":{"answers":["198.51.100.32"],"qtype":"A","query":"docs.example.org","rcode":"NOERROR","ttls":[300.0]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"ClmvCa48RGZ77QLVch","kind":"dns","src_ip":"10.0.1.11","src_port":51081,"summary":"A docs.example.org NOERROR 198.51.100.32","ts":"2026-01-01T00:00:43.800000Z"},
+     {"details":{"answers":[],"qtype":"A","query":"intranet.example.org","rcode":"NXDOMAIN","ttls":[]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"CgEW8u1Ee65H71E2Pj","kind":"dns","src_ip":"10.0.1.11","src_port":55081,"summary":"A intranet.example.org NXDOMAIN","ts":"2026-01-01T00:00:51.100000Z"}
     ]
    },
-   "worker_version": "pcap-worker/hand-trimmed"
+   "worker_version": "pcap-worker/snapshot"
   }
  ],
  "kind": "pcap",
  "name": "pcap_dns_traffic",
  "plants": [],
- "provenance": {"dataset":"apps/workers/pcap/dataset/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":1337,"snapshot_version":1,"source":"hand-trimmed"},
+ "provenance": {"dataset":"apps/workers/pcap/dataset","seed":1337,"snapshot_version":1,"source":"pipeline"},
  "scenario": "dns_traffic",
  "tasks": ["summarize_pcap"],
  "ti": []

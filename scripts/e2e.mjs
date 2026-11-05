@@ -4,13 +4,13 @@
 // cleared first; that is the only state this touches besides the data the test itself creates.
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { rmSync } from "node:fs";
+import { readdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 
 const PROD = process.argv.includes("--prod");
 const COMPOSE = PROD ? "docker compose -f docker-compose.yml -f docker-compose.prod.yml" : "docker compose";
-// E2E_PROD tells threat-intel.spec.ts to assert the `mock` provider is refused instead of
-// running the enrichment flow against it.
+// E2E_PROD tells threat-intel.spec.ts and ai-analyst.spec.ts to assert the `mock` providers
+// are refused instead of running the enrichment / AI flows against them.
 const TARGET = PROD ? "-e E2E_BASE_URL=https://gateway:8443 -e E2E_IGNORE_HTTPS_ERRORS=1 -e E2E_PROD=1" : "";
 
 function sh(command) {
@@ -44,6 +44,9 @@ docker([...pcapGen, "-m", "dataset.generate", "/out"]);
 // A small capture whose names are aimed at the `mock` threat-intel provider (threat-intel
 // spec). The run label gives the rate-limited name a fresh first lookup on every run.
 docker([...pcapGen, "-m", "dataset.ti_mock", "/out", randomBytes(4).toString("hex")]);
+// Two small captures carrying `ai-mock` markers for the AI analyst spec (a 429 once, then a
+// verifiable answer; a hostile answer). The run label gives the 429 a fresh first request.
+docker([...pcapGen, "-m", "dataset.ai_mock", "/out", randomBytes(4).toString("hex")]);
 
 // Synthetic executables for the static scenarios (they only reference APIs or carry packer
 // markers; never executed). Only these files are kept: the full set includes EICAR.
@@ -53,13 +56,25 @@ docker([
   "-c", "python -m samples.generate /tmp/samples >/dev/null && cp /tmp/samples/downloader_imports.bin /tmp/samples/packed_like.bin /out/static/ && chmod -R a+rX /out",
 ]);
 
-// Dev: the `mock` provider's sink (its key reaches the e2e container through compose
-// interpolation, never through this script's output). Prod has no sink: the spec asserts
-// the mock is refused there.
-if (!PROD) sh(`${COMPOSE} --profile e2e up -d --wait --no-deps ti-mock`);
+// Dev: the `mock` providers' sinks (their keys reach the e2e container through compose
+// interpolation, never through this script's output). Prod has no sink: the specs assert
+// the mocks are refused there. ai-mock is recreated so it forgets the markers it has seen.
+if (!PROD) sh(`${COMPOSE} --profile e2e up -d --wait --no-deps --force-recreate ti-mock ai-mock`);
 
+// Every spec registers one fresh user, and registration is limited to 5 per 10 minutes per IP:
+// the specs run in batches of at most five, with the register keys cleared before each.
 // A Lua one-liner avoids shell pipes, so it behaves the same under cmd.exe and sh.
-sh(
-  `${COMPOSE} exec -T redis redis-cli EVAL "for _,k in ipairs(redis.call('KEYS', ARGV[1])) do redis.call('DEL', k) end return 1" 0 "rl:register:*"`,
-);
-sh(`${COMPOSE} --profile e2e run --rm --build ${TARGET} e2e`);
+function clearRegisterLimit() {
+  sh(
+    `${COMPOSE} exec -T redis redis-cli EVAL "for _,k in ipairs(redis.call('KEYS', ARGV[1])) do redis.call('DEL', k) end return 1" 0 "rl:register:*"`,
+  );
+}
+const specs = readdirSync(resolve("apps/web/e2e"))
+  .filter((name) => name.endsWith(".spec.ts"))
+  .sort();
+const BATCH = 5;
+for (let i = 0; i < specs.length; i += BATCH) {
+  clearRegisterLimit();
+  const files = specs.slice(i, i + BATCH).map((name) => `e2e/${name}`).join(" ");
+  sh(`${COMPOSE} --profile e2e run --rm ${i === 0 ? "--build" : ""} ${TARGET} e2e pnpm exec playwright test ${files}`);
+}

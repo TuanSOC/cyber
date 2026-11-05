@@ -84,3 +84,11 @@ def test_its_environment_holds_no_api_secrets() -> None:
     assert leaked == []
     # Its broker user is `enrich` (confined to enrich* keys), never api/ingest.
     assert os.environ["BROKER_URL"].startswith("redis://enrich:")
+
+
+def test_it_holds_no_ai_private_key() -> None:
+    """M5 role separation: the AI seal private key (and the dev platform key) belong to the
+    analyst worker only; the enrich worker opens TI keys and nothing else."""
+    assert not Path("/run/secrets/ai_seal_private").exists()
+    assert "AI_SEAL_PRIVATE_KEYS_FILE" not in os.environ
+    assert "AI_PLATFORM_KEY_FILE" not in os.environ

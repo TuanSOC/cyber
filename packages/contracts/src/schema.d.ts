@@ -317,7 +317,8 @@ export interface paths {
         };
         /**
          * Get Ai Run Context
-         * @description The exact frozen context(s) sent; `reveal=true` adds the pseudonym map.
+         * @description The exact frozen context(s) sent; `reveal=true` adds the pseudonym map (audited;
+         *     `evidence.write` only, 403 for viewers).
          */
         get: operations["get_ai_run_context_api_v1_orgs__org_id__ai_runs__run_id__context_get"];
         put?: never;
@@ -1345,6 +1346,19 @@ export interface components {
             /** Pseudonymize Internal */
             pseudonymize_internal: boolean;
         };
+        /**
+         * AiLimitsIn
+         * @description Self-imposed limits: an org may lower them, never raise them above the ceiling.
+         */
+        AiLimitsIn: {
+            /** Per Minute */
+            per_minute?: number | null;
+        };
+        /** AiLimitsOut */
+        AiLimitsOut: {
+            /** Per Minute */
+            per_minute: number;
+        };
         /** AiModelOut */
         AiModelOut: {
             /** Id */
@@ -1432,8 +1446,10 @@ export interface components {
         AiProviderOut: {
             /** Available */
             available: boolean;
+            ceilings: components["schemas"]["AiLimitsOut"];
             /** Configured */
             configured: boolean;
+            default_limits: components["schemas"]["AiLimitsOut"];
             /** Default Model */
             default_model: string;
             /** Enabled */
@@ -1444,6 +1460,7 @@ export interface components {
             label: string;
             /** Last Error Code */
             last_error_code: string | null;
+            limits: components["schemas"]["AiLimitsOut"] | null;
             /** Model */
             model: string | null;
             /** Models */
@@ -1486,8 +1503,10 @@ export interface components {
         AiProviderSaved: {
             /** Available */
             available: boolean;
+            ceilings: components["schemas"]["AiLimitsOut"];
             /** Configured */
             configured: boolean;
+            default_limits: components["schemas"]["AiLimitsOut"];
             /** Default Model */
             default_model: string;
             /** Enabled */
@@ -1498,6 +1517,7 @@ export interface components {
             label: string;
             /** Last Error Code */
             last_error_code: string | null;
+            limits: components["schemas"]["AiLimitsOut"] | null;
             /** Model */
             model: string | null;
             /** Models */
@@ -1535,6 +1555,7 @@ export interface components {
             api_key?: string | null;
             /** Enabled */
             enabled?: boolean | null;
+            limits?: components["schemas"]["AiLimitsIn"] | null;
             /** Model */
             model?: string | null;
         };

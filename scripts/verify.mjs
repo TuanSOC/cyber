@@ -8,6 +8,8 @@ const PROD = process.argv.includes("--prod");
 // Live threat-intel tests (real providers, real keys) are never part of the gate: they are
 // skipped unless CYBERLAB_LIVE_TI=1, so make sure no child process inherits it.
 delete process.env.CYBERLAB_LIVE_TI;
+// Nor are live AI tests or the live AI evaluation (M5): real keys, real money.
+delete process.env.AI_EVAL_LIVE;
 const COMPOSE_PROD = "docker compose -f docker-compose.yml -f docker-compose.prod.yml";
 const started = Date.now();
 
@@ -74,21 +76,25 @@ async function healthProblems(base) {
 // `env` lists NAME=value pairs the running container must have (M4: the prod enrich-worker
 // runs ENV=prod, so the mock and the dev-only MISP flags are refused). Only those names are
 // compared: the container's other variables hold secrets and are never printed.
+// Every replica is checked (the prod analyst-worker runs two, M5).
 async function workerProblems(service, env = {}, image = null) {
   await new Promise((resolve) => setTimeout(resolve, 15_000));
-  const id = spawnSync(`${COMPOSE_PROD} ps -q ${service}`, { shell: true }).stdout.toString().trim();
-  if (!id) return [`${service}: no container`];
-  const inspect = spawnSync(`docker inspect ${id}`, { shell: true, maxBuffer: 16 * 1024 * 1024 });
-  const [container] = JSON.parse(inspect.stdout.toString() || "[{}]");
+  const ids = spawnSync(`${COMPOSE_PROD} ps -q ${service}`, { shell: true }).stdout.toString().split(/\s+/).filter(Boolean);
+  if (!ids.length) return [`${service}: no container`];
+  const inspect = spawnSync(`docker inspect ${ids.join(" ")}`, { shell: true, maxBuffer: 16 * 1024 * 1024 });
+  const containers = JSON.parse(inspect.stdout.toString() || "[{}]");
   const problems = [];
-  const state = `${container?.State?.Status} ${container?.RestartCount}`;
-  if (state !== "running 0") problems.push(`${service}: ${state} (expected "running 0")`);
-  if (image && container?.Config?.Image !== image) problems.push(`${service}: image ${container?.Config?.Image}`);
-  const actual = new Map(
-    (container?.Config?.Env ?? []).map((pair) => [pair.slice(0, pair.indexOf("=")), pair.slice(pair.indexOf("=") + 1)]),
-  );
-  for (const [name, value] of Object.entries(env)) {
-    if (actual.get(name) !== value) problems.push(`${service}: ${name} is not ${value}`);
+  for (const container of containers) {
+    const name = `${service} (${container?.Name ?? "?"})`;
+    const state = `${container?.State?.Status} ${container?.RestartCount}`;
+    if (state !== "running 0") problems.push(`${name}: ${state} (expected "running 0")`);
+    if (image && container?.Config?.Image !== image) problems.push(`${name}: image ${container?.Config?.Image}`);
+    const actual = new Map(
+      (container?.Config?.Env ?? []).map((pair) => [pair.slice(0, pair.indexOf("=")), pair.slice(pair.indexOf("=") + 1)]),
+    );
+    for (const [key, value] of Object.entries(env)) {
+      if (actual.get(key) !== value) problems.push(`${name}: ${key} is not ${value}`);
+    }
   }
   return problems;
 }
@@ -98,11 +104,22 @@ async function verifyProd() {
     "Enrich-worker envs: no api secrets (dev, test, prod), prod env matches the tested fixture",
     "node scripts/check-enrich-env.mjs",
   );
+  run(
+    "Analyst-worker envs: no api/TI secrets, AI keys only there, prod env matches the tested fixture",
+    "node scripts/check-analyst-env.mjs",
+  );
   run("Prod stack up", `${COMPOSE_PROD} up -d --build --wait --wait-timeout 400`);
   await probe("Prod enrich-worker: running, never restarted, ENV=prod, no mock", () =>
     workerProblems(
       "enrich-worker",
       { ENV: "prod", PROCESS_ROLE: "enrich", TI_MOCK_ENABLED: "false" },
+      "cyberlab/api:prod",
+    ),
+  );
+  await probe("Prod analyst-worker: every replica running, never restarted, ENV=prod, no mock or platform key", () =>
+    workerProblems(
+      "analyst-worker",
+      { ENV: "prod", PROCESS_ROLE: "analyst", AI_MOCK_ENABLED: "false", AI_PLATFORM_PROVIDER: "" },
       "cyberlab/api:prod",
     ),
   );
@@ -133,12 +150,13 @@ try {
   // Celery workers do not hot-reload: recreate them so the gate tests the current code.
   run(
     "Workers: reload code",
-    "docker compose --profile test up -d --force-recreate --no-deps pcap-worker pcap-worker-test static-worker static-worker-test ingest-worker ingest-beat enrich-worker enrich-worker-test ti-mock",
+    "docker compose --profile test up -d --force-recreate --no-deps pcap-worker pcap-worker-test static-worker static-worker-test ingest-worker ingest-beat enrich-worker enrich-worker-test ti-mock analyst-worker analyst-worker-test ai-mock",
   );
   run(
     "API: ruff, format, mypy --strict, pytest",
-    // Includes tests/container/test_egress.py (api-test: no route, no ti-mock); live TI tests skip.
-    'docker compose --profile test run --rm -e CYBERLAB_LIVE_TI=0 api-test sh -c "uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest -q"',
+    // Includes tests/container/test_egress.py (api-test: no route, no ti-mock / ai-mock) and
+    // the real AI pipeline (analyst-worker-test + ai-mock); live TI / AI tests skip.
+    'docker compose --profile test run --rm -e CYBERLAB_LIVE_TI=0 -e AI_EVAL_LIVE=0 api-test sh -c "uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest -q"',
   );
   run(
     "Enrich worker network: only Postgres, the broker and egress (review M2)",
@@ -148,7 +166,12 @@ try {
     "Ingest worker network: no route out, no ti-mock (M4 egress suite)",
     "docker compose exec -T -e PYTHONDONTWRITEBYTECODE=1 ingest-worker python -m pytest --noconftest -q -p no:cacheprovider tests/container/test_egress.py",
   );
+  run(
+    "Analyst worker network: only Postgres, the broker and egress (ai-mock); no TI key (M5)",
+    "docker compose --profile test run --rm --no-deps -e PYTHONDONTWRITEBYTECODE=1 analyst-worker-test python -m pytest --noconftest -q -p no:cacheprovider tests/container/test_analyst_network.py",
+  );
   run("TI key leak: a fresh sentinel key is absent from every container log", "node scripts/check-ti-key-leak.mjs");
+  run("AI key leak: a fresh sentinel key is absent from every container log", "node scripts/check-ai-key-leak.mjs");
   run("Workers (pcap, static, kit): ruff, format, mypy, sandbox + engine tests", "pnpm -s test:workers");
   run(
     "Web: typecheck, eslint, unit tests",

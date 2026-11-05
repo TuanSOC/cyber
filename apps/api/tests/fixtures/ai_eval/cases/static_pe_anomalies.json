@@ -6,18 +6,22 @@
   {
    "analyzer": "static",
    "created_at": "2026-01-01T01:01:00Z",
-   "evidence": {"description":"PE32 executable for MS Windows","filename":"pe_anomalies.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":15872,"uploaded_at":"2026-01-01T01:00:00Z"},
+   "evidence": {"description":"PE32 executable for MS Windows","filename":"pe_anomalies.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":28672,"uploaded_at":"2026-01-01T01:00:00Z"},
    "finished_at": "2026-01-01T01:02:00Z",
    "key": "j1",
    "profile": "full",
-   "summary": {"counts":{"capabilities":0,"exports":0,"findings":5,"imports":16,"iocs":0,"resources":0,"sections":3,"signatures":1,"strings":2},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":4070908800,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"2331ddaba5dbbe65fce9eba29efdedc3","is_dll":false,"machine":"I386","overlay_size":3584,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":2},"profile":"full","sample":{"analyzer_derived":{"imphash":"2331ddaba5dbbe65fce9eba29efdedc3","rich_header_hash":null,"ssdeep":null},"entropy":5.2,"file_type":"PE32 executable for MS Windows","md5":"9b83dad0fb49374d3c9746da82a34282","mime":"application/vnd.microsoft.portable-executable","sha1":"e86bf04d537487fec9e0c9a162f8f7beae100734","sha256":"be1c58b4976fe09d8d57b2eee613c90fa67aaac03a4416d4902eb3c1089f8af3","size":15872},"schema_version":"static.v1","tool_versions":{"capa":"9.2.1","clamav":"1.4.3","floss":"3.1.1","yara":"4.5.2"},"truncated":{}},
+   "summary": {"counts":{"capabilities":2,"exports":0,"findings":5,"imports":16,"iocs":0,"resources":1,"sections":6,"signatures":1,"strings":36},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["executable_image","32bit_machine"],"compile_timestamp":4070908800,"dll_characteristics":["dynamic_base","nx_compat","terminal_server_aware"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"is_dll":false,"machine":"i386","overlay_size":10752,"subsystem":"WINDOWS_CUI","tls_callbacks":2},"profile":"full","sample":{"analyzer_derived":{"imphash":"957db9470474ffca0ec010a54f7c0a4a","rich_header_hash":null,"ssdeep":"384:hHcmpV0rFJ+OfaNNg6LEU7Atk3qXfM7goqiayt10adU5gpOlAnN8dFTEN63OsYLq:RcmpeGOSN/pQTozGadUfWNvDfBYZj"},"entropy":6.5347,"file_type":"PE32 executable for MS Windows 6.00 (console), Intel i386, 6 sections","md5":"b5a0bc860ad019956c49882932b38374","mime":"application/vnd.microsoft.portable-executable","sha1":"73a8a33b7d185ef4797dc8e30d67b9e39c830ae4","sha256":"5b34e27b90ad84d114e81201cc2f21e647a32c94aab381757a76aa5109b4923d","size":28672},"schema_version":"static.v1","tool_versions":{"capa":"10.0.0","capa_rules":"v10.0.0","clamav":"1.4.3","clamav_db":"custom:clamav","floss":"3.2.0","pefile":"2024.8.26","ppdeep":"20260221","pyelftools":"0.33","python":"3.12.16","yara":"4.5.4"},"truncated":{}},
    "tables": {
     "analysis_findings": [
-     {"attributes":{"reason":"future","timestamp":4070908800},"confidence":0.8,"description":"The PE header timestamp is 2099-01-01 00:00:00 UTC (in the future). Timestamps are easily set to any value, so this only says the header was not written by a normal build.","detection_method":"heuristic:pe_anomaly@1","dst_ip":null,"dst_port":null,"evidence_refs":["pe_anomaly:timestamp_anomaly"],"finding_id":"534f40fd-d288-5409-b617-bd241a8e670f","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"Implausible compile timestamp","ts":"2026-01-01T00:00:00Z","type":"timestamp_anomaly"},
-     {"attributes":{"count":2},"confidence":0.8,"description":"The PE registers 2 TLS callback(s), which run before the entry point. Common in MinGW / Delphi runtimes; also used to run code early.","detection_method":"heuristic:pe_anomaly@1","dst_ip":null,"dst_port":null,"evidence_refs":["pe_anomaly:tls_callbacks"],"finding_id":"9311697b-f45c-5679-869f-66261db77b5a","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"TLS callbacks present (2)","ts":"2026-01-01T00:00:00Z","type":"tls_callbacks"},
-     {"attributes":{"count":1,"largest":8192},"confidence":0.8,"description":"1 resource(s) have entropy above 7.2 (largest: 8192 bytes), consistent with compressed or encrypted embedded data.","detection_method":"heuristic:pe_anomaly@1","dst_ip":null,"dst_port":null,"evidence_refs":["pe_anomaly:high_entropy_resource"],"finding_id":"b0fbdca5-01b9-59b0-a8c0-10a84ad6cb8b","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"High-entropy resources (1)","ts":"2026-01-01T00:00:00Z","type":"high_entropy_resource"},
-     {"attributes":{"size":3584},"confidence":0.8,"description":"3584 bytes follow the last section (entropy of the whole file: 6.21). Installers and self-extracting archives store payloads this way.","detection_method":"heuristic:pe_anomaly@1","dst_ip":null,"dst_port":null,"evidence_refs":["pe_anomaly:overlay"],"finding_id":"5b85ff1d-900b-5d20-9148-0636f16c0683","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"Overlay data after the last section (3584 bytes)","ts":"2026-01-01T00:00:00Z","type":"overlay"},
-     {"attributes":{"description":"embedded PE in the overlay","engine":"yara","name":"CyberLab_Embedded_PE_In_Overlay","namespace":"cyberlab"},"confidence":0.8,"description":"The YARA rule cyberlab:CyberLab_Embedded_PE_In_Overlay (rule-supplied description: embedded PE in the overlay) matched this file.","detection_method":"signature:yara@1","dst_ip":null,"dst_port":null,"evidence_refs":["yara:CyberLab_Embedded_PE_In_Overlay"],"finding_id":"af36c48c-8fa9-57fa-9f79-75bd920cce46","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"YARA rule match: CyberLab_Embedded_PE_In_Overlay","ts":"2026-01-01T00:00:00Z","type":"yara_match"}
+     {"attributes":{"description":"Overlay data starts with a complete PE header (embedded executable)","engine":"yara","name":"CyberLab_Embedded_PE_In_Overlay","namespace":"image.cyberlab_baseline"},"confidence":0.8,"description":"The YARA rule image.cyberlab_baseline:CyberLab_Embedded_PE_In_Overlay (rule-supplied description: Overlay data starts with a complete PE header (embedded executable)) matched this file.","detection_method":"signature:yara@1","dst_ip":null,"dst_port":null,"evidence_refs":["yara:image.cyberlab_baseline:CyberLab_Embedded_PE_In_Overlay"],"finding_id":"cc354ca5-b383-575a-9003-c3b3de2f52b7","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"YARA rule match: CyberLab_Embedded_PE_In_Overlay","ts":"2026-01-01T00:00:00Z","type":"yara_match"},
+     {"attributes":{"overlay_bytes":10752,"overlay_ratio":0.375},"confidence":0.9,"description":"10752 bytes follow the last section (entropy of the whole file: 6.53). Installers and self-extracting archives store payloads this way.","detection_method":"heuristic:pe_anomaly@1","dst_ip":null,"dst_port":null,"evidence_refs":[],"finding_id":"6715e835-f832-5567-a0f8-b4c1d3aed9b3","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"Overlay data after the last section (10752 bytes)","ts":"2026-01-01T00:00:00Z","type":"overlay"},
+     {"attributes":{"count":1,"largest_bytes":8192,"max_entropy":7.9775},"confidence":0.6,"description":"1 resource(s) have entropy above 7.5 (largest: 8192 bytes), consistent with compressed or encrypted embedded data.","detection_method":"heuristic:pe_anomaly@1","dst_ip":null,"dst_port":null,"evidence_refs":["resource:RT_RCDATA/101"],"finding_id":"a4abca46-d4be-59d5-ad8b-83af7002e7f7","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"High-entropy resources (1)","ts":"2026-01-01T00:00:00Z","type":"high_entropy_resource"},
+     {"attributes":{"reason":"in the future","timestamp":4070908800},"confidence":0.6,"description":"The PE header timestamp is 4070908800 (in the future). Timestamps are easily set to any value, so this only says the header was not written by a normal build.","detection_method":"heuristic:pe_anomaly@1","dst_ip":null,"dst_port":null,"evidence_refs":[],"finding_id":"522e0662-60be-5e82-8985-ef6faeeb208b","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"Implausible compile timestamp","ts":"2026-01-01T00:00:00Z","type":"timestamp_anomaly"},
+     {"attributes":{"count":2},"confidence":0.9,"description":"The PE registers 2 TLS callback(s), which run before the entry point. Common in MinGW / Delphi runtimes; also used to run code early.","detection_method":"heuristic:pe_anomaly@1","dst_ip":null,"dst_port":null,"evidence_refs":[],"finding_id":"d3993ab7-f598-54f9-9cac-a82327e8b410","flow_ref":null,"last_seen":null,"protocol":null,"severity":"info","src_ip":null,"src_port":null,"title":"TLS callbacks present (2)","ts":"2026-01-01T00:00:00Z","type":"tls_callbacks"}
+    ],
+    "malware_capabilities": [
+     {"attack":[],"matches":1,"mbc":[],"name":"contain a thread local storage (.tls) section","namespace":"executable/pe/section/tls"},
+     {"attack":[],"matches":1,"mbc":["B0023"],"name":"contain an embedded PE file","namespace":"executable/subfile/pe"}
     ],
     "malware_imports": [
      {"function":"GetModuleHandleA","library":"KERNEL32.dll","ordinal":null},
@@ -37,29 +41,69 @@
      {"function":"memcpy","library":"msvcrt.dll","ordinal":null},
      {"function":"exit","library":"msvcrt.dll","ordinal":null}
     ],
+    "malware_resources": [
+     {"entropy":7.9775,"language":"SUBLANG_ENGLISH_US","name":"101","sha256":"89307a18689bf76dc6ca5c6dbd08cc24fc7ddd27344f1919ee451b2ad3e9b19f","size":8192,"type":"RT_RCDATA"}
+    ],
     "malware_samples": [
-     {"elf":null,"entropy":5.2,"file_format":"pe","file_type":"PE32 executable for MS Windows","md5":"9b83dad0fb49374d3c9746da82a34282","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":4070908800,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"2331ddaba5dbbe65fce9eba29efdedc3","is_dll":false,"machine":"I386","overlay_size":3584,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":2},"sha1":"e86bf04d537487fec9e0c9a162f8f7beae100734","sha256":"be1c58b4976fe09d8d57b2eee613c90fa67aaac03a4416d4902eb3c1089f8af3","size":15872,"ssdeep":null}
+     {"elf":null,"entropy":6.5347,"file_format":"pe","file_type":"PE32 executable for MS Windows 6.00 (console), Intel i386, 6 sections","md5":"b5a0bc860ad019956c49882932b38374","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["executable_image","32bit_machine"],"compile_timestamp":4070908800,"dll_characteristics":["dynamic_base","nx_compat","terminal_server_aware"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"957db9470474ffca0ec010a54f7c0a4a","is_dll":false,"machine":"i386","overlay_size":10752,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":2},"sha1":"73a8a33b7d185ef4797dc8e30d67b9e39c830ae4","sha256":"5b34e27b90ad84d114e81201cc2f21e647a32c94aab381757a76aa5109b4923d","size":28672,"ssdeep":"384:hHcmpV0rFJ+OfaNNg6LEU7Atk3qXfM7goqiayt10adU5gpOlAnN8dFTEN63OsYLq:RcmpeGOSN/pQTozGadUfWNvDfBYZj"}
     ],
     "malware_sections": [
-     {"entropy":6.1,"flags":["read","execute"],"index":0,"name":".text","raw_size":2048,"virtual_address":4096,"virtual_size":2048},
-     {"entropy":4.2,"flags":["read"],"index":1,"name":".rdata","raw_size":2048,"virtual_address":8192,"virtual_size":2048},
-     {"entropy":1.3,"flags":["read"],"index":2,"name":".data","raw_size":2048,"virtual_address":12288,"virtual_size":2048}
+     {"entropy":5.311,"flags":["code","execute","read"],"index":0,"name":".text","raw_size":6144,"virtual_address":4096,"virtual_size":6144},
+     {"entropy":0.3007,"flags":["idata","read"],"index":1,"name":".rdata","raw_size":512,"virtual_address":12288,"virtual_size":17},
+     {"entropy":3.9633,"flags":["idata","read","write"],"index":2,"name":".data","raw_size":512,"virtual_address":16384,"virtual_size":512},
+     {"entropy":3.4223,"flags":["idata","read","write"],"index":3,"name":".idata","raw_size":512,"virtual_address":20480,"virtual_size":433},
+     {"entropy":0.3083,"flags":["idata","read","write"],"index":4,"name":".tls","raw_size":512,"virtual_address":24576,"virtual_size":60},
+     {"entropy":7.8237,"flags":["idata","read"],"index":5,"name":".rsrc","raw_size":8704,"virtual_address":28672,"virtual_size":8280}
     ],
     "malware_signature_matches": [
-     {"engine":"yara","meta":{"description":"embedded PE in the overlay"},"name":"CyberLab_Embedded_PE_In_Overlay","namespace":"cyberlab","tags":[]}
+     {"engine":"yara","meta":{"description":"Overlay data starts with a complete PE header (embedded executable)","severity":"medium"},"name":"CyberLab_Embedded_PE_In_Overlay","namespace":"image.cyberlab_baseline","tags":["embedded"]}
     ],
     "malware_strings": [
-     {"encoding":"ascii","offset":8192,"value":"anomalies sample"},
-     {"encoding":"ascii","offset":8209,"value":"embedded"}
+     {"encoding":"ascii","offset":77,"value":"!This program cannot be run in DOS mode."},
+     {"encoding":"ascii","offset":415,"value":"`.rdata"},
+     {"encoding":"ascii","offset":455,"value":"@.data"},
+     {"encoding":"ascii","offset":496,"value":".idata"},
+     {"encoding":"ascii","offset":7168,"value":"anomalies sample"},
+     {"encoding":"ascii","offset":8398,"value":"GetModuleHandleA"},
+     {"encoding":"ascii","offset":8418,"value":"GetCommandLineA"},
+     {"encoding":"ascii","offset":8436,"value":"GetLastError"},
+     {"encoding":"ascii","offset":8452,"value":"ExitProcess"},
+     {"encoding":"ascii","offset":8466,"value":"GetStartupInfoA"},
+     {"encoding":"ascii","offset":8484,"value":"HeapAlloc"},
+     {"encoding":"ascii","offset":8496,"value":"HeapFree"},
+     {"encoding":"ascii","offset":8508,"value":"GetProcessHeap"},
+     {"encoding":"ascii","offset":8526,"value":"CloseHandle"},
+     {"encoding":"ascii","offset":8548,"value":"printf"},
+     {"encoding":"ascii","offset":8558,"value":"malloc"},
+     {"encoding":"ascii","offset":8576,"value":"strlen"},
+     {"encoding":"ascii","offset":8586,"value":"memcpy"},
+     {"encoding":"ascii","offset":8601,"value":"KERNEL32.dll"},
+     {"encoding":"ascii","offset":8614,"value":"msvcrt.dll"},
+     {"encoding":"ascii","offset":9371,"value":"W&6Qhr"},
+     {"encoding":"ascii","offset":10311,"value":" ~m\\g["},
+     {"encoding":"ascii","offset":10324,"value":"q3;<{X="},
+     {"encoding":"ascii","offset":11504,"value":"pcSC;r"},
+     {"encoding":"ascii","offset":12604,"value":"v1)`0?Y"},
+     {"encoding":"ascii","offset":13442,"value":"RCW$To"},
+     {"encoding":"ascii","offset":14002,"value":"eRt:)W"},
+     {"encoding":"ascii","offset":14390,"value":"fc'.MX"},
+     {"encoding":"ascii","offset":14415,"value":"k8 Skd:S^]"},
+     {"encoding":"ascii","offset":15621,"value":"_luU3r"},
+     {"encoding":"ascii","offset":15733,"value":"d2*Kty"},
+     {"encoding":"ascii","offset":20207,"value":"UXPUUU1"},
+     {"encoding":"ascii","offset":25088,"value":"embedded"},
+     {"encoding":"ascii","offset":27083,"value":")wRlf6"},
+     {"encoding":"ascii","offset":27407,"value":"l_Oo)\\s"},
+     {"encoding":"ascii","offset":28323,"value":"R*X5um"}
     ]
    },
-   "worker_version": "static-worker/hand-trimmed"
+   "worker_version": "static-worker/snapshot"
   }
  ],
  "kind": "static",
  "name": "static_pe_anomalies",
  "plants": [],
- "provenance": {"dataset":"apps/workers/static/samples/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":20261105,"snapshot_version":1,"source":"hand-trimmed"},
+ "provenance": {"dataset":"apps/workers/static/samples","seed":20261105,"snapshot_version":1,"source":"pipeline"},
  "scenario": "pe_anomalies",
  "tasks": ["explain_static"],
  "ti": []

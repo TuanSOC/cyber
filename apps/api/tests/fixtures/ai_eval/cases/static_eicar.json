@@ -6,29 +6,29 @@
   {
    "analyzer": "static",
    "created_at": "2026-01-01T01:01:00Z",
-   "evidence": {"description":"ASCII text","filename":"eicar.bin","mime":"text/plain","size_bytes":3072,"uploaded_at":"2026-01-01T01:00:00Z"},
+   "evidence": {"description":"ASCII text","filename":"eicar.bin","mime":"text/plain","size_bytes":68,"uploaded_at":"2026-01-01T01:00:00Z"},
    "finished_at": "2026-01-01T01:02:00Z",
    "key": "j1",
    "profile": "av",
-   "summary": {"counts":{"capabilities":0,"exports":0,"findings":1,"imports":0,"iocs":0,"resources":0,"sections":0,"signatures":1,"strings":0},"elf":null,"engine_errors":[],"file_format":"other","pe":null,"profile":"av","sample":{"analyzer_derived":{"imphash":null,"rich_header_hash":null,"ssdeep":null},"entropy":5.2,"file_type":"ASCII text","md5":"8ee980b1b14bb8db014b3b71b5e46eb9","mime":"text/plain","sha1":"df4f2126f11d90f779d514ce22b492579ba88cf7","sha256":"aa59f16d3048a43ff4e752bf23b930a7d0404477b147c5cc99b6fe5ca355ad43","size":3072},"schema_version":"static.v1","tool_versions":{"capa":"9.2.1","clamav":"1.4.3","floss":"3.1.1","yara":"4.5.2"},"truncated":{}},
+   "summary": {"counts":{"capabilities":0,"exports":0,"findings":1,"imports":0,"iocs":0,"resources":0,"sections":0,"signatures":1,"strings":0},"elf":null,"engine_errors":[],"file_format":"other","pe":null,"profile":"av","sample":{"analyzer_derived":{"imphash":null,"rich_header_hash":null,"ssdeep":"3:a+JraNvsgzsVqSwHq9:tJuOgzsko"},"entropy":4.8723,"file_type":"EICAR virus test files","md5":"44d88612fea8a8f36de82e1278abb02f","mime":"text/plain","sha1":"3395856ce81f2b7382dee72602f798b642f14140","sha256":"275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f","size":68},"schema_version":"static.v1","tool_versions":{"capa":"10.0.0","capa_rules":"v10.0.0","clamav":"1.4.3","clamav_db":"custom:clamav","floss":"3.2.0","pefile":"2024.8.26","ppdeep":"20260221","pyelftools":"0.33","python":"3.12.16","yara":"4.5.4"},"truncated":{}},
    "tables": {
     "analysis_findings": [
-     {"attributes":{"engine":"clamav","name":"CyberLab.Test.EICAR"},"confidence":0.8,"description":"ClamAV reported the signature CyberLab.Test.EICAR (engine-supplied name) for this file. Review the signature and the file before drawing conclusions; test signatures and potentially-unwanted-application signatures are included.","detection_method":"signature:clamav@1","dst_ip":null,"dst_port":null,"evidence_refs":["clamav:CyberLab.Test.EICAR"],"finding_id":"0ed582f0-0d9e-5777-8215-2bc007724f4a","flow_ref":null,"last_seen":null,"protocol":null,"severity":"high","src_ip":null,"src_port":null,"title":"ClamAV signature match: CyberLab.Test.EICAR","ts":"2026-01-01T00:00:00Z","type":"av_signature_match"}
+     {"attributes":{"engine":"clamav","name":"CyberLab.Test.EICAR.UNOFFICIAL"},"confidence":0.9,"description":"ClamAV reported the signature CyberLab.Test.EICAR.UNOFFICIAL (engine-supplied name) for this file. Review the signature and the file before drawing conclusions; test signatures and potentially-unwanted-application signatures are included.","detection_method":"signature:clamav@1","dst_ip":null,"dst_port":null,"evidence_refs":["clamav:CyberLab.Test.EICAR.UNOFFICIAL"],"finding_id":"3d6e3d4d-6f67-5ce2-a512-d41c420a8d61","flow_ref":null,"last_seen":null,"protocol":null,"severity":"high","src_ip":null,"src_port":null,"title":"ClamAV signature match: CyberLab.Test.EICAR.UNOFFICIAL","ts":"2026-01-01T00:00:00Z","type":"av_signature_match"}
     ],
     "malware_samples": [
-     {"elf":null,"entropy":5.2,"file_format":"other","file_type":"ASCII text","md5":"8ee980b1b14bb8db014b3b71b5e46eb9","mime":"text/plain","pe":null,"sha1":"df4f2126f11d90f779d514ce22b492579ba88cf7","sha256":"aa59f16d3048a43ff4e752bf23b930a7d0404477b147c5cc99b6fe5ca355ad43","size":3072,"ssdeep":null}
+     {"elf":null,"entropy":4.8723,"file_format":"other","file_type":"EICAR virus test files","md5":"44d88612fea8a8f36de82e1278abb02f","mime":"text/plain","pe":null,"sha1":"3395856ce81f2b7382dee72602f798b642f14140","sha256":"275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f","size":68,"ssdeep":"3:a+JraNvsgzsVqSwHq9:tJuOgzsko"}
     ],
     "malware_signature_matches": [
-     {"engine":"clamav","meta":{"description":"CyberLab.Test.EICAR"},"name":"CyberLab.Test.EICAR","namespace":null,"tags":[]}
+     {"engine":"clamav","meta":{},"name":"CyberLab.Test.EICAR.UNOFFICIAL","namespace":null,"tags":[]}
     ]
    },
-   "worker_version": "static-worker/hand-trimmed"
+   "worker_version": "static-worker/snapshot"
   }
  ],
  "kind": "static",
  "name": "static_eicar",
  "plants": [],
- "provenance": {"dataset":"apps/workers/static/samples/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":20261105,"snapshot_version":1,"source":"hand-trimmed"},
+ "provenance": {"dataset":"apps/workers/static/samples","seed":20261105,"snapshot_version":1,"source":"pipeline"},
  "scenario": "eicar",
  "tasks": ["explain_static"],
  "ti": []

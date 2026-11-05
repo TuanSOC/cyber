@@ -581,9 +581,65 @@ async def test_overloaded_backs_off_then_fails(broker: Redis) -> None:
     assert (await _index(env.t, run_id)).attempts == 2
     assert 55 < await _seconds_until_resume(env.t, run_id) <= 61
     await _make_due(env.t, run_id)
-    assert await env.run(run_id) is AiRunStatus.FAILED  # the third call used the last one
+    assert await env.run(run_id) is AiRunStatus.WAITING
+    assert (await _index(env.t, run_id)).attempts == 3
+    assert 115 < await _seconds_until_resume(env.t, run_id) <= 121
+    await _make_due(env.t, run_id)
+    # Unbilled 529s use no call (the cap bounds billed calls): the backoff schedule ends it.
+    assert await env.run(run_id) is AiRunStatus.FAILED
     assert await _status(env.t, run_id) == ("failed", "overloaded", "failed")
+    assert env.provider.calls == 4
+    assert (await _index(env.t, run_id)).calls == 0
+
+
+async def test_an_unbilled_rate_limit_does_not_use_up_a_call(broker: Redis) -> None:
+    env, run_id = await _tenant(
+        broker, Scripted(_error(ProviderErrorKind.RATE_LIMITED, http_status=429, retry_after_s=1))
+    )
+    assert await env.run(run_id) is AiRunStatus.WAITING
+    assert (await _index(env.t, run_id)).calls == 0
+    assert env.provider.calls == 1
+
+
+async def test_a_rate_limit_with_the_call_cap_used_still_waits(broker: Redis) -> None:
+    """Review fix: a billed call, then a 429 at the cap, used to end `failed/provider_error`;
+    the 429 is not billed, so the run parks until the cooldown and then completes."""
+    env, run_id = await _tenant(
+        broker,
+        Scripted(
+            _error(ProviderErrorKind.TIMEOUT, request_sent=True),
+            _error(ProviderErrorKind.RATE_LIMITED, http_status=429, retry_after_s=1),
+            None,
+        ),
+    )
+    env.deps.settings = _settings(env.keys, ai_max_calls_per_run=2)
+    assert await env.run(run_id) is AiRunStatus.WAITING  # the timeout: billed, call 1
+    await _make_due(env.t, run_id)
+    assert await env.run(run_id) is AiRunStatus.WAITING  # the 429 at call 2: given back
+    assert (await _index(env.t, run_id)).calls == 1
+    await broker.delete(env.deps.limiter.keys("mock", env.t.org_id)[1])  # the cooldown
+    await _make_due(env.t, run_id)
+    assert await env.run(run_id) is AiRunStatus.COMPLETED
+    assert (await _index(env.t, run_id)).calls == 2
     assert env.provider.calls == 3
+
+
+async def test_an_overload_at_the_call_cap_backs_off_instead_of_failing(broker: Redis) -> None:
+    env, run_id = await _tenant(
+        broker,
+        Scripted(
+            _error(ProviderErrorKind.TIMEOUT, request_sent=True),
+            _error(ProviderErrorKind.OVERLOADED, http_status=529, request_sent=True),
+            None,
+        ),
+    )
+    env.deps.settings = _settings(env.keys, ai_max_calls_per_run=2)
+    assert await env.run(run_id) is AiRunStatus.WAITING
+    await _make_due(env.t, run_id)
+    assert await env.run(run_id) is AiRunStatus.WAITING
+    assert (await _index(env.t, run_id)).attempts == 1
+    await _make_due(env.t, run_id)
+    assert await env.run(run_id) is AiRunStatus.COMPLETED
 
 
 async def test_spend_limit_fails_and_parks_the_provider_until_midnight(broker: Redis) -> None:

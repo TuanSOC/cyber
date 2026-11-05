@@ -112,6 +112,17 @@ class AiModelOut(BaseModel):
     verified: bool
 
 
+class AiLimitsOut(BaseModel):
+    # Requests per minute per org (token bucket on the broker).
+    per_minute: int
+
+
+class AiLimitsIn(_In):
+    """Self-imposed limits: an org may lower them, never raise them above the ceiling."""
+
+    per_minute: int | None = Field(default=None, ge=1, le=1_000_000)
+
+
 class AiProviderOut(BaseModel):
     name: AiProviderName
     label: str
@@ -137,6 +148,11 @@ class AiProviderOut(BaseModel):
     last_error_code: str | None
     terms_ack_at: datetime | None
     paid_tier_ack_at: datetime | None
+    default_limits: AiLimitsOut
+    # The catalog ceiling, or the operator's `AI_CEILINGS.per_minute` override.
+    ceilings: AiLimitsOut
+    # The org's own (lowered) limits, if any.
+    limits: AiLimitsOut | None
 
 
 class AiProviderPage(Page[AiProviderOut]):
@@ -160,6 +176,8 @@ class AiProviderUpdate(_In):
     acknowledge_paid_tier: bool = Field(default=False, json_schema_extra=_no_default)
     # A catalog model id; null resets to the catalog default.
     model: Annotated[str, StringConstraints(min_length=1, max_length=64)] | None = None
+    # Replaces the org's limits; `{}` resets them to the catalog defaults.
+    limits: AiLimitsIn | None = None
 
 
 class AiVerifyQueued(BaseModel):

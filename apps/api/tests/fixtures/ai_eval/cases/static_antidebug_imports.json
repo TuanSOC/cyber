@@ -6,14 +6,14 @@
   {
    "analyzer": "static",
    "created_at": "2026-01-01T01:01:00Z",
-   "evidence": {"description":"PE32+ executable for MS Windows","filename":"antidebug_imports.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":11776,"uploaded_at":"2026-01-01T01:00:00Z"},
+   "evidence": {"description":"PE32+ executable for MS Windows","filename":"antidebug_imports.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":9216,"uploaded_at":"2026-01-01T01:00:00Z"},
    "finished_at": "2026-01-01T01:02:00Z",
    "key": "j1",
    "profile": "full",
-   "summary": {"counts":{"capabilities":0,"exports":0,"findings":1,"imports":14,"iocs":0,"resources":0,"sections":3,"signatures":0,"strings":1},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":64,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":5368709120,"imphash":"1962384d146eef1321cad5db92933551","is_dll":false,"machine":"AMD64","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"1962384d146eef1321cad5db92933551","rich_header_hash":null,"ssdeep":null},"entropy":5.2,"file_type":"PE32+ executable for MS Windows","md5":"f05cb5d03cdddd21661e1a6d6e316dd8","mime":"application/vnd.microsoft.portable-executable","sha1":"5461e97d275fe814275fdb38b250768ba7405962","sha256":"2ca87ea7f794206a9bb8eebe0ae7b2ad3c692e26d8b54fce321c050aa560dc06","size":11776},"schema_version":"static.v1","tool_versions":{"capa":"9.2.1","clamav":"1.4.3","floss":"3.1.1","yara":"4.5.2"},"truncated":{}},
+   "summary": {"counts":{"capabilities":0,"exports":0,"findings":1,"imports":14,"iocs":0,"resources":0,"sections":4,"signatures":0,"strings":24},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":64,"characteristics":["executable_image","large_address_aware"],"compile_timestamp":1600000000,"dll_characteristics":["high_entropy_va","dynamic_base","nx_compat","terminal_server_aware"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":5368709120,"is_dll":false,"machine":"amd64","overlay_size":0,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"0ee69e824e229d5a3d3fd8cff11146fc","rich_header_hash":null,"ssdeep":"192:7hSaBZHyq8Vv9Of2QC8lMHrv4kUo0fzShKz/i3L6A6IAY:VSajnb0v43o0fVDi31AY"},"entropy":4.9997,"file_type":"PE32+ executable for MS Windows 6.00 (console), x86-64, 4 sections","md5":"d025ddf471e49238478be383522f1714","mime":"application/vnd.microsoft.portable-executable","sha1":"349eb016e27667f8c86368b5e645f4a8979f5c42","sha256":"0c64b454c70e7b8e17765ccc688b3195698b448e8a4b457184ca387d62cdca22","size":9216},"schema_version":"static.v1","tool_versions":{"capa":"10.0.0","capa_rules":"v10.0.0","clamav":"1.4.3","clamav_db":"custom:clamav","floss":"3.2.0","pefile":"2024.8.26","ppdeep":"20260221","pyelftools":"0.33","python":"3.12.16","yara":"4.5.4"},"truncated":{}},
    "tables": {
     "analysis_findings": [
-     {"attributes":{"api_count":3,"apis":"IsDebuggerPresent, CheckRemoteDebuggerPresent, NtQueryInformationProcess","groups":"set"},"confidence":0.75,"description":"The import table combines debugger checks with process-information queries: IsDebuggerPresent, CheckRemoteDebuggerPresent, NtQueryInformationProcess. These can be used to change behaviour under analysis.","detection_method":"heuristic:suspicious_api@1","dst_ip":null,"dst_port":null,"evidence_refs":["import:IsDebuggerPresent","import:CheckRemoteDebuggerPresent","import:NtQueryInformationProcess"],"finding_id":"872cad7a-3843-5f4e-a634-5129362563a9","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"Debugger-detection API set imported","ts":"2026-01-01T00:00:00Z","type":"api_anti_debug"}
+     {"attributes":{"api_count":3,"apis":"CheckRemoteDebuggerPresent, IsDebuggerPresent, NtQueryInformationProcess","groups":"check, query"},"confidence":0.55,"description":"The import table combines debugger checks with process-information queries: CheckRemoteDebuggerPresent, IsDebuggerPresent, NtQueryInformationProcess. These can be used to change behaviour under analysis.","detection_method":"heuristic:suspicious_api@1","dst_ip":null,"dst_port":null,"evidence_refs":["import:CheckRemoteDebuggerPresent","import:IsDebuggerPresent","import:NtQueryInformationProcess"],"finding_id":"b9c44be8-40f3-53c7-be62-9e1c87e77863","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"Debugger-detection API set imported","ts":"2026-01-01T00:00:00Z","type":"api_anti_debug"}
     ],
     "malware_imports": [
      {"function":"GetModuleHandleA","library":"KERNEL32.dll","ordinal":null},
@@ -32,24 +32,48 @@
      {"function":"NtQueryInformationProcess","library":"ntdll.dll","ordinal":null}
     ],
     "malware_samples": [
-     {"elf":null,"entropy":5.2,"file_format":"pe","file_type":"PE32+ executable for MS Windows","md5":"f05cb5d03cdddd21661e1a6d6e316dd8","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":64,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":5368709120,"imphash":"1962384d146eef1321cad5db92933551","is_dll":false,"machine":"AMD64","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"sha1":"5461e97d275fe814275fdb38b250768ba7405962","sha256":"2ca87ea7f794206a9bb8eebe0ae7b2ad3c692e26d8b54fce321c050aa560dc06","size":11776,"ssdeep":null}
+     {"elf":null,"entropy":4.9997,"file_format":"pe","file_type":"PE32+ executable for MS Windows 6.00 (console), x86-64, 4 sections","md5":"d025ddf471e49238478be383522f1714","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":64,"characteristics":["executable_image","large_address_aware"],"compile_timestamp":1600000000,"dll_characteristics":["high_entropy_va","dynamic_base","nx_compat","terminal_server_aware"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":5368709120,"imphash":"0ee69e824e229d5a3d3fd8cff11146fc","is_dll":false,"machine":"amd64","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"sha1":"349eb016e27667f8c86368b5e645f4a8979f5c42","sha256":"0c64b454c70e7b8e17765ccc688b3195698b448e8a4b457184ca387d62cdca22","size":9216,"ssdeep":"192:7hSaBZHyq8Vv9Of2QC8lMHrv4kUo0fzShKz/i3L6A6IAY:VSajnb0v43o0fVDi31AY"}
     ],
     "malware_sections": [
-     {"entropy":6.1,"flags":["read","execute"],"index":0,"name":".text","raw_size":2048,"virtual_address":4096,"virtual_size":2048},
-     {"entropy":4.2,"flags":["read"],"index":1,"name":".rdata","raw_size":2048,"virtual_address":8192,"virtual_size":2048},
-     {"entropy":1.3,"flags":["read"],"index":2,"name":".data","raw_size":2048,"virtual_address":12288,"virtual_size":2048}
+     {"entropy":5.3216,"flags":["code","execute","read"],"index":0,"name":".text","raw_size":6144,"virtual_address":4096,"virtual_size":6144},
+     {"entropy":0.2679,"flags":["idata","read"],"index":1,"name":".rdata","raw_size":512,"virtual_address":12288,"virtual_size":15},
+     {"entropy":3.9845,"flags":["idata","read","write"],"index":2,"name":".data","raw_size":512,"virtual_address":16384,"virtual_size":512},
+     {"entropy":2.3048,"flags":["idata","read","write"],"index":3,"name":".idata","raw_size":1024,"virtual_address":20480,"virtual_size":589}
     ],
     "malware_strings": [
-     {"encoding":"ascii","offset":8192,"value":"debugger check"}
+     {"encoding":"ascii","offset":77,"value":"!This program cannot be run in DOS mode."},
+     {"encoding":"ascii","offset":431,"value":"`.rdata"},
+     {"encoding":"ascii","offset":471,"value":"@.data"},
+     {"encoding":"ascii","offset":512,"value":".idata"},
+     {"encoding":"ascii","offset":2477,"value":"XUPXX1"},
+     {"encoding":"ascii","offset":5671,"value":" XXUP]"},
+     {"encoding":"ascii","offset":7119,"value":"UUPU]t"},
+     {"encoding":"ascii","offset":7143,"value":" XX]XU"},
+     {"encoding":"ascii","offset":7168,"value":"debugger check"},
+     {"encoding":"ascii","offset":8510,"value":"GetModuleHandleA"},
+     {"encoding":"ascii","offset":8530,"value":"GetCommandLineA"},
+     {"encoding":"ascii","offset":8548,"value":"GetLastError"},
+     {"encoding":"ascii","offset":8564,"value":"ExitProcess"},
+     {"encoding":"ascii","offset":8578,"value":"GetStartupInfoA"},
+     {"encoding":"ascii","offset":8596,"value":"HeapAlloc"},
+     {"encoding":"ascii","offset":8608,"value":"HeapFree"},
+     {"encoding":"ascii","offset":8620,"value":"GetProcessHeap"},
+     {"encoding":"ascii","offset":8638,"value":"CloseHandle"},
+     {"encoding":"ascii","offset":8660,"value":"IsDebuggerPresent"},
+     {"encoding":"ascii","offset":8680,"value":"CheckRemoteDebuggerPresent"},
+     {"encoding":"ascii","offset":8710,"value":"OutputDebugStringA"},
+     {"encoding":"ascii","offset":8732,"value":"NtQueryInformationProcess"},
+     {"encoding":"ascii","offset":8758,"value":"KERNEL32.dll"},
+     {"encoding":"ascii","offset":8771,"value":"ntdll.dll"}
     ]
    },
-   "worker_version": "static-worker/hand-trimmed"
+   "worker_version": "static-worker/snapshot"
   }
  ],
  "kind": "static",
  "name": "static_antidebug_imports",
  "plants": [],
- "provenance": {"dataset":"apps/workers/static/samples/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":20261105,"snapshot_version":1,"source":"hand-trimmed"},
+ "provenance": {"dataset":"apps/workers/static/samples","seed":20261105,"snapshot_version":1,"source":"pipeline"},
  "scenario": "antidebug_imports",
  "tasks": ["explain_static"],
  "ti": []

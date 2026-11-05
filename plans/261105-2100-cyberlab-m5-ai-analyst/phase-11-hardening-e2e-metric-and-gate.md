@@ -101,12 +101,23 @@ Fixes found here go into the owning files one at a time, coordinated by the pare
 
 ## Success Criteria
 - [ ] `pnpm verify:prod` green: the dev e2e runs the AI flow on mock; the prod e2e asserts mock refused and the analyst-worker `ENV=prod`, `running 0`.
-- [ ] The outbound-privacy test proves no internal IP, hostname, username, URL query value or credential leaves with pseudonymization on.
-- [ ] The sentinel key is absent everywhere listed; the role separation (TI vs AI private keys) is proven.
-- [ ] HostileProvider invariants are at exact floors; the metric is recorded with honest provenance labels (live / replayed / fake).
+- [x] The outbound-privacy test proves no internal IP, hostname, username, URL query value or credential leaves with pseudonymization on. (`test_ai_pipeline.py::test_nothing_internal_leaves_with_pseudonymization_on`)
+- [x] The sentinel key is absent everywhere listed; the role separation (TI vs AI private keys) is proven. (`test_ai_key_leak.py`, `scripts/check-ai-key-leak.mjs` "sentinel absent", `test_analyst_network.py::test_its_environment_holds_no_api_secrets_or_ti_keys`, `test_enrich_network.py::test_it_holds_no_ai_private_key`, `scripts/check-analyst-env.mjs`)
+- [x] HostileProvider invariants are at exact floors; the metric is recorded with honest provenance labels (live / replayed / fake). (`scripts/ai_eval.py`: 1220 hostile runs, 0 violations; `plans/reports/ai-metric-261105.md`)
 - [ ] The reviewer pass has no open High findings; docs are reconciled; plan notes are written.
 
 ## Risk Assessment
 - **No live key available.** The metric is then replay- or fake-only. That is acceptable for the gate but stated plainly in TESTING.md and the report.
 - **Flaky e2e timing** around waiting/resume (beat 30 s). Use `Retry-After: 1` and give the wait the same 90 s bound as M4.
 - **Seam fixes across many owners at the end.** Keep each fix in the owning file and commit per fix, coordinated by the parent.
+
+## Implementation Notes
+
+- **Review fixes landed here:** `?reveal=true` on the context route needs `evidence.write` (viewers 403; the reveal stays audited; the web toggle is hidden for viewers); an unbilled 429 / 529 gives its call back (`_refund_call`), so a rate limit at the call cap parks the run until the deadline and overloads end on the backoff schedule (4 attempts) instead of `provider_error`; the provider PUT takes `limits: {per_minute}` within the ceiling (`422 limit_above_ceiling`, `{}` resets; read model `default_limits` / `ceilings` / `limits`; a small form on the provider card); the stale compose comment.
+- **ai-mock:** it never parsed the real prompt (`ai.prompt.render` sends an items array and names the task in the user turn; only the test doubles' context object was understood), so every real run got the empty answer; fixed and covered (`test_the_default_answer_reads_the_real_prompt`). `echo` now echoes the user turn up to the evidence (where the canary is); new markers `429-once-<label>` (e2e wait) and `hostile`; `401` echoes the key (key-leak suite); the `/_last` snapshot is mirrored to the `ai_mock_state` volume, read-only in api-test, because api-test cannot reach ai-mock (egress only) and must not.
+- **Test worker:** `analyst-worker-test` runs with `AI_CALL_TIMEOUT_S=8`, so the RT2 / RT7 slow-call tests take seconds. The pipeline and key-leak tests run on the default lane only (the worker serves `cyberlab_test` and broker db 1); lanes 2–7 skip them.
+- **Deadline:** `ai_runs.deadline_at` is immutable (trigger), so the deadline test sets the API's `ai_run_deadline_s` to its 60 s minimum before the request. The fallback reaper is not exercised end to end (covered in `test_analyst_worker.py`).
+- **RT8 (`409 ai_busy`)** stays covered by `test_ai_api_runs.py`; RT9 is proven by deleting the day key mid-day (the test user cannot FLUSHDB the broker).
+- **E2E:** six specs now register a user each, over the 5 per 10 min per-IP limit: `scripts/e2e.mjs` runs them in batches of five and clears the register keys before each batch. The prod check asserts the mock card is absent (the UI hides unavailable mocks), the catalog says `prod_mock` and the PUT answers 422.
+- **Snapshot:** `ai_eval_snapshot.py` replaced the hand-trimmed cases with pipeline ones; real ClamAV names carry `.UNOFFICIAL` (two golden files updated) and the static worker's analysis-time stamps are pinned in `tests/ai_eval/snapshot.py`.
+- **Open:** `pnpm verify:prod` (run by the parent), the reviewer pass, and the Implementation Notes of phases 1–10.

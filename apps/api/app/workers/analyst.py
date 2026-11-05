@@ -164,6 +164,9 @@ NOT_BILLED = frozenset(
         ProviderErrorKind.REFUSED,
     }
 )
+# Answers that are retried after a wait and, when not billed, do not use up a call: the
+# call cap (RT2) bounds billed calls; the deadline (and the overload backoff) bounds these.
+UNBILLED_RETRY = frozenset({ProviderErrorKind.RATE_LIMITED, ProviderErrorKind.OVERLOADED})
 GENERIC_SCHEMA_ERROR = "output: invalid_output"
 
 Publish = Callable[[AiRunMessage], Awaitable[None]]
@@ -999,6 +1002,18 @@ class _Work:
                 return counted
         return fallback
 
+    async def _refund_call(self) -> int | None:
+        """Undo `_count_call` for an unbilled rate-limit / overload answer. None when the
+        lease was lost."""
+        async with tenant_session(self.org_id, None) as s:
+            calls: int | None = await s.scalar(
+                update(AiRunIndex)
+                .where(AiRunIndex.run_id == self.run_id, AiRunIndex.lease_owner == self.token)
+                .values(calls=func.greatest(AiRunIndex.calls - 1, 0))
+                .returning(AiRunIndex.calls)
+            )
+        return calls
+
     async def _count_call(self) -> int | None:
         """Bump `calls` and commit before the call (RT2). None when the lease was lost."""
         async with tenant_session(self.org_id, None) as s:
@@ -1127,6 +1142,13 @@ class _Work:
             metrics = metrics.model_copy(update={"usage_unknown": True})
         else:
             await self._settle(call.reservation, 0)
+            if err.kind in UNBILLED_RETRY:
+                # A 429/529 the provider did not bill is not a call (RT2 caps billed calls):
+                # give it back, so a rate limit hit with the cap used still parks the run
+                # until the cooldown (bounded by the deadline) instead of failing it.
+                refunded = await self._refund_call()
+                if refunded is not None:
+                    st.calls = refunded
         values = self._values(usage, metrics)
         calls_left = st.calls < self.settings.ai_max_calls_per_run
         kind = err.kind

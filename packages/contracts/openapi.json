@@ -717,6 +717,40 @@
         "title": "AiInclusions",
         "type": "object"
       },
+      "AiLimitsIn": {
+        "additionalProperties": false,
+        "description": "Self-imposed limits: an org may lower them, never raise them above the ceiling.",
+        "properties": {
+          "per_minute": {
+            "anyOf": [
+              {
+                "maximum": 1000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Per Minute"
+          }
+        },
+        "title": "AiLimitsIn",
+        "type": "object"
+      },
+      "AiLimitsOut": {
+        "properties": {
+          "per_minute": {
+            "title": "Per Minute",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "per_minute"
+        ],
+        "title": "AiLimitsOut",
+        "type": "object"
+      },
       "AiModelOut": {
         "properties": {
           "id": {
@@ -933,9 +967,15 @@
             "title": "Available",
             "type": "boolean"
           },
+          "ceilings": {
+            "$ref": "#/components/schemas/AiLimitsOut"
+          },
           "configured": {
             "title": "Configured",
             "type": "boolean"
+          },
+          "default_limits": {
+            "$ref": "#/components/schemas/AiLimitsOut"
           },
           "default_model": {
             "title": "Default Model",
@@ -970,6 +1010,16 @@
               }
             ],
             "title": "Last Error Code"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiLimitsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "model": {
             "anyOf": [
@@ -1095,7 +1145,10 @@
           "verified_at",
           "last_error_code",
           "terms_ack_at",
-          "paid_tier_ack_at"
+          "paid_tier_ack_at",
+          "default_limits",
+          "ceilings",
+          "limits"
         ],
         "title": "AiProviderOut",
         "type": "object"
@@ -1133,9 +1186,15 @@
             "title": "Available",
             "type": "boolean"
           },
+          "ceilings": {
+            "$ref": "#/components/schemas/AiLimitsOut"
+          },
           "configured": {
             "title": "Configured",
             "type": "boolean"
+          },
+          "default_limits": {
+            "$ref": "#/components/schemas/AiLimitsOut"
           },
           "default_model": {
             "title": "Default Model",
@@ -1170,6 +1229,16 @@
               }
             ],
             "title": "Last Error Code"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiLimitsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "model": {
             "anyOf": [
@@ -1300,6 +1369,9 @@
           "last_error_code",
           "terms_ack_at",
           "paid_tier_ack_at",
+          "default_limits",
+          "ceilings",
+          "limits",
           "verify_queued"
         ],
         "title": "AiProviderSaved",
@@ -1339,6 +1411,16 @@
               }
             ],
             "title": "Enabled"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiLimitsIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "model": {
             "anyOf": [
@@ -10409,7 +10491,7 @@
     },
     "/api/v1/orgs/{org_id}/ai/runs/{run_id}/context": {
       "get": {
-        "description": "The exact frozen context(s) sent; `reveal=true` adds the pseudonym map.",
+        "description": "The exact frozen context(s) sent; `reveal=true` adds the pseudonym map (audited;\n`evidence.write` only, 403 for viewers).",
         "operationId": "get_ai_run_context_api_v1_orgs__org_id__ai_runs__run_id__context_get",
         "parameters": [
           {

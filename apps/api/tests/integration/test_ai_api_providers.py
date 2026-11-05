@@ -200,6 +200,39 @@ async def test_platform_key_covers_a_provider_outside_prod(
     assert all(i["platform_key"] is False for i in listing["items"])
 
 
+async def test_an_org_sets_its_own_request_limit_within_the_ceiling(
+    sent: AiSent, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The per-minute limit the worker's token bucket uses (`limits.per_minute`): an org may
+    set its own, never above the ceiling (`AI_CEILINGS.per_minute`, else the catalog's)."""
+    owner = await register()
+    await _enable(owner.client, owner.org_id)
+    listed = _entry((await owner.client.get(f"{API}/{owner.org_id}/ai/providers")).json(), "mock")
+    assert listed["default_limits"] == {"per_minute": 600}
+    assert listed["ceilings"] == {"per_minute": 6000} and listed["limits"] is None
+    lowered = await put_provider(owner.client, owner.org_id, limits={"per_minute": 5})
+    assert lowered.status_code == 200, lowered.text
+    assert lowered.json()["limits"] == {"per_minute": 5}
+    assert (await _config(owner.org_id)).limits == {"per_minute": 5}
+    *_, updated = await _audit(owner.org_id, "integration.ai_updated")
+    assert updated.details["changed"] == ["limits"]
+    assert updated.details["limits"] == {"per_minute": 5}
+
+    settings = get_settings()
+    ceilings = settings.ai_ceilings.model_copy(update={"per_minute": {AiProviderName.MOCK: 4}})
+    monkeypatch.setattr(settings, "ai_ceilings", ceilings)
+    above = await put_provider(owner.client, owner.org_id, limits={"per_minute": 5})
+    assert above.status_code == 422 and above.json()["error"]["code"] == "limit_above_ceiling"
+    shown = _entry((await owner.client.get(f"{API}/{owner.org_id}/ai/providers")).json(), "mock")
+    assert shown["ceilings"] == {"per_minute": 4}
+    for bad in ({"per_minute": 0}, {"per_minute": "x"}, {"per_day": 5}):
+        invalid = await put_provider(owner.client, owner.org_id, limits=bad)
+        assert invalid.status_code == 422, bad
+    reset = await put_provider(owner.client, owner.org_id, limits={})
+    assert reset.status_code == 200 and reset.json()["limits"] is None
+    assert (await _config(owner.org_id)).limits == {}
+
+
 async def test_model_allowlist(sent: AiSent) -> None:
     owner = await register()
     bad = await put_provider(

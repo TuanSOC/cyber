@@ -47,6 +47,14 @@ def test_threat_intel_hosts_are_not_reachable(host: str) -> None:
         socket.getaddrinfo(host, 8080)
 
 
+@pytest.mark.parametrize("host", ["ai-mock", "analyst-worker", "analyst-worker-test"])
+def test_ai_hosts_are_not_reachable(host: str) -> None:
+    """M5: the same for the LLM sink and the analyst worker (it holds the AI provider keys
+    and is the only process with egress besides the enrich worker)."""
+    with pytest.raises(socket.gaierror):
+        socket.getaddrinfo(host, 8080)
+
+
 def _broker() -> redis.Redis:
     return redis.Redis.from_url(os.environ["BROKER_URL"], socket_timeout=3)
 

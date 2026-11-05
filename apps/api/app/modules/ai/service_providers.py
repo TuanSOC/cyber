@@ -33,6 +33,8 @@ from app.modules.ai.contracts import AiProviderName, VerifyStatus
 from app.modules.ai.messages import AiVerifyMessage
 from app.modules.ai.models import AiProviderConfig
 from app.modules.ai.schemas import (
+    AiLimitsIn,
+    AiLimitsOut,
     AiModelOut,
     AiModelPrice,
     AiProviderOut,
@@ -85,6 +87,12 @@ class InvalidApiKey(AppError):
     message = "The api_key is not acceptable"
 
 
+class LimitAboveCeiling(AppError):
+    status_code = 422
+    code = "limit_above_ceiling"
+    message = "Limits may only be lowered, never raised above the provider's ceiling"
+
+
 class ProviderNotConfigured(Conflict):
     code = "provider_not_configured"
     message = "No key is stored for this provider"
@@ -113,6 +121,26 @@ def platform_key(settings: Settings, provider: AiProviderName) -> bool:
 
 def keyed(config: AiProviderConfig | None, settings: Settings, provider: AiProviderName) -> bool:
     return (config is not None and config.key_ct is not None) or platform_key(settings, provider)
+
+
+def per_minute_ceiling(settings: Settings, provider: AiProviderName) -> int:
+    entry = AI_CATALOG[provider]
+    return settings.ai_ceilings.per_minute.get(entry.name, entry.ceilings.per_minute)
+
+
+def _org_limits(raw: dict[str, Any] | None) -> AiLimitsOut | None:
+    minute = (raw or {}).get("per_minute")
+    if isinstance(minute, bool) or not isinstance(minute, int) or minute < 1:
+        return None
+    return AiLimitsOut(per_minute=minute)
+
+
+def _checked_limits(
+    provider: AiProviderName, limits: AiLimitsIn, settings: Settings
+) -> dict[str, int]:
+    if limits.per_minute is not None and limits.per_minute > per_minute_ceiling(settings, provider):
+        raise LimitAboveCeiling()
+    return {k: v for k, v in limits.model_dump().items() if v is not None}
 
 
 def to_out(
@@ -155,6 +183,9 @@ def to_out(
         last_error_code=config.last_error_code if config is not None else None,
         terms_ack_at=config.terms_ack_at if config is not None else None,
         paid_tier_ack_at=config.paid_tier_ack_at if config is not None else None,
+        default_limits=AiLimitsOut(per_minute=entry.default_limits.per_minute),
+        ceilings=AiLimitsOut(per_minute=per_minute_ceiling(settings, provider)),
+        limits=_org_limits(config.limits) if config is not None else None,
     )
 
 
@@ -215,6 +246,10 @@ async def update_provider(
     if model_set and body.model is not None and body.model not in entry.model_ids:
         raise ModelNotAllowed()
     platform = platform_key(settings, provider)
+    # `{}` resets the org's limits to the catalog defaults.
+    new_limits = (
+        _checked_limits(provider, body.limits, settings) if body.limits is not None else None
+    )
 
     await repository.lock_org(ctx.session, ctx.org_id)
     config = await repository.provider_config(
@@ -294,6 +329,9 @@ async def update_provider(
     if model_set and body.model != config.model:
         config.model = body.model
         changed.append("model")
+    if new_limits is not None and new_limits != (config.limits or {}):
+        config.limits = new_limits
+        changed.append("limits")
     await ctx.session.flush()
 
     if acknowledged:
@@ -318,6 +356,7 @@ async def update_provider(
                 "changed": changed,
                 "enabled": config.enabled,
                 "model": config.model,
+                **({"limits": config.limits} if "limits" in changed else {}),
             },
         )
     new_version = config.key_version if key_audit is not None else None

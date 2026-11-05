@@ -6,18 +6,18 @@
   {
    "analyzer": "static",
    "created_at": "2026-01-01T01:01:00Z",
-   "evidence": {"description":"PE32 executable for MS Windows","filename":"persistence_imports.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":15360,"uploaded_at":"2026-01-01T01:00:00Z"},
+   "evidence": {"description":"PE32 executable for MS Windows","filename":"persistence_imports.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":8704,"uploaded_at":"2026-01-01T01:00:00Z"},
    "finished_at": "2026-01-01T01:02:00Z",
    "key": "j1",
    "profile": "full",
-   "summary": {"counts":{"capabilities":0,"exports":0,"findings":1,"imports":17,"iocs":2,"resources":0,"sections":3,"signatures":0,"strings":3},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"04a063a2aad98479838cdc75e5d2f870","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"04a063a2aad98479838cdc75e5d2f870","rich_header_hash":null,"ssdeep":null},"entropy":5.2,"file_type":"PE32 executable for MS Windows","md5":"f13af91360c8a89bc5c1b77c127b1b08","mime":"application/vnd.microsoft.portable-executable","sha1":"63ed8377c4ddf0a7a522fba76badca755ca8692f","sha256":"aa46d27e8f6dee4a175b0b665012f881a543ef44a71b020384e59098321ad6b7","size":15360},"schema_version":"static.v1","tool_versions":{"capa":"9.2.1","clamav":"1.4.3","floss":"3.1.1","yara":"4.5.2"},"truncated":{}},
+   "summary": {"counts":{"capabilities":0,"exports":0,"findings":1,"imports":17,"iocs":2,"resources":0,"sections":4,"signatures":0,"strings":26},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["executable_image","32bit_machine"],"compile_timestamp":1600000000,"dll_characteristics":["dynamic_base","nx_compat","terminal_server_aware"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"is_dll":false,"machine":"i386","overlay_size":0,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"3d5fc20a25005da27e2a7826c7616896","rich_header_hash":null,"ssdeep":"192:1Usk+OAKrMaRcY1mAozLsAM1x6J3wogoeDRPv/JpaAuLt:1UPVA3DRs7x6mlviAux"},"entropy":5.241,"file_type":"PE32 executable for MS Windows 6.00 (console), Intel i386, 4 sections","md5":"643aa0c5d7b06e7061d56740866566ed","mime":"application/vnd.microsoft.portable-executable","sha1":"e2aafa1f9485bfab02cdf7bc0cc717fa4ddebb1c","sha256":"ad7f290bd843d485a901fca8215d6f5f3bf407b0e26f3393e036d284919eacb7","size":8704},"schema_version":"static.v1","tool_versions":{"capa":"10.0.0","capa_rules":"v10.0.0","clamav":"1.4.3","clamav_db":"custom:clamav","floss":"3.2.0","pefile":"2024.8.26","ppdeep":"20260221","pyelftools":"0.33","python":"3.12.16","yara":"4.5.4"},"truncated":{}},
    "tables": {
     "analysis_findings": [
-     {"attributes":{"api_count":5,"apis":"RegCreateKeyExA, RegSetValueExA, CreateServiceA, StartServiceA, Run-key path in strings","groups":"set"},"confidence":0.75,"description":"The file can register itself to start automatically: RegCreateKeyExA, RegSetValueExA, CreateServiceA, StartServiceA, Run-key path in strings. Installers and services do this legitimately.","detection_method":"heuristic:suspicious_api@1","dst_ip":null,"dst_port":null,"evidence_refs":["import:RegCreateKeyExA","import:RegSetValueExA","import:CreateServiceA","import:StartServiceA"],"finding_id":"7e29a589-8a1f-52e7-aa7d-853153b0509d","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"Persistence API set present","ts":"2026-01-01T00:00:00Z","type":"api_persistence"}
+     {"attributes":{"api_count":4,"apis":"RegCreateKeyExA, RegSetValueExA, CreateServiceA, OpenSCManagerA, Run-key path in strings","groups":"registry_write, run_key, service_create, service_manager"},"confidence":0.5,"description":"The file can register itself to start automatically: RegCreateKeyExA, RegSetValueExA, CreateServiceA, OpenSCManagerA, Run-key path in strings. Installers and services do this legitimately.","detection_method":"heuristic:suspicious_api@1","dst_ip":null,"dst_port":null,"evidence_refs":["import:RegCreateKeyExA","import:RegSetValueExA","import:CreateServiceA","import:OpenSCManagerA"],"finding_id":"264890db-b4f7-5931-919c-49d65b94322f","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"Persistence API set present","ts":"2026-01-01T00:00:00Z","type":"api_persistence"}
     ],
     "iocs": [
-     {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"strings","type":"registry_key","value":"Software\\Microsoft\\Windows\\CurrentVersion\\Run"},
-     {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"strings","type":"file_path","value":"C:\\ProgramData\\CyberLabTest\\updater.exe"}
+     {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"strings","type":"file_path","value":"C:\\ProgramData\\CyberLabTest\\updater.exe"},
+     {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"strings","type":"registry_key","value":"Software\\Microsoft\\Windows\\CurrentVersion\\Run"}
     ],
     "malware_imports": [
      {"function":"GetModuleHandleA","library":"KERNEL32.dll","ordinal":null},
@@ -39,26 +39,50 @@
      {"function":"CloseServiceHandle","library":"ADVAPI32.dll","ordinal":null}
     ],
     "malware_samples": [
-     {"elf":null,"entropy":5.2,"file_format":"pe","file_type":"PE32 executable for MS Windows","md5":"f13af91360c8a89bc5c1b77c127b1b08","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"04a063a2aad98479838cdc75e5d2f870","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"sha1":"63ed8377c4ddf0a7a522fba76badca755ca8692f","sha256":"aa46d27e8f6dee4a175b0b665012f881a543ef44a71b020384e59098321ad6b7","size":15360,"ssdeep":null}
+     {"elf":null,"entropy":5.241,"file_format":"pe","file_type":"PE32 executable for MS Windows 6.00 (console), Intel i386, 4 sections","md5":"643aa0c5d7b06e7061d56740866566ed","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["executable_image","32bit_machine"],"compile_timestamp":1600000000,"dll_characteristics":["dynamic_base","nx_compat","terminal_server_aware"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"3d5fc20a25005da27e2a7826c7616896","is_dll":false,"machine":"i386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"sha1":"e2aafa1f9485bfab02cdf7bc0cc717fa4ddebb1c","sha256":"ad7f290bd843d485a901fca8215d6f5f3bf407b0e26f3393e036d284919eacb7","size":8704,"ssdeep":"192:1Usk+OAKrMaRcY1mAozLsAM1x6J3wogoeDRPv/JpaAuLt:1UPVA3DRs7x6mlviAux"}
     ],
     "malware_sections": [
-     {"entropy":6.1,"flags":["read","execute"],"index":0,"name":".text","raw_size":2048,"virtual_address":4096,"virtual_size":2048},
-     {"entropy":4.2,"flags":["read"],"index":1,"name":".rdata","raw_size":2048,"virtual_address":8192,"virtual_size":2048},
-     {"entropy":1.3,"flags":["read"],"index":2,"name":".data","raw_size":2048,"virtual_address":12288,"virtual_size":2048}
+     {"entropy":5.2897,"flags":["code","execute","read"],"index":0,"name":".text","raw_size":6144,"virtual_address":4096,"virtual_size":6144},
+     {"entropy":1.5873,"flags":["idata","read"],"index":1,"name":".rdata","raw_size":512,"virtual_address":12288,"virtual_size":102},
+     {"entropy":3.9812,"flags":["idata","read","write"],"index":2,"name":".data","raw_size":512,"virtual_address":16384,"virtual_size":512},
+     {"entropy":4.1919,"flags":["idata","read","write"],"index":3,"name":".idata","raw_size":512,"virtual_address":20480,"virtual_size":511}
     ],
     "malware_strings": [
-     {"encoding":"ascii","offset":8192,"value":"Software\\Microsoft\\Windows\\CurrentVersion\\Run"},
-     {"encoding":"ascii","offset":8238,"value":"C:\\ProgramData\\CyberLabTest\\updater.exe"},
-     {"encoding":"ascii","offset":8278,"value":"CyberLabUpdater"}
+     {"encoding":"ascii","offset":77,"value":"!This program cannot be run in DOS mode."},
+     {"encoding":"ascii","offset":415,"value":"`.rdata"},
+     {"encoding":"ascii","offset":455,"value":"@.data"},
+     {"encoding":"ascii","offset":496,"value":".idata"},
+     {"encoding":"ascii","offset":4280,"value":"XUPPXP"},
+     {"encoding":"ascii","offset":7168,"value":"Software\\Microsoft\\Windows\\CurrentVersion\\Run"},
+     {"encoding":"ascii","offset":7214,"value":"C:\\ProgramData\\CyberLabTest\\updater.exe"},
+     {"encoding":"ascii","offset":7254,"value":"CyberLabUpdater"},
+     {"encoding":"ascii","offset":8406,"value":"GetModuleHandleA"},
+     {"encoding":"ascii","offset":8426,"value":"GetCommandLineA"},
+     {"encoding":"ascii","offset":8444,"value":"GetLastError"},
+     {"encoding":"ascii","offset":8460,"value":"ExitProcess"},
+     {"encoding":"ascii","offset":8474,"value":"GetStartupInfoA"},
+     {"encoding":"ascii","offset":8492,"value":"HeapAlloc"},
+     {"encoding":"ascii","offset":8504,"value":"HeapFree"},
+     {"encoding":"ascii","offset":8516,"value":"GetProcessHeap"},
+     {"encoding":"ascii","offset":8534,"value":"CloseHandle"},
+     {"encoding":"ascii","offset":8556,"value":"RegCreateKeyExA"},
+     {"encoding":"ascii","offset":8574,"value":"RegSetValueExA"},
+     {"encoding":"ascii","offset":8592,"value":"RegCloseKey"},
+     {"encoding":"ascii","offset":8606,"value":"OpenSCManagerA"},
+     {"encoding":"ascii","offset":8624,"value":"CreateServiceA"},
+     {"encoding":"ascii","offset":8642,"value":"StartServiceA"},
+     {"encoding":"ascii","offset":8658,"value":"CloseServiceHandle"},
+     {"encoding":"ascii","offset":8677,"value":"KERNEL32.dll"},
+     {"encoding":"ascii","offset":8690,"value":"ADVAPI32.dll"}
     ]
    },
-   "worker_version": "static-worker/hand-trimmed"
+   "worker_version": "static-worker/snapshot"
   }
  ],
  "kind": "static",
  "name": "static_persistence_imports",
  "plants": [],
- "provenance": {"dataset":"apps/workers/static/samples/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":20261105,"snapshot_version":1,"source":"hand-trimmed"},
+ "provenance": {"dataset":"apps/workers/static/samples","seed":20261105,"snapshot_version":1,"source":"pipeline"},
  "scenario": "persistence_imports",
  "tasks": ["explain_static"],
  "ti": []

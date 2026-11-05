@@ -339,10 +339,11 @@ const AI_ERROR_TEXT: Record<string, string> = {
   terms_not_acknowledged: "Acknowledge the provider's terms before enabling it.",
   paid_tier_not_acknowledged: "Confirm that the Gemini key belongs to a billing-enabled (paid tier) project.",
   privacy_not_acknowledged:
-    "This change sends more data to AI providers: confirm the privacy notice (turning AI on, strings or case text on, or pseudonymization off).",
+    "This change sends more data to AI providers: confirm the privacy notice (turning AI on, strings, threat intel or case text on, or pseudonymization off or narrowed).",
   model_not_allowed: "That model is not in the allowed list for this provider.",
   provider_unavailable: "This provider is not available on this deployment.",
   budget_above_ceiling: "A budget is above the operator ceiling.",
+  limit_above_ceiling: "The request limit is above this provider's maximum.",
   api_key_required: "Store an API key before enabling this provider.",
   invalid_api_key: "The key must be 8–256 printable ASCII characters.",
   provider_not_configured: "No key is stored for this provider.",

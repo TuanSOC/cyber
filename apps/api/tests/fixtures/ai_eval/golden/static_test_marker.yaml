@@ -6,7 +6,7 @@ must_mention:
     where: {type: "yara_match", attributes.name: "CyberLab_Test_Marker"}
   - id: clamav_test_marker
     table: analysis_findings
-    where: {type: "av_signature_match", attributes.name: "PUA.CyberLab.TestMarker"}
+    where: {type: "av_signature_match", attributes.name: "PUA.CyberLab.TestMarker.UNOFFICIAL"}
 allowed_attack: []
 forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
 forbid_external_urls: true

@@ -6,15 +6,15 @@
   {
    "analyzer": "static",
    "created_at": "2026-01-01T01:01:00Z",
-   "evidence": {"description":"PE32 executable for MS Windows","filename":"keylogger_imports.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":15360,"uploaded_at":"2026-01-01T01:00:00Z"},
+   "evidence": {"description":"PE32 executable for MS Windows","filename":"keylogger_imports.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":9216,"uploaded_at":"2026-01-01T01:00:00Z"},
    "finished_at": "2026-01-01T01:02:00Z",
    "key": "j1",
    "profile": "full",
-   "summary": {"counts":{"capabilities":0,"exports":0,"findings":2,"imports":18,"iocs":0,"resources":0,"sections":3,"signatures":1,"strings":2},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"619af28ffd9f7ab5850fd3b2bffdccaf","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"619af28ffd9f7ab5850fd3b2bffdccaf","rich_header_hash":null,"ssdeep":null},"entropy":5.2,"file_type":"PE32 executable for MS Windows","md5":"2db8ea263b0c509ffbdf1dae4de16e9e","mime":"application/vnd.microsoft.portable-executable","sha1":"1ec2db5c359e37c58e5f2107373c15b786971b0a","sha256":"b8037adb7a056129d29fccda1e920b79466bb57e6614ab429f54d39da3168b27","size":15360},"schema_version":"static.v1","tool_versions":{"capa":"9.2.1","clamav":"1.4.3","floss":"3.1.1","yara":"4.5.2"},"truncated":{}},
+   "summary": {"counts":{"capabilities":0,"exports":0,"findings":2,"imports":18,"iocs":0,"resources":0,"sections":4,"signatures":1,"strings":25},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["executable_image","32bit_machine"],"compile_timestamp":1600000000,"dll_characteristics":["dynamic_base","nx_compat","terminal_server_aware"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"is_dll":false,"machine":"i386","overlay_size":0,"subsystem":"WINDOWS_GUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"1f797e49c09b3a009b9def7a36bbd8d8","rich_header_hash":null,"ssdeep":"192:xdC/Fsqj3DHePRrtLZg6ecHtZSwXDUySTmv7bnfAHG:xdi6qjL2RRLZg6bNZJX5SijbnfA"},"entropy":5.0258,"file_type":"PE32 executable for MS Windows 6.00 (GUI), Intel i386, 4 sections","md5":"c47aa98cb45e3eb8607ff2a8e13ebccf","mime":"application/vnd.microsoft.portable-executable","sha1":"a984ec7530fe14ff47787b4d0c919e0488a09246","sha256":"9d874744ecbcaf56c96d3977c186e92dc42bbf6b5bd95b810b6337d344782b9a","size":9216},"schema_version":"static.v1","tool_versions":{"capa":"10.0.0","capa_rules":"v10.0.0","clamav":"1.4.3","clamav_db":"custom:clamav","floss":"3.2.0","pefile":"2024.8.26","ppdeep":"20260221","pyelftools":"0.33","python":"3.12.16","yara":"4.5.4"},"truncated":{}},
    "tables": {
     "analysis_findings": [
-     {"attributes":{"api_count":4,"apis":"SetWindowsHookExA, CallNextHookEx, GetAsyncKeyState, GetKeyState","groups":"set"},"confidence":0.75,"description":"The import table combines keyboard hooking or raw-input registration with key-state polling: SetWindowsHookExA, CallNextHookEx, GetAsyncKeyState, GetKeyState. This combination can record keystrokes; accessibility and hotkey tools also use it.","detection_method":"heuristic:suspicious_api@1","dst_ip":null,"dst_port":null,"evidence_refs":["import:SetWindowsHookExA","import:CallNextHookEx","import:GetAsyncKeyState","import:GetKeyState"],"finding_id":"4ef7b02a-a0f3-506c-8948-09c5968515ea","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"Keyboard hook / key-state API set imported","ts":"2026-01-01T00:00:00Z","type":"api_keylogging"},
-     {"attributes":{"description":"keyboard hook API names","engine":"yara","name":"CyberLab_Keyboard_Hook_API_Names","namespace":"cyberlab"},"confidence":0.8,"description":"The YARA rule cyberlab:CyberLab_Keyboard_Hook_API_Names (rule-supplied description: keyboard hook API names) matched this file.","detection_method":"signature:yara@1","dst_ip":null,"dst_port":null,"evidence_refs":["yara:CyberLab_Keyboard_Hook_API_Names"],"finding_id":"de1f2e9d-d940-5510-b917-526282eeb5d1","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"YARA rule match: CyberLab_Keyboard_Hook_API_Names","ts":"2026-01-01T00:00:00Z","type":"yara_match"}
+     {"attributes":{"api_count":3,"apis":"SetWindowsHookExA, GetAsyncKeyState, GetKeyState","groups":"hook, key_state"},"confidence":0.65,"description":"The import table combines keyboard hooking or raw-input registration with key-state polling: SetWindowsHookExA, GetAsyncKeyState, GetKeyState. This combination can record keystrokes; accessibility and hotkey tools also use it.","detection_method":"heuristic:suspicious_api@1","dst_ip":null,"dst_port":null,"evidence_refs":["import:SetWindowsHookExA","import:GetAsyncKeyState","import:GetKeyState"],"finding_id":"db3108e9-681b-5bed-926b-86cc06758d43","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"Keyboard hook / key-state API set imported","ts":"2026-01-01T00:00:00Z","type":"api_keylogging"},
+     {"attributes":{"description":"Names of keyboard hooking / key-state polling APIs","engine":"yara","name":"CyberLab_Keyboard_Hook_API_Names","namespace":"image.cyberlab_baseline"},"confidence":0.8,"description":"The YARA rule image.cyberlab_baseline:CyberLab_Keyboard_Hook_API_Names (rule-supplied description: Names of keyboard hooking / key-state polling APIs) matched this file.","detection_method":"signature:yara@1","dst_ip":null,"dst_port":null,"evidence_refs":["yara:image.cyberlab_baseline:CyberLab_Keyboard_Hook_API_Names"],"finding_id":"c6486d19-f1f2-5665-81f7-793170fd433c","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"YARA rule match: CyberLab_Keyboard_Hook_API_Names","ts":"2026-01-01T00:00:00Z","type":"yara_match"}
     ],
     "malware_imports": [
      {"function":"GetModuleHandleA","library":"KERNEL32.dll","ordinal":null},
@@ -37,28 +37,52 @@
      {"function":"UnhookWindowsHookEx","library":"USER32.dll","ordinal":null}
     ],
     "malware_samples": [
-     {"elf":null,"entropy":5.2,"file_format":"pe","file_type":"PE32 executable for MS Windows","md5":"2db8ea263b0c509ffbdf1dae4de16e9e","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"619af28ffd9f7ab5850fd3b2bffdccaf","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"sha1":"1ec2db5c359e37c58e5f2107373c15b786971b0a","sha256":"b8037adb7a056129d29fccda1e920b79466bb57e6614ab429f54d39da3168b27","size":15360,"ssdeep":null}
+     {"elf":null,"entropy":5.0258,"file_format":"pe","file_type":"PE32 executable for MS Windows 6.00 (GUI), Intel i386, 4 sections","md5":"c47aa98cb45e3eb8607ff2a8e13ebccf","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["executable_image","32bit_machine"],"compile_timestamp":1600000000,"dll_characteristics":["dynamic_base","nx_compat","terminal_server_aware"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"1f797e49c09b3a009b9def7a36bbd8d8","is_dll":false,"machine":"i386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_GUI","tls_callbacks":0},"sha1":"a984ec7530fe14ff47787b4d0c919e0488a09246","sha256":"9d874744ecbcaf56c96d3977c186e92dc42bbf6b5bd95b810b6337d344782b9a","size":9216,"ssdeep":"192:xdC/Fsqj3DHePRrtLZg6ecHtZSwXDUySTmv7bnfAHG:xdi6qjL2RRLZg6bNZJX5SijbnfA"}
     ],
     "malware_sections": [
-     {"entropy":6.1,"flags":["read","execute"],"index":0,"name":".text","raw_size":2048,"virtual_address":4096,"virtual_size":2048},
-     {"entropy":4.2,"flags":["read"],"index":1,"name":".rdata","raw_size":2048,"virtual_address":8192,"virtual_size":2048},
-     {"entropy":1.3,"flags":["read"],"index":2,"name":".data","raw_size":2048,"virtual_address":12288,"virtual_size":2048}
+     {"entropy":5.3003,"flags":["code","execute","read"],"index":0,"name":".text","raw_size":6144,"virtual_address":4096,"virtual_size":6144},
+     {"entropy":0.285,"flags":["idata","read"],"index":1,"name":".rdata","raw_size":512,"virtual_address":12288,"virtual_size":16},
+     {"entropy":3.9779,"flags":["idata","read","write"],"index":2,"name":".data","raw_size":512,"virtual_address":16384,"virtual_size":512},
+     {"entropy":2.5819,"flags":["idata","read","write"],"index":3,"name":".idata","raw_size":1024,"virtual_address":20480,"virtual_size":528}
     ],
     "malware_signature_matches": [
-     {"engine":"yara","meta":{"description":"keyboard hook API names"},"name":"CyberLab_Keyboard_Hook_API_Names","namespace":"cyberlab","tags":[]}
+     {"engine":"yara","meta":{"description":"Names of keyboard hooking / key-state polling APIs","severity":"low"},"name":"CyberLab_Keyboard_Hook_API_Names","namespace":"image.cyberlab_baseline","tags":["api"]}
     ],
     "malware_strings": [
-     {"encoding":"ascii","offset":8192,"value":"keys.log"},
-     {"encoding":"ascii","offset":8201,"value":"[%02x]"}
+     {"encoding":"ascii","offset":77,"value":"!This program cannot be run in DOS mode."},
+     {"encoding":"ascii","offset":415,"value":"`.rdata"},
+     {"encoding":"ascii","offset":455,"value":"@.data"},
+     {"encoding":"ascii","offset":496,"value":".idata"},
+     {"encoding":"ascii","offset":7167,"value":"Ekeys.log"},
+     {"encoding":"ascii","offset":7177,"value":"[%02x]"},
+     {"encoding":"ascii","offset":8414,"value":"GetModuleHandleA"},
+     {"encoding":"ascii","offset":8434,"value":"GetCommandLineA"},
+     {"encoding":"ascii","offset":8452,"value":"GetLastError"},
+     {"encoding":"ascii","offset":8468,"value":"ExitProcess"},
+     {"encoding":"ascii","offset":8482,"value":"GetStartupInfoA"},
+     {"encoding":"ascii","offset":8500,"value":"HeapAlloc"},
+     {"encoding":"ascii","offset":8512,"value":"HeapFree"},
+     {"encoding":"ascii","offset":8524,"value":"GetProcessHeap"},
+     {"encoding":"ascii","offset":8542,"value":"CloseHandle"},
+     {"encoding":"ascii","offset":8564,"value":"CreateFileA"},
+     {"encoding":"ascii","offset":8578,"value":"WriteFile"},
+     {"encoding":"ascii","offset":8590,"value":"SetWindowsHookExA"},
+     {"encoding":"ascii","offset":8610,"value":"CallNextHookEx"},
+     {"encoding":"ascii","offset":8628,"value":"GetAsyncKeyState"},
+     {"encoding":"ascii","offset":8648,"value":"GetKeyState"},
+     {"encoding":"ascii","offset":8662,"value":"GetMessageA"},
+     {"encoding":"ascii","offset":8676,"value":"UnhookWindowsHookEx"},
+     {"encoding":"ascii","offset":8696,"value":"KERNEL32.dll"},
+     {"encoding":"ascii","offset":8709,"value":"USER32.dll"}
     ]
    },
-   "worker_version": "static-worker/hand-trimmed"
+   "worker_version": "static-worker/snapshot"
   }
  ],
  "kind": "static",
  "name": "static_keylogger_imports",
  "plants": [],
- "provenance": {"dataset":"apps/workers/static/samples/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":20261105,"snapshot_version":1,"source":"hand-trimmed"},
+ "provenance": {"dataset":"apps/workers/static/samples","seed":20261105,"snapshot_version":1,"source":"pipeline"},
  "scenario": "keylogger_imports",
  "tasks": ["explain_static"],
  "ti": []

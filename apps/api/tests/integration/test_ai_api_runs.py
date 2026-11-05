@@ -565,13 +565,20 @@ async def test_revealing_the_pseudonym_map_is_audited(sent: AiSent) -> None:
     viewer_email = unique_email("viewer")
     await add_member(owner.org_id, await make_user(viewer_email), MemberRole.VIEWER)
     viewer = await login(viewer_email)
-    revealed = await viewer.get(url, params={"reveal": True})
+    # A viewer reads the pseudonymized context but may not reveal the map (analyst and up).
+    assert (await viewer.get(url)).status_code == 200
+    denied = await viewer.get(url, params={"reveal": True})
+    assert denied.status_code == 403 and "10.0.2.20" not in denied.text
+    analyst_email = unique_email("analyst")
+    await add_member(owner.org_id, await make_user(analyst_email), MemberRole.ANALYST)
+    analyst = await login(analyst_email)
+    revealed = await analyst.get(url, params={"reveal": True})
     assert revealed.status_code == 200
     async with tenant_session(owner.org_id, None) as s:
         rows = (
             await s.scalars(select(AuditLog).where(AuditLog.action == "ai.context_revealed"))
         ).all()
-    [row] = rows  # the plain read is not audited, the reveal is
+    [row] = rows  # the plain reads and the refused reveal are not audited, the reveal is
     assert row.target_id == uuid.UUID(run_id) and row.target_type == "ai_run"
     assert row.actor_id != owner.user_id and row.details == {"stages": ["base"]}
     assert "10.0.2.20" not in str(row.details) and "INT_IP" not in str(row.details)

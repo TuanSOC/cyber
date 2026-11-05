@@ -1,6 +1,7 @@
 """AI analyst run routes (M5 phase 7; registered via `router.py`).
 
-Requests and previews need `evidence.write`, reads `evidence.read`. A new run answers 202;
+Requests, previews and revealing a context's pseudonym map need `evidence.write`, reads
+`evidence.read`. A new run answers 202;
 an identical active or completed run (deduplicated) answers 200.
 """
 
@@ -94,7 +95,8 @@ async def get_ai_run(
 async def get_ai_run_context(
     run_id: uuid.UUID, ctx: EvidenceRead, request: Request, reveal: bool = False
 ) -> AiRunContextOut:
-    """The exact frozen context(s) sent; `reveal=true` adds the pseudonym map (audited)."""
+    """The exact frozen context(s) sent; `reveal=true` adds the pseudonym map (audited;
+    `evidence.write` only, 403 for viewers)."""
     out = await service.get_context(ctx, run_id, reveal=reveal, request=request)
     if reveal:
         await ctx.session.commit()  # the ai.context_revealed audit row

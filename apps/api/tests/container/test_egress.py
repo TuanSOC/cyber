@@ -7,7 +7,8 @@ the ingest worker, from `scripts/verify.mjs`:
     docker compose exec -T -e PYTHONDONTWRITEBYTECODE=1 ingest-worker python -m pytest \\
         --noconftest -q -p no:cacheprovider tests/container/test_egress.py
 
-The enrich worker is the one process WITH egress: `test_enrich_network.py` covers it.
+The enrich and analyst workers are the processes WITH egress: `test_enrich_network.py` and
+`test_analyst_network.py` cover them.
 """
 
 import os
@@ -22,7 +23,7 @@ ROUTES = Path("/proc/net/route")
 PUBLIC_NAME = "example.org"
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("PROCESS_ROLE") == "enrich", reason="the enrich worker has egress"
+    os.environ.get("PROCESS_ROLE") in ("enrich", "analyst"), reason="this worker has egress"
 )
 
 
@@ -57,9 +58,20 @@ def test_backend_services_still_resolve(host: str) -> None:
     assert socket.getaddrinfo(host, 80)
 
 
-@pytest.mark.parametrize("host", ["ti-mock", "enrich-worker", "enrich-worker-test"])
-def test_the_provider_sink_and_the_enrich_worker_are_out_of_reach(host: str) -> None:
-    """`ti-mock` sits on `egress` only: nothing on `backend` resolves or reaches it."""
+@pytest.mark.parametrize(
+    "host",
+    [
+        "ti-mock",
+        "enrich-worker",
+        "enrich-worker-test",
+        "ai-mock",
+        "analyst-worker",
+        "analyst-worker-test",
+    ],
+)
+def test_the_provider_sinks_and_the_internet_facing_workers_are_out_of_reach(host: str) -> None:
+    """`ti-mock` / `ai-mock` sit on `egress` only and the enrich / analyst workers on
+    `enrich` + `egress`: nothing on `backend` resolves or reaches them (M4, M5)."""
     with pytest.raises(socket.gaierror):
         socket.getaddrinfo(host, 8080)
     assert not _connects(host, 8080)

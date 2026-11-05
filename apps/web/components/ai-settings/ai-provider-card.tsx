@@ -120,6 +120,14 @@ export function AiProviderCard({
           <dd>{p.enabled ? "yes" : "no"}</dd>
           <dt className="text-muted-foreground">Model</dt>
           <dd>{model ? modelOptionLabel(model) : (p.model ?? p.default_model)}</dd>
+          <dt className="text-muted-foreground">Requests</dt>
+          <dd>
+            {(p.limits?.per_minute ?? p.default_limits.per_minute).toLocaleString("en-US")} / minute{" "}
+            <span className="text-muted-foreground">
+              (maximum {p.ceilings.per_minute.toLocaleString("en-US")}
+              {p.limits ? "; own limit" : ""})
+            </span>
+          </dd>
           <dt className="text-muted-foreground">Last check</dt>
           <dd>
             <When iso={p.verified_at} />
@@ -312,6 +320,20 @@ function ManageControls({
         </span>
       </div>
 
+      <AiLimitForm
+        provider={p}
+        pending={update.isPending}
+        onSave={(limits) =>
+          update.mutate(
+            { limits },
+            {
+              onSuccess: () => toast.success(`${p.label} request limit saved`),
+              onError: (error) => toast.error(aiErrorMessage(error)),
+            },
+          )
+        }
+      />
+
       <AiKeyForm
         orgId={orgId}
         provider={p}
@@ -352,6 +374,55 @@ function ManageControls({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/** The org's own per-minute request limit (empty: the provider default), at most the maximum. */
+function AiLimitForm({
+  provider: p,
+  pending,
+  onSave,
+}: {
+  provider: AiProvider;
+  pending: boolean;
+  onSave: (limits: { per_minute?: number }) => void;
+}) {
+  const [value, setValue] = useState(p.limits?.per_minute != null ? String(p.limits.per_minute) : "");
+  const text = value.trim();
+  const parsed = text === "" ? null : Number(text);
+  const error =
+    parsed !== null && (!Number.isInteger(parsed) || parsed < 1)
+      ? "A whole number of at least 1."
+      : parsed !== null && parsed > p.ceilings.per_minute
+        ? `At most ${p.ceilings.per_minute.toLocaleString("en-US")}.`
+        : null;
+  const inputId = `ai-limit-${p.name}`;
+  return (
+    <form
+      className="flex flex-col gap-1"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (error) return;
+        onSave(parsed === null ? {} : { per_minute: parsed });
+      }}
+    >
+      <Label htmlFor={inputId}>Requests per minute (optional, own limit)</Label>
+      <div className="flex flex-wrap items-start gap-2">
+        <Input
+          id={inputId}
+          className="w-28"
+          inputMode="numeric"
+          placeholder={String(p.default_limits.per_minute)}
+          value={value}
+          aria-invalid={error ? true : undefined}
+          onChange={(event) => setValue(event.target.value)}
+        />
+        <Button type="submit" size="sm" variant="outline" disabled={pending || Boolean(error)}>
+          Save limit
+        </Button>
+      </div>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </form>
   );
 }
 

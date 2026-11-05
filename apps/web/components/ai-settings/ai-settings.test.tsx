@@ -52,6 +52,9 @@ function provider(over: Partial<AiProvider> = {}): AiProvider {
     last_error_code: null,
     terms_ack_at: "2026-11-05T09:00:00Z",
     paid_tier_ack_at: null,
+    default_limits: { per_minute: 20 },
+    ceilings: { per_minute: 200 },
+    limits: null,
     ...over,
   };
 }
@@ -138,6 +141,21 @@ describe("AiProviderCard", () => {
     expect(html).not.toContain("Replace key");
     expect(html).toContain("configured · ••••wxyz");
     expect(html).toContain("Claude Sonnet 5");
+  });
+
+  it("shows the request limit with its maximum; admins may set their own", () => {
+    const readOnly = render(<AiProviderCard orgId="o1" provider={provider()} canManage={false} />);
+    expect(readOnly).toContain("20 / minute");
+    expect(readOnly).toContain("(maximum 200)");
+    expect(readOnly).not.toContain("Requests per minute");
+    const own = render(
+      <AiProviderCard orgId="o1" provider={provider({ limits: { per_minute: 5 } })} canManage />,
+    );
+    expect(own).toContain("5 / minute");
+    expect(own).toContain("own limit");
+    const input = own.match(/<input[^>]*id="ai-limit-anthropic"[^>]*>/)?.[0] ?? "";
+    expect(input).toContain('value="5"');
+    expect(own).toContain("Save limit");
   });
 
   it("shows the model with prices and marks unverified ids", () => {

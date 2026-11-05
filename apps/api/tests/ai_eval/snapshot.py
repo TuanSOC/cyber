@@ -46,6 +46,7 @@ from tests.ai_eval import handcases as hc
 from tests.ai_eval.cases import CASES_DIR, TWIN_SUFFIX, to_json_row, write_case
 
 EICAR_MARK = "EICAR-STANDARD-" + "ANTIVIRUS"  # never written whole into a committed file
+STATIC_TS = "2026-01-01T00:00:00Z"  # the hand-trimmed cases' analysis time
 MAX_ALERTS, MAX_IOCS, MAX_TIMELINE, TOP_FLOWS, REFS_PER_FINDING = 30, 50, 100, 10, 10
 MAX_STRINGS = 40
 
@@ -205,6 +206,13 @@ def static_case(root: Path, name: str, labels: dict[str, Any]) -> dict[str, Any]
     plants = _plants(labels, name)
     trimmed = trim_static(records, [str(p["value"]) for p in plants])
     tables = _rows(trimmed, static_ingest.to_row)
+    # The static worker stamps findings and IOCs with the analysis time (a file carries no
+    # event time): pin them, so a re-snapshot only changes when the analysis does.
+    for table, keys in (("analysis_findings", ("ts",)), ("iocs", ("first_seen", "last_seen"))):
+        for row in tables.get(table, []):
+            for key in keys:
+                if row.get(key) is not None:
+                    row[key] = STATIC_TS
     tables["malware_samples"] = [to_json_row(static_ingest.sample_row(validated))]
     summary = static_ingest.build_summary(validated, validated.counts, expected)
     sample = next(s for s in hc.STATIC_SAMPLES if s.name == scenario)

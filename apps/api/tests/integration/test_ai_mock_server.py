@@ -23,6 +23,7 @@ from pydantic import ValidationError
 
 from app.modules.ai.contracts import AiTask, FieldValue, RefKind
 from app.modules.ai.output_schema import AnalysisOutput, provider_json_schema
+from app.modules.ai.prompt import render
 from tests.ai_doubles import make_context, trivial_render
 
 KEY = "test-ai-mock-key"
@@ -168,8 +169,12 @@ def test_error_markers(
 ) -> None:
     response = client.post("/v1/analyze", json=_marked(f"ai-mock:{marker}"))
     assert response.status_code == status
-    assert response.json() == {"error": error}
+    assert response.json()["error"] == error
     assert response.headers.get("Retry-After") == retry_after
+    if marker == "401":  # hostile on purpose: the key comes back in the body (key-leak suite)
+        assert KEY in response.json()["message"]
+    else:
+        assert response.json() == {"error": error}
 
 
 def test_body_markers(client: httpx.Client) -> None:
@@ -210,12 +215,59 @@ def test_fabricate_echo_and_inject(client: httpx.Client) -> None:
     echoed = client.post("/v1/analyze", json=long).json()["output"]
     texts = [c.text for c in AnalysisOutput.model_validate(echoed).observed]
     assert any(CANARY in text for text in texts[1:])
+    # The real prompt (`ai.prompt.render`) puts the canary in the user turn, before the
+    # evidence block: echoed too; the evidence itself (the marker value) is not.
+    ctx = make_context(
+        items=((RefKind.FINDING, {"title": "Beacon (ai-mock:echo)", "severity": "high"}),)
+    )
+    parts = render(ctx, AiTask.SUMMARIZE_PCAP, delimiter="d" * 32, canary=CANARY)
+    assert CANARY not in parts.system and CANARY in parts.user
+    real = {**_marked("ai-mock:echo"), "system": parts.system, "user": parts.user}
+    echoed = client.post("/v1/analyze", json=real).json()["output"]
+    texts = [c.text for c in AnalysisOutput.model_validate(echoed).observed]
+    assert CANARY in texts[0] and any(CANARY in text for text in texts[1:])
+    assert not any("Beacon (ai-mock:echo)" in text for text in texts)
 
     injected = AnalysisOutput.model_validate(
         client.post("/v1/analyze", json=_marked("ai-mock:inject")).json()["output"]
     )
     assert "clean" in injected.observed[0].text
     assert injected.overall_confidence.level == "high"
+
+    hostile = AnalysisOutput.model_validate(
+        client.post("/v1/analyze", json=_marked("ai-mock:hostile")).json()["output"]
+    )
+    assert "clean" in hostile.observed[0].text
+    assert "F999" in [c.ref for claim in hostile.observed for c in claim.citations]
+    assert [claim.id for claim in hostile.observed] == ["O1", "O2", "O3"]
+
+
+def test_the_default_answer_reads_the_real_prompt(client: httpx.Client) -> None:
+    """`ai.prompt.render` sends the items array (not a context object) and names the task in
+    the user turn: the mock still cites the items, with a timeline for summarize_pcap."""
+    ctx = make_context(
+        items=(
+            (RefKind.FINDING, {"title": "Beacon to 203.0.113.50", "severity": "high"}),
+            (RefKind.TIMELINE, {"title": "Beacon from INT_IP_1", "ts": "2026-01-01T00:00:50Z"}),
+        )
+    )
+    parts = render(ctx, AiTask.SUMMARIZE_PCAP, delimiter="e" * 32, canary=CANARY)
+    body = {**_request(), "system": parts.system, "user": parts.user}
+    output = AnalysisOutput.model_validate(client.post("/v1/analyze", json=body).json()["output"])
+    assert [c.citations[0].ref for c in output.observed] == ["F1", "E1"]
+    assert [e.citations[0].ref for e in output.timeline] == ["E1"]
+
+
+def test_rate_limited_once_per_marker(client: httpx.Client) -> None:
+    first = client.post("/v1/analyze", json=_marked("ai-mock:429-once-abc1"))
+    assert first.status_code == 429 and first.headers["Retry-After"] == "1"
+    again = client.post("/v1/analyze", json=_marked("ai-mock:429-once-abc1"))
+    assert again.status_code == 200
+    AnalysisOutput.model_validate(again.json()["output"])
+    other = client.post("/v1/analyze", json=_marked("ai-mock:429-once-abc2"))
+    assert other.status_code == 429
+    client.post("/_reset")
+    assert client.post("/v1/analyze", json=_marked("ai-mock:429-once-abc1")).status_code == 429
 
 
 def test_slow_markers_answer_late(client: httpx.Client) -> None:

@@ -66,6 +66,9 @@ function aiProvider(over: Partial<AiProvider> = {}): AiProvider {
     last_error_code: null,
     terms_ack_at: "2026-11-05T09:00:00Z",
     paid_tier_ack_at: null,
+    default_limits: { per_minute: 20 },
+    ceilings: { per_minute: 200 },
+    limits: null,
     ...over,
   };
 }

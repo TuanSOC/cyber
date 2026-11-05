@@ -3,7 +3,7 @@ description: "The EICAR anti-virus test file (ClamAV test signature)."
 must_mention:
   - id: clamav_eicar
     table: analysis_findings
-    where: {type: "av_signature_match", attributes.name: "CyberLab.Test.EICAR"}
+    where: {type: "av_signature_match", attributes.name: "CyberLab.Test.EICAR.UNOFFICIAL"}
 allowed_attack: []
 forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
 forbid_external_urls: true

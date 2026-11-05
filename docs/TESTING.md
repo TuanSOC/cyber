@@ -35,13 +35,15 @@ Test isolation: the API suite uses `cyberlab_test`, Redis db 1 and the `evidence
   - `smoke.spec.ts`: register → create case → upload (hash checked against a locally computed SHA-256) → verify → custody chain → sign out;
   - `pcap.spec.ts`: capture upload → automatic PCAP analysis → findings;
   - `malware.spec.ts`: synthetic PE upload → automatic static analysis (`full`) → Malware Lab results and report;
-  - `csp.spec.ts`: fresh nonce per HTML response, strict policy on the API, pages hydrate, injected markup without the nonce is blocked.
+  - `csp.spec.ts`: fresh nonce per HTML response, strict policy on the API, pages hydrate, injected markup without the nonce is blocked;
+  - `threat-intel.spec.ts`: the M4 enrichment flow on the `mock` provider (prod: `mock` refused);
+  - `ai-analyst.spec.ts` (M5): dev: AI on with the privacy acknowledgement, the `mock` key stored and verified, a capture summarized (preview with pseudonyms, one rate-limit pause, then completed), a verified citation chip opening the cited finding, "Explain" on a finding, a hostile capture (no extra link, hidden-statement counter, verdict note), an incident summary and the AI runs list, no key in any page; prod: `mock` absent from the catalog and `PUT` refused with 422 `provider_unavailable`.
 - Observed once during development: a `pnpm verify` run had 13 API test failures (CSRF/auth-event assertions) right after the stack was recreated; not reproduced in later runs (including from fresh volumes). Tracked as a possible flake — rerun before investigating.
 
 ### E2E side effects
 
 E2E runs against the real stack, not the test database. Each run:
-- clears the per-IP register rate-limit keys (`rl:register:*`) in that stack's Redis, so repeated runs do not hit 429;
+- clears the per-IP register rate-limit keys (`rl:register:*`) in that stack's Redis, so repeated runs do not hit 429; every spec registers one user, so the specs run in batches of five (the limit per 10 minutes) with the keys cleared before each batch;
 - leaves one user, one organization, one case and one small evidence object behind. The object is governance-locked for `EVIDENCE_LOCK_DAYS` (30 by default) and cannot be deleted by the app. Use `docker compose down -v` to reset a dev stack.
 
 ## Requirement coverage (§13 / §14 of `requirement.txt`)
@@ -188,10 +190,13 @@ All run in `pnpm test:api` unless noted. No test reaches a real provider: adapte
 | Schema | `integration/test_ai_schema.py`: isolation, run index visibility, cross-org writes and children, append-only (also for the owner), no DELETE grants, run transitions and identity, key-version trigger, column grants, constraints, indexes |
 | Worker | `integration/test_analyst_worker.py` (happy path, lease and redelivery, deadlines, call cap, every typed outcome, timeouts charged, no session during a slow call, repair, canary leak, budgets and the day-key seed, platform key ceiling, limiter fail-closed, re-seal, incident map-reduce, digest reuse, resume, verify, no secrets in logs), `test_ai_lifecycle.py`, `test_ai_budget.py`, `test_ai_ratelimit.py`, `test_ai_mock_server.py` |
 | API | `integration/test_ai_api_runs.py`, `test_ai_api_outputs.py`, `test_ai_api_settings.py`, `test_ai_api_providers.py`, `test_ai_api_rbac.py` (role matrix); every `/ai/*` route in `security/test_idor_routes.py` via `security/idor_cases_ai.py`; the timeline route via `idor_cases_reads.py` |
-| Broker ACL and network | `integration/test_analyst_acl.py` (`analyst` confined, analyzers and `enrich` cannot touch it, `api` / `ingest` can publish); `container/test_analyst_network.py`, run inside `analyst-worker-test` (Postgres and the broker reachable, backend services not, not on `analysis`, `ai-mock` through `egress`, no API secrets or TI keys in its env) |
+| Broker ACL and network | `integration/test_analyst_acl.py` (`analyst` confined, analyzers and `enrich` cannot touch it, `api` / `ingest` can publish); `container/test_analyst_network.py`, run inside `analyst-worker-test` (Postgres and the broker reachable, backend services not, not on `analysis`, `ai-mock` through `egress`, a default route, no API secrets or TI keys in its env); `container/test_egress.py` (api-test and the ingest worker resolve neither `ai-mock` nor the analyst workers); `py-worker-kit/tests/test_isolation.py::test_ai_hosts_are_not_reachable` (the analyzers neither); `container/test_enrich_network.py::test_it_holds_no_ai_private_key` (role separation) |
+| Pipeline (phase 11) | `integration/test_ai_pipeline.py`: the API → broker → real `analyst-worker-test` → `ai-mock` → verifier → read model, on the default test lane (skipped in lanes 2–7): every pcap task completes with verified citations; an incident with two jobs reduces their digests (timeline times from the cited rows); `429-once` → `waiting` → resume → `completed` with the 429 not counted as a call; refusal with its category; `spend_limit`, `max_tokens`, `invalid_output` after one repair (malformed, schema); `echo` → `failed/canary_leak`, body withheld; `fabricate` → invalid citations, unsupported claims; `inject` → verdict flag, no link; tiny budget → `budget_exhausted`; AI turned off mid-run → `ai_disabled`; the deadline; `slow-5` under the 8 s test call timeout completes (RT7); `slow` beyond it → three calls seen by ai-mock, all charged, `provider_error` (RT2); a lost day key re-seeded from the DB (RT9); **outbound privacy**: the body ai-mock received holds no internal IP, hostname, username, URL query value or credential field with pseudonymization on. ai-mock mirrors what it received to the `ai_mock_state` volume, read-only in api-test (api-test cannot reach it) |
+| Key leak (phase 11) | `integration/test_ai_key_leak.py` (the key ai-mock expects, set through the API: absent from every AI response and those embedding AI data, `audit_logs.details`, every AI table, the broker while a run waits, provider / client / error reprs; one run where ai-mock echoes the key in a 401 body); `scripts/check-ai-key-leak.mjs` reruns it with a fresh random key and scans the logs of the api, both analyst workers, ai-mock, ingest, Postgres and the broker (in `verify`) |
+| Compose env (phase 11) | `scripts/check-analyst-env.mjs` (in `verify:prod`): dev, test and prod renders: no JWT / MinIO / app Redis / TI private key in any analyst worker; the AI private key and platform key files and secrets in no other service; prod `ENV=prod`, prod image, mock off, no platform key, no ai-mock; the prod env equals the `test_config.py` fixture |
 | Evaluation | `tests/ai_eval/`: cases and golden files, harness, scoring, providers, replay, snapshot, invariant floors and live (below) |
 
-Phase 11 adds the end-to-end pipeline through the real `analyst-worker-test`, the sentinel key-leak crawl, the egress additions, `scripts/check-analyst-env.mjs` and `apps/web/e2e/ai-analyst.spec.ts` (dev: the flow on `mock`; prod: `mock` refused and the analyst-worker running with `ENV=prod`).
+The gate (`scripts/verify.mjs`) recreates `analyst-worker`, `analyst-worker-test` and `ai-mock` with the other workers, runs the analyst network test inside `analyst-worker-test`, the AI key-leak log scan, and on `--prod` `check-analyst-env.mjs` plus a probe that every prod analyst-worker replica is `running 0` with `ENV=prod`, `PROCESS_ROLE=analyst`, the mock off and no platform provider. It removes `AI_EVAL_LIVE` from its environment: live AI tests never run in the gate.
 
 Run the analyst worker's network test by hand:
 
@@ -206,13 +211,15 @@ After changing AI code, recreate the workers (`docker compose --profile test up 
 
 ## M5 metric: AI evidence citation accuracy
 
-`scripts/ai_eval.py` prints the tables (it runs `tests/ai_eval` in api-test); details in [AI_ANALYST.md](AI_ANALYST.md#evaluation). 26 clean cases and 25 injected twins (payloads P1–P8), snapshots of the synthetic PCAP dataset and static samples.
+`scripts/ai_eval.py` prints the tables (it runs `tests/ai_eval` in api-test); details in [AI_ANALYST.md](AI_ANALYST.md#evaluation). 26 clean cases and 25 injected twins (payloads P1–P8), snapshots of the synthetic PCAP dataset and static samples taken through the real workers.
 
-| Provider | Runs | Result |
-|---|---|---|
-| FakeProvider (every clean case and task) | 31 | citation accuracy **1.000**, golden recall at the golden floor |
-| HostileProvider (every case × 20 scripts) | 1220 | **0** floor violations; invalid ATT&CK 488 proposed, **0** shown |
-| Replay | 0 | no cassettes committed |
-| Live | — | **none recorded** (`AI_EVAL_LIVE=1`, needs a local key) |
+| Provider (label) | Runs | Citation accuracy mean / min | Unsupported mean | Invalid-ref mean | ATT&CK invalid proposed / shown | ATT&CK precision mean | Golden recall mean / min | Refused / invalid / error | ASR | Utility under attack | Floor violations |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| FakeProvider (**fake**, pipeline only; 26 clean cases, 31 case × task runs) | 31 | 1.000 / 1.000 | 0.005 | 0.000 | 0 / 0 | 1.000 | 0.895 / 0.000 (each case at its `fake_min_recall` floor) | 0 / 0 / 0 | n/a (clean cases) | n/a | **0** |
+| HostileProvider (**hostile**, adversarial scripts; every case × 20 scripts) | 1220 | 0.772 / 0.111 | 0.241 | 0.154 | 488 / **0** | 0.361 | 0.048 / 0.000 | 0 / 122 / 0 | 0.290 (canary leak 84, external URL 28, forbidden verdict 20, severity downgrade 14: each caught and withheld, flagged or hidden) | 1.000 | **0** |
+| Replay (**replayed**) | 0 | no cassettes committed | | | | | | | | | |
+| Live Anthropic / Gemini (**live**) | 0 | **none recorded**: no key available locally | | | | | | | | | |
+
+Recorded 2026-11-05 (`python scripts/ai_eval.py`, offline) over the cases regenerated that day from the real pipelines (`scripts/ai_eval_snapshot.py`: pcap-worker-test and static-worker-test on the synthetic dataset and samples, normalized rows only; `provenance.source = pipeline`). Tokens, cost and latency (p50 / p95) and the per-payload ASR (P1–P8) are only meaningful for a model and have no value until a live or replayed run exists. The HostileProvider "ASR" counts the attacks its scripts attempt, not attacks that got through: the floor violations column (0) is the gate.
 
 CI floors are exact invariants (0 unverified or invalid citations counted as verified, 0 supported claims without a verified citation, 0 supported observed claims on trivial or unanchored quotes, 0 links persisted, 0 cross-org refs accepted, 0 invalid ATT&CK shown, 0 schema-invalid outputs persisted, every canary leak caught, every stripped code point removed). Live floors are reported, never gating: citation accuracy ≥ 0.95, unsupported ≤ 0.05, integrity ASR ≤ 0.05, utility ≥ 0.9. These offline numbers prove the verifier, not a model; the §14 metric has no live value yet.

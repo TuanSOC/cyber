@@ -30,9 +30,9 @@ from starlette.requests import HTTPConnection
 
 from app.core import rate_limit
 from app.core.config import Settings, get_settings
-from app.core.errors import AppError, Conflict, NotFound
+from app.core.errors import AppError, Conflict, Forbidden, NotFound
 from app.core.pagination import PageParams
-from app.core.rbac import OrgContext
+from app.core.rbac import ROLE_PERMISSIONS, OrgContext, Permission
 from app.modules.ai import repository, runs, service_outputs, service_settings
 from app.modules.ai.availability import provider_available
 from app.modules.ai.catalog import AI_CATALOG
@@ -473,7 +473,11 @@ async def get_context(
 ) -> AiRunContextOut:
     """The frozen context(s) exactly as sent (base, and reduce for an incident parent);
     `reveal` adds the pseudonym map (never sent to a provider) and is audited
-    (`ai.context_revealed`: the run and the actor, never a name; the caller commits)."""
+    (`ai.context_revealed`: the run and the actor, never a name; the caller commits).
+    Revealing needs `evidence.write` (analyst and up): a viewer reads the pseudonymized
+    context only (403 otherwise)."""
+    if reveal and Permission.EVIDENCE_WRITE not in ROLE_PERMISSIONS[ctx.role]:
+        raise Forbidden()
     found = await repository.get_run_row(ctx.session, ctx.org_id, run_id)
     if found is None:
         raise NotFound()

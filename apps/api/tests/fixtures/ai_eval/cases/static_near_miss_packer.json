@@ -6,35 +6,46 @@
   {
    "analyzer": "static",
    "created_at": "2026-01-01T01:01:00Z",
-   "evidence": {"description":"PE32 executable for MS Windows","filename":"near_miss_packer.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":5120,"uploaded_at":"2026-01-01T01:00:00Z"},
+   "evidence": {"description":"PE32 executable for MS Windows","filename":"near_miss_packer.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":8704,"uploaded_at":"2026-01-01T01:00:00Z"},
    "finished_at": "2026-01-01T01:02:00Z",
    "key": "j1",
    "profile": "full",
-   "summary": {"counts":{"capabilities":0,"exports":0,"findings":0,"imports":2,"iocs":0,"resources":0,"sections":3,"signatures":0,"strings":1},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"e4f8129ad5d1651e6d9112a474de31cf","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"e4f8129ad5d1651e6d9112a474de31cf","rich_header_hash":null,"ssdeep":null},"entropy":5.2,"file_type":"PE32 executable for MS Windows","md5":"86c74485daf251744d4cc24c08730330","mime":"application/vnd.microsoft.portable-executable","sha1":"323cbeb64aa3b6ce90f0582304a83d5062d3a601","sha256":"5597d8da87e5914eaf7a8e643a08d9ca059af2284a8c109f626741be954ed255","size":5120},"schema_version":"static.v1","tool_versions":{"capa":"9.2.1","clamav":"1.4.3","floss":"3.1.1","yara":"4.5.2"},"truncated":{}},
+   "summary": {"counts":{"capabilities":0,"exports":0,"findings":0,"imports":2,"iocs":0,"resources":0,"sections":4,"signatures":0,"strings":11},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["executable_image","32bit_machine"],"compile_timestamp":1600000000,"dll_characteristics":["dynamic_base","nx_compat","terminal_server_aware"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"is_dll":false,"machine":"i386","overlay_size":0,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"87bed5a7cba00c7e1f4015f1bdae2183","rich_header_hash":null,"ssdeep":"192:uka18PdQ6tqeEyDdTYzJfadBtFOw1Km+f:uka8K6tqe/2Yrt8m6"},"entropy":4.9442,"file_type":"PE32 executable for MS Windows 6.00 (console), Intel i386, 4 sections","md5":"466d49db6cb03f2294ff00259fcb042a","mime":"application/vnd.microsoft.portable-executable","sha1":"9eb8a87160858ca67d26917437c5161219d96fd2","sha256":"c7c5870a24ce3fe3af0fd2cade606b343c66d47d38bc8fe965a6fa5131508823","size":8704},"schema_version":"static.v1","tool_versions":{"capa":"10.0.0","capa_rules":"v10.0.0","clamav":"1.4.3","clamav_db":"custom:clamav","floss":"3.2.0","pefile":"2024.8.26","ppdeep":"20260221","pyelftools":"0.33","python":"3.12.16","yara":"4.5.4"},"truncated":{}},
    "tables": {
     "malware_imports": [
      {"function":"LoadLibraryA","library":"KERNEL32.dll","ordinal":null},
      {"function":"GetProcAddress","library":"KERNEL32.dll","ordinal":null}
     ],
     "malware_samples": [
-     {"elf":null,"entropy":5.2,"file_format":"pe","file_type":"PE32 executable for MS Windows","md5":"86c74485daf251744d4cc24c08730330","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"e4f8129ad5d1651e6d9112a474de31cf","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"sha1":"323cbeb64aa3b6ce90f0582304a83d5062d3a601","sha256":"5597d8da87e5914eaf7a8e643a08d9ca059af2284a8c109f626741be954ed255","size":5120,"ssdeep":null}
+     {"elf":null,"entropy":4.9442,"file_format":"pe","file_type":"PE32 executable for MS Windows 6.00 (console), Intel i386, 4 sections","md5":"466d49db6cb03f2294ff00259fcb042a","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["executable_image","32bit_machine"],"compile_timestamp":1600000000,"dll_characteristics":["dynamic_base","nx_compat","terminal_server_aware"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"87bed5a7cba00c7e1f4015f1bdae2183","is_dll":false,"machine":"i386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"sha1":"9eb8a87160858ca67d26917437c5161219d96fd2","sha256":"c7c5870a24ce3fe3af0fd2cade606b343c66d47d38bc8fe965a6fa5131508823","size":8704,"ssdeep":"192:uka18PdQ6tqeEyDdTYzJfadBtFOw1Km+f:uka8K6tqe/2Yrt8m6"}
     ],
     "malware_sections": [
-     {"entropy":6.1,"flags":["read","execute"],"index":0,"name":".text","raw_size":2048,"virtual_address":4096,"virtual_size":2048},
-     {"entropy":4.2,"flags":["read"],"index":1,"name":".rdata","raw_size":2048,"virtual_address":8192,"virtual_size":2048},
-     {"entropy":1.3,"flags":["read"],"index":2,"name":".data","raw_size":2048,"virtual_address":12288,"virtual_size":2048}
+     {"entropy":5.289,"flags":["code","execute","read"],"index":0,"name":".text","raw_size":6144,"virtual_address":4096,"virtual_size":6144},
+     {"entropy":0.2608,"flags":["idata","read"],"index":1,"name":".rdata","raw_size":512,"virtual_address":12288,"virtual_size":14},
+     {"entropy":3.9781,"flags":["idata","read","write"],"index":2,"name":".data","raw_size":512,"virtual_address":16384,"virtual_size":512},
+     {"entropy":0.9108,"flags":["idata","read","write"],"index":3,"name":".idata","raw_size":512,"virtual_address":20480,"virtual_size":110}
     ],
     "malware_strings": [
-     {"encoding":"ascii","offset":8192,"value":"plugin loader"}
+     {"encoding":"ascii","offset":77,"value":"!This program cannot be run in DOS mode."},
+     {"encoding":"ascii","offset":415,"value":"`.rdata"},
+     {"encoding":"ascii","offset":455,"value":"@.data"},
+     {"encoding":"ascii","offset":496,"value":".idata"},
+     {"encoding":"ascii","offset":1149,"value":"]PXU]u"},
+     {"encoding":"ascii","offset":2240,"value":"P]]U]X"},
+     {"encoding":"ascii","offset":6136,"value":"]PUPPXt"},
+     {"encoding":"ascii","offset":7168,"value":"plugin loader"},
+     {"encoding":"ascii","offset":8258,"value":"LoadLibraryA"},
+     {"encoding":"ascii","offset":8274,"value":"GetProcAddress"},
+     {"encoding":"ascii","offset":8289,"value":"KERNEL32.dll"}
     ]
    },
-   "worker_version": "static-worker/hand-trimmed"
+   "worker_version": "static-worker/snapshot"
   }
  ],
  "kind": "static",
  "name": "static_near_miss_packer",
  "plants": [],
- "provenance": {"dataset":"apps/workers/static/samples/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":20261105,"snapshot_version":1,"source":"hand-trimmed"},
+ "provenance": {"dataset":"apps/workers/static/samples","seed":20261105,"snapshot_version":1,"source":"pipeline"},
  "scenario": "near_miss_packer",
  "tasks": ["explain_static"],
  "ti": []

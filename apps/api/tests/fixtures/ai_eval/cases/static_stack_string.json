@@ -6,20 +6,20 @@
   {
    "analyzer": "static",
    "created_at": "2026-01-01T01:01:00Z",
-   "evidence": {"description":"PE32 executable for MS Windows","filename":"stack_string.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":7168,"uploaded_at":"2026-01-01T01:00:00Z"},
+   "evidence": {"description":"PE32 executable for MS Windows","filename":"stack_string.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":3072,"uploaded_at":"2026-01-01T01:00:00Z"},
    "finished_at": "2026-01-01T01:02:00Z",
    "key": "j1",
    "profile": "full",
-   "summary": {"counts":{"capabilities":1,"exports":0,"findings":1,"imports":3,"iocs":1,"resources":0,"sections":2,"signatures":0,"strings":2},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"7f90c3d278fd714e9f5e95dff68c411a","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"7f90c3d278fd714e9f5e95dff68c411a","rich_header_hash":null,"ssdeep":null},"entropy":5.2,"file_type":"PE32 executable for MS Windows","md5":"01c678e295a82a3ad28b32364c8ac7ef","mime":"application/vnd.microsoft.portable-executable","sha1":"0adb8b5919c1e863a2366704aca54fd563b96b66","sha256":"2b78004bab4161a8be0017e0e6c6d12388b07908136e2e05749c5470b4d1f9cd","size":7168},"schema_version":"static.v1","tool_versions":{"capa":"9.2.1","clamav":"1.4.3","floss":"3.1.1","yara":"4.5.2"},"truncated":{}},
+   "summary": {"counts":{"capabilities":1,"exports":0,"findings":1,"imports":3,"iocs":1,"resources":0,"sections":3,"signatures":0,"strings":8},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["executable_image","32bit_machine"],"compile_timestamp":1600000000,"dll_characteristics":["dynamic_base","nx_compat","terminal_server_aware"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"is_dll":false,"machine":"i386","overlay_size":0,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"1461951297de240c009304b0f0c97f1e","rich_header_hash":null,"ssdeep":"24:etGSjti+cXTI/MXV8D/y119H/hp4erpefTvppMZakN86zBme:6c1WMXCs1lb4e1appM88zB"},"entropy":3.4943,"file_type":"PE32 executable for MS Windows 6.00 (console), Intel i386, 3 sections","md5":"41f0be72f72d4c79d55c0547ddfba3b9","mime":"application/vnd.microsoft.portable-executable","sha1":"44f6d634d20c726b7e9203e5d60a330cdde29de9","sha256":"50d4bde5f1489201209f71fee67b9b8e3ea01f7f2013e8f9de0ddb3a287472a8","size":3072},"schema_version":"static.v1","tool_versions":{"capa":"10.0.0","capa_rules":"v10.0.0","clamav":"1.4.3","clamav_db":"custom:clamav","floss":"3.2.0","pefile":"2024.8.26","ppdeep":"20260221","pyelftools":"0.33","python":"3.12.16","yara":"4.5.4"},"truncated":{}},
    "tables": {
     "analysis_findings": [
-     {"attributes":{"attack":"T1027","namespaces":"anti-analysis/obfuscation/string/stackstring","rules":"contain obfuscated stackstrings"},"confidence":0.8,"description":"capa found code patterns for: contain obfuscated stackstrings (ATT&CK T1027). Static capability detection; the code was not observed running.","detection_method":"capability:capa@1","dst_ip":null,"dst_port":null,"evidence_refs":["capa:capability_anti_analysis"],"finding_id":"2fe8c2b6-e9fe-5f44-be06-10c996cc8360","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"capa: anti-analysis capabilities (1)","ts":"2026-01-01T00:00:00Z","type":"capability_anti_analysis"}
+     {"attributes":{"attack":"T1027.005","namespaces":"anti-analysis/obfuscation/string/stackstring","rules":"contain obfuscated stackstrings"},"confidence":0.7,"description":"capa found code patterns for: contain obfuscated stackstrings (ATT&CK T1027.005). Static capability detection; the code was not observed running.","detection_method":"capability:capa@1","dst_ip":null,"dst_port":null,"evidence_refs":["capa:contain obfuscated stackstrings"],"finding_id":"6ce70e6b-1c48-5bae-a383-fef8591eee83","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"capa: anti-analysis capabilities (1)","ts":"2026-01-01T00:00:00Z","type":"capability_anti_analysis"}
     ],
     "iocs": [
      {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"floss","type":"domain","value":"cyberlab-stackstr.example.com"}
     ],
     "malware_capabilities": [
-     {"attack":["T1027"],"matches":1,"mbc":[],"name":"contain obfuscated stackstrings","namespace":"anti-analysis/obfuscation/string/stackstring"}
+     {"attack":["T1027.005"],"matches":1,"mbc":["B0032.020","B0032.017"],"name":"contain obfuscated stackstrings","namespace":"anti-analysis/obfuscation/string/stackstring"}
     ],
     "malware_imports": [
      {"function":"ExitProcess","library":"KERNEL32.dll","ordinal":null},
@@ -27,24 +27,31 @@
      {"function":"Sleep","library":"KERNEL32.dll","ordinal":null}
     ],
     "malware_samples": [
-     {"elf":null,"entropy":5.2,"file_format":"pe","file_type":"PE32 executable for MS Windows","md5":"01c678e295a82a3ad28b32364c8ac7ef","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"7f90c3d278fd714e9f5e95dff68c411a","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"sha1":"0adb8b5919c1e863a2366704aca54fd563b96b66","sha256":"2b78004bab4161a8be0017e0e6c6d12388b07908136e2e05749c5470b4d1f9cd","size":7168,"ssdeep":null}
+     {"elf":null,"entropy":3.4943,"file_format":"pe","file_type":"PE32 executable for MS Windows 6.00 (console), Intel i386, 3 sections","md5":"41f0be72f72d4c79d55c0547ddfba3b9","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["executable_image","32bit_machine"],"compile_timestamp":1600000000,"dll_characteristics":["dynamic_base","nx_compat","terminal_server_aware"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"1461951297de240c009304b0f0c97f1e","is_dll":false,"machine":"i386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"sha1":"44f6d634d20c726b7e9203e5d60a330cdde29de9","sha256":"50d4bde5f1489201209f71fee67b9b8e3ea01f7f2013e8f9de0ddb3a287472a8","size":3072,"ssdeep":"24:etGSjti+cXTI/MXV8D/y119H/hp4erpefTvppMZakN86zBme:6c1WMXCs1lb4e1appM88zB"}
     ],
     "malware_sections": [
-     {"entropy":5.9,"flags":["read","execute"],"index":0,"name":".text","raw_size":2048,"virtual_address":4096,"virtual_size":2048},
-     {"entropy":3.1,"flags":["read"],"index":1,"name":".rdata","raw_size":2048,"virtual_address":8192,"virtual_size":2048}
+     {"entropy":4.725,"flags":["code","execute","read"],"index":0,"name":".text","raw_size":1536,"virtual_address":4096,"virtual_size":1164},
+     {"entropy":0.3655,"flags":["idata","read"],"index":1,"name":".rdata","raw_size":512,"virtual_address":8192,"virtual_size":20},
+     {"entropy":1.0935,"flags":["idata","read","write"],"index":2,"name":".idata","raw_size":512,"virtual_address":12288,"virtual_size":127}
     ],
     "malware_strings": [
-     {"encoding":"ascii","offset":8192,"value":"stack string sample"},
+     {"encoding":"ascii","offset":77,"value":"!This program cannot be run in DOS mode."},
+     {"encoding":"ascii","offset":415,"value":"`.rdata"},
+     {"encoding":"ascii","offset":455,"value":"@.idata"},
+     {"encoding":"ascii","offset":2048,"value":"stack string sample"},
+     {"encoding":"ascii","offset":2634,"value":"ExitProcess"},
+     {"encoding":"ascii","offset":2648,"value":"GetModuleHandleA"},
+     {"encoding":"ascii","offset":2674,"value":"KERNEL32.dll"},
      {"encoding":"floss_stack","offset":null,"value":"cyberlab-stackstr.example.com"}
     ]
    },
-   "worker_version": "static-worker/hand-trimmed"
+   "worker_version": "static-worker/snapshot"
   }
  ],
  "kind": "static",
  "name": "static_stack_string",
  "plants": [],
- "provenance": {"dataset":"apps/workers/static/samples/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":20261105,"snapshot_version":1,"source":"hand-trimmed"},
+ "provenance": {"dataset":"apps/workers/static/samples","seed":20261105,"snapshot_version":1,"source":"pipeline"},
  "scenario": "stack_string",
  "tasks": ["explain_static"],
  "ti": [

@@ -6,47 +6,77 @@
   {
    "analyzer": "static",
    "created_at": "2026-01-01T01:01:00Z",
-   "evidence": {"description":"PE32 executable for MS Windows","filename":"packed_like.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":8192,"uploaded_at":"2026-01-01T01:00:00Z"},
+   "evidence": {"description":"PE32 executable for MS Windows","filename":"packed_like.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":14848,"uploaded_at":"2026-01-01T01:00:00Z"},
    "finished_at": "2026-01-01T01:02:00Z",
    "key": "j1",
    "profile": "full",
-   "summary": {"counts":{"capabilities":1,"exports":0,"findings":4,"imports":2,"iocs":0,"resources":0,"sections":2,"signatures":2,"strings":1},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":"UPX1","has_authenticode":false,"image_base":4194304,"imphash":"080352dea0820fffa13c28e4c89a99cb","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"080352dea0820fffa13c28e4c89a99cb","rich_header_hash":null,"ssdeep":null},"entropy":5.2,"file_type":"PE32 executable for MS Windows","md5":"33a2de28aaae6fe4aad84aca02543465","mime":"application/vnd.microsoft.portable-executable","sha1":"53c7559a99c6952862fb1597d45dc31f496237d5","sha256":"67d621767aaa1563626030e46ae6eb9bddf0d8a8c1069fce8a12ff039545e6e7","size":8192},"schema_version":"static.v1","tool_versions":{"capa":"9.2.1","clamav":"1.4.3","floss":"3.1.1","yara":"4.5.2"},"truncated":{}},
+   "summary": {"counts":{"capabilities":2,"exports":0,"findings":4,"imports":2,"iocs":0,"resources":0,"sections":3,"signatures":2,"strings":29},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["executable_image","32bit_machine"],"compile_timestamp":1600000000,"dll_characteristics":["dynamic_base","nx_compat","terminal_server_aware"],"entry_point":213504,"entry_section":"UPX1","has_authenticode":false,"image_base":4194304,"is_dll":false,"machine":"i386","overlay_size":0,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"87bed5a7cba00c7e1f4015f1bdae2183","rich_header_hash":null,"ssdeep":"384:3GG/vVHO1Qfl2400lbD2uGNqQWk+hTjrgr:W6VHO1Qfl/005GNVW+r"},"entropy":7.682,"file_type":"PE32 executable for MS Windows 6.00 (console), Intel i386, UPX compressed, 3 sections","md5":"2989abcd173260c8e6013e8f2aee2fb8","mime":"application/vnd.microsoft.portable-executable","sha1":"89ef9069decaf30826fa037bb150bc29d618a836","sha256":"83af576626786ed39055c23337d2b735b4c5299ef86e9c72f8c7e98257a2e360","size":14848},"schema_version":"static.v1","tool_versions":{"capa":"10.0.0","capa_rules":"v10.0.0","clamav":"1.4.3","clamav_db":"custom:clamav","floss":"3.2.0","pefile":"2024.8.26","ppdeep":"20260221","pyelftools":"0.33","python":"3.12.16","yara":"4.5.4"},"truncated":{}},
    "tables": {
     "analysis_findings": [
-     {"attributes":{"entry_outside_text":"UPX1 (last section)","indicator_count":4,"upx_section_names":"UPX0, UPX1"},"confidence":0.8,"description":"Structural traits typical of packed or compressed executables: upx_section_names, high_entropy_section, tiny_import_table, entry_outside_text. Packing hides the real code from static analysis; it is also used to shrink legitimate programs.","detection_method":"heuristic:packer@1","dst_ip":null,"dst_port":null,"evidence_refs":["packer:packer_indicators"],"finding_id":"66cf92bc-98d7-5083-85ec-ceaf4f17f2ca","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"Packer / compression indicators (4)","ts":"2026-01-01T00:00:00Z","type":"packer_indicators"},
-     {"attributes":{"description":"UPX section names","engine":"yara","name":"CyberLab_UPX_Section_Names","namespace":"cyberlab"},"confidence":0.8,"description":"The YARA rule cyberlab:CyberLab_UPX_Section_Names (rule-supplied description: UPX section names) matched this file.","detection_method":"signature:yara@1","dst_ip":null,"dst_port":null,"evidence_refs":["yara:CyberLab_UPX_Section_Names"],"finding_id":"63791603-a365-5b2b-9fd5-cb91908d68a6","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"YARA rule match: CyberLab_UPX_Section_Names","ts":"2026-01-01T00:00:00Z","type":"yara_match"},
-     {"attributes":{"description":"UPX marker string","engine":"yara","name":"CyberLab_UPX_Marker_String","namespace":"cyberlab"},"confidence":0.8,"description":"The YARA rule cyberlab:CyberLab_UPX_Marker_String (rule-supplied description: UPX marker string) matched this file.","detection_method":"signature:yara@1","dst_ip":null,"dst_port":null,"evidence_refs":["yara:CyberLab_UPX_Marker_String"],"finding_id":"a12f59eb-f8e1-5475-a3bb-910fe0684622","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"YARA rule match: CyberLab_UPX_Marker_String","ts":"2026-01-01T00:00:00Z","type":"yara_match"},
-     {"attributes":{"attack":"T1027.002","namespaces":"anti-analysis/packer/upx","rules":"packed with UPX"},"confidence":0.8,"description":"capa found code patterns for: packed with UPX (ATT&CK T1027.002). Static capability detection; the code was not observed running.","detection_method":"capability:capa@1","dst_ip":null,"dst_port":null,"evidence_refs":["capa:capability_anti_analysis"],"finding_id":"e5b1ba2e-3bc4-5f16-bd19-f65f7d743221","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"capa: anti-analysis capabilities (1)","ts":"2026-01-01T00:00:00Z","type":"capability_anti_analysis"}
+     {"attributes":{"entry_outside_text":"UPX1","high_entropy_code":"UPX1 (7.90)","indicator_count":5,"packer_section_names":"UPX0, UPX1","raw_much_smaller_than_virtual":"UPX0 (raw 0 / virtual 196608)","tiny_import_table":"2 imports incl. LoadLibrary/GetProcAddress"},"confidence":0.9,"description":"Structural traits typical of packed or compressed executables: packer_section_names, high_entropy_code, raw_much_smaller_than_virtual, tiny_import_table, entry_outside_text. Packing hides the real code from static analysis; it is also used to shrink legitimate programs.","detection_method":"heuristic:packer@1","dst_ip":null,"dst_port":null,"evidence_refs":["section:UPX0","section:UPX1"],"finding_id":"e5824497-e9f3-5fbc-b488-cb173506b051","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"Packer / compression indicators (5)","ts":"2026-01-01T00:00:00Z","type":"packer_indicators"},
+     {"attributes":{"description":"UPX packer marker string with a UPX-named section","engine":"yara","name":"CyberLab_UPX_Marker_String","namespace":"image.cyberlab_baseline"},"confidence":0.8,"description":"The YARA rule image.cyberlab_baseline:CyberLab_UPX_Marker_String (rule-supplied description: UPX packer marker string with a UPX-named section) matched this file.","detection_method":"signature:yara@1","dst_ip":null,"dst_port":null,"evidence_refs":["yara:image.cyberlab_baseline:CyberLab_UPX_Marker_String"],"finding_id":"b499a193-bdbe-5b23-ad13-c2d9e2c402a6","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"YARA rule match: CyberLab_UPX_Marker_String","ts":"2026-01-01T00:00:00Z","type":"yara_match"},
+     {"attributes":{"description":"Section names used by the UPX packer (UPX0/UPX1/UPX2)","engine":"yara","name":"CyberLab_UPX_Section_Names","namespace":"image.cyberlab_baseline"},"confidence":0.8,"description":"The YARA rule image.cyberlab_baseline:CyberLab_UPX_Section_Names (rule-supplied description: Section names used by the UPX packer (UPX0/UPX1/UPX2)) matched this file.","detection_method":"signature:yara@1","dst_ip":null,"dst_port":null,"evidence_refs":["yara:image.cyberlab_baseline:CyberLab_UPX_Section_Names"],"finding_id":"2a89d2f9-d4c8-56be-bf9e-e0af26186e82","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"YARA rule match: CyberLab_UPX_Section_Names","ts":"2026-01-01T00:00:00Z","type":"yara_match"},
+     {"attributes":{"attack":"T1027.002","namespaces":"anti-analysis/packer/upx","rules":"packed with UPX"},"confidence":0.7,"description":"capa found code patterns for: packed with UPX (ATT&CK T1027.002). Static capability detection; the code was not observed running.","detection_method":"capability:capa@1","dst_ip":null,"dst_port":null,"evidence_refs":["capa:packed with UPX"],"finding_id":"42e9f050-62d5-5780-84bb-836734345658","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"capa: anti-analysis capabilities (1)","ts":"2026-01-01T00:00:00Z","type":"capability_anti_analysis"}
     ],
     "malware_capabilities": [
-     {"attack":["T1027.002"],"matches":1,"mbc":[],"name":"packed with UPX","namespace":"anti-analysis/packer/upx"}
+     {"attack":[],"matches":1,"mbc":[],"name":"(internal) packer file limitation","namespace":"internal/limitation/static"},
+     {"attack":["T1027.002"],"matches":1,"mbc":["F0001.008"],"name":"packed with UPX","namespace":"anti-analysis/packer/upx"}
     ],
     "malware_imports": [
      {"function":"LoadLibraryA","library":"KERNEL32.DLL","ordinal":null},
      {"function":"GetProcAddress","library":"KERNEL32.DLL","ordinal":null}
     ],
     "malware_samples": [
-     {"elf":null,"entropy":5.2,"file_format":"pe","file_type":"PE32 executable for MS Windows","md5":"33a2de28aaae6fe4aad84aca02543465","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":"UPX1","has_authenticode":false,"image_base":4194304,"imphash":"080352dea0820fffa13c28e4c89a99cb","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"sha1":"53c7559a99c6952862fb1597d45dc31f496237d5","sha256":"67d621767aaa1563626030e46ae6eb9bddf0d8a8c1069fce8a12ff039545e6e7","size":8192,"ssdeep":null}
+     {"elf":null,"entropy":7.682,"file_format":"pe","file_type":"PE32 executable for MS Windows 6.00 (console), Intel i386, UPX compressed, 3 sections","md5":"2989abcd173260c8e6013e8f2aee2fb8","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["executable_image","32bit_machine"],"compile_timestamp":1600000000,"dll_characteristics":["dynamic_base","nx_compat","terminal_server_aware"],"entry_point":213504,"entry_section":"UPX1","has_authenticode":false,"image_base":4194304,"imphash":"87bed5a7cba00c7e1f4015f1bdae2183","is_dll":false,"machine":"i386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"sha1":"89ef9069decaf30826fa037bb150bc29d618a836","sha256":"83af576626786ed39055c23337d2b735b4c5299ef86e9c72f8c7e98257a2e360","size":14848,"ssdeep":"384:3GG/vVHO1Qfl2400lbD2uGNqQWk+hTjrgr:W6VHO1Qfl/005GNVW+r"}
     ],
     "malware_sections": [
-     {"entropy":0.0,"flags":["read"],"index":0,"name":"UPX0","raw_size":0,"virtual_address":4096,"virtual_size":2048},
-     {"entropy":7.9,"flags":["read","execute"],"index":1,"name":"UPX1","raw_size":2048,"virtual_address":8192,"virtual_size":2048}
+     {"entropy":0.0,"flags":["code","udata","execute","read","write"],"index":0,"name":"UPX0","raw_size":0,"virtual_address":4096,"virtual_size":196608},
+     {"entropy":7.9008,"flags":["code","execute","read","write"],"index":1,"name":"UPX1","raw_size":13824,"virtual_address":200704,"virtual_size":13316},
+     {"entropy":1.0098,"flags":["idata","read","write"],"index":2,"name":".idata","raw_size":512,"virtual_address":217088,"virtual_size":110}
     ],
     "malware_signature_matches": [
-     {"engine":"yara","meta":{"description":"UPX section names"},"name":"CyberLab_UPX_Section_Names","namespace":"cyberlab","tags":[]},
-     {"engine":"yara","meta":{"description":"UPX marker string"},"name":"CyberLab_UPX_Marker_String","namespace":"cyberlab","tags":[]}
+     {"engine":"yara","meta":{"description":"Section names used by the UPX packer (UPX0/UPX1/UPX2)","severity":"low"},"name":"CyberLab_UPX_Section_Names","namespace":"image.cyberlab_baseline","tags":["packer"]},
+     {"engine":"yara","meta":{"description":"UPX packer marker string with a UPX-named section","severity":"low"},"name":"CyberLab_UPX_Marker_String","namespace":"image.cyberlab_baseline","tags":["packer"]}
     ],
     "malware_strings": [
-     {"encoding":"ascii","offset":8192,"value":"UPX!"}
+     {"encoding":"ascii","offset":77,"value":"!This program cannot be run in DOS mode."},
+     {"encoding":"ascii","offset":456,"value":".idata"},
+     {"encoding":"ascii","offset":701,"value":"& %Qn&\tGM"},
+     {"encoding":"ascii","offset":1243,"value":">K6K~S_"},
+     {"encoding":"ascii","offset":1727,"value":"I!bKMg"},
+     {"encoding":"ascii","offset":2313,"value":"V\",8QXHr"},
+     {"encoding":"ascii","offset":2469,"value":"L[T&51"},
+     {"encoding":"ascii","offset":2985,"value":"404#T "},
+     {"encoding":"ascii","offset":3256,"value":"D*Ke\"?"},
+     {"encoding":"ascii","offset":3595,"value":"QV`vYb2"},
+     {"encoding":"ascii","offset":4111,"value":"Z~\"|*u{"},
+     {"encoding":"ascii","offset":4157,"value":"<W6!:(+"},
+     {"encoding":"ascii","offset":5127,"value":"_Gb8id"},
+     {"encoding":"ascii","offset":6459,"value":"~h~v_G"},
+     {"encoding":"ascii","offset":6741,"value":"c|Bdoh"},
+     {"encoding":"ascii","offset":6916,"value":"! |tz\\"},
+     {"encoding":"ascii","offset":7766,"value":"P7(W4pM"},
+     {"encoding":"ascii","offset":8300,"value":"\tZO?%G7)"},
+     {"encoding":"ascii","offset":8404,"value":"a]x={+"},
+     {"encoding":"ascii","offset":8961,"value":"bu]W_;U"},
+     {"encoding":"ascii","offset":10041,"value":",uh<:L"},
+     {"encoding":"ascii","offset":10284,"value":"/q_D9g''"},
+     {"encoding":"ascii","offset":12169,"value":"rr fO\\"},
+     {"encoding":"ascii","offset":12419,"value":"l0#g:B"},
+     {"encoding":"ascii","offset":12800,"value":"UPX!T "},
+     {"encoding":"ascii","offset":13517,"value":"\"@:V2#"},
+     {"encoding":"ascii","offset":14402,"value":"LoadLibraryA"},
+     {"encoding":"ascii","offset":14418,"value":"GetProcAddress"},
+     {"encoding":"ascii","offset":14433,"value":"KERNEL32.DLL"}
     ]
    },
-   "worker_version": "static-worker/hand-trimmed"
+   "worker_version": "static-worker/snapshot"
   }
  ],
  "kind": "static",
  "name": "static_packed_like",
  "plants": [],
- "provenance": {"dataset":"apps/workers/static/samples/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":20261105,"snapshot_version":1,"source":"hand-trimmed"},
+ "provenance": {"dataset":"apps/workers/static/samples","seed":20261105,"snapshot_version":1,"source":"pipeline"},
  "scenario": "packed_like",
  "tasks": ["explain_static"],
  "ti": []

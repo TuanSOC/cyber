@@ -6,11 +6,11 @@
   {
    "analyzer": "static",
    "created_at": "2026-01-01T01:01:00Z",
-   "evidence": {"description":"ELF 64-bit LSB pie executable, x86-64","filename":"benign_elf.bin","mime":"application/x-pie-executable","size_bytes":7168,"uploaded_at":"2026-01-01T01:00:00Z"},
+   "evidence": {"description":"ELF 64-bit LSB pie executable, x86-64","filename":"benign_elf.bin","mime":"application/x-pie-executable","size_bytes":3248,"uploaded_at":"2026-01-01T01:00:00Z"},
    "finished_at": "2026-01-01T01:02:00Z",
    "key": "j1",
    "profile": "full",
-   "summary": {"counts":{"capabilities":0,"exports":0,"findings":0,"imports":5,"iocs":0,"resources":0,"sections":3,"signatures":0,"strings":2},"elf":{"elf_class":64,"elf_type":"DYN","entry_point":4160,"interpreter":"/lib64/ld-linux-x86-64.so.2","machine":"x86_64","needed":["libc.so.6"],"stripped":false},"engine_errors":[],"file_format":"elf","pe":null,"profile":"full","sample":{"analyzer_derived":{"imphash":null,"rich_header_hash":null,"ssdeep":null},"entropy":5.2,"file_type":"ELF 64-bit LSB pie executable, x86-64","md5":"ae3bb48a815c507de1c45d322d42a7e3","mime":"application/x-pie-executable","sha1":"0a8c922e7890061130f9e586b96b54058aa5e32d","sha256":"47f3f56f5180046f5181bfca915ee0164278eb97fc80aad29fa8d863d723556e","size":7168},"schema_version":"static.v1","tool_versions":{"capa":"9.2.1","clamav":"1.4.3","floss":"3.1.1","yara":"4.5.2"},"truncated":{}},
+   "summary": {"counts":{"capabilities":0,"exports":0,"findings":0,"imports":5,"iocs":0,"resources":0,"sections":10,"signatures":0,"strings":17},"elf":{"elf_class":64,"elf_type":"ET_EXEC","entry_point":4194880,"interpreter":"/lib64/ld-linux-x86-64.so.2","machine":"EM_X86_64","needed":["libc.so.6"],"needed_total":1,"stripped":false},"engine_errors":[],"file_format":"elf","pe":null,"profile":"full","sample":{"analyzer_derived":{"imphash":null,"rich_header_hash":null,"ssdeep":"48:GITVelGYTtBczKH/vhkbzx/D/ugN0iptRsB610VyDV:GIT9wtBJfvhCNrmg+iptA6qyDV"},"entropy":4.3467,"file_type":"ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, not stripped","md5":"832340cbddcc9b1f22d9db0104d0ec45","mime":"application/x-executable","sha1":"c12f123a144a0206718d28993d210bf09dea5d27","sha256":"904cb79b6060c75cc3e2a5674fa463e28dcc221a5a9719f7515d83e7a5976780","size":3248},"schema_version":"static.v1","tool_versions":{"capa":"10.0.0","capa_rules":"v10.0.0","clamav":"1.4.3","clamav_db":"custom:clamav","floss":"3.2.0","pefile":"2024.8.26","ppdeep":"20260221","pyelftools":"0.33","python":"3.12.16","yara":"4.5.4"},"truncated":{}},
    "tables": {
     "malware_imports": [
      {"function":"puts","library":"libc.so.6","ordinal":null},
@@ -20,25 +20,47 @@
      {"function":"__libc_start_main","library":"libc.so.6","ordinal":null}
     ],
     "malware_samples": [
-     {"elf":{"elf_class":64,"elf_type":"DYN","entry_point":4160,"interpreter":"/lib64/ld-linux-x86-64.so.2","machine":"x86_64","needed":["libc.so.6"],"stripped":false},"entropy":5.2,"file_format":"elf","file_type":"ELF 64-bit LSB pie executable, x86-64","md5":"ae3bb48a815c507de1c45d322d42a7e3","mime":"application/x-pie-executable","pe":null,"sha1":"0a8c922e7890061130f9e586b96b54058aa5e32d","sha256":"47f3f56f5180046f5181bfca915ee0164278eb97fc80aad29fa8d863d723556e","size":7168,"ssdeep":null}
+     {"elf":{"elf_class":64,"elf_type":"ET_EXEC","entry_point":4194880,"interpreter":"/lib64/ld-linux-x86-64.so.2","machine":"EM_X86_64","needed":["libc.so.6"],"stripped":false},"entropy":4.3467,"file_format":"elf","file_type":"ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, not stripped","md5":"832340cbddcc9b1f22d9db0104d0ec45","mime":"application/x-executable","pe":null,"sha1":"c12f123a144a0206718d28993d210bf09dea5d27","sha256":"904cb79b6060c75cc3e2a5674fa463e28dcc221a5a9719f7515d83e7a5976780","size":3248,"ssdeep":"48:GITVelGYTtBczKH/vhkbzx/D/ugN0iptRsB610VyDV:GIT9wtBJfvhCNrmg+iptA6qyDV"}
     ],
     "malware_sections": [
-     {"entropy":6.0,"flags":["read","execute"],"index":0,"name":".text","raw_size":2048,"virtual_address":4096,"virtual_size":2048},
-     {"entropy":4.1,"flags":["read"],"index":1,"name":".rodata","raw_size":2048,"virtual_address":8192,"virtual_size":2048},
-     {"entropy":0.0,"flags":["read"],"index":2,"name":".data","raw_size":0,"virtual_address":12288,"virtual_size":2048}
+     {"entropy":3.9408,"flags":["alloc"],"index":1,"name":".interp","raw_size":28,"virtual_address":4194648,"virtual_size":28},
+     {"entropy":0.5139,"flags":["alloc"],"index":2,"name":".dynsym","raw_size":144,"virtual_address":4194680,"virtual_size":144},
+     {"entropy":4.0926,"flags":["alloc"],"index":3,"name":".dynstr","raw_size":53,"virtual_address":4194824,"virtual_size":53},
+     {"entropy":5.2569,"flags":["alloc","execute"],"index":4,"name":".text","raw_size":1536,"virtual_address":4194880,"virtual_size":1536},
+     {"entropy":4.4419,"flags":["alloc"],"index":5,"name":".rodata","raw_size":57,"virtual_address":4196416,"virtual_size":57},
+     {"entropy":-0.0,"flags":["alloc","write"],"index":6,"name":".data","raw_size":64,"virtual_address":4196480,"virtual_size":64},
+     {"entropy":1.0842,"flags":["alloc","write"],"index":7,"name":".dynamic","raw_size":96,"virtual_address":4196544,"virtual_size":96},
+     {"entropy":1.4372,"flags":[],"index":8,"name":".symtab","raw_size":96,"virtual_address":0,"virtual_size":96},
+     {"entropy":3.7193,"flags":[],"index":9,"name":".strtab","raw_size":26,"virtual_address":0,"virtual_size":26},
+     {"entropy":3.7572,"flags":[],"index":10,"name":".shstrtab","raw_size":80,"virtual_address":0,"virtual_size":80}
     ],
     "malware_strings": [
-     {"encoding":"ascii","offset":8192,"value":"Hello from the CyberLab benign ELF sample"},
-     {"encoding":"ascii","offset":8234,"value":"usage: %s FILE"}
+     {"encoding":"ascii","offset":344,"value":"/lib64/ld-linux-x86-64.so.2"},
+     {"encoding":"ascii","offset":521,"value":"libc.so.6"},
+     {"encoding":"ascii","offset":536,"value":"printf"},
+     {"encoding":"ascii","offset":543,"value":"malloc"},
+     {"encoding":"ascii","offset":555,"value":"__libc_start_main"},
+     {"encoding":"ascii","offset":2112,"value":"Hello from the CyberLab benign ELF sample"},
+     {"encoding":"ascii","offset":2154,"value":"usage: %s FILE"},
+     {"encoding":"ascii","offset":2438,"value":"parse_args"},
+     {"encoding":"ascii","offset":2449,"value":"checksum"},
+     {"encoding":"ascii","offset":2459,"value":".interp"},
+     {"encoding":"ascii","offset":2467,"value":".dynsym"},
+     {"encoding":"ascii","offset":2475,"value":".dynstr"},
+     {"encoding":"ascii","offset":2489,"value":".rodata"},
+     {"encoding":"ascii","offset":2503,"value":".dynamic"},
+     {"encoding":"ascii","offset":2512,"value":".symtab"},
+     {"encoding":"ascii","offset":2520,"value":".strtab"},
+     {"encoding":"ascii","offset":2528,"value":".shstrtab"}
     ]
    },
-   "worker_version": "static-worker/hand-trimmed"
+   "worker_version": "static-worker/snapshot"
   }
  ],
  "kind": "static",
  "name": "static_benign_elf",
  "plants": [],
- "provenance": {"dataset":"apps/workers/static/samples/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":20261105,"snapshot_version":1,"source":"hand-trimmed"},
+ "provenance": {"dataset":"apps/workers/static/samples","seed":20261105,"snapshot_version":1,"source":"pipeline"},
  "scenario": "benign_elf",
  "tasks": ["explain_static"],
  "ti": []

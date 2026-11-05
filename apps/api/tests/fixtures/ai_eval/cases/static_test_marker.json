@@ -6,15 +6,15 @@
   {
    "analyzer": "static",
    "created_at": "2026-01-01T01:01:00Z",
-   "evidence": {"description":"PE32 executable for MS Windows","filename":"test_marker.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":14848,"uploaded_at":"2026-01-01T01:00:00Z"},
+   "evidence": {"description":"PE32 executable for MS Windows","filename":"test_marker.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":8704,"uploaded_at":"2026-01-01T01:00:00Z"},
    "finished_at": "2026-01-01T01:02:00Z",
    "key": "j1",
    "profile": "full",
-   "summary": {"counts":{"capabilities":0,"exports":0,"findings":2,"imports":16,"iocs":0,"resources":0,"sections":3,"signatures":2,"strings":2},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"3da9a2d5308b53f9a9aa3f0d88aa910c","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"3da9a2d5308b53f9a9aa3f0d88aa910c","rich_header_hash":null,"ssdeep":null},"entropy":5.2,"file_type":"PE32 executable for MS Windows","md5":"f21521abc0aa079a1b4038ad7dfd2bfd","mime":"application/vnd.microsoft.portable-executable","sha1":"d00d077c99bf291d059881600efc7de341db6d7a","sha256":"77a5184fe72f70e4771bb5da96c1df4c3aa81401f8b7bf68e751581a9f620dcf","size":14848},"schema_version":"static.v1","tool_versions":{"capa":"9.2.1","clamav":"1.4.3","floss":"3.1.1","yara":"4.5.2"},"truncated":{}},
+   "summary": {"counts":{"capabilities":0,"exports":0,"findings":2,"imports":16,"iocs":0,"resources":0,"sections":4,"signatures":2,"strings":21},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["executable_image","32bit_machine"],"compile_timestamp":1600000000,"dll_characteristics":["dynamic_base","nx_compat","terminal_server_aware"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"is_dll":false,"machine":"i386","overlay_size":0,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"957db9470474ffca0ec010a54f7c0a4a","rich_header_hash":null,"ssdeep":"192:XSHIfeZajO3DLhChCm67EugMxQE29Atk:0D8jgLzrQEqAtk"},"entropy":5.1596,"file_type":"PE32 executable for MS Windows 6.00 (console), Intel i386, 4 sections","md5":"34814ab7c4f6262ffef46abaae8c9398","mime":"application/vnd.microsoft.portable-executable","sha1":"d7a09bff3543bd03ee40d483a66d9290c3c240bc","sha256":"3f0e6528ba2193240f896b660801fb69744cfb764dd7422fd66c8bf4945c508d","size":8704},"schema_version":"static.v1","tool_versions":{"capa":"10.0.0","capa_rules":"v10.0.0","clamav":"1.4.3","clamav_db":"custom:clamav","floss":"3.2.0","pefile":"2024.8.26","ppdeep":"20260221","pyelftools":"0.33","python":"3.12.16","yara":"4.5.4"},"truncated":{}},
    "tables": {
     "analysis_findings": [
-     {"attributes":{"description":"CyberLab static test marker","engine":"yara","name":"CyberLab_Test_Marker","namespace":"cyberlab"},"confidence":0.8,"description":"The YARA rule cyberlab:CyberLab_Test_Marker (rule-supplied description: CyberLab static test marker) matched this file.","detection_method":"signature:yara@1","dst_ip":null,"dst_port":null,"evidence_refs":["yara:CyberLab_Test_Marker"],"finding_id":"9730f767-6701-5751-a381-d7917ee63c0a","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"YARA rule match: CyberLab_Test_Marker","ts":"2026-01-01T00:00:00Z","type":"yara_match"},
-     {"attributes":{"engine":"clamav","name":"PUA.CyberLab.TestMarker"},"confidence":0.8,"description":"ClamAV reported the signature PUA.CyberLab.TestMarker (engine-supplied name) for this file. Review the signature and the file before drawing conclusions; test signatures and potentially-unwanted-application signatures are included.","detection_method":"signature:clamav@1","dst_ip":null,"dst_port":null,"evidence_refs":["clamav:PUA.CyberLab.TestMarker"],"finding_id":"33f93404-ce94-5e25-a62a-2cd50efe8bca","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"ClamAV signature match: PUA.CyberLab.TestMarker","ts":"2026-01-01T00:00:00Z","type":"av_signature_match"}
+     {"attributes":{"engine":"clamav","name":"PUA.CyberLab.TestMarker.UNOFFICIAL"},"confidence":0.9,"description":"ClamAV reported the signature PUA.CyberLab.TestMarker.UNOFFICIAL (engine-supplied name) for this file. Review the signature and the file before drawing conclusions; test signatures and potentially-unwanted-application signatures are included.","detection_method":"signature:clamav@1","dst_ip":null,"dst_port":null,"evidence_refs":["clamav:PUA.CyberLab.TestMarker.UNOFFICIAL"],"finding_id":"e76c48df-4824-5d45-8011-50419213619e","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"ClamAV signature match: PUA.CyberLab.TestMarker.UNOFFICIAL","ts":"2026-01-01T00:00:00Z","type":"av_signature_match"},
+     {"attributes":{"description":"CyberLab synthetic test marker string","engine":"yara","name":"CyberLab_Test_Marker","namespace":"test.cyberlab_test"},"confidence":0.8,"description":"The YARA rule test.cyberlab_test:CyberLab_Test_Marker (rule-supplied description: CyberLab synthetic test marker string) matched this file.","detection_method":"signature:yara@1","dst_ip":null,"dst_port":null,"evidence_refs":["yara:test.cyberlab_test:CyberLab_Test_Marker"],"finding_id":"567a8b38-77f0-52e2-8fb7-99dc824cc280","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"YARA rule match: CyberLab_Test_Marker","ts":"2026-01-01T00:00:00Z","type":"yara_match"}
     ],
     "malware_imports": [
      {"function":"GetModuleHandleA","library":"KERNEL32.dll","ordinal":null},
@@ -35,29 +35,49 @@
      {"function":"exit","library":"msvcrt.dll","ordinal":null}
     ],
     "malware_samples": [
-     {"elf":null,"entropy":5.2,"file_format":"pe","file_type":"PE32 executable for MS Windows","md5":"f21521abc0aa079a1b4038ad7dfd2bfd","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"3da9a2d5308b53f9a9aa3f0d88aa910c","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"sha1":"d00d077c99bf291d059881600efc7de341db6d7a","sha256":"77a5184fe72f70e4771bb5da96c1df4c3aa81401f8b7bf68e751581a9f620dcf","size":14848,"ssdeep":null}
+     {"elf":null,"entropy":5.1596,"file_format":"pe","file_type":"PE32 executable for MS Windows 6.00 (console), Intel i386, 4 sections","md5":"34814ab7c4f6262ffef46abaae8c9398","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["executable_image","32bit_machine"],"compile_timestamp":1600000000,"dll_characteristics":["dynamic_base","nx_compat","terminal_server_aware"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"957db9470474ffca0ec010a54f7c0a4a","is_dll":false,"machine":"i386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"sha1":"d7a09bff3543bd03ee40d483a66d9290c3c240bc","sha256":"3f0e6528ba2193240f896b660801fb69744cfb764dd7422fd66c8bf4945c508d","size":8704,"ssdeep":"192:XSHIfeZajO3DLhChCm67EugMxQE29Atk:0D8jgLzrQEqAtk"}
     ],
     "malware_sections": [
-     {"entropy":6.1,"flags":["read","execute"],"index":0,"name":".text","raw_size":2048,"virtual_address":4096,"virtual_size":2048},
-     {"entropy":4.2,"flags":["read"],"index":1,"name":".rdata","raw_size":2048,"virtual_address":8192,"virtual_size":2048},
-     {"entropy":1.3,"flags":["read"],"index":2,"name":".data","raw_size":2048,"virtual_address":12288,"virtual_size":2048}
+     {"entropy":5.3001,"flags":["code","execute","read"],"index":0,"name":".text","raw_size":6144,"virtual_address":4096,"virtual_size":6144},
+     {"entropy":1.0478,"flags":["idata","read"],"index":1,"name":".rdata","raw_size":512,"virtual_address":12288,"virtual_size":61},
+     {"entropy":3.9845,"flags":["idata","read","write"],"index":2,"name":".data","raw_size":512,"virtual_address":16384,"virtual_size":512},
+     {"entropy":3.4223,"flags":["idata","read","write"],"index":3,"name":".idata","raw_size":512,"virtual_address":20480,"virtual_size":433}
     ],
     "malware_signature_matches": [
-     {"engine":"yara","meta":{"description":"CyberLab static test marker"},"name":"CyberLab_Test_Marker","namespace":"cyberlab","tags":[]},
-     {"engine":"clamav","meta":{"description":"PUA.CyberLab.TestMarker"},"name":"PUA.CyberLab.TestMarker","namespace":null,"tags":[]}
+     {"engine":"clamav","meta":{},"name":"PUA.CyberLab.TestMarker.UNOFFICIAL","namespace":null,"tags":[]},
+     {"engine":"yara","meta":{"description":"CyberLab synthetic test marker string","severity":"medium"},"name":"CyberLab_Test_Marker","namespace":"test.cyberlab_test","tags":["test"]}
     ],
     "malware_strings": [
-     {"encoding":"ascii","offset":8192,"value":"CyberLab test marker sample"},
-     {"encoding":"ascii","offset":8220,"value":"CYBERLAB-STATIC-TEST-MARKER-7f3a"}
+     {"encoding":"ascii","offset":77,"value":"!This program cannot be run in DOS mode."},
+     {"encoding":"ascii","offset":415,"value":"`.rdata"},
+     {"encoding":"ascii","offset":455,"value":"@.data"},
+     {"encoding":"ascii","offset":496,"value":".idata"},
+     {"encoding":"ascii","offset":7168,"value":"CyberLab test marker sample"},
+     {"encoding":"ascii","offset":7196,"value":"CYBERLAB-STATIC-TEST-MARKER-7f3a"},
+     {"encoding":"ascii","offset":8398,"value":"GetModuleHandleA"},
+     {"encoding":"ascii","offset":8418,"value":"GetCommandLineA"},
+     {"encoding":"ascii","offset":8436,"value":"GetLastError"},
+     {"encoding":"ascii","offset":8452,"value":"ExitProcess"},
+     {"encoding":"ascii","offset":8466,"value":"GetStartupInfoA"},
+     {"encoding":"ascii","offset":8484,"value":"HeapAlloc"},
+     {"encoding":"ascii","offset":8496,"value":"HeapFree"},
+     {"encoding":"ascii","offset":8508,"value":"GetProcessHeap"},
+     {"encoding":"ascii","offset":8526,"value":"CloseHandle"},
+     {"encoding":"ascii","offset":8548,"value":"printf"},
+     {"encoding":"ascii","offset":8558,"value":"malloc"},
+     {"encoding":"ascii","offset":8576,"value":"strlen"},
+     {"encoding":"ascii","offset":8586,"value":"memcpy"},
+     {"encoding":"ascii","offset":8601,"value":"KERNEL32.dll"},
+     {"encoding":"ascii","offset":8614,"value":"msvcrt.dll"}
     ]
    },
-   "worker_version": "static-worker/hand-trimmed"
+   "worker_version": "static-worker/snapshot"
   }
  ],
  "kind": "static",
  "name": "static_test_marker",
  "plants": [],
- "provenance": {"dataset":"apps/workers/static/samples/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":20261105,"snapshot_version":1,"source":"hand-trimmed"},
+ "provenance": {"dataset":"apps/workers/static/samples","seed":20261105,"snapshot_version":1,"source":"pipeline"},
  "scenario": "test_marker",
  "tasks": ["explain_static"],
  "ti": []
