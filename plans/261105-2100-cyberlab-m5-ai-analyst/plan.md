@@ -8,7 +8,7 @@ description: >-
   next steps / limitations; a deterministic verifier checks every citation and ATT&CK id;
   sealed write-only per-org keys; opt-in per org; budgets; offline evaluation with hostile
   and replayed providers; prompt-injection metric.
-status: pending
+status: completed
 priority: P1
 effort: 105h
 branch: "feat/m5-ai-analyst"
@@ -353,17 +353,17 @@ Four hostile reviewers (security, reliability/cost, product/legal, scope/paralle
 
 | Phase | Name | Group | Depends on | Status |
 |-------|------|-------|------------|--------|
-| 1 | [Foundation contracts data model sealing and compose](./phase-01-foundation-contracts-data-model-sealing-and-compose.md) | A | — | Pending |
-| 2 | [Analyst worker lifecycle limiter budget and ai-mock](./phase-02-analyst-worker-lifecycle-limiter-budget-and-ai-mock.md) | B (2a) | 1 | Pending |
-| 3 | [Provider adapters and replay fixtures](./phase-03-provider-adapters-and-replay-fixtures.md) | B (2b) | 1 | Pending |
-| 4 | [Context builder pseudonymization and investigation aggregation](./phase-04-context-builder-pseudonymization-and-investigation-aggregati.md) | B (2c) | 1 | Pending |
-| 5 | [Prompt citation verifier and output post-processing](./phase-05-prompt-citation-verifier-and-output-post-processing.md) | B (2d) | 1 | Pending |
-| 6 | [Evaluation harness datasets and adversarial generators](./phase-06-evaluation-harness-datasets-and-adversarial-generators.md) | B (2e) | 1 | Pending |
-| 7 | [AI analyst API routes](./phase-07-ai-analyst-api-routes.md) | B (2f) | 1 | Pending |
-| 8 | [AI analyst frontend views](./phase-08-ai-analyst-frontend-views.md) | C (3a) | B merged + contracts | Pending |
-| 9 | [AI settings and providers frontend](./phase-09-ai-settings-and-providers-frontend.md) | C (3b) | B merged + contracts | Pending |
-| 10 | [Docs and threat model](./phase-10-docs-and-threat-model.md) | C (3c) | B merged | Pending |
-| 11 | [Hardening e2e metric and gate](./phase-11-hardening-e2e-metric-and-gate.md) | D (4) | all | Pending |
+| 1 | [Foundation contracts data model sealing and compose](./phase-01-foundation-contracts-data-model-sealing-and-compose.md) | A | — | Completed |
+| 2 | [Analyst worker lifecycle limiter budget and ai-mock](./phase-02-analyst-worker-lifecycle-limiter-budget-and-ai-mock.md) | B (2a) | 1 | Completed |
+| 3 | [Provider adapters and replay fixtures](./phase-03-provider-adapters-and-replay-fixtures.md) | B (2b) | 1 | Completed |
+| 4 | [Context builder pseudonymization and investigation aggregation](./phase-04-context-builder-pseudonymization-and-investigation-aggregati.md) | B (2c) | 1 | Completed |
+| 5 | [Prompt citation verifier and output post-processing](./phase-05-prompt-citation-verifier-and-output-post-processing.md) | B (2d) | 1 | Completed |
+| 6 | [Evaluation harness datasets and adversarial generators](./phase-06-evaluation-harness-datasets-and-adversarial-generators.md) | B (2e) | 1 | Completed |
+| 7 | [AI analyst API routes](./phase-07-ai-analyst-api-routes.md) | B (2f) | 1 | Completed |
+| 8 | [AI analyst frontend views](./phase-08-ai-analyst-frontend-views.md) | C (3a) | B merged + contracts | Completed |
+| 9 | [AI settings and providers frontend](./phase-09-ai-settings-and-providers-frontend.md) | C (3b) | B merged + contracts | Completed |
+| 10 | [Docs and threat model](./phase-10-docs-and-threat-model.md) | C (3c) | B merged | Completed |
+| 11 | [Hardening e2e metric and gate](./phase-11-hardening-e2e-metric-and-gate.md) | D (4) | all | Completed |
 
 ## Dependencies and parallelism
 

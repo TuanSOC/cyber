@@ -1,7 +1,7 @@
 ---
 phase: 10
 title: "Docs and threat model"
-status: pending
+status: completed
 priority: P2
 effort: "5h"
 dependencies: [2, 3, 4, 5, 6, 7]

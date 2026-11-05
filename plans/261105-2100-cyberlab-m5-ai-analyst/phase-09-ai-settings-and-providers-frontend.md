@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "AI settings and providers frontend"
-status: pending
+status: completed
 priority: P2
 effort: "5h"
 dependencies: [7]

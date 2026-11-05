@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Context builder pseudonymization and investigation aggregation"
-status: pending
+status: completed
 priority: P1
 effort: "12h"
 dependencies: [1]
