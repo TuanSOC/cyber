@@ -759,7 +759,8 @@ services:
       QUEUE_PREFIX: "test."
       WORKER_QUEUE: report
       RUFF_CACHE_DIR: /tmp/ruff
-      MYPY_CACHE_DIR: /tmp/mypy
+      # /tmp is only 16 MiB here and the mypy cache does not fit: /dev/null disables it.
+      MYPY_CACHE_DIR: /dev/null
     volumes:
       - ./apps/workers/report/report_worker:/srv/workers/report/report_worker:ro
       - ./apps/workers/report/tests:/srv/workers/report/tests:ro

@@ -701,6 +701,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/attack-mappings/{mapping_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Mapping
+         * @description Audited `case_attack.updated` (from / to status).
+         */
+        patch: operations["update_mapping_api_v1_orgs__org_id__attack_mappings__mapping_id__patch"];
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/audit-logs": {
         parameters: {
             query?: never;
@@ -710,6 +730,26 @@ export interface paths {
         };
         /** List Audit Logs */
         get: operations["list_audit_logs_api_v1_orgs__org_id__audit_logs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/cited-by": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Cited By
+         * @description AI outputs (verified citations) and report versions that cite one row.
+         */
+        get: operations["get_cited_by_api_v1_orgs__org_id__cited_by_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -800,6 +840,31 @@ export interface paths {
         /** Download Evidence */
         get: operations["download_evidence_api_v1_orgs__org_id__evidence__evidence_id__download_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/evidence/{evidence_id}/share-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Share Policy
+         * @description The evidence's "do not send to AI / TI" flags and its effective policy.
+         */
+        get: operations["get_share_policy_api_v1_orgs__org_id__evidence__evidence_id__share_policy_get"];
+        /**
+         * Put Share Policy
+         * @description Set the flags (turning one off needs `integrations.manage`); audited
+         *     `evidence.share_policy_updated`. The evidence row itself is never touched.
+         */
+        put: operations["put_share_policy_api_v1_orgs__org_id__evidence__evidence_id__share_policy_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -939,6 +1004,51 @@ export interface paths {
         patch: operations["update_investigation_api_v1_orgs__org_id__investigations__investigation_id__patch"];
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/investigations/{investigation_id}/attack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Case Attack
+         * @description Mappings with labels, and the tactic-grouped matrix (v20 order, rejected excluded).
+         */
+        get: operations["get_case_attack_api_v1_orgs__org_id__investigations__investigation_id__attack_get"];
+        put?: never;
+        /**
+         * Create Mapping
+         * @description `422 invalid_technique` (unknown, revoked or deprecated), `409 mapping_exists`,
+         *     `422 ref_out_of_scope`; audited `case_attack.mapped`.
+         */
+        post: operations["create_mapping_api_v1_orgs__org_id__investigations__investigation_id__attack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/investigations/{investigation_id}/attack/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Suggestions
+         * @description From capa, findings and verified AI techniques of the case; never auto-confirmed.
+         */
+        get: operations["get_suggestions_api_v1_orgs__org_id__investigations__investigation_id__attack_suggestions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/investigations/{investigation_id}/evidence": {
         parameters: {
             query?: never;
@@ -960,6 +1070,115 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/investigations/{investigation_id}/ioc-collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Collections */
+        get: operations["list_collections_api_v1_orgs__org_id__investigations__investigation_id__ioc_collections_get"];
+        put?: never;
+        /**
+         * Create Collection
+         * @description `409 collection_exists` for a duplicate name in the case.
+         */
+        post: operations["create_collection_api_v1_orgs__org_id__investigations__investigation_id__ioc_collections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/investigations/{investigation_id}/iocs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Case Iocs
+         * @description IOCs of the latest succeeded job per evidence, deduplicated (`case_iocs.case_iocs`).
+         */
+        get: operations["list_case_iocs_api_v1_orgs__org_id__investigations__investigation_id__iocs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/investigations/{investigation_id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Notes
+         * @description The current version of each note; deleted notes only with `include_deleted`
+         *     (tombstones without body).
+         */
+        get: operations["list_notes_api_v1_orgs__org_id__investigations__investigation_id__notes_get"];
+        put?: never;
+        /**
+         * Create Note
+         * @description Refs are re-checked in the org and case scope (`422 ref_out_of_scope`); audited
+         *     `note.created` (ids and ref count, never the body).
+         */
+        post: operations["create_note_api_v1_orgs__org_id__investigations__investigation_id__notes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/investigations/{investigation_id}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Case Reports */
+        get: operations["list_case_reports_api_v1_orgs__org_id__investigations__investigation_id__reports_get"];
+        put?: never;
+        /**
+         * Create Report
+         * @description TLP defaults to the case TLP; below it needs `org.update` + the acknowledgement;
+         *     `409 investigation_archived`.
+         */
+        post: operations["create_report_api_v1_orgs__org_id__investigations__investigation_id__reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/investigations/{investigation_id}/status-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Status Events
+         * @description Status history of the case, newest first (M6 phase 2; 501 until then).
+         */
+        get: operations["list_status_events_api_v1_orgs__org_id__investigations__investigation_id__status_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/investigations/{investigation_id}/timeline": {
         parameters: {
             query?: never;
@@ -970,12 +1189,117 @@ export interface paths {
         /**
          * Get Investigation Timeline
          * @description Merged case timeline: custody, job lifecycle, the latest pcap job's timeline and alerts
-         *     per evidence, and static findings at analysis time; sorted (ts, kind, ref_id).
+         *     per evidence, and static findings at analysis time; sorted (ts, kind, ref_id). M6: case
+         *     events (notes, status changes) have no `evidence_id`; `kinds` filters by ref kind.
          */
         get: operations["get_investigation_timeline_api_v1_orgs__org_id__investigations__investigation_id__timeline_get"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/investigations/{investigation_id}/timeline/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Timeline
+         * @description A streamed, TLP-headed, formula-safe attachment of at most TIMELINE_EXPORT_MAX_ROWS
+         *     entries (nosniff, no-store, CSP sandbox); audited `investigation.timeline_exported`.
+         */
+        get: operations["export_timeline_api_v1_orgs__org_id__investigations__investigation_id__timeline_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ioc-collections/{collection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Collection */
+        get: operations["get_collection_api_v1_orgs__org_id__ioc_collections__collection_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Collection */
+        patch: operations["update_collection_api_v1_orgs__org_id__ioc_collections__collection_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ioc-collections/{collection_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Collection
+         * @description A streamed attachment (RFC 5987 filename, nosniff, no-store, CSP sandbox); never
+         *     redacted; `defang=false` needs `evidence.write`; audited `ioc_collection.exported`.
+         */
+        get: operations["export_collection_api_v1_orgs__org_id__ioc_collections__collection_id__export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ioc-collections/{collection_id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Items
+         * @description Each item with its attributed TI summary (latest per provider) and source job.
+         */
+        get: operations["list_items_api_v1_orgs__org_id__ioc_collections__collection_id__items_get"];
+        put?: never;
+        /**
+         * Add Items
+         * @description Up to 500 per call; per item `added | duplicate | invalid(reason)`.
+         */
+        post: operations["add_items_api_v1_orgs__org_id__ioc_collections__collection_id__items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ioc-collections/{collection_id}/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Item
+         * @description Soft remove (audited).
+         */
+        delete: operations["remove_item_api_v1_orgs__org_id__ioc_collections__collection_id__items__item_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1015,6 +1339,297 @@ export interface paths {
         head?: never;
         /** Change Role */
         patch: operations["change_role_api_v1_orgs__org_id__members__member_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/notes/{note_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Note
+         * @description The current version and the full version history.
+         */
+        get: operations["get_note_api_v1_orgs__org_id__notes__note_id__get"];
+        /**
+         * Update Note
+         * @description Author or `org.update` only; `409 stale_note` on a wrong `expected_version`.
+         */
+        put: operations["update_note_api_v1_orgs__org_id__notes__note_id__put"];
+        post?: never;
+        /**
+         * Delete Note
+         * @description Soft delete (the versions stay); author or `org.update` only.
+         */
+        delete: operations["delete_note_api_v1_orgs__org_id__notes__note_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/report-renders/{render_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Render */
+        get: operations["get_render_api_v1_orgs__org_id__report_renders__render_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/report-renders/{render_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Render
+         * @description Streamed from the exact object version, re-hashed while streaming (`409
+         *     integrity_failed`); attachment with the TLP in the filename, nosniff, no-store, CSP
+         *     sandbox; audited `report.downloaded`.
+         */
+        get: operations["download_render_api_v1_orgs__org_id__report_renders__render_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Reports
+         * @description The org-wide list (latest version, TLP, updated).
+         */
+        get: operations["list_reports_api_v1_orgs__org_id__reports_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/reports/{report_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Report */
+        get: operations["get_report_api_v1_orgs__org_id__reports__report_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Report
+         * @description `409 stale_draft`; `422 selection_out_of_scope`.
+         */
+        patch: operations["update_report_api_v1_orgs__org_id__reports__report_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/reports/{report_id}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Discard Report
+         * @description Only without versions (`409 report_has_versions`).
+         */
+        post: operations["discard_report_api_v1_orgs__org_id__reports__report_id__discard_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/reports/{report_id}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finalize Report
+         * @description Freeze the draft into a signed version (PDF render queued): `422 report_too_large`,
+         *     `422 report_too_large_to_render` (RT1), `409 tlp_below_case` (RT7),
+         *     `422 external_review_required` (RT8), `422 distribution_required`, `409 stale_draft`.
+         */
+        post: operations["finalize_report_api_v1_orgs__org_id__reports__report_id__finalize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/reports/{report_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Report
+         * @description The snapshot built in memory with its size and render units against the budget;
+         *     nothing stored, nothing audited.
+         */
+        post: operations["preview_report_api_v1_orgs__org_id__reports__report_id__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/reports/{report_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Versions */
+        get: operations["list_versions_api_v1_orgs__org_id__reports__report_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/reports/{report_id}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Version
+         * @description Manifest, `signature_valid`, `snapshot_ok` (re-hashed), counts, renders.
+         */
+        get: operations["get_version_api_v1_orgs__org_id__reports__report_id__versions__version__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/reports/{report_id}/versions/{version}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Version Content
+         * @description The stored snapshot for the viewer (inline, `no-store`), re-hashed (`409
+         *     integrity_failed`); not audited per view (RT11).
+         */
+        get: operations["get_version_content_api_v1_orgs__org_id__reports__report_id__versions__version__content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/reports/{report_id}/versions/{version}/renders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Renders */
+        get: operations["list_renders_api_v1_orgs__org_id__reports__report_id__versions__version__renders_get"];
+        put?: never;
+        /**
+         * Request Render
+         * @description 202 (queued) or 200 (deduplicated); `409 render_busy`.
+         */
+        post: operations["request_render_api_v1_orgs__org_id__reports__report_id__versions__version__renders_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/reports/{report_id}/versions/{version}/signature": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Signature
+         * @description `{manifest, signature, kid, alg}` served as `.sig.json`.
+         */
+        get: operations["get_signature_api_v1_orgs__org_id__reports__report_id__versions__version__signature_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/reports/{report_id}/versions/{version}/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Snapshot
+         * @description The canonical JSON exactly as stored, as an attachment; audited
+         *     `report.snapshot_downloaded`.
+         */
+        get: operations["download_snapshot_api_v1_orgs__org_id__reports__report_id__versions__version__snapshot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/orgs/{org_id}/storage": {
@@ -1149,6 +1764,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/report-signing-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Report Signing Keys */
+        get: operations["report_signing_keys_api_v1_report_signing_keys_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1247,6 +1879,39 @@ export interface components {
             /** Stale */
             stale: boolean;
             status: components["schemas"]["CitationStatus"];
+        };
+        /**
+         * AiClaim
+         * @description A supported claim or a labelled hypothesis of a verified M5 run; `flags` are shown
+         *     inline (RT15). Unsupported claims are never here (only counted).
+         */
+        AiClaim: {
+            /**
+             * Cite Nos
+             * @default []
+             */
+            cite_nos: number[];
+            /** Claim Id */
+            claim_id: string;
+            /** Confidence */
+            confidence?: string | null;
+            /**
+             * Flags
+             * @default []
+             */
+            flags: string[];
+            /**
+             * Section
+             * @enum {string}
+             */
+            section: "observed" | "interpretation" | "hypotheses" | "next_steps" | "limitations";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "supported" | "hypothesis";
+            /** Text */
+            text: string;
         };
         /** AiClaimOut */
         AiClaimOut: {
@@ -1779,11 +2444,63 @@ export interface components {
          * @enum {string}
          */
         AiRunStatus: "queued" | "running" | "waiting" | "completed" | "partial" | "failed" | "refused";
+        /** AiRunsSection */
+        AiRunsSection: {
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["AiSection"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
         /**
          * AiScope
          * @enum {string}
          */
         AiScope: "job" | "investigation";
+        /** AiSection */
+        AiSection: {
+            /**
+             * Claims
+             * @default []
+             */
+            claims: components["schemas"]["AiClaim"][];
+            /** Context Sha256 */
+            context_sha256: string;
+            /** Disclaimer */
+            disclaimer: string;
+            /** Finished At */
+            finished_at?: string | null;
+            /** Model */
+            model: string;
+            /**
+             * Omitted Flagged
+             * @default 0
+             */
+            omitted_flagged: number;
+            /**
+             * Omitted Unsupported
+             * @default 0
+             */
+            omitted_unsupported: number;
+            /** Overall Confidence */
+            overall_confidence?: string | null;
+            /** Prompt Version */
+            prompt_version: string;
+            /** Provider */
+            provider: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Task */
+            task: string;
+        };
         /** AiSettingsOut */
         AiSettingsOut: {
             /** Ai Enabled */
@@ -1946,6 +2663,37 @@ export interface components {
              */
             status: "queued";
         };
+        /** AlertItem */
+        AlertItem: {
+            /** Alert Id */
+            alert_id: string;
+            /** Cite No */
+            cite_no?: number | null;
+            /**
+             * Count
+             * @default 1
+             */
+            count: number;
+            /** Dst */
+            dst?: string | null;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Proto */
+            proto?: string | null;
+            /** Severity */
+            severity: string;
+            /** Signature */
+            signature: string;
+            /** Signature Id */
+            signature_id?: number | null;
+            /** Src */
+            src?: string | null;
+            /** Ts */
+            ts?: string | null;
+        };
         /** AlertOut */
         AlertOut: {
             /** Category */
@@ -1990,6 +2738,19 @@ export interface components {
             /**
              * Total
              * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
+        /** AlertsSection */
+        AlertsSection: {
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["AlertItem"][];
+            /**
+             * Total
+             * @default 0
              */
             total: number;
         };
@@ -2065,6 +2826,52 @@ export interface components {
          */
         AnalysisStatus: "queued" | "running" | "succeeded" | "failed";
         /**
+         * AnalystSections
+         * @description The draft's plain-text sections, carried whole (RT9).
+         */
+        AnalystSections: {
+            /**
+             * Actions Taken
+             * @default
+             */
+            actions_taken: string;
+            /**
+             * Executive Summary
+             * @default
+             */
+            executive_summary: string;
+            /**
+             * Impact
+             * @default
+             */
+            impact: string;
+            /**
+             * Lessons Learned
+             * @default
+             */
+            lessons_learned: string;
+            /**
+             * Methodology
+             * @default
+             */
+            methodology: string;
+            /**
+             * Recommendations
+             * @default
+             */
+            recommendations: string;
+            /**
+             * Root Cause
+             * @default
+             */
+            root_cause: string;
+            /**
+             * Scope
+             * @default
+             */
+            scope: string;
+        };
+        /**
          * Analyzer
          * @enum {string}
          */
@@ -2080,6 +2887,38 @@ export interface components {
             rich_header_hash: string | null;
             /** Ssdeep */
             ssdeep: string | null;
+        };
+        /** AttackItem */
+        AttackItem: {
+            /**
+             * Cite Nos
+             * @default []
+             */
+            cite_nos: number[];
+            /** Name */
+            name: string;
+            /**
+             * Rationale
+             * @default
+             */
+            rationale: string;
+            /**
+             * Revoked
+             * @default false
+             */
+            revoked: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "confirmed" | "suspected";
+            /**
+             * Tactics
+             * @default []
+             */
+            tactics: string[];
+            /** Technique Id */
+            technique_id: string;
         };
         /**
          * AttackLabel
@@ -2107,6 +2946,82 @@ export interface components {
             /** Url */
             url: string;
         };
+        /** AttackMappingCreate */
+        AttackMappingCreate: {
+            /**
+             * Rationale
+             * @default
+             */
+            rationale: string;
+            /**
+             * Sources
+             * @default []
+             */
+            sources: components["schemas"]["AttackSourceRef"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "confirmed" | "suspected" | "rejected";
+            /** Technique Id */
+            technique_id: string;
+        };
+        /** AttackMappingOut */
+        AttackMappingOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Investigation Id
+             * Format: uuid
+             */
+            investigation_id: string;
+            label: components["schemas"]["TechniqueLabel"];
+            /** Rationale */
+            rationale: string;
+            /** Sources */
+            sources: components["schemas"]["SourceDescriptor"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "confirmed" | "suspected" | "rejected";
+            /** Technique Id */
+            technique_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Updated By
+             * Format: uuid
+             */
+            updated_by: string;
+            /** Updated By Name */
+            updated_by_name: string;
+        };
+        /** AttackMappingUpdate */
+        AttackMappingUpdate: {
+            /** Rationale */
+            rationale?: string | null;
+            /** Sources */
+            sources?: components["schemas"]["AttackSourceRef"][] | null;
+            /** Status */
+            status?: ("confirmed" | "suspected" | "rejected") | null;
+        };
         /** AttackMeta */
         AttackMeta: {
             /** Attack Spec */
@@ -2120,6 +3035,65 @@ export interface components {
             notice: string;
             /** Version */
             version: string;
+        };
+        /** AttackSection */
+        AttackSection: {
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["AttackItem"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /** AttackSelection */
+        AttackSelection: {
+            /**
+             * Statuses
+             * @default [
+             *       "confirmed"
+             *     ]
+             */
+            statuses: ("confirmed" | "suspected")[];
+        };
+        /**
+         * AttackSourceRef
+         * @description Evidence behind a mapping; re-checked in the case scope (`422 ref_out_of_scope`).
+         */
+        AttackSourceRef: {
+            /** Job Id */
+            job_id?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "capability" | "finding" | "ai_run";
+            /** Ref Id */
+            ref_id: string;
+            /** Run Id */
+            run_id?: string | null;
+        };
+        /** AttackSuggestion */
+        AttackSuggestion: {
+            /** Already Mapped */
+            already_mapped: boolean;
+            label: components["schemas"]["TechniqueLabel"];
+            /** Sources */
+            sources: components["schemas"]["SourceDescriptor"][];
+            /** Technique Id */
+            technique_id: string;
+        };
+        /** AttackSuggestionsOut */
+        AttackSuggestionsOut: {
+            /** Index Version */
+            index_version: string;
+            /** Items */
+            items: components["schemas"]["AttackSuggestion"][];
+            /** Notice */
+            notice: string;
         };
         /** AttackTactic */
         AttackTactic: {
@@ -2205,6 +3179,115 @@ export interface components {
              */
             total: number;
         };
+        /** CaseAttackOut */
+        CaseAttackOut: {
+            /** Index Version */
+            index_version: string;
+            /** Mappings */
+            mappings: components["schemas"]["AttackMappingOut"][];
+            /** Matrix */
+            matrix: components["schemas"]["MatrixTactic"][];
+            /** Notice */
+            notice: string;
+        };
+        /**
+         * CaseIocOut
+         * @description One deduplicated IOC of the case (latest succeeded job per evidence).
+         */
+        CaseIocOut: {
+            /** Count Jobs */
+            count_jobs: number;
+            /** First Seen */
+            first_seen: string | null;
+            /** In Collections */
+            in_collections: string[];
+            /** Ioc Key */
+            ioc_key: string;
+            /** Ioc Type */
+            ioc_type: string;
+            /** Job Ids */
+            job_ids: string[];
+            /** Last Seen */
+            last_seen: string | null;
+            /** Value */
+            value: string;
+        };
+        /** CaseIocPage */
+        CaseIocPage: {
+            /** Items */
+            items: components["schemas"]["CaseIocOut"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+            /** Total */
+            total?: number | null;
+        };
+        /** CaseSection */
+        CaseSection: {
+            /** Case Ref */
+            case_ref: string;
+            /** Created At */
+            created_at: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Investigation Id
+             * Format: uuid
+             */
+            investigation_id: string;
+            /** Severity */
+            severity: string;
+            /** Status */
+            status: string;
+            /**
+             * Status History
+             * @default []
+             */
+            status_history: components["schemas"]["StatusEventItem"][];
+            /**
+             * Status History Total
+             * @default 0
+             */
+            status_history_total: number;
+            /** Title */
+            title: string;
+            tlp: components["schemas"]["TLP"];
+        };
+        /**
+         * Citation
+         * @description `[C<n>]`: a copy of the cited row's rendered fields at snapshot time and its
+         *     `fields_sha256`. `path` is the internal deep link (None in `external`, RT8).
+         */
+        Citation: {
+            /** Cite No */
+            cite_no: number;
+            /**
+             * Fields
+             * @default {}
+             */
+            fields: {
+                [key: string]: string;
+            };
+            /** Fields Sha256 */
+            fields_sha256: string;
+            /** Job Id */
+            job_id?: string | null;
+            /** Kind */
+            kind: string;
+            /** Path */
+            path?: string | null;
+            /** Ref Id */
+            ref_id: string;
+            /** Ref Table */
+            ref_table: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "ai" | "selection" | "note" | "attack";
+        };
         /**
          * CitationReason
          * @description Why a citation is not verified, or why a claim is unsupported.
@@ -2216,6 +3299,90 @@ export interface components {
          * @enum {string}
          */
         CitationStatus: "verified" | "unverified" | "invalid";
+        /** CitationsSection */
+        CitationsSection: {
+            /**
+             * Dropped Out Of Scope
+             * @default 0
+             */
+            dropped_out_of_scope: number;
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["Citation"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /**
+         * CitedByOut
+         * @description `GET /cited-by`: the AI outputs (verified citations only) and the report versions
+         *     that cite one row.
+         */
+        CitedByOut: {
+            /** Ai Outputs */
+            ai_outputs: components["schemas"]["CitingAiOutput"][];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "finding" | "alert" | "ioc" | "evidence" | "job" | "timeline" | "capability" | "signature" | "flow" | "record" | "ti_result" | "sample" | "pe_summary" | "string" | "custody" | "note";
+            /** Ref Id */
+            ref_id: string;
+            /** Report Versions */
+            report_versions: components["schemas"]["CitingReportVersion"][];
+        };
+        /** CitedRowRef */
+        CitedRowRef: {
+            /** Job Id */
+            job_id?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "finding" | "alert" | "ioc" | "evidence" | "job" | "timeline" | "capability" | "signature" | "flow" | "record" | "ti_result" | "sample" | "pe_summary" | "string" | "custody" | "note";
+            /** Ref Id */
+            ref_id: string;
+        };
+        /** CitingAiOutput */
+        CitingAiOutput: {
+            /** Claims */
+            claims: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Task */
+            task: string;
+        };
+        /** CitingReportVersion */
+        CitingReportVersion: {
+            /** Cite Nos */
+            cite_nos: number[];
+            /**
+             * Finalized At
+             * Format: date-time
+             */
+            finalized_at: string;
+            /**
+             * Report Id
+             * Format: uuid
+             */
+            report_id: string;
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
         /**
          * ClaimStatus
          * @enum {string}
@@ -2273,6 +3440,11 @@ export interface components {
             per_kind: {
                 [key: string]: components["schemas"]["KindStats"];
             };
+            /**
+             * Policy Excluded
+             * @default 0
+             */
+            policy_excluded: number;
             /**
              * Pseudonymized
              * @default {}
@@ -2334,11 +3506,45 @@ export interface components {
             /** User Agent */
             user_agent: string | null;
         };
+        /**
+         * CustodyItem
+         * @description `ip` / `user_agent` only in the internal profile; `actor` is a role in external.
+         */
+        CustodyItem: {
+            /** Action */
+            action: string;
+            /** Actor */
+            actor: string;
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /** Ip */
+            ip?: string | null;
+            /** Occurred At */
+            occurred_at: string;
+            /** User Agent */
+            user_agent?: string | null;
+        };
         /** CustodyPage */
         CustodyPage: {
             /** Items */
             items: components["schemas"]["CustodyEventOut"][];
             /** Total */
+            total: number;
+        };
+        /** CustodySection */
+        CustodySection: {
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["CustodyItem"][];
+            /**
+             * Total
+             * @default 0
+             */
             total: number;
         };
         /**
@@ -2352,6 +3558,137 @@ export interface components {
             suspicious: number;
             /** Total */
             total: number;
+        };
+        /**
+         * DocumentControlItem
+         * @description One prior version of the same report (RT23).
+         */
+        DocumentControlItem: {
+            /** Change Note */
+            change_note?: string | null;
+            /** Finalized At */
+            finalized_at: string;
+            /** Snapshot Sha256 Short */
+            snapshot_sha256_short: string;
+            /** Version */
+            version: number;
+        };
+        /** DraftInclude */
+        DraftInclude: {
+            /**
+             * Ai Runs
+             * @default []
+             */
+            ai_runs: string[];
+            /**
+             * @default {
+             *       "max": 500,
+             *       "min_severity": "low"
+             *     }
+             */
+            alerts: components["schemas"]["SeveritySelection"];
+            /**
+             * @default {
+             *       "statuses": [
+             *         "confirmed"
+             *       ]
+             *     }
+             */
+            attack: components["schemas"]["AttackSelection"];
+            /**
+             * Cited Rows
+             * @default []
+             */
+            cited_rows: components["schemas"]["CitedRowRef"][];
+            /**
+             * Custody
+             * @default true
+             */
+            custody: boolean;
+            /**
+             * Evidence
+             * @default true
+             */
+            evidence: boolean;
+            /**
+             * @default {
+             *       "max": 500,
+             *       "min_severity": "low"
+             *     }
+             */
+            findings: components["schemas"]["SeveritySelection"];
+            /**
+             * @default {
+             *       "case_iocs": true,
+             *       "collections": [],
+             *       "max": 2000
+             *     }
+             */
+            iocs: components["schemas"]["IocSelection"];
+            /**
+             * Jobs
+             * @default latest
+             */
+            jobs: "latest" | string[];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            /**
+             * Ti
+             * @default true
+             */
+            ti: boolean;
+            /**
+             * @default {
+             *       "max": 1000
+             *     }
+             */
+            timeline: components["schemas"]["TimelineSelection"];
+        };
+        /** DraftSections */
+        DraftSections: {
+            /**
+             * Actions Taken
+             * @default
+             */
+            actions_taken: string;
+            /**
+             * Executive Summary
+             * @default
+             */
+            executive_summary: string;
+            /**
+             * Impact
+             * @default
+             */
+            impact: string;
+            /**
+             * Lessons Learned
+             * @default
+             */
+            lessons_learned: string;
+            /**
+             * Methodology
+             * @default
+             */
+            methodology: string;
+            /**
+             * Recommendations
+             * @default
+             */
+            recommendations: string;
+            /**
+             * Root Cause
+             * @default
+             */
+            root_cause: string;
+            /**
+             * Scope
+             * @default
+             */
+            scope: string;
         };
         /** ElfOut */
         ElfOut: {
@@ -2408,11 +3745,57 @@ export interface components {
             /** Providers */
             providers?: components["schemas"]["ProviderName"][] | null;
         };
+        /** EvidenceItem */
+        EvidenceItem: {
+            /** Cite No */
+            cite_no?: number | null;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /** Filename */
+            filename: string;
+            /** Last Verified At */
+            last_verified_at?: string | null;
+            /** Md5 */
+            md5?: string | null;
+            /** Mime */
+            mime: string;
+            /** Sha1 */
+            sha1?: string | null;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Status */
+            status: string;
+            /** Uploaded At */
+            uploaded_at: string;
+            /** Uploaded By */
+            uploaded_by: string;
+            /**
+             * Verification
+             * @default unverified
+             * @enum {string}
+             */
+            verification: "ok" | "mismatch" | "unverified";
+        };
         /**
          * EvidenceOut
          * @description Evidence metadata. Storage location/version are internal and never exposed.
          */
         EvidenceOut: {
+            /**
+             * Ai Excluded
+             * @default false
+             */
+            ai_excluded: boolean;
             /** Description */
             description: string;
             /** Detected Description */
@@ -2439,6 +3822,11 @@ export interface components {
             size_bytes: number;
             status: components["schemas"]["EvidenceStatus"];
             /**
+             * Ti Excluded
+             * @default false
+             */
+            ti_excluded: boolean;
+            /**
              * Uploaded At
              * Format: date-time
              */
@@ -2457,6 +3845,46 @@ export interface components {
             items: components["schemas"]["EvidenceOut"][];
             /** Total */
             total: number;
+        };
+        /** EvidenceSection */
+        EvidenceSection: {
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["EvidenceItem"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /**
+         * EvidenceSharePolicyIn
+         * @description `PUT /evidence/{id}/share-policy`: turning a flag off needs `integrations.manage`.
+         */
+        EvidenceSharePolicyIn: {
+            /** Ai Excluded */
+            ai_excluded: boolean;
+            /** Ti Excluded */
+            ti_excluded: boolean;
+        };
+        /** EvidenceSharePolicyOut */
+        EvidenceSharePolicyOut: {
+            /** Ai Excluded */
+            ai_excluded: boolean;
+            effective: components["schemas"]["SharePolicyOut"];
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /** Ti Excluded */
+            ti_excluded: boolean;
+            /** Updated At */
+            updated_at: string | null;
+            /** Updated By */
+            updated_by: string | null;
         };
         /**
          * EvidenceStatus
@@ -2486,6 +3914,36 @@ export interface components {
              * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
              */
             total: number;
+        };
+        /** FindingItem */
+        FindingItem: {
+            /**
+             * Attack Ids
+             * @default []
+             */
+            attack_ids: string[];
+            /** Category */
+            category?: string | null;
+            /** Cite No */
+            cite_no?: number | null;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Finding Id */
+            finding_id: string;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Score */
+            score?: string | null;
+            /** Severity */
+            severity: string;
+            /** Title */
+            title: string;
         };
         /** FindingOut */
         FindingOut: {
@@ -2551,6 +4009,19 @@ export interface components {
          * @enum {string}
          */
         FindingSeverity: "info" | "low" | "medium" | "high";
+        /** FindingsSection */
+        FindingsSection: {
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["FindingItem"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
         /** FlowOut */
         FlowOut: {
             /** Community Id */
@@ -2806,6 +4277,8 @@ export interface components {
         };
         /** InvestigationOut */
         InvestigationOut: {
+            /** Ai Excluded */
+            ai_excluded: boolean;
             /** Allowed Transitions */
             allowed_transitions: components["schemas"]["InvestigationStatus"][];
             /** Case Number */
@@ -2834,9 +4307,13 @@ export interface components {
              */
             id: string;
             severity: components["schemas"]["Severity"];
+            share_policy: components["schemas"]["SharePolicyOut"];
             status: components["schemas"]["InvestigationStatus"];
+            /** Ti Excluded */
+            ti_excluded: boolean;
             /** Title */
             title: string;
+            tlp: components["schemas"]["TLP"];
             /**
              * Updated At
              * Format: date-time
@@ -2862,14 +4339,157 @@ export interface components {
             /** Next Cursor */
             next_cursor: string | null;
         };
-        /** InvestigationUpdate */
+        /**
+         * InvestigationUpdate
+         * @description M6 adds `tlp` (lowering it needs `org.update` and `acknowledge_tlp_downgrade`), the
+         *     share-policy flags (turning one off needs `integrations.manage`) and `status_reason`
+         *     (required to close, reopen or archive). Phase 2 implements the rules.
+         */
         InvestigationUpdate: {
+            /** Acknowledge Tlp Downgrade */
+            acknowledge_tlp_downgrade?: boolean | null;
+            /** Ai Excluded */
+            ai_excluded?: boolean | null;
             /** Description */
             description?: string | null;
             severity?: components["schemas"]["Severity"] | null;
             status?: components["schemas"]["InvestigationStatus"] | null;
+            /** Status Reason */
+            status_reason?: string | null;
+            /** Ti Excluded */
+            ti_excluded?: boolean | null;
             /** Title */
             title?: string | null;
+            tlp?: components["schemas"]["TLP"] | null;
+        };
+        /** IocCollectionCreate */
+        IocCollectionCreate: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Name */
+            name: string;
+        };
+        /** IocCollectionDetail */
+        IocCollectionDetail: {
+            collection: components["schemas"]["IocCollectionOut"];
+            /** Counts By Type */
+            counts_by_type: {
+                [key: string]: number;
+            };
+        };
+        /** IocCollectionItemOut */
+        IocCollectionItemOut: {
+            /**
+             * Added At
+             * Format: date-time
+             */
+            added_at: string;
+            /**
+             * Added By
+             * Format: uuid
+             */
+            added_by: string;
+            /** Added By Name */
+            added_by_name: string;
+            /**
+             * Collection Id
+             * Format: uuid
+             */
+            collection_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ioc Id */
+            ioc_id: string | null;
+            /** Ioc Key */
+            ioc_key: string;
+            /** Ioc Type */
+            ioc_type: string;
+            /** Job Id */
+            job_id: string | null;
+            /** Note */
+            note: string | null;
+            /** Removed At */
+            removed_at: string | null;
+            /** Removed By */
+            removed_by: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "job_ioc" | "manual";
+            /** Ti */
+            ti: components["schemas"]["TiSummaryOut"][];
+            /** Ti Eligible */
+            ti_eligible: boolean;
+            /** Value */
+            value: string;
+        };
+        /** IocCollectionItemPage */
+        IocCollectionItemPage: {
+            /** Items */
+            items: components["schemas"]["IocCollectionItemOut"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** IocCollectionOut */
+        IocCollectionOut: {
+            /** Archived */
+            archived: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Created By Name */
+            created_by_name: string;
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Investigation Id
+             * Format: uuid
+             */
+            investigation_id: string;
+            /** Item Count */
+            item_count: number;
+            /** Name */
+            name: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** IocCollectionPage */
+        IocCollectionPage: {
+            /** Items */
+            items: components["schemas"]["IocCollectionOut"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** IocCollectionUpdate */
+        IocCollectionUpdate: {
+            /** Archived */
+            archived?: boolean | null;
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name?: string | null;
         };
         /**
          * IocEnrichmentOut
@@ -2913,6 +4533,83 @@ export interface components {
          * @enum {string}
          */
         IocInclude: "enrichment";
+        /** IocItem */
+        IocItem: {
+            /** Cite No */
+            cite_no?: number | null;
+            /**
+             * Collections
+             * @default []
+             */
+            collections: string[];
+            /**
+             * Count Jobs
+             * @default 1
+             */
+            count_jobs: number;
+            /** First Seen */
+            first_seen?: string | null;
+            /** Ioc Key */
+            ioc_key: string;
+            /** Ioc Type */
+            ioc_type: string;
+            /**
+             * Job Ids
+             * @default []
+             */
+            job_ids: string[];
+            /** Last Seen */
+            last_seen?: string | null;
+            /** Value */
+            value: string;
+        };
+        /** IocItemFromJob */
+        IocItemFromJob: {
+            /**
+             * Ioc Id
+             * Format: uuid
+             */
+            ioc_id: string;
+        };
+        /** IocItemManual */
+        IocItemManual: {
+            /** Note */
+            note?: string | null;
+            /** Type */
+            type: string;
+            /** Value */
+            value: string;
+        };
+        /** IocItemResult */
+        IocItemResult: {
+            /** Index */
+            index: number;
+            /** Item Id */
+            item_id: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "added" | "duplicate" | "invalid";
+            /** Reason */
+            reason: string | null;
+        };
+        /** IocItemsAdd */
+        IocItemsAdd: {
+            /** Items */
+            items: (components["schemas"]["IocItemFromJob"] | components["schemas"]["IocItemManual"])[];
+        };
+        /** IocItemsAddResult */
+        IocItemsAddResult: {
+            /** Added */
+            added: number;
+            /** Duplicates */
+            duplicates: number;
+            /** Invalid */
+            invalid: number;
+            /** Results */
+            results: components["schemas"]["IocItemResult"][];
+        };
         /** IocOut */
         IocOut: {
             /** Count */
@@ -2945,6 +4642,82 @@ export interface components {
             /**
              * Total
              * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
+        /** IocSelection */
+        IocSelection: {
+            /**
+             * Case Iocs
+             * @default true
+             */
+            case_iocs: boolean;
+            /**
+             * Collections
+             * @default []
+             */
+            collections: string[];
+            /**
+             * Max
+             * @default 2000
+             */
+            max: number;
+        };
+        /** IocsSection */
+        IocsSection: {
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["IocItem"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /** JobItem */
+        JobItem: {
+            /** Analyzer */
+            analyzer: string;
+            /** Cite No */
+            cite_no?: number | null;
+            /** Created At */
+            created_at: string;
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /** Finished At */
+            finished_at?: string | null;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Profile */
+            profile?: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Tool Versions
+             * @default {}
+             */
+            tool_versions: {
+                [key: string]: string;
+            };
+        };
+        /** JobsSection */
+        JobsSection: {
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["JobItem"][];
+            /**
+             * Total
+             * @default 0
              */
             total: number;
         };
@@ -3038,6 +4811,13 @@ export interface components {
              * @default []
              */
             vendor_intel: string[];
+        };
+        /** MatrixTactic */
+        MatrixTactic: {
+            /** Tactic */
+            tactic: string;
+            /** Techniques */
+            techniques: components["schemas"]["AttackMappingOut"][];
         };
         /** MeOut */
         MeOut: {
@@ -3211,6 +4991,188 @@ export interface components {
             function: string;
             /** Library */
             library: string;
+        };
+        /** NoteCreate */
+        NoteCreate: {
+            /** Body */
+            body: string;
+            /**
+             * Include In Reports
+             * @default false
+             */
+            include_in_reports: boolean;
+            /**
+             * Pinned
+             * @default false
+             */
+            pinned: boolean;
+            /**
+             * Refs
+             * @default []
+             */
+            refs: components["schemas"]["NoteRef"][];
+        };
+        /** NoteDetail */
+        NoteDetail: {
+            note: components["schemas"]["NoteOut"];
+            /** Versions */
+            versions: components["schemas"]["NoteVersionOut"][];
+        };
+        /** NoteItem */
+        NoteItem: {
+            /** Author */
+            author: string;
+            /** Body */
+            body: string;
+            /**
+             * Cite Nos
+             * @default []
+             */
+            cite_nos: number[];
+            /** Created At */
+            created_at: string;
+            /**
+             * Note Id
+             * Format: uuid
+             */
+            note_id: string;
+            /** Updated At */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * NoteOut
+         * @description The current version of a note. A deleted note (listed only with `include_deleted`)
+         *     shows its tombstone: `deleted=true`, `body=null`, `refs=[]`.
+         */
+        NoteOut: {
+            /**
+             * Author Id
+             * Format: uuid
+             */
+            author_id: string;
+            /** Author Name */
+            author_name: string;
+            /** Body */
+            body: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Created By Name */
+            created_by_name: string;
+            /** Deleted */
+            deleted: boolean;
+            /** Deleted At */
+            deleted_at: string | null;
+            /** Deleted By */
+            deleted_by: string | null;
+            /** Edited */
+            edited: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Include In Reports */
+            include_in_reports: boolean;
+            /**
+             * Investigation Id
+             * Format: uuid
+             */
+            investigation_id: string;
+            /** Pinned */
+            pinned: boolean;
+            /** Refs */
+            refs: components["schemas"]["NoteRef"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** NotePage */
+        NotePage: {
+            /** Items */
+            items: components["schemas"]["NoteOut"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
+         * NoteRef
+         * @description A typed link to a row of the case; re-checked in the org and case scope on write
+         *     (`422 ref_out_of_scope`).
+         */
+        NoteRef: {
+            /** Job Id */
+            job_id?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "finding" | "alert" | "ioc" | "evidence" | "job" | "timeline" | "capability" | "signature";
+            /** Ref Id */
+            ref_id: string;
+        };
+        /**
+         * NoteUpdate
+         * @description A body or refs change adds a version (`expected_version` must be the current one,
+         *     else `409 stale_note`); flag-only changes update the flags.
+         */
+        NoteUpdate: {
+            /** Body */
+            body?: string | null;
+            /** Expected Version */
+            expected_version: number;
+            /** Include In Reports */
+            include_in_reports?: boolean | null;
+            /** Pinned */
+            pinned?: boolean | null;
+            /** Refs */
+            refs?: components["schemas"]["NoteRef"][] | null;
+        };
+        /** NoteVersionOut */
+        NoteVersionOut: {
+            /**
+             * Author Id
+             * Format: uuid
+             */
+            author_id: string;
+            /** Author Name */
+            author_name: string;
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Refs */
+            refs: components["schemas"]["NoteRef"][];
+            /** Version */
+            version: number;
+        };
+        /** NotesSection */
+        NotesSection: {
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["NoteItem"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
         };
         /** OrgCreate */
         OrgCreate: {
@@ -3386,6 +5348,11 @@ export interface components {
          * @enum {string}
          */
         RefKind: "job" | "finding" | "alert" | "flow" | "record" | "ioc" | "ti_result" | "sample" | "signature" | "capability" | "pe_summary" | "string" | "timeline" | "evidence" | "investigation" | "digest_claim";
+        /**
+         * RefKindName
+         * @enum {string}
+         */
+        RefKindName: "custody" | "job" | "timeline" | "alert" | "finding" | "note" | "status";
         /** RegisterIn */
         RegisterIn: {
             /** Display Name */
@@ -3399,6 +5366,66 @@ export interface components {
             organization_name: string;
             /** Password */
             password: string;
+        };
+        /** RenderCreate */
+        RenderCreate: {
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "pdf" | "html" | "md";
+        };
+        /** RenderList */
+        RenderList: {
+            /** Items */
+            items: components["schemas"]["RenderOut"][];
+        };
+        /** RenderOut */
+        RenderOut: {
+            /** Bytes */
+            bytes: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error Code */
+            error_code: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "pdf" | "html" | "md";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Pages */
+            pages: number | null;
+            /** Renderer Version */
+            renderer_version: string | null;
+            /**
+             * Requested By
+             * Format: uuid
+             */
+            requested_by: string;
+            /** Sha256 */
+            sha256: string | null;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed";
+            /**
+             * Version Id
+             * Format: uuid
+             */
+            version_id: string;
         };
         /** ReportAnalysis */
         ReportAnalysis: {
@@ -3466,6 +5493,29 @@ export interface components {
              */
             truncated: boolean;
         };
+        /**
+         * ReportCreate
+         * @description `tlp` defaults to the case TLP; below it the downgrade rule applies (`org.update` +
+         *     `acknowledge_tlp_downgrade`).
+         */
+        ReportCreate: {
+            /**
+             * Acknowledge Tlp Downgrade
+             * @default false
+             */
+            acknowledge_tlp_downgrade: boolean;
+            /** @default internal */
+            profile: components["schemas"]["ReportProfile"];
+            /**
+             * Template
+             * @default incident_v1
+             * @constant
+             */
+            template: "incident_v1";
+            /** Title */
+            title: string;
+            tlp?: components["schemas"]["TLP"] | null;
+        };
         /** ReportCustody */
         ReportCustody: {
             /**
@@ -3494,6 +5544,65 @@ export interface components {
              * Format: date-time
              */
             occurred_at: string;
+        };
+        /** ReportDetail */
+        ReportDetail: {
+            draft: components["schemas"]["ReportDraft"];
+            report: components["schemas"]["ReportOut"];
+            /** Versions */
+            versions: components["schemas"]["ReportVersionSummary"][];
+        };
+        /**
+         * ReportDraft
+         * @description `reports.draft`. The whole JSON must fit DRAFT_MAX_BYTES (1 MiB, RT9).
+         */
+        ReportDraft: {
+            /**
+             * @default {
+             *       "ai_runs": [],
+             *       "alerts": {
+             *         "max": 500,
+             *         "min_severity": "low"
+             *       },
+             *       "attack": {
+             *         "statuses": [
+             *           "confirmed"
+             *         ]
+             *       },
+             *       "cited_rows": [],
+             *       "custody": true,
+             *       "evidence": true,
+             *       "findings": {
+             *         "max": 500,
+             *         "min_severity": "low"
+             *       },
+             *       "iocs": {
+             *         "case_iocs": true,
+             *         "collections": [],
+             *         "max": 2000
+             *       },
+             *       "jobs": "latest",
+             *       "notes": [],
+             *       "ti": true,
+             *       "timeline": {
+             *         "max": 1000
+             *       }
+             *     }
+             */
+            include: components["schemas"]["DraftInclude"];
+            /**
+             * @default {
+             *       "actions_taken": "",
+             *       "executive_summary": "",
+             *       "impact": "",
+             *       "lessons_learned": "",
+             *       "methodology": "",
+             *       "recommendations": "",
+             *       "root_cause": "",
+             *       "scope": ""
+             *     }
+             */
+            sections: components["schemas"]["DraftSections"];
         };
         /** ReportEvidence */
         ReportEvidence: {
@@ -3528,6 +5637,23 @@ export interface components {
             /** Uploaded By Name */
             uploaded_by_name: string;
         };
+        /** ReportFinalize */
+        ReportFinalize: {
+            /**
+             * Acknowledge External Review
+             * @default false
+             */
+            acknowledge_external_review: boolean;
+            /**
+             * Acknowledge Tlp Downgrade
+             * @default false
+             */
+            acknowledge_tlp_downgrade: boolean;
+            /** Change Note */
+            change_note?: string | null;
+            /** Revision */
+            revision: number;
+        };
         /** ReportFindings */
         ReportFindings: {
             /** Items */
@@ -3542,6 +5668,45 @@ export interface components {
              * @description True when `items` holds fewer than `total`.
              */
             truncated: boolean;
+        };
+        /**
+         * ReportInfo
+         * @description The report and this version. `base_url` and deep-link paths are omitted (None) for
+         *     the `external` profile (RT8); `generated_by` is a display name, or a role there.
+         */
+        ReportInfo: {
+            /** Base Url */
+            base_url?: string | null;
+            /** Change Note */
+            change_note?: string | null;
+            /** Distribution */
+            distribution?: string | null;
+            /**
+             * Document Control
+             * @default []
+             */
+            document_control: components["schemas"]["DocumentControlItem"][];
+            /** Finalized At */
+            finalized_at: string;
+            /** Generated By */
+            generated_by: string;
+            profile: components["schemas"]["ReportProfile"];
+            /**
+             * Report Id
+             * Format: uuid
+             */
+            report_id: string;
+            /**
+             * Template
+             * @default incident_v1
+             * @constant
+             */
+            template: "incident_v1";
+            /** Title */
+            title: string;
+            tlp: components["schemas"]["TLP"];
+            /** Version */
+            version: number;
         };
         /** ReportInvestigation */
         ReportInvestigation: {
@@ -3580,6 +5745,100 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** ReportOut */
+        ReportOut: {
+            /** Case Ref */
+            case_ref: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Created By Name */
+            created_by_name: string;
+            /** Distribution */
+            distribution: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Investigation Id
+             * Format: uuid
+             */
+            investigation_id: string;
+            latest: components["schemas"]["ReportVersionSummary"] | null;
+            /** Latest Version */
+            latest_version: number;
+            profile: components["schemas"]["ReportProfile"];
+            /** Revision */
+            revision: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "discarded";
+            /**
+             * Template
+             * @constant
+             */
+            template: "incident_v1";
+            /** Title */
+            title: string;
+            tlp: components["schemas"]["TLP"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ReportPage */
+        ReportPage: {
+            /** Items */
+            items: components["schemas"]["ReportOut"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
+         * ReportPreviewOut
+         * @description `POST …/preview`: the snapshot built in memory (nothing stored or audited), its size
+         *     and render units against the budget (RT1).
+         */
+        ReportPreviewOut: {
+            /** Max Render Units */
+            max_render_units: number;
+            /** Max Snapshot Bytes */
+            max_snapshot_bytes: number;
+            /** Over Budget */
+            over_budget: boolean;
+            /** Render Units */
+            render_units: number;
+            /** Section Counts */
+            section_counts: {
+                [key: string]: components["schemas"]["SectionCount"];
+            };
+            /** Section Units */
+            section_units: {
+                [key: string]: number;
+            };
+            /** Snapshot */
+            snapshot: {
+                [key: string]: unknown;
+            };
+            /** Snapshot Bytes */
+            snapshot_bytes: number;
+        };
+        /**
+         * ReportProfile
+         * @enum {string}
+         */
+        ReportProfile: "internal" | "external";
         /**
          * ReportSample
          * @description Trusted size and hashes (evidence record) plus the analyzer's file facts.
@@ -3621,6 +5880,26 @@ export interface components {
              */
             truncated: boolean;
         };
+        /**
+         * ReportSignatureOut
+         * @description `GET …/signature` (served as `.sig.json`).
+         */
+        ReportSignatureOut: {
+            /**
+             * Alg
+             * @default Ed25519
+             * @constant
+             */
+            alg: "Ed25519";
+            /** Kid */
+            kid: string;
+            /** Manifest */
+            manifest: {
+                [key: string]: unknown;
+            };
+            /** Signature */
+            signature: string;
+        };
         /** ReportSignatures */
         ReportSignatures: {
             /** Items */
@@ -3635,6 +5914,210 @@ export interface components {
              * @description True when `items` holds fewer than `total`.
              */
             truncated: boolean;
+        };
+        /**
+         * ReportSnapshot
+         * @description The whole signed document (`cyberlab.report.v1`).
+         */
+        ReportSnapshot: {
+            /**
+             * @default {
+             *       "items": [],
+             *       "total": 0
+             *     }
+             */
+            ai: components["schemas"]["AiRunsSection"];
+            /**
+             * @default {
+             *       "items": [],
+             *       "total": 0
+             *     }
+             */
+            alerts: components["schemas"]["AlertsSection"];
+            /**
+             * @default {
+             *       "items": [],
+             *       "total": 0
+             *     }
+             */
+            attack: components["schemas"]["AttackSection"];
+            case: components["schemas"]["CaseSection"];
+            /**
+             * @default {
+             *       "dropped_out_of_scope": 0,
+             *       "items": [],
+             *       "total": 0
+             *     }
+             */
+            citations: components["schemas"]["CitationsSection"];
+            /**
+             * @default {
+             *       "items": [],
+             *       "total": 0
+             *     }
+             */
+            custody: components["schemas"]["CustodySection"];
+            /**
+             * @default {
+             *       "items": [],
+             *       "total": 0
+             *     }
+             */
+            evidence: components["schemas"]["EvidenceSection"];
+            /**
+             * @default {
+             *       "items": [],
+             *       "total": 0
+             *     }
+             */
+            findings: components["schemas"]["FindingsSection"];
+            /**
+             * @default {
+             *       "items": [],
+             *       "total": 0
+             *     }
+             */
+            iocs: components["schemas"]["IocsSection"];
+            /**
+             * @default {
+             *       "items": [],
+             *       "total": 0
+             *     }
+             */
+            jobs: components["schemas"]["JobsSection"];
+            /**
+             * @default {
+             *       "items": [],
+             *       "total": 0
+             *     }
+             */
+            notes: components["schemas"]["NotesSection"];
+            report: components["schemas"]["ReportInfo"];
+            /**
+             * Schema Version
+             * @default cyberlab.report.v1
+             * @constant
+             */
+            schema_version: "cyberlab.report.v1";
+            /**
+             * @default {
+             *       "actions_taken": "",
+             *       "executive_summary": "",
+             *       "impact": "",
+             *       "lessons_learned": "",
+             *       "methodology": "",
+             *       "recommendations": "",
+             *       "root_cause": "",
+             *       "scope": ""
+             *     }
+             */
+            sections: components["schemas"]["AnalystSections"];
+            /**
+             * @default {
+             *       "items": [],
+             *       "total": 0
+             *     }
+             */
+            ti: components["schemas"]["TiSection"];
+            /**
+             * @default {
+             *       "items": [],
+             *       "total": 0
+             *     }
+             */
+            timeline: components["schemas"]["TimelineSection"];
+        };
+        /**
+         * ReportUpdate
+         * @description Optimistic concurrency: `revision` must be the current one (`409 stale_draft`).
+         */
+        ReportUpdate: {
+            /**
+             * Acknowledge Tlp Downgrade
+             * @default false
+             */
+            acknowledge_tlp_downgrade: boolean;
+            /** Distribution */
+            distribution?: string | null;
+            draft?: components["schemas"]["ReportDraft"] | null;
+            profile?: components["schemas"]["ReportProfile"] | null;
+            /** Revision */
+            revision: number;
+            /** Title */
+            title?: string | null;
+            tlp?: components["schemas"]["TLP"] | null;
+        };
+        /**
+         * ReportVersionDetail
+         * @description `snapshot_ok` re-hashes the stored object; `signature_valid` verifies the manifest
+         *     with the version's kid. A mismatch is shown, never hidden (and audited).
+         */
+        ReportVersionDetail: {
+            /**
+             * Alg
+             * @default Ed25519
+             * @constant
+             */
+            alg: "Ed25519";
+            /** Manifest */
+            manifest: {
+                [key: string]: unknown;
+            };
+            /** Renders */
+            renders: components["schemas"]["RenderOut"][];
+            /**
+             * Report Id
+             * Format: uuid
+             */
+            report_id: string;
+            /** Section Counts */
+            section_counts: {
+                [key: string]: components["schemas"]["SectionCount"];
+            };
+            /** Signature */
+            signature: string;
+            /** Signature Valid */
+            signature_valid: boolean;
+            /** Snapshot Ok */
+            snapshot_ok: boolean;
+            version: components["schemas"]["ReportVersionSummary"];
+        };
+        /** ReportVersionList */
+        ReportVersionList: {
+            /** Items */
+            items: components["schemas"]["ReportVersionSummary"][];
+        };
+        /** ReportVersionSummary */
+        ReportVersionSummary: {
+            /** Change Note */
+            change_note: string | null;
+            /**
+             * Finalized At
+             * Format: date-time
+             */
+            finalized_at: string;
+            /**
+             * Finalized By
+             * Format: uuid
+             */
+            finalized_by: string;
+            /** Finalized By Name */
+            finalized_by_name: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kid */
+            kid: string;
+            profile: components["schemas"]["ReportProfile"];
+            /** Snapshot Bytes */
+            snapshot_bytes: number;
+            /** Snapshot Sha256 */
+            snapshot_sha256: string;
+            tlp: components["schemas"]["TLP"];
+            /** Version */
+            version: number;
         };
         /** ResourceOut */
         ResourceOut: {
@@ -3787,7 +6270,7 @@ export interface components {
             ioc_type: components["schemas"]["TiIocType"];
             provider: components["schemas"]["ProviderName"];
             /** Reason */
-            reason: ("rate_limited" | "quota_exhausted" | "deadline" | "auth_failed") | null;
+            reason: ("rate_limited" | "quota_exhausted" | "deadline" | "auth_failed" | "policy_blocked") | null;
             result: components["schemas"]["ResultOut"] | null;
             /** Seq */
             seq: number;
@@ -4028,6 +6511,13 @@ export interface components {
             /** Size */
             size: number;
         };
+        /** SectionCount */
+        SectionCount: {
+            /** Included */
+            included: number;
+            /** Total */
+            total: number;
+        };
         /** SectionOut */
         SectionOut: {
             /** Entropy */
@@ -4065,6 +6555,33 @@ export interface components {
          * @enum {string}
          */
         Severity: "low" | "medium" | "high" | "critical";
+        /** SeveritySelection */
+        SeveritySelection: {
+            /**
+             * Max
+             * @default 500
+             */
+            max: number;
+            /**
+             * Min Severity
+             * @default low
+             * @enum {string}
+             */
+            min_severity: "info" | "low" | "medium" | "high" | "critical";
+        };
+        /**
+         * SharePolicyOut
+         * @description The case-level share policy (TLP:RED implies both blocks). Evidence-level flags are
+         *     on the evidence (`EvidenceSharePolicyOut`).
+         */
+        SharePolicyOut: {
+            /** Ai Blocked */
+            ai_blocked: boolean;
+            /** Reasons */
+            reasons: string[];
+            /** Ti Blocked */
+            ti_blocked: boolean;
+        };
         /**
          * SignatureEngine
          * @enum {string}
@@ -4102,11 +6619,52 @@ export interface components {
              */
             total: number;
         };
+        /** SigningKeyOut */
+        SigningKeyOut: {
+            /** Active */
+            active: boolean;
+            /**
+             * Alg
+             * @default Ed25519
+             * @constant
+             */
+            alg: "Ed25519";
+            /** Kid */
+            kid: string;
+            /** Public Key */
+            public_key: string;
+        };
+        /**
+         * SigningKeysOut
+         * @description `GET /api/v1/report-signing-keys` (unauthenticated, RT22): verify an external PDF.
+         */
+        SigningKeysOut: {
+            /** Keys */
+            keys: components["schemas"]["SigningKeyOut"][];
+        };
         /**
          * SortKey
          * @enum {string}
          */
         SortKey: "created_at" | "-created_at" | "severity" | "-severity";
+        /** SourceDescriptor */
+        SourceDescriptor: {
+            /** Citation Status */
+            citation_status?: string | null;
+            /** Job Id */
+            job_id: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "capability" | "finding" | "ai_run";
+            /** Path */
+            path: string | null;
+            /** Ref Id */
+            ref_id: string;
+            /** Run Id */
+            run_id: string | null;
+        };
         /**
          * StaticReport
          * @description Summary-level, capped report of one succeeded static analysis (no string dump).
@@ -4137,6 +6695,53 @@ export interface components {
             schema: "cyberlab.report.static.v1";
             sections: components["schemas"]["ReportSections"];
             signatures: components["schemas"]["ReportSignatures"];
+        };
+        /** StatusEventItem */
+        StatusEventItem: {
+            /** Actor */
+            actor: string;
+            /** From Status */
+            from_status?: string | null;
+            /** Occurred At */
+            occurred_at: string;
+            /** Reason */
+            reason?: string | null;
+            /** To Status */
+            to_status: string;
+        };
+        /**
+         * StatusEventOut
+         * @description One status change (M6). `reason` is shown to `investigation.read` holders.
+         */
+        StatusEventOut: {
+            /**
+             * Actor Id
+             * Format: uuid
+             */
+            actor_id: string;
+            /** Actor Name */
+            actor_name: string;
+            from_status: components["schemas"]["InvestigationStatus"] | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Reason */
+            reason: string | null;
+            to_status: components["schemas"]["InvestigationStatus"];
+        };
+        /** StatusEventPage */
+        StatusEventPage: {
+            /** Items */
+            items: components["schemas"]["StatusEventOut"][];
+            /** Next Cursor */
+            next_cursor: string | null;
         };
         /**
          * StorageOut
@@ -4179,10 +6784,76 @@ export interface components {
             total: number;
         };
         /**
+         * TLP
+         * @enum {string}
+         */
+        TLP: "clear" | "green" | "amber" | "amber_strict" | "red";
+        /**
+         * TechniqueLabel
+         * @description From the pinned offline ATT&CK index (v20); `url` is shown as text, never fetched.
+         */
+        TechniqueLabel: {
+            /** Deprecated */
+            deprecated: boolean;
+            /** Name */
+            name: string | null;
+            /** Revoked */
+            revoked: boolean;
+            /** Tactics */
+            tactics: string[];
+            /** Technique Id */
+            technique_id: string;
+            /** Url */
+            url: string | null;
+        };
+        /**
          * IocType
          * @enum {string}
          */
         TiIocType: "ipv4" | "ipv6" | "domain" | "url" | "md5" | "sha1" | "sha256" | "email";
+        /**
+         * TiItem
+         * @description An attributed provider answer for an IOC: never a verdict of the platform.
+         */
+        TiItem: {
+            /** Cite No */
+            cite_no?: number | null;
+            /** Fetched At */
+            fetched_at: string;
+            /**
+             * Found
+             * @default false
+             */
+            found: boolean;
+            /** Ioc Key */
+            ioc_key: string;
+            /** Provider */
+            provider: string;
+            /** Score */
+            score?: string | null;
+            /** Score Scale */
+            score_scale?: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+        };
+        /** TiSection */
+        TiSection: {
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["TiItem"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
         /** TiSettingsOut */
         TiSettingsOut: {
             /** Excluded Suffixes */
@@ -4196,17 +6867,40 @@ export interface components {
             excluded_suffixes: string[];
         };
         /**
+         * TiSummaryOut
+         * @description The latest provider answer for an item's `ioc_key` (attributed, never a verdict).
+         */
+        TiSummaryOut: {
+            /**
+             * Fetched At
+             * Format: date-time
+             */
+            fetched_at: string;
+            /** Found */
+            found: boolean;
+            /** Provider */
+            provider: string;
+            /** Score */
+            score: number | null;
+            /** Score Scale */
+            score_scale: string | null;
+            /** Status */
+            status: string;
+            /** Summary */
+            summary: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
          * TimelineEntryOut
          * @description One entry of the merged investigation timeline (M5). `ts_source` says which clock the
          *     time comes from: `recorded` (platform event), `capture` (the capture's clock) or
-         *     `analysis_time` (a static finding, at its job's finish time).
+         *     `analysis_time` (a static finding, at its job's finish time). M6 (RT10): case events
+         *     (`ref_kind` `note` / `status`) have no `evidence_id`.
          */
         TimelineEntryOut: {
-            /**
-             * Evidence Id
-             * Format: uuid
-             */
-            evidence_id: string;
+            /** Evidence Id */
+            evidence_id: string | null;
             /** Job Id */
             job_id: string | null;
             /** Kind */
@@ -4226,6 +6920,29 @@ export interface components {
              * Ts
              * Format: date-time
              */
+            ts: string;
+            /** Ts Source */
+            ts_source: string;
+        };
+        /** TimelineItem */
+        TimelineItem: {
+            /** Cite No */
+            cite_no?: number | null;
+            /** Evidence Id */
+            evidence_id?: string | null;
+            /** Job Id */
+            job_id?: string | null;
+            /** Kind */
+            kind: string;
+            /** Ref Id */
+            ref_id: string;
+            /** Ref Kind */
+            ref_kind: string;
+            /** Severity */
+            severity?: string | null;
+            /** Title */
+            title: string;
+            /** Ts */
             ts: string;
             /** Ts Source */
             ts_source: string;
@@ -4263,6 +6980,33 @@ export interface components {
              * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
              */
             total: number;
+        };
+        /** TimelineSection */
+        TimelineSection: {
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["TimelineItem"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /** TimelineSelection */
+        TimelineSelection: {
+            /** From */
+            from?: string | null;
+            /** Kinds */
+            kinds?: ("custody" | "job" | "timeline" | "alert" | "finding" | "note" | "status")[] | null;
+            /**
+             * Max
+             * @default 1000
+             */
+            max: number;
+            /** To */
+            to?: string | null;
         };
         /** UrlhausBlacklists */
         UrlhausBlacklists: {
@@ -5856,6 +8600,42 @@ export interface operations {
             };
         };
     };
+    update_mapping_api_v1_orgs__org_id__attack_mappings__mapping_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mapping_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttackMappingUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttackMappingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_audit_logs_api_v1_orgs__org_id__audit_logs_get: {
         parameters: {
             query?: {
@@ -5881,6 +8661,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditLogPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_cited_by_api_v1_orgs__org_id__cited_by_get: {
+        parameters: {
+            query: {
+                kind: "finding" | "alert" | "ioc" | "evidence" | "job" | "timeline" | "capability" | "signature" | "flow" | "record" | "ti_result" | "sample" | "pe_summary" | "string" | "custody" | "note";
+                ref_id: string;
+                job_id?: string | null;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CitedByOut"];
                 };
             };
             /** @description Validation Error */
@@ -6083,6 +8898,74 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_share_policy_api_v1_orgs__org_id__evidence__evidence_id__share_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evidence_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceSharePolicyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_share_policy_api_v1_orgs__org_id__evidence__evidence_id__share_policy_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evidence_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvidenceSharePolicyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceSharePolicyOut"];
                 };
             };
             /** @description Validation Error */
@@ -6398,6 +9281,106 @@ export interface operations {
             };
         };
     };
+    get_case_attack_api_v1_orgs__org_id__investigations__investigation_id__attack_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                investigation_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAttackOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_mapping_api_v1_orgs__org_id__investigations__investigation_id__attack_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                investigation_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttackMappingCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttackMappingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_suggestions_api_v1_orgs__org_id__investigations__investigation_id__attack_suggestions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                investigation_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttackSuggestionsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_evidence_api_v1_orgs__org_id__investigations__investigation_id__evidence_get: {
         parameters: {
             query?: {
@@ -6472,7 +9455,257 @@ export interface operations {
             };
         };
     };
-    get_investigation_timeline_api_v1_orgs__org_id__investigations__investigation_id__timeline_get: {
+    list_collections_api_v1_orgs__org_id__investigations__investigation_id__ioc_collections_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                investigation_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IocCollectionPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_collection_api_v1_orgs__org_id__investigations__investigation_id__ioc_collections_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                investigation_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IocCollectionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IocCollectionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_case_iocs_api_v1_orgs__org_id__investigations__investigation_id__iocs_get: {
+        parameters: {
+            query?: {
+                type?: string[] | null;
+                q?: string | null;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                investigation_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseIocPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_notes_api_v1_orgs__org_id__investigations__investigation_id__notes_get: {
+        parameters: {
+            query?: {
+                include_deleted?: boolean;
+                pinned?: boolean | null;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                investigation_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_note_api_v1_orgs__org_id__investigations__investigation_id__notes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                investigation_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_case_reports_api_v1_orgs__org_id__investigations__investigation_id__reports_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                investigation_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_report_api_v1_orgs__org_id__investigations__investigation_id__reports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                investigation_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_status_events_api_v1_orgs__org_id__investigations__investigation_id__status_events_get: {
         parameters: {
             query?: {
                 cursor?: string | null;
@@ -6493,8 +9726,291 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["StatusEventPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_investigation_timeline_api_v1_orgs__org_id__investigations__investigation_id__timeline_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+                kinds?: components["schemas"]["RefKindName"][] | null;
+            };
+            header?: never;
+            path: {
+                investigation_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/json": components["schemas"]["InvestigationTimelinePage"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_timeline_api_v1_orgs__org_id__investigations__investigation_id__timeline_export_get: {
+        parameters: {
+            query?: {
+                format?: "csv" | "json";
+                kinds?: components["schemas"]["RefKindName"][] | null;
+                from?: string | null;
+                to?: string | null;
+            };
+            header?: never;
+            path: {
+                investigation_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_collection_api_v1_orgs__org_id__ioc_collections__collection_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IocCollectionDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_collection_api_v1_orgs__org_id__ioc_collections__collection_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IocCollectionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IocCollectionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_collection_api_v1_orgs__org_id__ioc_collections__collection_id__export_get: {
+        parameters: {
+            query?: {
+                format?: "csv" | "json" | "stix21";
+                defang?: boolean;
+            };
+            header?: never;
+            path: {
+                collection_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "application/stix+json": unknown;
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_items_api_v1_orgs__org_id__ioc_collections__collection_id__items_get: {
+        parameters: {
+            query?: {
+                type?: string | null;
+                q?: string | null;
+                include_removed?: boolean;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                collection_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IocCollectionItemPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_items_api_v1_orgs__org_id__ioc_collections__collection_id__items_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IocItemsAdd"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IocItemsAddResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_item_api_v1_orgs__org_id__ioc_collections__collection_id__items__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+                item_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -6629,6 +10145,616 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemberOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_note_api_v1_orgs__org_id__notes__note_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                note_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoteDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_note_api_v1_orgs__org_id__notes__note_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                note_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoteUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_note_api_v1_orgs__org_id__notes__note_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                note_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_render_api_v1_orgs__org_id__report_renders__render_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                render_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_render_api_v1_orgs__org_id__report_renders__render_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                render_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
+                    "text/html": unknown;
+                    "text/markdown": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_reports_api_v1_orgs__org_id__reports_get: {
+        parameters: {
+            query?: {
+                investigation_id?: string | null;
+                status?: ("draft" | "discarded") | null;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_report_api_v1_orgs__org_id__reports__report_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_report_api_v1_orgs__org_id__reports__report_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discard_report_api_v1_orgs__org_id__reports__report_id__discard_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finalize_report_api_v1_orgs__org_id__reports__report_id__finalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportFinalize"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportVersionSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_report_api_v1_orgs__org_id__reports__report_id__preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_versions_api_v1_orgs__org_id__reports__report_id__versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportVersionList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_version_api_v1_orgs__org_id__reports__report_id__versions__version__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                version: number;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportVersionDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_version_content_api_v1_orgs__org_id__reports__report_id__versions__version__content_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                version: number;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportSnapshot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_renders_api_v1_orgs__org_id__reports__report_id__versions__version__renders_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                version: number;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenderList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_render_api_v1_orgs__org_id__reports__report_id__versions__version__renders_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                version: number;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenderCreate"];
+            };
+        };
+        responses: {
+            /** @description An existing render (deduplicated) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenderOut"];
+                };
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_signature_api_v1_orgs__org_id__reports__report_id__versions__version__signature_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                version: number;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportSignatureOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_snapshot_api_v1_orgs__org_id__reports__report_id__versions__version__snapshot_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                version: number;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -6921,6 +11047,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_signing_keys_api_v1_report_signing_keys_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SigningKeysOut"];
                 };
             };
         };

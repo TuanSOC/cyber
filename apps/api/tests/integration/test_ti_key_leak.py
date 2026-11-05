@@ -34,7 +34,13 @@ from tests.ti_api_helpers import API, add_result, capture_sends, put_integration
 from tests.ti_helpers import SENTINEL_KEY, MockSink, SafeTransport, assert_key_absent, new_seal_keys
 
 # Routes outside an org: none takes a resource id.
-GLOBAL_GETS = ("/api/v1/auth/me", "/api/v1/orgs", "/api/v1/attack/techniques", "/api/v1/health")
+GLOBAL_GETS = (
+    "/api/v1/auth/me",
+    "/api/v1/orgs",
+    "/api/v1/attack/techniques",
+    "/api/v1/health",
+    "/api/v1/report-signing-keys",  # M6: public keys only, unauthenticated
+)
 
 
 @pytest.fixture(autouse=True)

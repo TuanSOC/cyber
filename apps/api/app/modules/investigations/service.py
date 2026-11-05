@@ -6,8 +6,8 @@ from starlette.requests import HTTPConnection
 from app.core.errors import Conflict, NotFound
 from app.core.pagination import PageParams
 from app.core.rbac import OrgContext
-from app.modules.audit import service as audit
 from app.core.stubs import not_implemented
+from app.modules.audit import service as audit
 from app.modules.investigations import policy
 from app.modules.investigations import repository as repo
 from app.modules.investigations.models import Investigation, InvestigationStatus

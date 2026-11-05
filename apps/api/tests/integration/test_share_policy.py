@@ -33,6 +33,7 @@ from app.modules.threat_intel import runs as ti_runs
 from tests.ai_api_helpers import (
     capture_ai_sends,
     enable_ai,
+    incident_builder,
     job_of,
     preview,
     request_run,
@@ -140,10 +141,11 @@ async def test_ai_preview_and_run_are_refused(
     monkeypatch: pytest.MonkeyPatch, setup: dict[str, dict[str, Any]], reason: str
 ) -> None:
     capture_ai_sends(monkeypatch)
-    use_fake_builder(monkeypatch)
     reg = await register(org_name="Policy AI Org")
     await enable_ai(reg.client, reg.org_id)
     job = await job_of(reg)
+    # Real job ids for the incident run (its `job_digest` children have job FKs).
+    use_fake_builder(monkeypatch, build=incident_builder([job]))
     evidence, case_id = await _job_evidence_and_case(reg.org_id, job)
     t = Tenant(reg.org_id, reg.user_id, case_id)
     ok = await preview(reg.client, reg.org_id, task="summarize_pcap", job_id=str(job))

@@ -17,7 +17,7 @@ from app.core.csv_safe import CHUNK_ROWS, csv_safe, write_csv
         "@SUM(A1)",
         "\t=x",
         "\r=x",
-        "  =HYPERLINK(\"http://x\")",
+        '  =HYPERLINK("http://x")',
         " =1",
         "　@x",
         "＝1+1",

@@ -26,9 +26,7 @@ MAX_AI_RUNS = 10
 MAX_CITED_ROWS = 200
 MAX_SELECTED_IDS = 200
 
-SectionText = Annotated[
-    str, StringConstraints(max_length=SECTION_MAX_CHARS, pattern=r"^[^\x00]*$")
-]
+SectionText = Annotated[str, StringConstraints(max_length=SECTION_MAX_CHARS, pattern=r"^[^\x00]*$")]
 ReportTitle = Annotated[
     str,
     StringConstraints(
@@ -95,9 +93,9 @@ class IocSelection(_Strict):
 
 
 class AttackSelection(_Strict):
-    statuses: Annotated[
-        list[Literal["confirmed", "suspected"]], Field(max_length=2)
-    ] = ["confirmed"]
+    statuses: Annotated[list[Literal["confirmed", "suspected"]], Field(max_length=2)] = [
+        "confirmed"
+    ]
 
 
 class TimelineSelection(_Strict):

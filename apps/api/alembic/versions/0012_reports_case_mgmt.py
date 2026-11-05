@@ -206,9 +206,7 @@ def _org_fk(table: str) -> sa.ForeignKeyConstraint:
 
 
 def _user_fk(table: str, column: str) -> sa.ForeignKeyConstraint:
-    return sa.ForeignKeyConstraint(
-        [column], ["users.id"], name=op.f(f"fk_{table}_{column}_users")
-    )
+    return sa.ForeignKeyConstraint([column], ["users.id"], name=op.f(f"fk_{table}_{column}_users"))
 
 
 def _parent_fk(

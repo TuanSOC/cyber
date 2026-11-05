@@ -705,6 +705,7 @@ export const ITEM_REASON_TEXT: Record<ItemReason, string> = {
   quota_exhausted: "daily quota reached",
   deadline: "run deadline reached",
   auth_failed: "key rejected by the provider",
+  policy_blocked: "blocked by the case share policy",
 };
 
 export function itemReasonText(reason: string | null | undefined): string | null {

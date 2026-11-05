@@ -42,9 +42,7 @@ class CaseAttackMapping(UUIDPk, Base):
         UniqueConstraint("investigation_id", "technique_id"),
         Index(None, "organization_id"),
         CheckConstraint(f"technique_id ~ '{TECHNIQUE_PATTERN}'", name="technique_id"),
-        CheckConstraint(
-            "status IN ('confirmed', 'suspected', 'rejected')", name="status"
-        ),
+        CheckConstraint("status IN ('confirmed', 'suspected', 'rejected')", name="status"),
         CheckConstraint(
             f"char_length(rationale) <= {RATIONALE_MAX_CHARS}", name="rationale_length"
         ),
@@ -60,9 +58,7 @@ class CaseAttackMapping(UUIDPk, Base):
     technique_id: Mapped[str] = mapped_column(String(16))
     status: Mapped[str] = mapped_column(String(16))
     rationale: Mapped[str] = mapped_column(Text, server_default="", default="")
-    sources: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, server_default="[]", default=list
-    )
+    sources: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default="[]", default=list)
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     updated_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

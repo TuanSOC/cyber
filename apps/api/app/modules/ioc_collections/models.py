@@ -91,9 +91,7 @@ class IocCollectionItem(UUIDPk, Base):
             f"char_length(value_norm) BETWEEN 1 AND {ITEM_VALUE_MAX_CHARS}", name="value_length"
         ),
         CheckConstraint("ioc_type ~ '^[a-z][a-z0-9_]{0,31}$'", name="ioc_type"),
-        CheckConstraint(
-            "source IN ('job_ioc', 'manual')", name="source"
-        ),
+        CheckConstraint("source IN ('job_ioc', 'manual')", name="source"),
         CheckConstraint("(job_id IS NULL) = (ioc_id IS NULL)", name="job_ioc_pair"),
         CheckConstraint("(source = 'job_ioc') = (ioc_id IS NOT NULL)", name="source_matches"),
         CheckConstraint(

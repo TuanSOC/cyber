@@ -11,9 +11,7 @@ from app.modules.case_attack.models import MAX_SOURCES, RATIONALE_MAX_CHARS, TEC
 MappingStatus = Literal["confirmed", "suspected", "rejected"]
 SourceKind = Literal["capability", "finding", "ai_run"]
 TechniqueId = Annotated[str, StringConstraints(pattern=TECHNIQUE_PATTERN)]
-Rationale = Annotated[
-    str, StringConstraints(max_length=RATIONALE_MAX_CHARS, pattern=r"^[^\x00]*$")
-]
+Rationale = Annotated[str, StringConstraints(max_length=RATIONALE_MAX_CHARS, pattern=r"^[^\x00]*$")]
 
 
 class AttackSourceRef(BaseModel):

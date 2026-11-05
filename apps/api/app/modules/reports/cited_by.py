@@ -9,8 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.reports.schemas import CitedByOut
 
 
-async def cited_by(
-    session: AsyncSession, org_id: uuid.UUID, kind: str, ref_id: str
-) -> CitedByOut:
+async def cited_by(session: AsyncSession, org_id: uuid.UUID, kind: str, ref_id: str) -> CitedByOut:
     """Phase 3."""
     raise NotImplementedError("reports.cited_by.cited_by lands in M6 phase 3")

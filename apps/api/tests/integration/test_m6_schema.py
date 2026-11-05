@@ -114,6 +114,8 @@ async def test_children_cannot_point_at_another_orgs_rows() -> None:
     a = await seed_tenant("alpha")
     b = await seed_tenant("bravo")
     foreign = await _seed_all(b)
+    # Evidence without a share-policy row (the seeded one has one: its PK would fire first).
+    bare_evidence = await seed_evidence(b)
     statements = (
         "INSERT INTO investigation_status_events (organization_id, investigation_id, "
         "to_status, actor_id) VALUES (:o, :inv, 'closed', :u)",
@@ -128,14 +130,15 @@ async def test_children_cannot_point_at_another_orgs_rows() -> None:
         "repeat('b', 64), 'manual', :u)",
         "INSERT INTO reports (organization_id, investigation_id, title, tlp, created_by) "
         "VALUES (:o, :inv, 'x', 'amber', :u)",
+        # `md`: the seeded render is a live `pdf` one (its unique index would fire first).
         "INSERT INTO report_renders (organization_id, version_id, format, token_sha256, "
-        "requested_by) VALUES (:o, :ver, 'pdf', repeat('c', 64), :u)",
+        "requested_by) VALUES (:o, :ver, 'md', repeat('c', 64), :u)",
     )
     params = {
         "o": a.org_id,
         "u": a.owner_id,
         "inv": b.investigation_id,
-        "ev": foreign["evidence"],
+        "ev": bare_evidence,
         "note": foreign["note"],
         "col": foreign["collection"],
         "ver": foreign["version"],

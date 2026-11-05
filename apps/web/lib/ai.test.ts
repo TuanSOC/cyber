@@ -259,6 +259,7 @@ describe("context and output notes", () => {
       neutralized: 0,
       omitted: 5,
       per_kind: { finding: { included: 10, total: 15 }, alert: { included: 3, total: 3 } },
+      policy_excluded: 0,
       pseudonymized: { ip: 3, host: 1 },
       stripped: {},
       truncated: true,

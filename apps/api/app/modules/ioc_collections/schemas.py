@@ -27,9 +27,7 @@ CollectionName = Annotated[
 CollectionDescription = Annotated[
     str, StringConstraints(max_length=COLLECTION_DESCRIPTION_MAX_CHARS, pattern=r"^[^\x00]*$")
 ]
-ItemNote = Annotated[
-    str, StringConstraints(max_length=ITEM_NOTE_MAX_CHARS, pattern=r"^[^\x00]*$")
-]
+ItemNote = Annotated[str, StringConstraints(max_length=ITEM_NOTE_MAX_CHARS, pattern=r"^[^\x00]*$")]
 IocTypeName = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
 IocValue = Annotated[
     str, StringConstraints(min_length=1, max_length=ITEM_VALUE_MAX_CHARS, pattern=r"^[^\x00]+$")

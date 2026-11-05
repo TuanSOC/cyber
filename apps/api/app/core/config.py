@@ -448,8 +448,7 @@ class Settings(BaseSettings):
         ).lower().startswith("dev-"):
             raise ValueError("REPORT_SIGNING_*: dev- signing keys are not allowed in prod")
         if any(
-            _key_bytes(v) in _DEV_REPORT_KEY_BYTES
-            for v in self.report_signing_public_keys.values()
+            _key_bytes(v) in _DEV_REPORT_KEY_BYTES for v in self.report_signing_public_keys.values()
         ):
             raise ValueError(
                 "REPORT_SIGNING_PUBLIC_KEYS: the committed dev signing key is not allowed in prod"

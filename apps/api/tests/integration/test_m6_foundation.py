@@ -113,6 +113,7 @@ async def test_signing_keys_route_is_rate_limited(monkeypatch: pytest.MonkeyPatc
 
 # --- frozen stubs ---------------------------------------------------------------------------
 
+
 def _org_routes() -> set[tuple[str, str]]:
     return {
         (method.upper(), path)

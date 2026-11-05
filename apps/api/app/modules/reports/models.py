@@ -32,7 +32,6 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.models_base import Base, UUIDPk
@@ -74,9 +73,7 @@ class Report(UUIDPk, Base):
         CheckConstraint(_in("tlp", TLP_VALUES), name="tlp"),
         CheckConstraint(_in("profile", PROFILES), name="profile"),
         CheckConstraint(_in("status", REPORT_STATUSES), name="status"),
-        CheckConstraint(
-            f"char_length(title) BETWEEN 1 AND {TITLE_MAX_CHARS}", name="title_length"
-        ),
+        CheckConstraint(f"char_length(title) BETWEEN 1 AND {TITLE_MAX_CHARS}", name="title_length"),
         CheckConstraint(
             f"distribution IS NULL OR char_length(distribution) <= {DISTRIBUTION_MAX_CHARS}",
             name="distribution_length",

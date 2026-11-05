@@ -52,7 +52,9 @@ class InvestigationUpdate(BaseModel):
     ai_excluded: bool | None = None
     ti_excluded: bool | None = None
     status_reason: StatusReason | None = None
-    acknowledge_tlp_downgrade: bool = False
+    # Optional like every other PATCH field (a `bool = False` default would make the generated
+    # TS type require it on every edit); only `true` acknowledges a downgrade.
+    acknowledge_tlp_downgrade: bool | None = None
 
     @field_validator(
         "title",
@@ -63,6 +65,7 @@ class InvestigationUpdate(BaseModel):
         "ai_excluded",
         "ti_excluded",
         "status_reason",
+        "acknowledge_tlp_downgrade",
         mode="before",
     )
     @classmethod

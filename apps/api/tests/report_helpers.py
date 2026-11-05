@@ -115,9 +115,7 @@ def fake_snapshot(**sections: Any) -> ReportSnapshot:
 
 
 def hostile_snapshot() -> ReportSnapshot:
-    return ReportSnapshot.model_validate_json(
-        (FIXTURES / "hostile_snapshot.json").read_bytes()
-    )
+    return ReportSnapshot.model_validate_json((FIXTURES / "hostile_snapshot.json").read_bytes())
 
 
 def reports_test_bucket() -> str:

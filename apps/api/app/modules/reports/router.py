@@ -142,12 +142,8 @@ async def download_snapshot(
     raise not_implemented()
 
 
-@router.get(
-    "/reports/{report_id}/versions/{version}/signature", response_model=ReportSignatureOut
-)
-async def get_signature(
-    report_id: uuid.UUID, version: Version, ctx: InvRead
-) -> ReportSignatureOut:
+@router.get("/reports/{report_id}/versions/{version}/signature", response_model=ReportSignatureOut)
+async def get_signature(report_id: uuid.UUID, version: Version, ctx: InvRead) -> ReportSignatureOut:
     """`{manifest, signature, kid, alg}` served as `.sig.json`."""
     raise not_implemented()
 

@@ -208,9 +208,7 @@ def test_extended_deny_refuses_netlink_packet_and_io_uring_with_eacces(
 ) -> None:
     import socket
 
-    seen = _probe(
-        dirs, "deny.txt", deny_extra_domains=(socket.AF_NETLINK,), deny_io_uring=True
-    )
+    seen = _probe(dirs, "deny.txt", deny_extra_domains=(socket.AF_NETLINK,), deny_io_uring=True)
     assert seen["AF_INET"] == "EACCES" and seen["AF_INET6"] == "EACCES"
     assert seen["AF_NETLINK"] == "EACCES" and seen["AF_PACKET"] == "EACCES"
     assert seen["io_uring"] == "EACCES"

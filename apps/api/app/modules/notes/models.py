@@ -61,9 +61,7 @@ class AnalystNote(UUIDPk, Base):
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     current_version: Mapped[int] = mapped_column(Integer, server_default="1", default=1)
     pinned: Mapped[bool] = mapped_column(Boolean, server_default="false", default=False)
-    include_in_reports: Mapped[bool] = mapped_column(
-        Boolean, server_default="false", default=False
-    )
+    include_in_reports: Mapped[bool] = mapped_column(Boolean, server_default="false", default=False)
     deleted_at: Mapped[datetime | None]
     deleted_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())

@@ -165,9 +165,14 @@ STIX_TLP_MARKINGS: dict[TLP, dict[str, Any]] = {
 }
 
 
-class Profile(enum.StrEnum):
+class ReportProfile(enum.StrEnum):
     INTERNAL = "internal"
     EXTERNAL = "external"
+
+
+# The class is named `ReportProfile` because the OpenAPI schema name comes from `__name__`
+# and `Profile` is already the static-analysis profile (cyberlab_jobs.static, M2).
+Profile = ReportProfile
 
 
 RenderFormat = Literal["pdf", "html", "md"]
@@ -886,6 +891,7 @@ __all__ = [
     "NoteItem",
     "NotesSection",
     "Profile",
+    "ReportProfile",
     "RenderErrorCode",
     "RenderFormat",
     "ReportInfo",

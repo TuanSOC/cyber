@@ -539,13 +539,12 @@ def test_prod_public_base_url_needs_https_outside_localhost() -> None:
             cookie_secure=True,
         )  # fmt: skip
     for ok in ("https://cyberlab.example/", "http://localhost:8080"):
-        settings = Settings(
-            **BASE, **PROD_TI, public_base_url=ok, env="prod", cookie_secure=True
-        )
+        settings = Settings(**BASE, **PROD_TI, public_base_url=ok, env="prod", cookie_secure=True)
         assert settings.public_base_url == ok.rstrip("/")
 
 
-def test_report_defaults() -> None:
+def test_report_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("REPORTS_BUCKET", raising=False)  # api-test sets `reports-test`
     settings = Settings(**BASE)
     assert settings.reports_bucket == "reports"
     assert settings.report_max_snapshot_bytes == 8 * 1024**2
