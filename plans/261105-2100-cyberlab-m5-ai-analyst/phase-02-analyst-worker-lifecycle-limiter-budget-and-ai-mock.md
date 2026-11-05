@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Analyst worker lifecycle limiter budget and ai-mock"
-status: pending
+status: completed
 priority: P1
 effort: "11h"
 dependencies: [1]

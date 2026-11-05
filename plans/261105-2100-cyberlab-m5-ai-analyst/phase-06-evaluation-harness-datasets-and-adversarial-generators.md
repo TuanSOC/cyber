@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Evaluation harness datasets and adversarial generators"
-status: pending
+status: completed
 priority: P1
 effort: "9h"
 dependencies: [1]

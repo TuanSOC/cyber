@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Prompt citation verifier and output post-processing"
-status: pending
+status: completed
 priority: P1
 effort: "8h"
 dependencies: [1]

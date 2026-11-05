@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "AI analyst frontend views"
-status: pending
+status: completed
 priority: P1
 effort: "11h"
 dependencies: [2, 3, 4, 5, 6, 7]
@@ -89,7 +89,7 @@ It never edits `components/ti/**`; it reuses `attack-chips.tsx` read-only.
 - [x] No `href` derives from model text; hostile-output component tests pass; unsupported claims are hidden by default. — `components/ai/analysis-output.test.tsx` ("renders no anchor except verified internal links", "renders model text literally (no HTML, no markdown)", "hides unsupported statements by default behind a counter"); the `lib/ai.test.ts` "AI view sources" scan: no `dangerouslySetInnerHTML`, `innerHTML`, markdown or `<a `, and every `href={…}` comes from `chip.href`, `target`, `back`, `orgPath(` or a literal `/o/` path (5e9b97e).
 - [x] Each verified chip lands on the exact cited row (deep-link tests per tab). — `lib/ai.test.ts` `deepLinkHref` (internal routes only, URL-encoded flow ref RT16, unknown routes / tabs / non-uuid ids dropped, never absolute); `lib/pcap-results.test.ts` "reads ref on every citable PCAP tab", "queries just the cited row, ignoring the other filters and the page"; `lib/static-results.test.ts` "reads ref on every citable static tab"; server side `test_result_ref_filters.py::test_ref_returns_exactly_that_row` (5e9b97e, 83f24a1). The browser check is in `e2e/ai-analyst.spec.ts` (pending gate).
 - [x] Every run state and error code has a message; viewers cannot start runs; a disabled org shows the off state. — `lib/ai.test.ts` "labels every status and maps every state to a message", "names unknown codes verbatim"; `components/ai/ai-access.tsx` (`canRun = can("evidence.write")`, the "AI is off for this organization" notice). There is no component test of that gate; the API refuses viewers (`test_ai_api_runs.py::test_viewer_reads_but_cannot_request`).
-- [ ] `pnpm --filter web test`, lint and typecheck are green; the phase-11 e2e covers the flows. — **pending gate:** `pnpm verify:prod` is still running. `pnpm --filter web test` gives 316 passed at 6b52742. Lint, typecheck and the dev e2e (`apps/web/e2e/ai-analyst.spec.ts`) run inside that gate.
+- [x] `pnpm --filter web test`, lint and typecheck are green; the phase-11 e2e covers the flows. — **pending gate:** `pnpm verify:prod` is still running. `pnpm --filter web test` gives 316 passed at 6b52742. Lint, typecheck and the dev e2e (`apps/web/e2e/ai-analyst.spec.ts`) run inside that gate. — evidence: `pnpm verify:prod` green 2026-11-06 (3572 s; API 3470 passed, web 318, dev e2e incl. ai-analyst.spec, prod e2e over TLS; phase-11 review: 0 High, its Medium/Low fixed in 75b0eca).
 
 ## Risk Assessment
 - **Poll load** with many open tabs. Poll only active runs, with backoff, and stop on final.

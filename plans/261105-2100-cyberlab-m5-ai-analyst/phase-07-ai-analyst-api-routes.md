@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "AI analyst API routes"
-status: pending
+status: completed
 priority: P1
 effort: "10h"
 dependencies: [1]

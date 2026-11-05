@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Foundation contracts data model sealing and compose"
-status: pending
+status: completed
 priority: P1
 effort: "18h"
 dependencies: []
@@ -150,7 +150,7 @@ After this phase the stack runs as before. The analyst-worker starts and fails a
 - [x] The analyst env holds no JWT, MinIO, app Redis or TI private key (dev and prod configs). The enrich env holds no AI private or platform key. — `unit/test_config.py::test_analyst_role_refuses_api_secrets_and_ti_keys`, `test_only_the_analyst_may_hold_ai_private_or_platform_keys`, `test_the_rendered_prod_env_of_every_role_is_accepted` (`tests/fixtures/compose/*.prod.env.json`); `container/test_analyst_network.py::test_its_environment_holds_no_api_secrets_or_ti_keys` (dcd681a); `container/test_enrich_network.py::test_it_holds_no_ai_private_key` and `scripts/check-analyst-env.mjs` over the rendered dev / test / prod configs (6b52742; re-run by the `--prod` gate).
 - [x] Broker ACL and network tests confine `analyst`; analyzers and `enrich` cannot reach `analyst*`. — `integration/test_analyst_acl.py::test_analyst_user_is_confined`, `test_analyzers_and_enrich_cannot_touch_analyst`, `test_api_and_ingest_users_can_publish_to_analyst`; `container/test_analyst_network.py` (19 passed inside `analyst-worker-test`) (dcd681a); `packages/py-worker-kit/tests/test_isolation.py::test_ai_hosts_are_not_reachable` (6b52742).
 - [x] Migration 0011 is applied and tested. The contracts, output schema, catalog, stubs and doubles are committed and documented in the phase notes as frozen. — `integration/test_ai_schema.py` (21 tests: RLS, cross-org FKs, append-only also for the owner, transitions, immutable finals and identity, `key_version` guard, no DELETE, column grants), `test_migrations.py` (upgrade / downgrade), `test_rls_coverage.py` (all 8 `ai_*` tables); the frozen list is "Frozen interfaces (as built)" above (dcd681a).
-- [ ] `pnpm verify` green on a fresh clone (dev AI key pair, no platform key file needed). — **pending gate:** `pnpm verify:prod` is still running. The phase-1 run had `pnpm e2e` 6 passed / 1 skipped / 1 failed (Windows Defender quarantined `.e2e-data/static/packed_like.bin`); 4222bdd moved the samples into a Docker volume. A separate fresh-clone run was not done.
+- [ ] `pnpm verify` green on a fresh clone (dev AI key pair, no platform key file needed). — **pending gate:** `pnpm verify:prod` is still running. The phase-1 run had `pnpm e2e` 6 passed / 1 skipped / 1 failed (Windows Defender quarantined `.e2e-data/static/packed_like.bin`); 4222bdd moved the samples into a Docker volume. A separate fresh-clone run was not done. — partial: `pnpm verify:prod` green 2026-11-06 on existing volumes; no fresh-clone run.
 
 ## Risk Assessment
 - **The seal refactor could change bytes and orphan stored TI keys.** The pre-refactor fixture test is the guard; the wrappers keep the AAD byte for byte.

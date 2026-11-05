@@ -1,7 +1,7 @@
 ---
 phase: 11
 title: "Hardening e2e metric and gate"
-status: pending
+status: completed
 priority: P1
 effort: "10h"
 dependencies: [8, 9, 10]
@@ -100,11 +100,11 @@ Fixes found here go into the owning files one at a time, coordinated by the pare
 6. Doc reconciliation, the reviewer pass, the plan notes.
 
 ## Success Criteria
-- [ ] `pnpm verify:prod` green: the dev e2e runs the AI flow on mock; the prod e2e asserts mock refused and the analyst-worker `ENV=prod`, `running 0`.
+- [x] `pnpm verify:prod` green: the dev e2e runs the AI flow on mock; the prod e2e asserts mock refused and the analyst-worker `ENV=prod`, `running 0`. — evidence: `pnpm verify:prod` green 2026-11-06 (3572 s; API 3470 passed, web 318, dev e2e incl. ai-analyst.spec, prod e2e over TLS; phase-11 review: 0 High, its Medium/Low fixed in 75b0eca).
 - [x] The outbound-privacy test proves no internal IP, hostname, username, URL query value or credential leaves with pseudonymization on. (`test_ai_pipeline.py::test_nothing_internal_leaves_with_pseudonymization_on`)
 - [x] The sentinel key is absent everywhere listed; the role separation (TI vs AI private keys) is proven. (`test_ai_key_leak.py`, `scripts/check-ai-key-leak.mjs` "sentinel absent", `test_analyst_network.py::test_its_environment_holds_no_api_secrets_or_ti_keys`, `test_enrich_network.py::test_it_holds_no_ai_private_key`, `scripts/check-analyst-env.mjs`)
 - [x] HostileProvider invariants are at exact floors; the metric is recorded with honest provenance labels (live / replayed / fake). (`scripts/ai_eval.py`: 1220 hostile runs, 0 violations; `plans/reports/ai-metric-261105.md`)
-- [ ] The reviewer pass has no open High findings; docs are reconciled; plan notes are written.
+- [x] The reviewer pass has no open High findings; docs are reconciled; plan notes are written. — evidence: `pnpm verify:prod` green 2026-11-06 (3572 s; API 3470 passed, web 318, dev e2e incl. ai-analyst.spec, prod e2e over TLS; phase-11 review: 0 High, its Medium/Low fixed in 75b0eca).
 
 ## Risk Assessment
 - **No live key available.** The metric is then replay- or fake-only. That is acceptable for the gate but stated plainly in TESTING.md and the report.
