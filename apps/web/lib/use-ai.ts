@@ -70,12 +70,14 @@ export function useAiRuns(orgId: string, filters: AiRunFilters, enabled = true) 
 }
 
 /**
- * One run with its output read model. `keep` asks for the pseudonyms as sent instead of the
- * original internal names. Polled while active; refreshes the run lists once it ends.
+ * One run with its output read model. `keep` asks for the pseudonyms as sent; otherwise the
+ * API's default for the caller's role applies (original internal names for `evidence.write`,
+ * pseudonyms kept for viewers: `reverse` is never sent, a viewer would get 403).
+ * Polled while active; refreshes the run lists once it ends.
  */
 export function useAiRun(orgId: string, runId: string | null, keep = false) {
   const queryClient = useQueryClient();
-  const key = [...aiKeys.run(orgId, runId ?? ""), keep ? "keep" : "reverse"];
+  const key = [...aiKeys.run(orgId, runId ?? ""), keep ? "keep" : "default"];
   return useQuery({
     queryKey: key,
     queryFn: async () => {
@@ -84,7 +86,7 @@ export function useAiRun(orgId: string, runId: string | null, keep = false) {
         await api.GET("/api/v1/orgs/{org_id}/ai/runs/{run_id}", {
           params: {
             path: { org_id: orgId, run_id: runId ?? "" },
-            query: { pseudonyms: keep ? "keep" : "reverse" },
+            query: keep ? { pseudonyms: "keep" } : {},
           },
         }),
       );

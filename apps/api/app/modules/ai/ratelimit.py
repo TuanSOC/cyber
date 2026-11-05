@@ -122,7 +122,8 @@ def _positive_int(value: Any) -> int | None:
 def effective_per_minute(
     settings: Settings, provider: AiProviderName | str, org_limits: Mapping[str, Any] | None
 ) -> int:
-    """The org's per-minute limit, never above the ceiling (an org may only lower it)."""
+    """The org's per-minute limit (any value from 1 to the ceiling), else the catalog
+    default, never above the current ceiling."""
     entry = AI_CATALOG[AiProviderName(provider)]
     ceiling = settings.ai_ceilings.per_minute.get(entry.name, entry.ceilings.per_minute)
     value = _positive_int((org_limits or {}).get("per_minute"))

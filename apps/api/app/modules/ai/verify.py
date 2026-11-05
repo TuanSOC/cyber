@@ -298,7 +298,8 @@ ENUM_FIELDS = frozenset(
 def is_enum_field(name: str, value: FieldValue) -> bool:
     if isinstance(value, bool) or (isinstance(value, str) and value in ("true", "false")):
         return True
-    return name in ENUM_FIELDS or name.startswith("count.") or name.endswith("count")
+    counter = name == "count" or name.startswith("count.") or name.endswith("_count")
+    return name in ENUM_FIELDS or counter
 
 
 def anchored(claim_text: str, quote: str, *, enum_only: bool = False) -> bool:

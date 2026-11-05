@@ -719,7 +719,7 @@
       },
       "AiLimitsIn": {
         "additionalProperties": false,
-        "description": "Self-imposed limits: an org may lower them, never raise them above the ceiling.",
+        "description": "The org's own limits: an admin may set any value from 1 up to the ceiling.",
         "properties": {
           "per_minute": {
             "anyOf": [
@@ -834,7 +834,7 @@
         "type": "object"
       },
       "AiOutputOut": {
-        "description": "The verified output, display-ready: claim statuses, resolved citations, and the text\nwith pseudonyms reversed (unless `?pseudonyms=keep`).",
+        "description": "The verified output, display-ready: claim statuses, resolved citations, and the text\nwith pseudonyms reversed for `evidence.write` members (unless `?pseudonyms=keep`),\nalways kept for viewers.",
         "properties": {
           "attack_techniques": {
             "items": {
@@ -10423,7 +10423,7 @@
     },
     "/api/v1/orgs/{org_id}/ai/runs/{run_id}": {
       "get": {
-        "description": "The run with its output read model when completed: claim statuses, resolved\ncitations (deep links for verified ones only) and pseudonyms reversed unless `keep`.",
+        "description": "The run with its output read model when completed: claim statuses, resolved\ncitations (deep links for verified ones only) and pseudonyms. Reversing them to the\noriginal internal values needs `evidence.write` (the default for analysts and up unless\n`keep`); viewers always get them kept as sent (403 on an explicit `reverse`).",
         "operationId": "get_ai_run_api_v1_orgs__org_id__ai_runs__run_id__get",
         "parameters": [
           {
@@ -10451,13 +10451,19 @@
             "name": "pseudonyms",
             "required": false,
             "schema": {
-              "default": "reverse",
-              "enum": [
-                "reverse",
-                "keep"
+              "anyOf": [
+                {
+                  "enum": [
+                    "reverse",
+                    "keep"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
               ],
-              "title": "Pseudonyms",
-              "type": "string"
+              "title": "Pseudonyms"
             }
           }
         ],

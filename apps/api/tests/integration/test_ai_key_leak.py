@@ -59,8 +59,9 @@ def needles(key: str = MOCK_KEY) -> list[str]:
 
 
 def assert_absent(where: str, value: str) -> None:
-    for needle in needles():
-        assert needle not in value, f"the AI key leaked into {where}"
+    """Fails naming the location only: the sentinel and the value are never echoed."""
+    leaked = any(needle in value for needle in needles())
+    assert not leaked, f"{where} contains the sentinel"
 
 
 @pytest.fixture
@@ -130,7 +131,7 @@ async def test_the_key_never_leaves_its_sealed_columns(sent: SentJobs, broker: R
         ]
     for url in urls:
         response = await reg.client.get(url)
-        assert response.status_code == 200, (url, response.text)
+        assert response.status_code == 200, (url, response.status_code)
         assert_absent(url, response.text)
     providers = (await reg.client.get(f"{base}/ai/providers")).json()["items"]
     mock = next(p for p in providers if p["name"] == "mock")

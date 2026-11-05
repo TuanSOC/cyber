@@ -19,11 +19,14 @@ import {
   pseudonymizationText,
   taskLabel,
 } from "@/lib/ai";
+import { useOrg } from "@/lib/org-context";
 import { useAiRun } from "@/lib/use-ai";
 
 /**
  * One run: banner, state (spinner / waiting / refused / failure), the truncation and
  * pseudonymization notes, the output with a "names as sent" toggle, and the footer.
+ * Original internal names need `evidence.write` (analysts and up): viewers always get the
+ * pseudonyms as sent (the API answers 403 to `reverse`), so the toggle is not offered to them.
  */
 export function RunView({
   orgId,
@@ -50,8 +53,10 @@ export function RunView({
   /** Extra content between the output and the footer (e.g. per-job digests). */
   children?: (run: AiRunDetail) => ReactNode;
 }) {
+  const { can } = useOrg();
+  const canReverse = can("evidence.write");
   const [keep, setKeep] = useState(false);
-  const query = useAiRun(orgId, runId, keep);
+  const query = useAiRun(orgId, runId, keep || !canReverse);
   const run = query.data;
 
   if (query.isError) return <QueryError error={query.error} onRetry={() => void query.refetch()} />;
@@ -89,17 +94,21 @@ export function RunView({
       <OutputNotes notes={notes} />
       {hasOutput(run.status) && run.output && (
         <>
-          <div className="flex items-center gap-2 text-xs">
-            <input
-              id={`keep-${run.id}`}
-              type="checkbox"
-              checked={keep}
-              onChange={(event) => setKeep(event.target.checked)}
-            />
-            <Label htmlFor={`keep-${run.id}`} className="text-xs font-normal">
-              Show internal names as pseudonyms (as sent to the provider)
-            </Label>
-          </div>
+          {canReverse ? (
+            <div className="flex items-center gap-2 text-xs">
+              <input
+                id={`keep-${run.id}`}
+                type="checkbox"
+                checked={keep}
+                onChange={(event) => setKeep(event.target.checked)}
+              />
+              <Label htmlFor={`keep-${run.id}`} className="text-xs font-normal">
+                Show internal names as pseudonyms (as sent to the provider)
+              </Label>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Internal names are shown as pseudonyms (as sent to the provider).</p>
+          )}
           <AnalysisOutput
             orgId={orgId}
             output={run.output}

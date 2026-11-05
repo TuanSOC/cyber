@@ -138,7 +138,7 @@ class AiProviderConfig(UUIDPk, Base):
     )
     verified_at: Mapped[datetime | None]
     last_error_code: Mapped[str | None] = mapped_column(String(64))
-    # Org-lowered limits ({per_minute}); never above the catalog / AI_CEILINGS ceilings.
+    # The org's own limits ({per_minute}); never above the catalog / AI_CEILINGS ceilings.
     limits: Mapped[dict[str, Any]] = mapped_column(server_default="{}", default=dict)
     terms_ack_at: Mapped[datetime | None]
     terms_ack_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))

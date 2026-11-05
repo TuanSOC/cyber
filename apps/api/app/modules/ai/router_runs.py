@@ -1,7 +1,7 @@
 """AI analyst run routes (M5 phase 7; registered via `router.py`).
 
-Requests, previews and revealing a context's pseudonym map need `evidence.write`, reads
-`evidence.read`. A new run answers 202;
+Requests, previews, revealing a context's pseudonym map and reversing an output's
+pseudonyms need `evidence.write`, reads `evidence.read`. A new run answers 202;
 an identical active or completed run (deduplicated) answers 200.
 """
 
@@ -84,11 +84,14 @@ async def list_ai_runs(
 async def get_ai_run(
     run_id: uuid.UUID,
     ctx: EvidenceRead,
-    pseudonyms: Literal["reverse", "keep"] = "reverse",
+    pseudonyms: Literal["reverse", "keep"] | None = None,
 ) -> AiRunDetail:
     """The run with its output read model when completed: claim statuses, resolved
-    citations (deep links for verified ones only) and pseudonyms reversed unless `keep`."""
-    return await service.get_run(ctx, run_id, keep_pseudonyms=pseudonyms == "keep")
+    citations (deep links for verified ones only) and pseudonyms. Reversing them to the
+    original internal values needs `evidence.write` (the default for analysts and up unless
+    `keep`); viewers always get them kept as sent (403 on an explicit `reverse`)."""
+    keep = None if pseudonyms is None else pseudonyms == "keep"
+    return await service.get_run(ctx, run_id, keep_pseudonyms=keep)
 
 
 @router.get("/ai/runs/{run_id}/context", response_model=AiRunContextOut)

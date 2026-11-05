@@ -1,7 +1,7 @@
 """Role x route matrix for every AI analyst route (M5 phase 7): viewers read (status, runs,
-outputs, the pseudonymized context, usage; never a secret), analysts also preview, request
-runs and reveal a context's pseudonym map, admins and owners also manage providers and AI
-settings."""
+outputs with pseudonyms kept, the pseudonymized context, usage; never a secret), analysts
+also preview, request runs, reverse an output's pseudonyms and reveal a context's pseudonym
+map, admins and owners also manage providers and AI settings."""
 
 import uuid
 from collections.abc import Callable
@@ -43,6 +43,16 @@ def _routes() -> list[tuple[str, str, Call]]:
         (READ, "usage", lambda c, b, ids: c.get(f"{b}/ai/usage")),
         (READ, "list runs", lambda c, b, ids: c.get(f"{b}/ai/runs")),
         (READ, "get run", lambda c, b, ids: c.get(f"{b}/ai/runs/{ids['run']}")),
+        (
+            READ,
+            "get run kept",
+            lambda c, b, ids: c.get(f"{b}/ai/runs/{ids['run']}", params={"pseudonyms": "keep"}),
+        ),
+        (
+            WRITE,
+            "get run reversed",
+            lambda c, b, ids: c.get(f"{b}/ai/runs/{ids['run']}", params={"pseudonyms": "reverse"}),
+        ),
         (READ, "get context", lambda c, b, ids: c.get(f"{b}/ai/runs/{ids['run']}/context")),
         (
             WRITE,

@@ -1,6 +1,7 @@
 """The output read model (M5 phase 7): claim statuses, citations resolved from the stored
-rows, deep links for verified citations only, pseudonyms reversed vs kept, canary-leak
-bodies never returned, refusal categories and incident child summaries (RT23)."""
+rows, deep links for verified citations only, pseudonyms reversed vs kept (reversed for
+analysts and up only, always kept for viewers), canary-leak bodies never returned, refusal
+categories and incident child summaries (RT23)."""
 
 import json
 import uuid
@@ -22,6 +23,7 @@ from app.modules.ai.contracts import (
 )
 from app.modules.ai.service_outputs import reverser
 from app.modules.analysis.models import AnalysisJob
+from app.modules.organizations.models import MemberRole
 from app.modules.pcap_analysis.models import NetworkRecord, TimelineEntry
 from tests.ai_api_helpers import (
     API,
@@ -37,7 +39,7 @@ from tests.ai_api_helpers import (
 )
 from tests.ai_doubles import make_context
 from tests.ai_helpers import seed_job
-from tests.factories import Registered, register
+from tests.factories import Registered, add_member, login, make_user, register, unique_email
 
 BODY: dict[str, Any] = {
     "observed": [
@@ -251,6 +253,41 @@ async def test_pseudonyms_are_reversed_unless_kept(sent: AiSent) -> None:
     kept = (await owner.client.get(url, params={"pseudonyms": "keep"})).json()["output"]
     assert kept["pseudonyms"] == "kept" and "10.0.2.20" not in json.dumps(kept)
     assert kept["observed"][0]["text"] == BODY["observed"][0]["text"]
+
+
+async def test_viewers_always_get_pseudonyms_kept(sent: AiSent) -> None:
+    """Reversing needs `evidence.write`: a viewer never sees an original internal value in
+    the output (texts or citation quotes), and asking for `reverse` is a 403 (no way to
+    diff `reverse` against `keep` and rebuild the map)."""
+    owner = await register()
+    await enable_ai(owner.client, owner.org_id)
+    run_id, _, _ = await _completed(owner)
+    url = f"{API}/{owner.org_id}/ai/runs/{run_id}"
+    viewer_email = unique_email("viewer")
+    await add_member(owner.org_id, await make_user(viewer_email), MemberRole.VIEWER)
+    viewer = await login(viewer_email)
+
+    shown = await viewer.get(url)
+    assert shown.status_code == 200, shown.text
+    out = shown.json()["output"]
+    assert out["pseudonyms"] == "kept"
+    assert "10.0.2.20" not in shown.text
+    assert out["observed"][0]["text"] == BODY["observed"][0]["text"]
+    assert out["observed"][0]["citations"][0]["quote"] == "Periodic beacon from INT_IP_1"
+    kept = await viewer.get(url, params={"pseudonyms": "keep"})
+    assert kept.status_code == 200 and "10.0.2.20" not in kept.text
+    assert kept.json()["output"] == out
+    denied = await viewer.get(url, params={"pseudonyms": "reverse"})
+    assert denied.status_code == 403
+    assert "10.0.2.20" not in denied.text
+
+    analyst_email = unique_email("analyst")
+    await add_member(owner.org_id, await make_user(analyst_email), MemberRole.ANALYST)
+    analyst = await login(analyst_email)
+    for params in ({}, {"pseudonyms": "reverse"}):
+        reversed_ = (await analyst.get(url, params=params)).json()["output"]
+        assert reversed_["pseudonyms"] == "reversed"
+        assert reversed_["observed"][0]["citations"][0]["quote"] == "Periodic beacon from 10.0.2.20"
 
 
 async def test_timeline_time_comes_from_the_first_verified_cited_row(sent: AiSent) -> None:

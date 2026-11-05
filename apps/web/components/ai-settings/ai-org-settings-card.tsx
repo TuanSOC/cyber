@@ -36,6 +36,7 @@ import {
   normalizeCidr,
   normalizeSuffix,
   parseBudget,
+  privacyAckRetry,
   usableAiProviders,
 } from "@/lib/ai-settings";
 import { api, unwrap } from "@/lib/api";
@@ -129,20 +130,23 @@ export function AiOrgSettingsPanel({
   const ackBy = useMemberName(orgId, s.privacy_ack_by);
   const editable = canManage;
 
+  const askPrivacyAck = (change: AiSettingsUpdate) => {
+    save.reset();
+    setAckChecked(false);
+    setPendingChange(change);
+  };
+
   const apply = (change: AiSettingsUpdate, done: string) => {
     if (needsPrivacyAck(s, change)) {
-      save.reset();
-      setAckChecked(false);
-      setPendingChange(change);
+      askPrivacyAck(change);
       return;
     }
     save.mutate(change, {
       onSuccess: () => toast.success(done),
       onError: (error) => {
-        if (hasErrorCode(error, "privacy_not_acknowledged")) {
-          setAckChecked(false);
-          setPendingChange(change);
-        }
+        // A widening the client did not predict: the API refused it, ask for the acknowledgement.
+        const retry = privacyAckRetry(error, change);
+        if (retry) askPrivacyAck(retry);
       },
     });
   };
@@ -260,7 +264,7 @@ export function AiOrgSettingsPanel({
           <p>Add your organization&apos;s address ranges and domain suffixes; other names are sent as they are.</p>
         </div>
         {editable ? (
-          <ListsForm key={s.updated_at ?? "new"} orgId={orgId} settings={s} />
+          <ListsForm key={s.updated_at ?? "new"} orgId={orgId} settings={s} onNeedsAck={askPrivacyAck} />
         ) : (
           <div className="flex flex-col gap-2">
             <ReadOnlyList label="Internal CIDRs" values={s.internal_cidrs} />
@@ -403,7 +407,16 @@ function ReadOnlyList({ label, values }: { label: string; values: readonly strin
   );
 }
 
-function ListsForm({ orgId, settings: s }: { orgId: string; settings: AiSettings }) {
+/** Removing an entry pseudonymizes less (RT22): it goes through the privacy acknowledgement (`onNeedsAck`). */
+function ListsForm({
+  orgId,
+  settings: s,
+  onNeedsAck,
+}: {
+  orgId: string;
+  settings: AiSettings;
+  onNeedsAck: (change: AiSettingsUpdate) => void;
+}) {
   const save = useSaveSettings(orgId);
   const [cidrs, setCidrs] = useState<string[]>(s.internal_cidrs);
   const [suffixes, setSuffixes] = useState<string[]>(s.internal_suffixes);
@@ -419,10 +432,22 @@ function ListsForm({ orgId, settings: s }: { orgId: string; settings: AiSettings
       className="flex flex-col gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        save.mutate(
-          { internal_cidrs: cidrs, internal_suffixes: suffixes },
-          { onSuccess: () => toast.success("Internal networks and domains saved") },
-        );
+        const change: AiSettingsUpdate = { internal_cidrs: cidrs, internal_suffixes: suffixes };
+        if (needsPrivacyAck(s, change)) {
+          save.reset();
+          onNeedsAck(change);
+          return;
+        }
+        save.mutate(change, {
+          onSuccess: () => toast.success("Internal networks and domains saved"),
+          onError: (error) => {
+            const retry = privacyAckRetry(error, change);
+            if (retry) {
+              save.reset();
+              onNeedsAck(retry);
+            }
+          },
+        });
       }}
     >
       <TagInput

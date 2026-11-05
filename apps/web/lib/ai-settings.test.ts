@@ -21,6 +21,7 @@ import {
   normalizeCidr,
   normalizeSuffix,
   parseBudget,
+  privacyAckRetry,
   unavailableText,
   usableAiProviders,
   usedPercent,
@@ -129,6 +130,8 @@ describe("privacy", () => {
     include_strings: false,
     include_ti: true,
     include_case_text: false,
+    internal_cidrs: ["10.20.0.0/16", "192.168.50.0/24"],
+    internal_suffixes: ["corp.example.org"],
   };
 
   it("re-acknowledgement only when the disclosure widens (RT22)", () => {
@@ -137,10 +140,31 @@ describe("privacy", () => {
     expect(needsPrivacyAck(current, { include_case_text: true })).toBe(true);
     expect(needsPrivacyAck(current, { pseudonymize_internal: false })).toBe(true);
     expect(needsPrivacyAck(current, { include_ti: false })).toBe(false);
-    expect(needsPrivacyAck(current, { include_ti: true })).toBe(false);
+    expect(needsPrivacyAck(current, { include_ti: true })).toBe(false); // already on
+    expect(needsPrivacyAck({ ...current, include_ti: false }, { include_ti: true })).toBe(true);
     expect(needsPrivacyAck(current, { ai_enabled: false })).toBe(false);
     expect(needsPrivacyAck(current, { daily_token_budget: 5 })).toBe(false);
     expect(needsPrivacyAck({ ...current, include_strings: true }, { include_strings: true })).toBe(false);
+  });
+
+  it("re-acknowledgement when an internal CIDR or suffix is removed, never when one is added", () => {
+    const cidrs = current.internal_cidrs;
+    expect(needsPrivacyAck(current, { internal_cidrs: ["10.20.0.0/16"] })).toBe(true);
+    expect(needsPrivacyAck(current, { internal_cidrs: [] })).toBe(true);
+    expect(needsPrivacyAck(current, { internal_suffixes: [] })).toBe(true);
+    expect(needsPrivacyAck(current, { internal_cidrs: [...cidrs, "172.16.0.0/12"] })).toBe(false);
+    expect(needsPrivacyAck(current, { internal_suffixes: ["corp.example.org", "lab.example.org"] })).toBe(false);
+    expect(needsPrivacyAck(current, { internal_cidrs: [...cidrs].reverse() })).toBe(false); // reordered
+    expect(needsPrivacyAck(current, { internal_cidrs: null, internal_suffixes: null })).toBe(false);
+    // Swapping an entry removes one: needs the acknowledgement even though the count is the same.
+    expect(needsPrivacyAck(current, { internal_suffixes: ["lab.example.org"] })).toBe(true);
+  });
+
+  it("asks for the acknowledgement again when the API answers 422 privacy_not_acknowledged", () => {
+    const change = { internal_cidrs: ["10.20.0.0/16"] };
+    expect(privacyAckRetry(new ApiError(422, "privacy_not_acknowledged", "x"), change)).toBe(change);
+    expect(privacyAckRetry(new ApiError(422, "budget_above_ceiling", "x"), change)).toBeNull();
+    expect(privacyAckRetry(new Error("network"), change)).toBeNull();
   });
 
   it("lists the categories that leave under the next settings", () => {

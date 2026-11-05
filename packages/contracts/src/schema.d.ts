@@ -297,7 +297,9 @@ export interface paths {
         /**
          * Get Ai Run
          * @description The run with its output read model when completed: claim statuses, resolved
-         *     citations (deep links for verified ones only) and pseudonyms reversed unless `keep`.
+         *     citations (deep links for verified ones only) and pseudonyms. Reversing them to the
+         *     original internal values needs `evidence.write` (the default for analysts and up unless
+         *     `keep`); viewers always get them kept as sent (403 on an explicit `reverse`).
          */
         get: operations["get_ai_run_api_v1_orgs__org_id__ai_runs__run_id__get"];
         put?: never;
@@ -1348,7 +1350,7 @@ export interface components {
         };
         /**
          * AiLimitsIn
-         * @description Self-imposed limits: an org may lower them, never raise them above the ceiling.
+         * @description The org's own limits: an admin may set any value from 1 up to the ceiling.
          */
         AiLimitsIn: {
             /** Per Minute */
@@ -1395,7 +1397,8 @@ export interface components {
         /**
          * AiOutputOut
          * @description The verified output, display-ready: claim statuses, resolved citations, and the text
-         *     with pseudonyms reversed (unless `?pseudonyms=keep`).
+         *     with pseudonyms reversed for `evidence.write` members (unless `?pseudonyms=keep`),
+         *     always kept for viewers.
          */
         AiOutputOut: {
             /** Attack Techniques */
@@ -5019,7 +5022,7 @@ export interface operations {
     get_ai_run_api_v1_orgs__org_id__ai_runs__run_id__get: {
         parameters: {
             query?: {
-                pseudonyms?: "reverse" | "keep";
+                pseudonyms?: ("reverse" | "keep") | null;
             };
             header?: never;
             path: {

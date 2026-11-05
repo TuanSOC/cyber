@@ -90,7 +90,7 @@ class InvalidApiKey(AppError):
 class LimitAboveCeiling(AppError):
     status_code = 422
     code = "limit_above_ceiling"
-    message = "Limits may only be lowered, never raised above the provider's ceiling"
+    message = "Limits may not be set above the provider's ceiling"
 
 
 class ProviderNotConfigured(Conflict):
@@ -128,11 +128,13 @@ def per_minute_ceiling(settings: Settings, provider: AiProviderName) -> int:
     return settings.ai_ceilings.per_minute.get(entry.name, entry.ceilings.per_minute)
 
 
-def _org_limits(raw: dict[str, Any] | None) -> AiLimitsOut | None:
+def _org_limits(raw: dict[str, Any] | None, ceiling: int) -> AiLimitsOut | None:
+    """The org's own limit as the worker applies it: a value stored under a higher ceiling
+    shows the current (lowered) ceiling, never more."""
     minute = (raw or {}).get("per_minute")
     if isinstance(minute, bool) or not isinstance(minute, int) or minute < 1:
         return None
-    return AiLimitsOut(per_minute=minute)
+    return AiLimitsOut(per_minute=min(minute, ceiling))
 
 
 def _checked_limits(
@@ -149,6 +151,7 @@ def to_out(
     entry = AI_CATALOG[provider]
     available, reason = provider_available(settings, provider)
     configured = config is not None and config.key_ct is not None
+    ceiling = per_minute_ceiling(settings, provider)
     return AiProviderOut(
         name=provider,
         label=entry.label,
@@ -184,8 +187,8 @@ def to_out(
         terms_ack_at=config.terms_ack_at if config is not None else None,
         paid_tier_ack_at=config.paid_tier_ack_at if config is not None else None,
         default_limits=AiLimitsOut(per_minute=entry.default_limits.per_minute),
-        ceilings=AiLimitsOut(per_minute=per_minute_ceiling(settings, provider)),
-        limits=_org_limits(config.limits) if config is not None else None,
+        ceilings=AiLimitsOut(per_minute=ceiling),
+        limits=_org_limits(config.limits, ceiling) if config is not None else None,
     )
 
 

@@ -225,6 +225,9 @@ async def test_an_org_sets_its_own_request_limit_within_the_ceiling(
     assert above.status_code == 422 and above.json()["error"]["code"] == "limit_above_ceiling"
     shown = _entry((await owner.client.get(f"{API}/{owner.org_id}/ai/providers")).json(), "mock")
     assert shown["ceilings"] == {"per_minute": 4}
+    # The stored 5 is shown as applied: capped by the lowered ceiling.
+    assert shown["limits"] == {"per_minute": 4}
+    assert (await _config(owner.org_id)).limits == {"per_minute": 5}
     for bad in ({"per_minute": 0}, {"per_minute": "x"}, {"per_day": 5}):
         invalid = await put_provider(owner.client, owner.org_id, limits=bad)
         assert invalid.status_code == 422, bad

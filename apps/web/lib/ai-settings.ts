@@ -153,14 +153,41 @@ export const PSEUDONYMIZED_KINDS = [
   "user names in C:\\Users\\… and /home/… paths, PDB paths and internal email local parts",
 ] as const;
 
-/** Whether a settings change widens the disclosure: AI turned on, strings or case text turned on, or pseudonymization turned off (RT22). */
-export function needsPrivacyAck(current: AiInclusions & { ai_enabled: boolean }, change: AiSettingsUpdate): boolean {
+/** The current settings `needsPrivacyAck` compares a change against. */
+export type AiDisclosure = AiInclusions &
+  Pick<AiSettings, "ai_enabled"> & {
+    internal_cidrs: readonly string[];
+    internal_suffixes: readonly string[];
+  };
+
+/** A list change that drops an entry (less is pseudonymized); adding entries never widens. */
+function removesEntry(current: readonly string[], next: readonly string[] | null | undefined): boolean {
+  return next != null && current.some((entry) => !next.includes(entry));
+}
+
+/**
+ * Whether a settings change widens the disclosure (RT22), mirroring the API's `_widens`: AI
+ * turned on, strings, threat intel or case text turned on, pseudonymization turned off, or an
+ * internal CIDR / suffix removed.
+ */
+export function needsPrivacyAck(current: AiDisclosure, change: AiSettingsUpdate): boolean {
   return (
     (change.ai_enabled === true && !current.ai_enabled) ||
     (change.include_strings === true && !current.include_strings) ||
+    (change.include_ti === true && !current.include_ti) ||
     (change.include_case_text === true && !current.include_case_text) ||
-    (change.pseudonymize_internal === false && current.pseudonymize_internal)
+    (change.pseudonymize_internal === false && current.pseudonymize_internal) ||
+    removesEntry(current.internal_cidrs, change.internal_cidrs) ||
+    removesEntry(current.internal_suffixes, change.internal_suffixes)
   );
+}
+
+/**
+ * The change to ask the privacy acknowledgement for when the API refused it with
+ * `422 privacy_not_acknowledged` (a widening `needsPrivacyAck` did not predict), else null.
+ */
+export function privacyAckRetry(error: unknown, change: AiSettingsUpdate): AiSettingsUpdate | null {
+  return hasErrorCode(error, "privacy_not_acknowledged") ? change : null;
 }
 
 export const INCLUSION_LABELS: Record<AiInclusionKey, { label: string; hint: string }> = {

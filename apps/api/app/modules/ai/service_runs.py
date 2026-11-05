@@ -419,7 +419,21 @@ def _flags(raw: Sequence[Any]) -> list[OutputFlag]:
     return out
 
 
-async def get_run(ctx: OrgContext, run_id: uuid.UUID, *, keep_pseudonyms: bool) -> AiRunDetail:
+def _may_reverse(ctx: OrgContext) -> bool:
+    """Showing original internal values (reversed pseudonyms, the map) needs `evidence.write`."""
+    return Permission.EVIDENCE_WRITE in ROLE_PERMISSIONS[ctx.role]
+
+
+async def get_run(
+    ctx: OrgContext, run_id: uuid.UUID, *, keep_pseudonyms: bool | None = None
+) -> AiRunDetail:
+    """The run and its output read model. Pseudonyms are reversed to the original internal
+    values for `evidence.write` members only (the default for them unless `keep`); a viewer
+    always gets them kept as sent, and an explicit reverse request from one is a 403."""
+    may_reverse = _may_reverse(ctx)
+    if keep_pseudonyms is False and not may_reverse:
+        raise Forbidden()
+    keep = not may_reverse if keep_pseudonyms is None else keep_pseudonyms
     found = await repository.get_run_row(ctx.session, ctx.org_id, run_id)
     if found is None:
         raise NotFound()
@@ -436,10 +450,10 @@ async def get_run(ctx: OrgContext, run_id: uuid.UUID, *, keep_pseudonyms: bool) 
     if output is not None and final_ok and not withheld:
         rows = await repository.citations_of(ctx.session, ctx.org_id, output.id)
         links = await service_outputs.LinkContext.load(ctx.session, ctx.org_id, rows)
-        mapping = {} if keep_pseudonyms else await _pseudonym_map(ctx, run)
+        mapping = {} if keep else await _pseudonym_map(ctx, run)
         times = await service_outputs.timeline_times(ctx.session, ctx.org_id, run.id, rows)
         body = service_outputs.build(
-            output, rows, links, mapping, keep_pseudonyms=keep_pseudonyms, times=times
+            output, rows, links, mapping, keep_pseudonyms=keep, times=times
         )
     child_runs = []
     for child, child_flags in children:
@@ -476,7 +490,7 @@ async def get_context(
     (`ai.context_revealed`: the run and the actor, never a name; the caller commits).
     Revealing needs `evidence.write` (analyst and up): a viewer reads the pseudonymized
     context only (403 otherwise)."""
-    if reveal and Permission.EVIDENCE_WRITE not in ROLE_PERMISSIONS[ctx.role]:
+    if reveal and not _may_reverse(ctx):
         raise Forbidden()
     found = await repository.get_run_row(ctx.session, ctx.org_id, run_id)
     if found is None:

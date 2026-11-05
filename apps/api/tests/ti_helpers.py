@@ -292,5 +292,5 @@ async def assert_key_absent(t: Tenant, key: str) -> None:
                     text(f"SELECT coalesce(string_agg(t::text, ''), '') FROM {table} t")
                 )
             ).scalar_one()
-            assert key not in dump, table
-            assert key[-12:] not in dump, table
+            leaked = key in dump or key[-12:] in dump
+            assert not leaked, f"{table} contains the sentinel"

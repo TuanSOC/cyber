@@ -118,7 +118,7 @@ class AiLimitsOut(BaseModel):
 
 
 class AiLimitsIn(_In):
-    """Self-imposed limits: an org may lower them, never raise them above the ceiling."""
+    """The org's own limits: an admin may set any value from 1 up to the ceiling."""
 
     per_minute: int | None = Field(default=None, ge=1, le=1_000_000)
 
@@ -151,7 +151,7 @@ class AiProviderOut(BaseModel):
     default_limits: AiLimitsOut
     # The catalog ceiling, or the operator's `AI_CEILINGS.per_minute` override.
     ceilings: AiLimitsOut
-    # The org's own (lowered) limits, if any.
+    # The org's own limits, if any, as applied (capped by the current ceiling).
     limits: AiLimitsOut | None
 
 
@@ -462,7 +462,8 @@ class AiVerificationOut(BaseModel):
 
 class AiOutputOut(BaseModel):
     """The verified output, display-ready: claim statuses, resolved citations, and the text
-    with pseudonyms reversed (unless `?pseudonyms=keep`)."""
+    with pseudonyms reversed for `evidence.write` members (unless `?pseudonyms=keep`),
+    always kept for viewers."""
 
     observed: list[AiClaimOut]
     interpretation: list[AiClaimOut]

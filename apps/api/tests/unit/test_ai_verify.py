@@ -724,6 +724,9 @@ async def test_enum_field_quotes_anchor_only_through_structured_tokens(
         ("anything", "false", True),
         ("count.flows", 47, True),
         ("dns_count", 3, True),
+        ("count", 12, True),
+        ("account", "svc-backup", False),  # ends with "count", is not a counter
+        ("discount", 3, False),
         ("detection_method", "heuristic:beaconing@1", False),
         ("signature", "ET MALWARE beacon", False),
         ("sid", 2000001, False),

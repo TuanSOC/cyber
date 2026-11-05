@@ -50,11 +50,11 @@ async def _ciphertexts(org_id: uuid.UUID, provider: str = "mock") -> list[str]:
 
 
 def _assert_clean(text: str, where: str, ciphertexts: list[str]) -> None:
-    assert SENTINEL_KEY not in text, where
-    assert SENTINEL_KEY[:12] not in text, where
-    assert "TEST-SENTINEL-KEY" not in text, where
-    for ct in ciphertexts:
-        assert ct not in text, where
+    """Fails naming the location only: the sentinel, ciphertexts and text are never echoed."""
+    leaked = any(n in text for n in (SENTINEL_KEY, SENTINEL_KEY[:12], "TEST-SENTINEL-KEY"))
+    assert not leaked, f"{where} contains the sentinel"
+    sealed = any(ct in text for ct in ciphertexts)
+    assert not sealed, f"{where} contains a key ciphertext"
 
 
 def test_the_crawl_covers_every_route_outside_an_org() -> None:
@@ -131,10 +131,10 @@ async def test_failed_puts_never_echo_the_key() -> None:
         {"api_key": f"{SENTINEL_KEY}\x00"},
         {"api_key": SENTINEL_KEY * 8},
     ]
-    for body in bodies:
+    for n, body in enumerate(bodies):
         response = await put_integration(owner.client, owner.org_id, **body)
-        assert response.status_code in (400, 409, 422), (body, response.status_code)
-        _assert_clean(response.text, str(body)[:60], ciphertexts)
+        assert response.status_code in (400, 409, 422), (f"body #{n}", response.status_code)
+        _assert_clean(response.text, f"the answer to body #{n}", ciphertexts)
     for provider, body in (
         ("misp", {"api_key": SENTINEL_KEY, "base_url": f"https://u:{SENTINEL_KEY}@misp.x.net"}),
         ("misp", {"api_key": SENTINEL_KEY, "base_url": f"https://misp.x.net/?k={SENTINEL_KEY}"}),
@@ -142,7 +142,7 @@ async def test_failed_puts_never_echo_the_key() -> None:
         ("nope", {"api_key": SENTINEL_KEY}),
     ):
         response = await put_integration(owner.client, owner.org_id, provider, **body)
-        assert response.status_code == 422, (provider, response.text[:200])
+        assert response.status_code == 422, (provider, response.status_code)
         _assert_clean(response.text, provider, ciphertexts)
     # Malformed JSON with the key in it.
     raw = await owner.client.put(
