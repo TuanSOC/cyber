@@ -1168,7 +1168,7 @@ export interface paths {
         };
         /**
          * List Status Events
-         * @description Status history of the case, newest first (M6 phase 2; 501 until then).
+         * @description Status history of the case, newest first, with the actor's display name (M6).
          */
         get: operations["list_status_events_api_v1_orgs__org_id__investigations__investigation_id__status_events_get"];
         put?: never;
@@ -1559,7 +1559,8 @@ export interface paths {
         /**
          * Get Version Content
          * @description The stored snapshot for the viewer (inline, `no-store`), re-hashed (`409
-         *     integrity_failed`); not audited per view (RT11).
+         *     integrity_failed`); not audited per view (RT11). The verified canonical bytes are served
+         *     as stored (they are the `ReportSnapshot` JSON).
          */
         get: operations["get_version_content_api_v1_orgs__org_id__reports__report_id__versions__version__content_get"];
         put?: never;

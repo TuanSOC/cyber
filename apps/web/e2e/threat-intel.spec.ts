@@ -50,6 +50,8 @@ async function newInvestigationWith(page: Page, title: string, files: string[]):
   await dialog.getByRole("button", { name: "Create" }).click();
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
   for (const file of files) {
+    // M6: the uploader lives in the case workspace's Evidence tab.
+    await page.getByRole("tablist", { name: "Case sections" }).getByRole("tab", { name: "Evidence", exact: true }).click();
     await page.locator('input[type="file"]').setInputFiles(file);
     const name = file.split("/").at(-1) as string;
     await expect(page.getByRole("row").filter({ hasText: name }).first()).toBeVisible();

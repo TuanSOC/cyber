@@ -1,6 +1,7 @@
 """The render subprocess sandbox (RT3, RT4): uid 10004 (its own, review L6), `python -I -B`
 from the venv, an environment without the broker URL, AF_UNIX sockets only (every other
-family `EACCES`, review L5) and no io_uring (`EACCES`), rlimits, the wall timeout, and `reset` killing leftovers.
+family `EACCES`, review L5) and no io_uring (`EACCES`), rlimits, the wall timeout, and
+`reset` killing leftovers.
 
 Each probe runs through `report_worker.sandbox.run`, the exact configuration of a render,
 and reports through a JSON file in its out/ dir (its HOME / TMPDIR).

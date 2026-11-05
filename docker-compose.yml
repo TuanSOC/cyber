@@ -480,8 +480,9 @@ services:
       redis-broker:
         condition: service_healthy
 
-  # Report renderer (M6): consumes `report.render` (queue `report`), answers `report.rendered`
-  # on `ingest`. Phase 1 skeleton: every render fails `not_implemented`.
+  # Report renderer (M6): consumes `report.render` (queue `report`), renders the signed
+  # snapshot in its sandboxed subprocess, uploads the artifact through the presigned POST
+  # and answers `report.rendered` on `ingest` (the ingest worker re-hashes and records it).
   report-worker:
     <<: *report-worker
     environment:

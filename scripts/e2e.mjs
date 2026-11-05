@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// `pnpm e2e` (add `--prod` for the prod-like stack over TLS): Playwright golden path against
+// `pnpm e2e` (add `--prod` for the prod-like stack over TLS; name filters run only the matching
+// specs, e.g. `pnpm e2e reports`): Playwright golden path against
 // the running stack. Each run registers a fresh user, so the per-IP register rate limit is
 // cleared first; that is the only state this touches besides the data the test itself creates.
 import { spawnSync } from "node:child_process";
@@ -69,9 +70,16 @@ function clearRegisterLimit() {
     `${COMPOSE} exec -T redis redis-cli EVAL "for _,k in ipairs(redis.call('KEYS', ARGV[1])) do redis.call('DEL', k) end return 1" 0 "rl:register:*"`,
   );
 }
+// Optional name filters (`pnpm e2e reports`): only the specs whose file name contains one.
+const filters = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
 const specs = readdirSync(resolve("apps/web/e2e"))
   .filter((name) => name.endsWith(".spec.ts"))
+  .filter((name) => !filters.length || filters.some((f) => name.includes(f)))
   .sort();
+if (!specs.length) {
+  console.error(`no e2e spec matches ${filters.join(", ")}`);
+  process.exit(1);
+}
 const BATCH = 5;
 for (let i = 0; i < specs.length; i += BATCH) {
   clearRegisterLimit();

@@ -31,6 +31,8 @@ test("a capture upload is analyzed automatically and its findings are shown", as
   await dialog.getByRole("button", { name: "Create" }).click();
   await expect(page.getByRole("heading", { name: "Synthetic capture review" })).toBeVisible();
 
+  // M6: the uploader lives in the case workspace's Evidence tab.
+  await page.getByRole("tablist", { name: "Case sections" }).getByRole("tab", { name: "Evidence", exact: true }).click();
   await page.locator('input[type="file"]').setInputFiles("/data/mixed.pcap");
   await expect(page.getByText("Uploaded and hashed").first()).toBeVisible();
 

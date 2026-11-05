@@ -89,5 +89,8 @@ def check_startup_keys() -> None:
 
 
 def reset_cache() -> None:
-    """Tests: forget the loaded keys (after changing the settings)."""
-    _private_keys.cache_clear()
+    """Tests: forget the loaded keys (after changing the settings). A test may have replaced
+    the loader with a plain stand-in (no cache to clear); the real loader is cached."""
+    clear = getattr(_private_keys, "cache_clear", None)
+    if clear is not None:
+        clear()

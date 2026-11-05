@@ -65,7 +65,7 @@ apps/api/app/
                `report.rendered` ingest and the render reaper);
                enrich_app / enrich_tasks / enrich (M4: the internet-facing enrich worker);
                analyst_app / analyst_tasks / analyst (M5: the internet-facing AI analyst worker)
-  scripts/     dump_openapi (contracts), reconcile_orphans (report-only)
+  scripts/     dump_openapi (contracts), reconcile_orphans (report-only: evidence and report objects without a row)
 ```
 
 Modules follow `models / schemas / repository / service / router`, keeping only the layers they need.
@@ -295,5 +295,6 @@ flowchart LR
 - **report-worker** (`apps/workers/report`, own image; analyzer-class): `analysis` network only, env `BROKER_URL` only (broker user `report`), root Celery process with the analyzers' capabilities, prefork with one task per child. It downloads the snapshot through a presigned GET, checks its sha256, and runs WeasyPrint in a uid-10004 subprocess (its own tool uid, not the static worker's 10003) with seccomp (AF_UNIX sockets only, no io_uring), rlimits, an empty environment and a deny-all URL fetcher. It uploads one artifact through a presigned POST and answers `report.rendered`.
 - **Trusted ingest:** `reports/render_ingest.py` takes the org from `report_render_index`, checks the per-render token, re-hashes the stored object (never parses it), sets its retention and marks the render `succeeded`. `workers/reaper.py: reap_report_renders` fails renders past their deadline and re-dispatches lost publishes.
 - **Reads:** the viewer gets the verified snapshot JSON (`GET …/versions/{v}/content`) and renders it as React text; renderer HTML is never shown in the app. Downloads are streamed by the API from the exact object version, re-hashed, audited, as sandboxed attachments.
-- **Signing keys:** the private key file is a compose secret of the api role only; public keys are published unauthenticated at `GET /api/v1/report-signing-keys` for offline verification (`scripts/verify_report.py`).
+- **Signing keys:** the private key file is a compose secret of the api role only; public keys are published unauthenticated at `GET /api/v1/report-signing-keys` for offline verification (`scripts/verify_report.py`). The prod api checks the key file, the active kid's published public half and the committed dev key at startup (`reports/signing.check_startup_keys`).
+- **Case text and AI:** notes and status reasons never enter an AI context (the builder selects the evidence-derived timeline kinds only).
 - **Web:** the case workspace (`/o/{org}/investigations/{id}`) gains Notes, IOCs (case IOCs and collections), ATT&CK, Timeline (kinds filter, export) and Reports tabs, the TLP badge and card, the share-policy card, the status control with reasons and history; evidence pages get the evidence share policy. Reports: the org list (`/o/{org}/reports`), the builder (`/o/{org}/reports/{id}`: sections, selections, preview with the render budget, finalize dialog with the acknowledgements and change note) and the version viewer (`/o/{org}/reports/{id}/v/{n}`: TLP banners, integrity strip, renders and downloads).

@@ -38,6 +38,8 @@ test("register, open a case, upload evidence, verify integrity", async ({ page }
   await expect(page.getByText(/CASE-00001/).first()).toBeVisible();
 
   // Upload evidence through the real file input.
+  // M6: the uploader lives in the case workspace's Evidence tab.
+  await page.getByRole("tablist", { name: "Case sections" }).getByRole("tab", { name: "Evidence", exact: true }).click();
   await page.locator('input[type="file"]').setInputFiles({
     name: "capture.pcap",
     mimeType: "application/octet-stream",

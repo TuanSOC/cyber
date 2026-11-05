@@ -14,7 +14,8 @@ builder (separate run trees number independently, RT2).
      and timestamp fields (`EXEMPT`); planted pseudonym-shaped text is neutralized first;
   3. a whole-token second pass replaces every original value already in the map wherever
      it occurs (single-label hosts such as `FIN-SRV-01`, bare usernames in free text);
-  4. notes, custody `ip` / `user_agent`, deep links and `base_url` are dropped, and actors and
+  4. notes (their section, the timeline's `note` entries and a cited note's copied fields),
+     custody `ip` / `user_agent`, deep links and `base_url` are dropped, and actors and
      authors become role labels.
   The map is never stored (RT29). Pattern-based redaction stays a residual (RT8).
 """
@@ -326,8 +327,16 @@ async def redact(
         item["ip"] = None
         item["user_agent"] = None
     data["notes"] = {"items": [], "total": 0}
+    # Notes leave the external profile everywhere, not only their section: the timeline's
+    # `note` entries carry the body as their title, and a cited note copies its fields.
+    timeline = data["timeline"]
+    kept = [item for item in timeline["items"] if item["kind"] != "note"]
+    timeline["total"] = max(0, timeline["total"] - (len(timeline["items"]) - len(kept)))
+    timeline["items"] = kept
     for item in data["citations"]["items"]:
         item["path"] = None
+        if item["kind"] == "note":
+            item["fields"] = {}
     labels = set(ROLE_LABELS.values()) | {FORMER_MEMBER}
 
     r = _Redactor(p)

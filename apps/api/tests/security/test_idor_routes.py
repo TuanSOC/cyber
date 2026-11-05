@@ -22,6 +22,8 @@ from httpx import AsyncClient
 
 from app.main import app
 from app.modules.organizations.models import MemberRole
+from app.modules.reports import dispatch
+from app.modules.reports import signing as report_signing
 from tests import static_results
 from tests.factories import Registered, add_member, csrf, make_user, new_client, register
 from tests.pcap_results import seed_results
@@ -194,8 +196,16 @@ def org_scoped_routes() -> set[tuple[str, str]]:
 @pytest.fixture(autouse=True)
 def _no_publish(monkeypatch: pytest.MonkeyPatch) -> None:
     """Threat intel publishes (`ti.enrich`, `ti.verify`) are captured: no live enrich worker
-    takes part in these tests (analysis jobs are still queued for real, as before)."""
+    takes part in these tests (analysis jobs are still queued for real, as before).
+
+    The M6 victim extenders may install stand-ins by plain assignment (the report signing
+    key loader, the render dispatch; `idor_cases_reports._install_stand_ins`): registering
+    the current objects with monkeypatch first restores them after every test, so no
+    stand-in outlives this module (it broke `report_signing.reset_cache` in later tests)."""
     capture_sends(monkeypatch, analyses=False)
+    monkeypatch.setattr(report_signing, "_private_keys", report_signing._private_keys)
+    monkeypatch.setattr(dispatch, "create_render", dispatch.create_render)
+    monkeypatch.setattr(dispatch, "dispatch_render", dispatch.dispatch_render)
 
 
 def test_route_enumeration_is_not_empty() -> None:

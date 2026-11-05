@@ -68,7 +68,11 @@ async def _seeded_case() -> tuple[Registered, Tenant, dict[str, Any]]:
     records = [*pcap_results.sample_records(), dns("FIN-SRV-01"), dns("files.corp", 12)]
     evidence_id, job = await pcap_job(reg, t, records, filename="FIN-SRV-01.pcap")
     await static_job(reg, t, [user_string("C:\\Users\\jdoe\\AppData\\Local\\Temp\\drop.exe")])
-    note = await seed_note(t, bodies=("NOTE-SECRET-42 seen on FIN-SRV-01",))
+    # Included in reports: the note also reaches the case timeline (a `note` entry whose
+    # title is the body), which the external profile must drop too (phase 9 e2e finding).
+    note = await seed_note(
+        t, bodies=("NOTE-SECRET-42 seen on FIN-SRV-01",), include_in_reports=True
+    )
     return reg, t, {"evidence_id": evidence_id, "job": job, "note": note}
 
 
@@ -113,6 +117,8 @@ async def test_external_leaves_no_internal_value(sent: Dispatched) -> None:
     snap = json.loads(data)
     assert snap["report"]["base_url"] is None
     assert snap["report"]["generated_by"] == "Owner"
+    assert snap["notes"]["items"] == []
+    assert [i for i in snap["timeline"]["items"] if i["kind"] == "note"] == []
     assert snap["notes"] == {"items": [], "total": 0}
     assert all(c["ip"] is None and c["user_agent"] is None for c in snap["custody"]["items"])
     assert all(c["path"] is None for c in snap["citations"]["items"])

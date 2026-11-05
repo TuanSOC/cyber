@@ -394,7 +394,9 @@ async def _is_stub(func: Any, *args: Any) -> bool:
 
 
 async def _install_stand_ins() -> None:
-    """Only while the phase-4 dispatch and the api signing key are absent (this lane)."""
+    """Only while the phase-4 dispatch and the api signing key are absent (this lane).
+    Plain assignments: `test_idor_routes._no_publish` registers the originals with
+    monkeypatch first, so they are restored after each test."""
     if await _is_stub(dispatch.dispatch_render, []):
 
         async def send(render_ids: Sequence[uuid.UUID]) -> None:

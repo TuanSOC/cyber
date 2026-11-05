@@ -74,6 +74,8 @@ async function newInvestigationWith(page: Page, title: string, file: string): Pr
 }
 
 async function upload(page: Page, file: string): Promise<void> {
+  // M6: the uploader lives in the case workspace's Evidence tab.
+  await page.getByRole("tablist", { name: "Case sections" }).getByRole("tab", { name: "Evidence", exact: true }).click();
   await page.locator('input[type="file"]').setInputFiles(file);
   const name = file.split("/").at(-1) as string;
   await expect(page.getByRole("row").filter({ hasText: name }).first()).toBeVisible();
@@ -288,7 +290,9 @@ test("dev: the mock AI analyst summarizes, cites, explains, resists a hostile ca
   // 6. The investigation's incident summary: one digest per job, then the summary.
   await page.goto(invUrl);
   await expect(page.getByRole("heading", { name: "AI analyst review" })).toBeVisible();
-  const incident = page.locator('[data-slot="card"]').filter({ hasText: "Incident summary (AI)" });
+  // M6: the incident card lives in the case workspace's AI tab.
+  await page.getByRole("tablist", { name: "Case sections" }).getByRole("tab", { name: "AI", exact: true }).click();
+  const incident =page.locator('[data-slot="card"]').filter({ hasText: "Incident summary (AI)" });
   await expect(incident.getByText("No incident summary for this case yet.")).toBeVisible();
   const incidentPreview = await previewAndRun(
     page,
