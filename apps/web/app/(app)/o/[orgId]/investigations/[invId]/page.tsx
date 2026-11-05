@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
 
+import { IncidentCard } from "@/components/ai/incident-card";
 import { InvestigationAnalyses } from "@/components/analysis/investigation-analyses";
 import { EvidenceTable } from "@/components/evidence/evidence-table";
 import { EvidenceUploader } from "@/components/evidence/evidence-uploader";
@@ -123,6 +124,7 @@ export default function InvestigationPage() {
         </CardContent>
       </Card>
       <InvestigationAnalyses orgId={orgId} investigationId={invId} />
+      <IncidentCard orgId={orgId} investigationId={invId} />
     </>
   );
 }

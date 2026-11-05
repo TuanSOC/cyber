@@ -2,27 +2,28 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useState } from "react";
 
 import { AnalysisStatusBadge } from "@/components/analysis/analysis-status-badge";
 import { AnalyzerBadge } from "@/components/analysis/analyzer-badge";
 import { FindingCount } from "@/components/analysis/finding-count";
+import { Pager } from "@/components/pager";
 import { QueryError } from "@/components/query-error";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { analysisErrorText, analysisSegment, latestPerEvidence, pollWhileActive } from "@/lib/analysis";
+import { analysisErrorText, analysisSegment, pollWhileActive } from "@/lib/analysis";
 import { api, unwrap } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { orgPath } from "@/lib/nav";
 
-// One request, never one per evidence: the newest org-wide jobs, filtered to this case.
-const RECENT = 100;
+const PAGE = 50;
 
 /**
- * Latest analysis per evidence and kind of run (PCAP, full static, AV scan) of this investigation,
- * among the org's most recent jobs.
+ * Latest analysis per evidence and kind of run (PCAP, full static, AV scan) of one case, filtered
+ * on the server (`investigation_id` + `latest_per_evidence`). Shared with the incident card.
  */
-export function InvestigationAnalyses({ orgId, investigationId }: { orgId: string; investigationId: string }) {
-  const params = { limit: RECENT, offset: 0 };
-  const recent = useQuery({
+export function useInvestigationAnalyses(orgId: string, investigationId: string, offset = 0) {
+  const params = { investigation_id: investigationId, latest_per_evidence: true, limit: PAGE, offset };
+  return useQuery({
     queryKey: ["org", orgId, "analyses", params],
     queryFn: async () =>
       unwrap(
@@ -30,13 +31,13 @@ export function InvestigationAnalyses({ orgId, investigationId }: { orgId: strin
           params: { path: { org_id: orgId }, query: params },
         }),
       ),
-    select: (page) => ({
-      items: latestPerEvidence(page.items.filter((job) => job.investigation_id === investigationId)),
-      partial: page.total > page.items.length,
-    }),
-    refetchInterval: (query) =>
-      pollWhileActive(query.state.data?.items.filter((job) => job.investigation_id === investigationId)),
+    refetchInterval: (query) => pollWhileActive(query.state.data?.items),
   });
+}
+
+export function InvestigationAnalyses({ orgId, investigationId }: { orgId: string; investigationId: string }) {
+  const [offset, setOffset] = useState(0);
+  const analyses = useInvestigationAnalyses(orgId, investigationId, offset);
 
   return (
     <Card className="mt-6">
@@ -44,18 +45,18 @@ export function InvestigationAnalyses({ orgId, investigationId }: { orgId: strin
         <CardTitle>Analyses</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {recent.isError ? (
-          <QueryError error={recent.error} onRetry={() => void recent.refetch()} />
-        ) : !recent.data ? (
+        {analyses.isError ? (
+          <QueryError error={analyses.error} onRetry={() => void analyses.refetch()} />
+        ) : !analyses.data ? (
           <p className="text-sm text-muted-foreground">Loading analyses…</p>
-        ) : recent.data.items.length === 0 ? (
+        ) : analyses.data.items.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No recent analyses for this case. Uploads are analyzed automatically: packet captures by the
-            PCAP analyzer, executables by static analysis and other files by an AV scan.
+            No analyses for this case yet. Uploads are analyzed automatically: packet captures by the PCAP analyzer,
+            executables by static analysis and other files by an AV scan.
           </p>
         ) : (
           <ul className="flex flex-col divide-y">
-            {recent.data.items.map((job) => {
+            {analyses.data.items.map((job) => {
               const created = formatDate(job.created_at);
               const error = analysisErrorText(job.error_code);
               return (
@@ -82,18 +83,7 @@ export function InvestigationAnalyses({ orgId, investigationId }: { orgId: strin
             })}
           </ul>
         )}
-        {recent.data?.partial && (
-          <p className="text-xs text-muted-foreground">
-            Showing the latest analysis per evidence among the organization&apos;s {RECENT} most recent runs.{" "}
-            <Link className="underline underline-offset-4" href={orgPath(orgId, "pcap")}>
-              PCAP analyses
-            </Link>
-            {" · "}
-            <Link className="underline underline-offset-4" href={orgPath(orgId, "malware")}>
-              Malware Lab
-            </Link>
-          </p>
-        )}
+        <Pager offset={offset} total={analyses.data?.total ?? 0} pageSize={PAGE} onChange={setOffset} />
       </CardContent>
     </Card>
   );

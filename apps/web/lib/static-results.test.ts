@@ -18,6 +18,7 @@ import {
   reportFilename,
   sectionWarnings,
   staticEngineErrorText,
+  STATIC_REF_TABS,
   staticTabs,
   staticTruncationText,
 } from "./static-results";
@@ -172,8 +173,9 @@ describe("filters and formatting", () => {
 
 describe("tabs", () => {
   it("offers only signature tabs for the AV profile", () => {
-    expect(staticTabs("av").map(([tab]) => tab)).toEqual(["findings", "signatures", "iocs"]);
-    expect(staticTabs("full")).toHaveLength(9);
+    expect(staticTabs("av").map(([tab]) => tab)).toEqual(["findings", "signatures", "iocs", "ai"]);
+    expect(staticTabs("full")).toHaveLength(10);
+    expect(parseStaticTab("ai", "av")).toBe("ai");
     expect(parseStaticTab("strings", "full")).toBe("strings");
     expect(parseStaticTab("strings", "av")).toBe("overview");
     expect(parseStaticTab("bogus", "full")).toBe("overview");
@@ -224,5 +226,15 @@ describe("reportFilename", () => {
     expect(reportFilename(`attachment; filename*=UTF-8''%E0%A4%A`)).toBe("static-report.json");
     expect(reportFilename(null)).toBe("static-report.json");
     expect(reportFilename("inline")).toBe("static-report.json");
+  });
+});
+
+describe("cited rows (ref)", () => {
+  it("reads ref on every citable static tab", () => {
+    for (const tab of ["findings", "signatures", "capabilities", "strings", "imports", "iocs"]) {
+      expect(STATIC_REF_TABS.has(tab)).toBe(true);
+      expect(parseStaticTab(tab, "full")).toBe(tab);
+    }
+    expect(STATIC_REF_TABS.has("sections")).toBe(false);
   });
 });

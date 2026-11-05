@@ -3,12 +3,14 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { CirclePlay, CircleStop, Flag, Handshake, Info, type LucideIcon, Siren } from "lucide-react";
 
+import { CITED_ROW, CitedRefBar, useScrollToCited } from "@/components/ai/cited-ref-bar";
 import { FlowButton, PAGE_SIZE, Trunc, When, usePageOffset } from "@/components/analysis/result-parts";
 import { Pager } from "@/components/pager";
 import { QueryError } from "@/components/query-error";
 import { SeverityBadge } from "@/components/severity-badge";
 import { api, unwrap } from "@/lib/api";
-import { type FlowLink, type TimelineItem, endpointText } from "@/lib/pcap-results";
+import { type FlowLink, type TimelineItem, citedQuery, endpointText, parseRowRef } from "@/lib/pcap-results";
+import { cn } from "@/lib/utils";
 
 const EVENTS: Record<string, [LucideIcon, string]> = {
   capture_start: [CirclePlay, "Capture start"],
@@ -22,13 +24,19 @@ export function TimelineTab({
   orgId,
   jobId,
   onShowFlow,
+  citedRef,
+  onClearRef,
 }: {
   orgId: string;
   jobId: string;
   onShowFlow: (link: FlowLink) => void;
+  /** A cited timeline entry (AI citation link): just that entry is shown. */
+  citedRef?: string | null;
+  onClearRef?: () => void;
 }) {
+  const cited = parseRowRef(citedRef);
   const [offset, setOffset] = usePageOffset("");
-  const query = { limit: PAGE_SIZE, offset };
+  const query = citedQuery(cited.ref, {}, { limit: PAGE_SIZE, offset });
   const timeline = useQuery({
     queryKey: ["org", orgId, "analysis", jobId, "timeline", query],
     queryFn: async () =>
@@ -40,9 +48,11 @@ export function TimelineTab({
     placeholderData: keepPreviousData,
   });
   const items = timeline.data?.items;
+  useScrollToCited(Boolean(cited.ref), timeline.isSuccess);
 
   return (
     <div className="flex flex-col gap-3">
+      {(cited.ref || cited.invalid) && <CitedRefBar invalid={cited.invalid} onClear={onClearRef} />}
       {timeline.isError && <QueryError error={timeline.error} onRetry={() => void timeline.refetch()} />}
       {timeline.isPending && !timeline.isError && (
         <p className="rounded-lg border p-6 text-center text-sm text-muted-foreground">Loading…</p>
@@ -53,20 +63,28 @@ export function TimelineTab({
       {items && items.length > 0 && (
         <ol className="relative ml-3 border-l pl-6">
           {items.map((entry) => (
-            <TimelineEntry key={entry.id} entry={entry} onShowFlow={onShowFlow} />
+            <TimelineEntry key={entry.id} entry={entry} onShowFlow={onShowFlow} cited={entry.id === cited.ref} />
           ))}
         </ol>
       )}
-      <Pager offset={offset} total={timeline.data?.total ?? 0} onChange={setOffset} />
+      <Pager offset={cited.ref ? 0 : offset} total={timeline.data?.total ?? 0} onChange={setOffset} />
     </div>
   );
 }
 
-function TimelineEntry({ entry, onShowFlow }: { entry: TimelineItem; onShowFlow: (link: FlowLink) => void }) {
+function TimelineEntry({
+  entry,
+  onShowFlow,
+  cited,
+}: {
+  entry: TimelineItem;
+  onShowFlow: (link: FlowLink) => void;
+  cited: boolean;
+}) {
   const [Icon, label] = Object.hasOwn(EVENTS, entry.event) ? EVENTS[entry.event] : [Info, entry.event];
   const hasEnds = entry.src_ip || entry.dst_ip;
   return (
-    <li className="relative pb-4 last:pb-0">
+    <li className={cn("relative pb-4 last:pb-0", cited && `${CITED_ROW} rounded-md p-2`)}>
       <span className="absolute top-0.5 -left-[2.3rem] flex size-6 items-center justify-center rounded-full border bg-background">
         <Icon className="size-3.5 text-muted-foreground" aria-hidden />
       </span>

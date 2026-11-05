@@ -38,6 +38,7 @@ export const RESULT_TABS = [
   ["tls", "TLS"],
   ["iocs", "IOCs"],
   ["timeline", "Timeline"],
+  ["ai", "AI Analyst"],
 ] as const;
 
 export type ResultTab = (typeof RESULT_TABS)[number][0] | "overview";
@@ -47,6 +48,29 @@ const TAB_VALUES = new Set<string>(RESULT_TABS.map(([value]) => value));
 /** The `tab` search param as a known tab; anything else falls back to the overview. */
 export function parseTab(value: string | null | undefined): ResultTab {
   return value && TAB_VALUES.has(value) ? (value as ResultTab) : "overview";
+}
+
+/** Tabs whose list reads `?ref=<row id>` (citation deep links); Flows keeps its own uid `ref`. */
+export const REF_TABS = new Set<string>(["findings", "alerts", "dns", "http", "tls", "iocs", "timeline"]);
+
+const ROW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The cited row of a deep link: a row id (UUID) passes, anything else is flagged invalid and
+ * never sent to the API; no `ref` = no cited row.
+ */
+export function parseRowRef(value: string | null | undefined): { ref?: string; invalid: boolean } {
+  if (!value) return { invalid: false };
+  return ROW_ID.test(value) ? { ref: value.toLowerCase(), invalid: false } : { invalid: true };
+}
+
+/** List params for a tab: just the cited row when there is one, else the tab's own filters. */
+export function citedQuery<F extends object>(
+  ref: string | undefined,
+  filters: F,
+  page: { limit: number; offset: number },
+): Partial<F> & { ref?: string; limit: number; offset: number } {
+  return ref ? ({ ref, limit: page.limit, offset: 0 } as Partial<F> & { ref: string; limit: number; offset: number }) : { ...filters, ...page };
 }
 
 /** Query string (with leading "?", or "" when empty) after applying set/delete updates. */

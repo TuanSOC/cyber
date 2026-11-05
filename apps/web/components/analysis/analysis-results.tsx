@@ -3,6 +3,7 @@
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
+import { AiAnalystTab } from "@/components/ai/ai-tab";
 import { AlertsTab } from "@/components/analysis/alerts-tab";
 import { AnalysisOverview } from "@/components/analysis/analysis-overview";
 import { FindingsTab } from "@/components/analysis/findings-tab";
@@ -13,14 +14,16 @@ import { NoResults } from "@/components/analysis/result-parts";
 import { TimelineTab } from "@/components/analysis/timeline-tab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AnalysisJob } from "@/lib/analysis";
-import { type FlowLink, RESULT_TABS, parseOverview, parseTab, withParams } from "@/lib/pcap-results";
+import { type FlowLink, REF_TABS, RESULT_TABS, parseOverview, parseTab, withParams } from "@/lib/pcap-results";
 
-// Flow filters live in the URL only while the Flows tab is open.
+// Flow filters live in the URL only while the Flows tab is open; a cited row (`ref`) only on
+// the tab it was linked to.
 const FLOW_PARAMS = { ip: undefined, port: undefined, ref: undefined };
 
 /**
  * Overview + result tabs. The active tab (`?tab=`) and the Flows filters (`ip`, `port`, `ref`)
- * are kept in the URL so a view, e.g. "the flow behind this finding", can be shared.
+ * are kept in the URL so a view, e.g. "the flow behind this finding", can be shared. On the
+ * other list tabs `ref=<row id>` (an AI citation deep link) narrows the list to the cited row.
  * Native history calls are used; Next.js keeps `useSearchParams` in sync with them.
  */
 export function AnalysisResults({ orgId, job }: { orgId: string; job: AnalysisJob }) {
@@ -41,13 +44,16 @@ export function AnalysisResults({ orgId, job }: { orgId: string; job: AnalysisJo
     setLinkCount((n) => n + 1);
     go({ tab: "flows", ip: link.ip, port: link.port, ref: link.ref }, "push");
   };
+  const citedRef = REF_TABS.has(tab) ? searchParams.get("ref") : null;
+  const clearRef = () => go({ ref: undefined }, "replace");
   const props = { orgId, jobId: job.id, onShowFlow: showFlow };
+  const cited = { citedRef, onClearRef: clearRef };
 
   return (
     <Tabs
       value={tab}
       onValueChange={(value) =>
-        go({ ...(value === "flows" ? {} : FLOW_PARAMS), tab: value === "overview" ? undefined : value }, "replace")
+        go({ ...FLOW_PARAMS, tab: value === "overview" ? undefined : value }, "replace")
       }
     >
       <TabsList aria-label="Analysis results">
@@ -66,9 +72,9 @@ export function AnalysisResults({ orgId, job }: { orgId: string; job: AnalysisJo
           {!ready ? (
             <NoResults status={job.status} />
           ) : value === "findings" ? (
-            <FindingsTab {...props} />
+            <FindingsTab {...props} {...cited} />
           ) : value === "alerts" ? (
-            <AlertsTab {...props} suricataMissing={suricataMissing} />
+            <AlertsTab {...props} {...cited} suricataMissing={suricataMissing} />
           ) : value === "flows" ? (
             <FlowsTab
               key={linkCount}
@@ -80,11 +86,13 @@ export function AnalysisResults({ orgId, job }: { orgId: string; job: AnalysisJo
               onUrlChange={(updates) => go(updates, "replace")}
             />
           ) : value === "dns" || value === "http" || value === "tls" ? (
-            <RecordsTab {...props} kind={value} />
+            <RecordsTab {...props} {...cited} kind={value} />
           ) : value === "iocs" ? (
-            <IocsTab orgId={orgId} jobId={job.id} />
+            <IocsTab orgId={orgId} jobId={job.id} {...cited} />
+          ) : value === "ai" ? (
+            <AiAnalystTab orgId={orgId} job={job} />
           ) : (
-            <TimelineTab {...props} />
+            <TimelineTab {...props} {...cited} />
           )}
         </TabsContent>
       ))}

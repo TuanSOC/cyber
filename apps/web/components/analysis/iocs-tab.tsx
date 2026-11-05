@@ -15,6 +15,7 @@ import {
   When,
   usePageOffset,
 } from "@/components/analysis/result-parts";
+import { CITED_ROW, CitedRefBar, useScrollToCited } from "@/components/ai/cited-ref-bar";
 import { EnrichButton } from "@/components/ti/enrich-button";
 import { ProviderChip } from "@/components/ti/provider-chip";
 import { ResultById } from "@/components/ti/result-panel";
@@ -23,7 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { TableCell, TableHead } from "@/components/ui/table";
 import { api, unwrap } from "@/lib/api";
-import { IOC_TYPE_LABELS, type IocType, formatCount, searchTerm } from "@/lib/pcap-results";
+import { IOC_TYPE_LABELS, type IocType, citedQuery, formatCount, parseRowRef, searchTerm } from "@/lib/pcap-results";
 import {
   type EnrichedIoc,
   PROVIDERS,
@@ -45,23 +46,32 @@ const ENRICHING_REFRESH_MS = 10_000;
  * Observables seen in the capture or sample. Values are attacker-controlled (a "url" may be anything,
  * e.g. `javascript:`): shown as text with a copy button, never as a link. With threat intel (M4)
  * each row carries the latest attributed answer per provider, or why the value is never sent.
+ * `citedRef` (an AI citation link) narrows the list to that observable.
  */
 export function IocsTab({
   orgId,
   jobId,
   source = "capture",
+  citedRef,
+  onClearRef,
 }: {
   orgId: string;
   jobId: string;
   /** What the observables were extracted from ("capture", "file"). */
   source?: string;
+  citedRef?: string | null;
+  onClearRef?: () => void;
 }) {
+  const cited = parseRowRef(citedRef);
   const [type, setType] = useState<IocType | typeof ALL>(ALL);
   const [search, setSearch] = useState("");
   const q = searchTerm(useDebounced(search));
   const filters = { type: type === ALL ? undefined : type, q };
   const [offset, setOffset] = usePageOffset(JSON.stringify(filters));
-  const query = { ...filters, include: "enrichment" as const, limit: PAGE_SIZE, offset };
+  const query = {
+    ...citedQuery(cited.ref, filters, { limit: PAGE_SIZE, offset }),
+    include: "enrichment" as const,
+  };
   const latestRun = useLatestJobRun(orgId, jobId);
   const run = latestRun.data?.items[0];
   const enriching = isActiveRun(run?.status);
@@ -77,16 +87,18 @@ export function IocsTab({
     placeholderData: keepPreviousData,
     refetchInterval: enriching ? ENRICHING_REFRESH_MS : false,
   });
+  useScrollToCited(Boolean(cited.ref), iocs.isSuccess);
 
   return (
     <ResultTable
       query={iocs}
-      offset={offset}
+      offset={cited.ref ? 0 : offset}
       onOffset={setOffset}
       columns={COLUMNS}
       empty={type !== ALL || q ? "No IOCs match these filters." : "No observables recorded."}
       note={
         <div className="flex flex-col gap-2">
+          {(cited.ref || cited.invalid) && <CitedRefBar invalid={cited.invalid} onClear={onClearRef} />}
           {run && <RunProgress orgId={orgId} run={run} />}
           <p className="text-xs text-muted-foreground">
             Observables extracted from the {source}. Threat intel chips quote each provider&apos;s own answer with its
@@ -95,6 +107,7 @@ export function IocsTab({
         </div>
       }
       filters={
+        cited.ref ? undefined : (
         <>
           <FilterSelect
             value={type}
@@ -117,6 +130,7 @@ export function IocsTab({
             <EnrichButton orgId={orgId} jobId={jobId} busy={enriching} />
           </div>
         </>
+        )
       }
       head={
         <>
@@ -131,7 +145,7 @@ export function IocsTab({
         </>
       }
     >
-      {(items) => items.map((ioc) => <IocRow key={ioc.id} orgId={orgId} ioc={ioc} />)}
+      {(items) => items.map((ioc) => <IocRow key={ioc.id} orgId={orgId} ioc={ioc} cited={ioc.id === cited.ref} />)}
     </ResultTable>
   );
 }
@@ -163,12 +177,13 @@ function EnrichmentCell({ ioc }: { ioc: EnrichedIoc }) {
   );
 }
 
-function IocRow({ orgId, ioc }: { orgId: string; ioc: EnrichedIoc }) {
+function IocRow({ orgId, ioc, cited }: { orgId: string; ioc: EnrichedIoc; cited: boolean }) {
   const answers = sortedEnrichment(ioc);
   const lookupType = lookupTypeForIoc(ioc.type);
   return (
     <ExpandableRow
       columns={COLUMNS}
+      className={cited ? CITED_ROW : undefined}
       cells={
         <>
           <TableCell>

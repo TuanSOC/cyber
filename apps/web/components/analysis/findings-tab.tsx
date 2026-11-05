@@ -15,6 +15,8 @@ import {
   When,
   usePageOffset,
 } from "@/components/analysis/result-parts";
+import { CITED_ROW, CitedRefBar, useScrollToCited } from "@/components/ai/cited-ref-bar";
+import { ExplainButton } from "@/components/ai/explain-drawer";
 import { SeverityBadge } from "@/components/severity-badge";
 import { type AttackLookup, AttackChips, MitreNotice, useAttackLookup } from "@/components/ti/attack-chips";
 import { Button } from "@/components/ui/button";
@@ -27,8 +29,10 @@ import {
   type FindingSeverity,
   type FlowLink,
   attributeText,
+  citedQuery,
   flowLinkFor,
   formatPercent,
+  parseRowRef,
 } from "@/lib/pcap-results";
 import { STATIC_FINDING_TYPES } from "@/lib/static-results";
 import { attackIdsFromAttributes } from "@/lib/ti";
@@ -38,26 +42,32 @@ const SEVERITY_OPTIONS = FINDING_SEVERITIES.map((s) => [s, s[0].toUpperCase() + 
 /**
  * Findings of one job (the shared per-job route). `pcap` findings carry endpoints and evidence
  * flows (with links into the Flows tab); `static` findings describe the sample, their evidence
- * references (sections, rules, imports) are shown as text.
+ * references (sections, rules, imports) are shown as text. A cited row (`citedRef`, from an AI
+ * citation chip) narrows the list to that finding, highlighted. Each row has an "Explain" drawer.
  */
 export function FindingsTab({
   orgId,
   jobId,
   onShowFlow,
   variant = "pcap",
+  citedRef,
+  onClearRef,
 }: {
   orgId: string;
   jobId: string;
   onShowFlow?: (link: FlowLink) => void;
   variant?: "pcap" | "static";
+  citedRef?: string | null;
+  onClearRef?: () => void;
 }) {
   const isPcap = variant === "pcap";
-  const columns = isPcap ? 9 : 6;
+  const columns = isPcap ? 9 : 7;
+  const cited = parseRowRef(citedRef);
   const [severity, setSeverity] = useState<FindingSeverity | typeof ALL>(ALL);
   const [type, setType] = useState<string>(ALL);
   const filters = { severity: severity === ALL ? undefined : severity, type: type === ALL ? undefined : type };
   const [offset, setOffset] = usePageOffset(JSON.stringify(filters));
-  const query = { ...filters, limit: PAGE_SIZE, offset };
+  const query = citedQuery(cited.ref, filters, { limit: PAGE_SIZE, offset });
 
   const findings = useQuery({
     queryKey: ["org", orgId, "analysis", jobId, "findings", query],
@@ -73,11 +83,12 @@ export function FindingsTab({
   // ATT&CK ids carried by findings (e.g. capa-derived static findings), labelled in one request.
   const attackIdsOnPage = findings.data?.items.flatMap((f) => attackIdsFromAttributes(f.attributes)) ?? [];
   const attackLookup = useAttackLookup(attackIdsOnPage);
+  useScrollToCited(Boolean(cited.ref), findings.isSuccess);
 
   return (
     <ResultTable
       query={findings}
-      offset={offset}
+      offset={cited.ref ? 0 : offset}
       onOffset={setOffset}
       columns={columns}
       empty={
@@ -89,6 +100,7 @@ export function FindingsTab({
       }
       note={
         <div className="flex flex-col gap-1">
+          {(cited.ref || cited.invalid) && <CitedRefBar invalid={cited.invalid} onClear={onClearRef} />}
           <p className="text-xs text-muted-foreground">
             {isPcap
               ? "Findings are heuristics that describe observed behaviour; they are leads to review, not verdicts."
@@ -98,6 +110,7 @@ export function FindingsTab({
         </div>
       }
       filters={
+        cited.ref ? undefined : (
         <>
           <FilterSelect
             value={severity}
@@ -116,6 +129,7 @@ export function FindingsTab({
             className="w-60"
           />
         </>
+        )
       }
       head={
         <>
@@ -127,7 +141,7 @@ export function FindingsTab({
           <TableHead>Method</TableHead>
           <TableHead className="w-40">{isPcap ? "First seen" : "Detected"}</TableHead>
           {isPcap && <TableHead className="w-40">Last seen</TableHead>}
-          {isPcap && <TableHead className="w-16" />}
+          <TableHead className={isPcap ? "w-36" : "w-24"} />
         </>
       }
     >
@@ -135,6 +149,9 @@ export function FindingsTab({
         items.map((f) => (
           <FindingRow
             key={f.id}
+            orgId={orgId}
+            jobId={jobId}
+            cited={f.id === cited.ref}
             finding={f}
             columns={columns}
             onShowFlow={isPcap ? onShowFlow : undefined}
@@ -147,11 +164,17 @@ export function FindingsTab({
 }
 
 function FindingRow({
+  orgId,
+  jobId,
+  cited,
   finding: f,
   columns,
   onShowFlow,
   attackLookup,
 }: {
+  orgId: string;
+  jobId: string;
+  cited: boolean;
   finding: Finding;
   columns: number;
   onShowFlow?: (link: FlowLink) => void;
@@ -162,6 +185,7 @@ function FindingRow({
   return (
     <ExpandableRow
       columns={columns}
+      className={cited ? CITED_ROW : undefined}
       cells={
         <>
           <TableCell>
@@ -188,11 +212,14 @@ function FindingRow({
               <When iso={f.last_seen} />
             </TableCell>
           )}
-          {onShowFlow && (
-            <TableCell>
-              {f.flow_ref && <FlowButton link={flowLinkFor(f, f.flow_ref, false)} onShowFlow={onShowFlow} />}
-            </TableCell>
-          )}
+          <TableCell>
+            <span className="flex items-center gap-1">
+              {onShowFlow && f.flow_ref && (
+                <FlowButton link={flowLinkFor(f, f.flow_ref, false)} onShowFlow={onShowFlow} />
+              )}
+              <ExplainButton orgId={orgId} jobId={jobId} target="finding" targetId={f.id} title={f.title} />
+            </span>
+          </TableCell>
         </>
       }
       detail={

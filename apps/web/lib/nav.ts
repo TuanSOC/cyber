@@ -84,7 +84,6 @@ export const NAV: NavItem[] = [
     label: "AI Analyst",
     icon: Bot,
     segment: "ai-analyst",
-    plannedFor: "Milestone 5",
     summary: "Evidence-cited explanations, timelines and recommendations.",
   },
   {
@@ -100,7 +99,7 @@ export const NAV: NavItem[] = [
     label: "Integrations",
     icon: Plug,
     segment: "settings/integrations",
-    summary: "Threat intelligence provider keys and connectors.",
+    summary: "Threat intelligence and AI provider keys and settings",
   },
   { key: "settings", label: "Settings", icon: Settings, segment: "settings", summary: "Organization and members." },
 ];

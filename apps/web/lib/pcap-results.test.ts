@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  REF_TABS,
   alertSeverity,
+  citedQuery,
+  parseRowRef,
   attributeText,
   detailList,
   detailText,
@@ -297,5 +300,35 @@ describe("filters and URL state", () => {
       port: undefined,
       ref: undefined,
     });
+  });
+});
+
+describe("cited rows (ref)", () => {
+  const ROW = "33333333-3333-4333-8333-333333333333";
+
+  it("accepts only row ids and never forwards anything else", () => {
+    expect(parseRowRef(ROW)).toEqual({ ref: ROW, invalid: false });
+    expect(parseRowRef(ROW.toUpperCase())).toEqual({ ref: ROW, invalid: false });
+    expect(parseRowRef(null)).toEqual({ invalid: false });
+    expect(parseRowRef("CUid1")).toEqual({ invalid: true });
+    expect(parseRowRef("javascript:alert(1)")).toEqual({ invalid: true });
+  });
+
+  it("queries just the cited row, ignoring the other filters and the page", () => {
+    expect(citedQuery(ROW, { severity: "high" }, { limit: 25, offset: 50 })).toEqual({ ref: ROW, limit: 25, offset: 0 });
+    expect(citedQuery(undefined, { severity: "high" }, { limit: 25, offset: 50 })).toEqual({
+      severity: "high",
+      limit: 25,
+      offset: 50,
+    });
+  });
+
+  it("reads ref on every citable PCAP tab; Flows keeps its uid highlight", () => {
+    for (const tab of ["findings", "alerts", "dns", "http", "tls", "iocs", "timeline"]) {
+      expect(REF_TABS.has(tab)).toBe(true);
+      expect(parseTab(tab)).toBe(tab);
+    }
+    expect(REF_TABS.has("flows")).toBe(false);
+    expect(parseTab("ai")).toBe("ai");
   });
 });

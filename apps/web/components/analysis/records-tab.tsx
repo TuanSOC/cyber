@@ -14,6 +14,7 @@ import {
   When,
   usePageOffset,
 } from "@/components/analysis/result-parts";
+import { CITED_ROW, CitedRefBar, useScrollToCited } from "@/components/ai/cited-ref-bar";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { TableCell, TableHead } from "@/components/ui/table";
@@ -22,10 +23,12 @@ import {
   type FlowLink,
   type NetRecord,
   type RecordKind,
+  citedQuery,
   detailFlag,
   detailList,
   detailText,
   flowLinkFor,
+  parseRowRef,
   recordFields,
   searchTerm,
 } from "@/lib/pcap-results";
@@ -162,17 +165,23 @@ export function RecordsTab({
   jobId,
   kind,
   onShowFlow,
+  citedRef,
+  onClearRef,
 }: {
   orgId: string;
   jobId: string;
   kind: RecordKind;
   onShowFlow: (link: FlowLink) => void;
+  /** A cited record (AI citation link): the list shows just that row. */
+  citedRef?: string | null;
+  onClearRef?: () => void;
 }) {
   const view = VIEWS[kind];
+  const cited = parseRowRef(citedRef);
   const [search, setSearch] = useState("");
   const q = searchTerm(useDebounced(search));
   const [offset, setOffset] = usePageOffset(q ?? "");
-  const query = { kind, q, limit: PAGE_SIZE, offset };
+  const query = { ...citedQuery(cited.ref, { q }, { limit: PAGE_SIZE, offset }), kind };
   const columns = BASE_COLUMNS + countColumns(kind);
 
   const records = useQuery({
@@ -185,15 +194,18 @@ export function RecordsTab({
       ),
     placeholderData: keepPreviousData,
   });
+  useScrollToCited(Boolean(cited.ref), records.isSuccess);
 
   return (
     <ResultTable
       query={records}
-      offset={offset}
+      offset={cited.ref ? 0 : offset}
+      note={(cited.ref || cited.invalid) && <CitedRefBar invalid={cited.invalid} onClear={onClearRef} />}
       onOffset={setOffset}
       columns={columns}
       empty={q ? `No ${view.noun} match this search.` : `No ${view.noun} recorded.`}
       filters={
+        cited.ref ? undefined : (
         <Input
           className="w-80"
           type="search"
@@ -203,6 +215,7 @@ export function RecordsTab({
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+        )
       }
       head={
         <>
@@ -214,7 +227,7 @@ export function RecordsTab({
         </>
       }
     >
-      {(items) => items.map((r) => <RecordRow key={r.id} record={r} view={view} columns={columns} onShowFlow={onShowFlow} />)}
+      {(items) => items.map((r) => <RecordRow key={r.id} record={r} view={view} columns={columns} onShowFlow={onShowFlow} cited={r.id === cited.ref} />)}
     </ResultTable>
   );
 }
@@ -228,7 +241,9 @@ function RecordRow({
   view,
   columns,
   onShowFlow,
+  cited,
 }: {
+  cited: boolean;
   record: NetRecord;
   view: KindView;
   columns: number;
@@ -237,6 +252,7 @@ function RecordRow({
   return (
     <ExpandableRow
       columns={columns}
+      className={cited ? CITED_ROW : undefined}
       cells={
         <>
           <TableCell>

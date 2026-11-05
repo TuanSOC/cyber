@@ -41,12 +41,16 @@ export const STATIC_TABS = [
   ["resources", "Resources"],
   ["strings", "Strings"],
   ["iocs", "IOCs"],
+  ["ai", "AI Analyst"],
 ] as const;
 
 export type StaticTab = (typeof STATIC_TABS)[number][0] | "overview";
 
 // The AV profile runs ClamAV + YARA only: no structure, strings or capa results exist.
-const AV_TABS = new Set<string>(["findings", "signatures", "iocs"]);
+const AV_TABS = new Set<string>(["findings", "signatures", "iocs", "ai"]);
+
+/** Static tabs whose list reads `?ref=<row id>` (citation deep links). */
+export const STATIC_REF_TABS = new Set<string>(["findings", "signatures", "capabilities", "strings", "imports", "iocs"]);
 
 export function staticTabs(profile: string | null | undefined): (typeof STATIC_TABS)[number][] {
   return profile === "av" ? STATIC_TABS.filter(([value]) => AV_TABS.has(value)) : [...STATIC_TABS];
