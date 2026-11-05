@@ -73,3 +73,24 @@ class InvestigationOut(BaseModel):
 
 class InvestigationPage(Page[InvestigationOut]):
     pass
+
+
+class TimelineEntryOut(BaseModel):
+    """One entry of the merged investigation timeline (M5). `ts_source` says which clock the
+    time comes from: `recorded` (platform event), `capture` (the capture's clock) or
+    `analysis_time` (a static finding, at its job's finish time)."""
+
+    ts: datetime
+    ts_source: str
+    kind: str
+    title: str
+    severity: str | None
+    evidence_id: uuid.UUID
+    job_id: uuid.UUID | None
+    ref_kind: str
+    ref_id: uuid.UUID
+
+
+class InvestigationTimelinePage(BaseModel):
+    items: list[TimelineEntryOut]
+    next_cursor: str | None

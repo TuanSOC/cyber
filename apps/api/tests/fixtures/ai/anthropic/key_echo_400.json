@@ -1,0 +1,24 @@
+{
+  "_source": "Hand-written from the documented response shape (no live key was available on 2026-11-05); sanitized: no key, no account-identifying request id.",
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "request-id": "req_fixture_err"
+    },
+    "json": {
+      "type": "error",
+      "error": {
+        "type": "invalid_request_error",
+        "message": "malformed header near {{KEY}}"
+      },
+      "request_id": "req_fixture_err"
+    }
+  },
+  "expect": {
+    "kind": "bad_request",
+    "request_sent": true,
+    "http_status": 400,
+    "usage": null
+  }
+}

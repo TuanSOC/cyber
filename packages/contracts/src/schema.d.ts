@@ -162,6 +162,217 @@ export interface paths {
         patch: operations["update_org_api_v1_orgs__org_id__patch"];
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/ai/context-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Ai Context
+         * @description What a run with this body would send (pseudonyms shown). Nothing is persisted.
+         */
+        post: operations["preview_ai_context_api_v1_orgs__org_id__ai_context_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ai/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Ai Providers
+         * @description The AI provider catalog with this org's configuration status (never a key).
+         */
+        get: operations["list_ai_providers_api_v1_orgs__org_id__ai_providers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ai/providers/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Ai Provider
+         * @description Store a key (sealed, write-only), enable/disable, acknowledge the terms (and, for
+         *     Gemini, the paid tier), pick a model. A new key is checked after the commit
+         *     (`ai.verify`) within the per-provider verify limit; `verify_queued` says whether it was.
+         */
+        put: operations["update_ai_provider_api_v1_orgs__org_id__ai_providers__provider__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ai/providers/{provider}/key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Ai Provider Key */
+        delete: operations["remove_ai_provider_key_api_v1_orgs__org_id__ai_providers__provider__key_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ai/providers/{provider}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Ai Provider
+         * @description Queue a check of the stored key (the analyst worker calls the provider).
+         */
+        post: operations["verify_ai_provider_api_v1_orgs__org_id__ai_providers__provider__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ai/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Ai Runs
+         * @description Top-level runs, newest first (incident digests are listed in their parent).
+         */
+        get: operations["list_ai_runs_api_v1_orgs__org_id__ai_runs_get"];
+        put?: never;
+        /**
+         * Request Ai Run
+         * @description Freeze the context and queue an analysis (an incident also queues one digest per
+         *     job). An identical active or completed run is returned instead (200), unless
+         *     `regenerate`.
+         */
+        post: operations["request_ai_run_api_v1_orgs__org_id__ai_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ai/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ai Run
+         * @description The run with its output read model when completed: claim statuses, resolved
+         *     citations (deep links for verified ones only) and pseudonyms reversed unless `keep`.
+         */
+        get: operations["get_ai_run_api_v1_orgs__org_id__ai_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ai/runs/{run_id}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ai Run Context
+         * @description The exact frozen context(s) sent; `reveal=true` adds the pseudonym map.
+         */
+        get: operations["get_ai_run_context_api_v1_orgs__org_id__ai_runs__run_id__context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ai/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ai Settings
+         * @description The org's AI settings (the defaults until saved), the ceilings and the privacy notice.
+         */
+        get: operations["get_ai_settings_api_v1_orgs__org_id__ai_settings_get"];
+        /**
+         * Update Ai Settings
+         * @description Partial update. Turning AI on, or widening what is sent later, needs
+         *     `acknowledge_privacy`; budgets stay within the operator ceilings.
+         */
+        put: operations["update_ai_settings_api_v1_orgs__org_id__ai_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ai/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ai Usage
+         * @description Today's (UTC) tokens and estimated cost per provider, against the budget.
+         */
+        get: operations["get_ai_usage_api_v1_orgs__org_id__ai_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/analyses": {
         parameters: {
             query?: never;
@@ -169,7 +380,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Analyses */
+        /**
+         * List Analyses
+         * @description `investigation_id`: only that case's evidence (404 for an unknown or foreign case);
+         *     `latest_per_evidence`: the newest job per evidence and kind of run (analyzer, profile)
+         *     among the jobs matching the other filters.
+         */
         get: operations["list_analyses_api_v1_orgs__org_id__analyses_get"];
         put?: never;
         post?: never;
@@ -741,6 +957,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/investigations/{investigation_id}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Investigation Timeline
+         * @description Merged case timeline: custody, job lifecycle, the latest pcap job's timeline and alerts
+         *     per evidence, and static findings at analysis time; sorted (ts, kind, ref_id).
+         */
+        get: operations["get_investigation_timeline_api_v1_orgs__org_id__investigations__investigation_id__timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/members": {
         parameters: {
             query?: never;
@@ -943,6 +1180,747 @@ export interface components {
             total_reports?: number | null;
             /** Usage Type */
             usage_type?: string | null;
+        };
+        /** AiAttackOut */
+        AiAttackOut: {
+            /** Citations */
+            citations: components["schemas"]["AiCitationOut"][];
+            /** Rationale */
+            rationale: string;
+            reason: components["schemas"]["CitationReason"] | null;
+            status: components["schemas"]["ClaimStatus"];
+            /** Technique Id */
+            technique_id: string;
+        };
+        /**
+         * AiCeilingsOut
+         * @description Operator ceilings over the per-org budgets (`AI_CEILINGS`).
+         */
+        AiCeilingsOut: {
+            /** Daily Token Budget */
+            daily_token_budget: number;
+            /** Incident Token Cap */
+            incident_token_cap: number;
+            /** Run Token Cap */
+            run_token_cap: number;
+        };
+        /** AiChildRunOut */
+        AiChildRunOut: {
+            /** Citation Accuracy */
+            citation_accuracy: number | null;
+            /** Error Code */
+            error_code: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Flags */
+            flags: components["schemas"]["OutputFlag"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Job Id */
+            job_id: string | null;
+            /** Refusal Category */
+            refusal_category: string | null;
+            status: components["schemas"]["AiRunStatus"];
+            usage: components["schemas"]["AiTokenUsage"];
+        };
+        /** AiCitationOut */
+        AiCitationOut: {
+            /** Field */
+            field: string | null;
+            /** Job Id */
+            job_id: string | null;
+            kind: components["schemas"]["RefKind"] | null;
+            /** Label */
+            label: string;
+            link: components["schemas"]["AiDeepLink"] | null;
+            /** Quote */
+            quote: string | null;
+            reason: components["schemas"]["CitationReason"] | null;
+            /** Ref Id */
+            ref_id: string | null;
+            /** Stale */
+            stale: boolean;
+            status: components["schemas"]["CitationStatus"];
+        };
+        /** AiClaimOut */
+        AiClaimOut: {
+            /** Citations */
+            citations: components["schemas"]["AiCitationOut"][];
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "low" | "medium" | "high";
+            /** Id */
+            id: string;
+            reason: components["schemas"]["CitationReason"] | null;
+            status: components["schemas"]["ClaimStatus"];
+            /** Text */
+            text: string;
+        };
+        /**
+         * AiContextPreviewOut
+         * @description What a run would send (pseudonyms shown, never the map). Nothing is persisted.
+         */
+        AiContextPreviewOut: {
+            /** Categories */
+            categories: string[];
+            /** Context Sha256 */
+            context_sha256: string;
+            context_stats: components["schemas"]["ContextStats"];
+            inclusions: components["schemas"]["AiInclusions"];
+            /** Items */
+            items: components["schemas"]["ContextItem"][];
+            /** Model */
+            model: string;
+            provider: components["schemas"]["AiProviderName"];
+            task: components["schemas"]["AiTask"];
+        };
+        /** AiContextStageOut */
+        AiContextStageOut: {
+            /** Context Sha256 */
+            context_sha256: string;
+            /** Items */
+            items: components["schemas"]["ContextItem"][];
+            /** Pseudonym Map */
+            pseudonym_map: {
+                [key: string]: string;
+            } | null;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "base" | "reduce";
+            stats: components["schemas"]["ContextStats"] | null;
+            task: components["schemas"]["AiTask"];
+            /** Version */
+            version: string;
+        };
+        /**
+         * AiDeepLink
+         * @description An internal deep link (never a URL): the web app maps it to its own route.
+         */
+        AiDeepLink: {
+            /** Job Id */
+            job_id: string | null;
+            /** Ref */
+            ref: string | null;
+            /**
+             * Route
+             * @enum {string}
+             */
+            route: "pcap" | "malware" | "evidence" | "investigation";
+            /** Tab */
+            tab: ("overview" | "findings" | "alerts" | "flows" | "dns" | "http" | "tls" | "iocs" | "timeline" | "signatures" | "capabilities" | "sections" | "strings") | null;
+        };
+        /** AiHypothesisOut */
+        AiHypothesisOut: {
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "low" | "medium" | "high";
+            /** Contradicting */
+            contradicting: components["schemas"]["AiCitationOut"][];
+            /** Id */
+            id: string;
+            reason: components["schemas"]["CitationReason"] | null;
+            status: components["schemas"]["ClaimStatus"];
+            /** Supporting */
+            supporting: components["schemas"]["AiCitationOut"][];
+            /** Text */
+            text: string;
+        };
+        /** AiInclusions */
+        AiInclusions: {
+            /** Include Case Text */
+            include_case_text: boolean;
+            /** Include Strings */
+            include_strings: boolean;
+            /** Include Ti */
+            include_ti: boolean;
+            /** Pseudonymize Internal */
+            pseudonymize_internal: boolean;
+        };
+        /** AiModelOut */
+        AiModelOut: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            price: components["schemas"]["AiModelPrice"];
+            /** Verified */
+            verified: boolean;
+        };
+        /**
+         * AiModelPrice
+         * @description USD per million tokens (an estimate: prices change; see `price_version`).
+         */
+        AiModelPrice: {
+            /** Cache Read */
+            cache_read: number;
+            /** Cache Write */
+            cache_write: number;
+            /** Input */
+            input: number;
+            /** Output */
+            output: number;
+        };
+        /** AiNextStepOut */
+        AiNextStepOut: {
+            /** Rationale */
+            rationale: string;
+            /** Refs */
+            refs: components["schemas"]["AiCitationOut"][];
+            /** Text */
+            text: string;
+        };
+        /**
+         * AiOutputOut
+         * @description The verified output, display-ready: claim statuses, resolved citations, and the text
+         *     with pseudonyms reversed (unless `?pseudonyms=keep`).
+         */
+        AiOutputOut: {
+            /** Attack Techniques */
+            attack_techniques: components["schemas"]["AiAttackOut"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Flags */
+            flags: components["schemas"]["OutputFlag"][];
+            /** Hypotheses */
+            hypotheses: components["schemas"]["AiHypothesisOut"][];
+            /** Interpretation */
+            interpretation: components["schemas"]["AiClaimOut"][];
+            /** Limitations */
+            limitations: string[];
+            /** Next Steps */
+            next_steps: components["schemas"]["AiNextStepOut"][];
+            /** Observed */
+            observed: components["schemas"]["AiClaimOut"][];
+            overall_confidence: components["schemas"]["AiOverallConfidenceOut"];
+            /**
+             * Pseudonyms
+             * @enum {string}
+             */
+            pseudonyms: "reversed" | "kept";
+            /** Timeline */
+            timeline: components["schemas"]["AiTimelineOut"][];
+            verification: components["schemas"]["AiVerificationOut"];
+        };
+        /** AiOverallConfidenceOut */
+        AiOverallConfidenceOut: {
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "low" | "medium" | "high";
+            /** Rationale */
+            rationale: string;
+        };
+        /**
+         * AiProviderName
+         * @enum {string}
+         */
+        AiProviderName: "anthropic" | "gemini" | "mock";
+        /** AiProviderOut */
+        AiProviderOut: {
+            /** Available */
+            available: boolean;
+            /** Configured */
+            configured: boolean;
+            /** Default Model */
+            default_model: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Key Last4 */
+            key_last4: string | null;
+            /** Label */
+            label: string;
+            /** Last Error Code */
+            last_error_code: string | null;
+            /** Model */
+            model: string | null;
+            /** Models */
+            models: components["schemas"]["AiModelOut"][];
+            name: components["schemas"]["AiProviderName"];
+            /** Paid Tier Ack At */
+            paid_tier_ack_at: string | null;
+            /** Platform Key */
+            platform_key: boolean;
+            /** Price Version */
+            price_version: string;
+            /** Privacy Note */
+            privacy_note: string;
+            /** Requires Paid Tier Ack */
+            requires_paid_tier_ack: boolean;
+            /** Terms Ack At */
+            terms_ack_at: string | null;
+            /** Tos Note */
+            tos_note: string;
+            /** Unavailable Reason */
+            unavailable_reason: ("ai_disabled_platform" | "prod_mock" | "gemini_billing_required") | null;
+            /** Verified At */
+            verified_at: string | null;
+            verify_status: components["schemas"]["VerifyStatus"] | null;
+        };
+        /** AiProviderPage */
+        AiProviderPage: {
+            /** Items */
+            items: components["schemas"]["AiProviderOut"][];
+            /** Platform Ai Enabled */
+            platform_ai_enabled: boolean;
+            /** Total */
+            total: number;
+        };
+        /**
+         * AiProviderSaved
+         * @description A PUT's answer plus whether a key check (`ai.verify`) was queued: only after a new
+         *     key, within the per-provider verify limit, and when the broker took it.
+         */
+        AiProviderSaved: {
+            /** Available */
+            available: boolean;
+            /** Configured */
+            configured: boolean;
+            /** Default Model */
+            default_model: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Key Last4 */
+            key_last4: string | null;
+            /** Label */
+            label: string;
+            /** Last Error Code */
+            last_error_code: string | null;
+            /** Model */
+            model: string | null;
+            /** Models */
+            models: components["schemas"]["AiModelOut"][];
+            name: components["schemas"]["AiProviderName"];
+            /** Paid Tier Ack At */
+            paid_tier_ack_at: string | null;
+            /** Platform Key */
+            platform_key: boolean;
+            /** Price Version */
+            price_version: string;
+            /** Privacy Note */
+            privacy_note: string;
+            /** Requires Paid Tier Ack */
+            requires_paid_tier_ack: boolean;
+            /** Terms Ack At */
+            terms_ack_at: string | null;
+            /** Tos Note */
+            tos_note: string;
+            /** Unavailable Reason */
+            unavailable_reason: ("ai_disabled_platform" | "prod_mock" | "gemini_billing_required") | null;
+            /** Verified At */
+            verified_at: string | null;
+            /** Verify Queued */
+            verify_queued: boolean;
+            verify_status: components["schemas"]["VerifyStatus"] | null;
+        };
+        /** AiProviderUpdate */
+        AiProviderUpdate: {
+            /** Acknowledge Paid Tier */
+            acknowledge_paid_tier?: boolean;
+            /** Acknowledge Terms */
+            acknowledge_terms?: boolean;
+            /** Api Key */
+            api_key?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Model */
+            model?: string | null;
+        };
+        /** AiProviderUsageOut */
+        AiProviderUsageOut: {
+            /** Cost Micros */
+            cost_micros: number;
+            provider: components["schemas"]["AiProviderName"];
+            /** Runs */
+            runs: number;
+            usage: components["schemas"]["AiTokenUsage"];
+        };
+        /** AiRunContextOut */
+        AiRunContextOut: {
+            /** Context Sha256 */
+            context_sha256: string;
+            /** Revealed */
+            revealed: boolean;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Stages */
+            stages: components["schemas"]["AiContextStageOut"][];
+        };
+        /**
+         * AiRunCreate
+         * @description `POST /ai/runs` and `/ai/context-preview` (the frozen `AiRunRequest`; `regenerate`
+         *     without a schema default).
+         */
+        AiRunCreate: {
+            /** Investigation Id */
+            investigation_id?: string | null;
+            /** Job Id */
+            job_id?: string | null;
+            /** Model */
+            model?: string | null;
+            provider?: components["schemas"]["AiProviderName"] | null;
+            /** Regenerate */
+            regenerate?: boolean;
+            /** Target Id */
+            target_id?: string | null;
+            task: components["schemas"]["AiTask"];
+        };
+        /** AiRunCreated */
+        AiRunCreated: {
+            /** Deduplicated */
+            deduplicated: boolean;
+            run: components["schemas"]["AiRunOut"];
+        };
+        /** AiRunDetail */
+        AiRunDetail: {
+            /** Child Runs */
+            child_runs: components["schemas"]["AiChildRunOut"][];
+            /** Children */
+            children: number;
+            /** Citation Accuracy */
+            citation_accuracy: number | null;
+            /** Claims Unsupported */
+            claims_unsupported: number | null;
+            /** Context Sha256 */
+            context_sha256: string;
+            context_stats: components["schemas"]["ContextStats"] | null;
+            /** Cost Estimated */
+            cost_estimated: boolean;
+            /** Cost Micros */
+            cost_micros: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Deadline At
+             * Format: date-time
+             */
+            deadline_at: string;
+            /** Error Code */
+            error_code: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Flags */
+            flags: components["schemas"]["OutputFlag"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Investigation Id */
+            investigation_id: string | null;
+            /** Job Id */
+            job_id: string | null;
+            metrics: components["schemas"]["RunMetrics"] | null;
+            /** Model */
+            model: string;
+            output: components["schemas"]["AiOutputOut"] | null;
+            /** Output Schema */
+            output_schema: string;
+            /** Output Withheld */
+            output_withheld: boolean;
+            /** Parent Run Id */
+            parent_run_id: string | null;
+            /** Price Version */
+            price_version: string | null;
+            /** Prompt Version */
+            prompt_version: string;
+            provider: components["schemas"]["AiProviderName"];
+            /** Refusal Category */
+            refusal_category: string | null;
+            /**
+             * Requested By
+             * Format: uuid
+             */
+            requested_by: string;
+            /** Requested By Name */
+            requested_by_name: string;
+            /** Resume At */
+            resume_at: string | null;
+            scope: components["schemas"]["AiScope"];
+            /** Served Model */
+            served_model: string | null;
+            /** Started At */
+            started_at: string | null;
+            status: components["schemas"]["AiRunStatus"];
+            /** Supersedes Run Id */
+            supersedes_run_id: string | null;
+            /** Target Id */
+            target_id: string | null;
+            /** Target Kind */
+            target_kind: ("finding" | "alert") | null;
+            task: components["schemas"]["AiTask"];
+            usage: components["schemas"]["AiTokenUsage"];
+        };
+        /** AiRunOut */
+        AiRunOut: {
+            /** Children */
+            children: number;
+            /** Citation Accuracy */
+            citation_accuracy: number | null;
+            /** Claims Unsupported */
+            claims_unsupported: number | null;
+            /** Context Sha256 */
+            context_sha256: string;
+            /** Cost Estimated */
+            cost_estimated: boolean;
+            /** Cost Micros */
+            cost_micros: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Deadline At
+             * Format: date-time
+             */
+            deadline_at: string;
+            /** Error Code */
+            error_code: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Investigation Id */
+            investigation_id: string | null;
+            /** Job Id */
+            job_id: string | null;
+            /** Model */
+            model: string;
+            /** Output Schema */
+            output_schema: string;
+            /** Parent Run Id */
+            parent_run_id: string | null;
+            /** Price Version */
+            price_version: string | null;
+            /** Prompt Version */
+            prompt_version: string;
+            provider: components["schemas"]["AiProviderName"];
+            /** Refusal Category */
+            refusal_category: string | null;
+            /**
+             * Requested By
+             * Format: uuid
+             */
+            requested_by: string;
+            /** Requested By Name */
+            requested_by_name: string;
+            /** Resume At */
+            resume_at: string | null;
+            scope: components["schemas"]["AiScope"];
+            /** Served Model */
+            served_model: string | null;
+            /** Started At */
+            started_at: string | null;
+            status: components["schemas"]["AiRunStatus"];
+            /** Supersedes Run Id */
+            supersedes_run_id: string | null;
+            /** Target Id */
+            target_id: string | null;
+            /** Target Kind */
+            target_kind: ("finding" | "alert") | null;
+            task: components["schemas"]["AiTask"];
+            usage: components["schemas"]["AiTokenUsage"];
+        };
+        /** AiRunPage */
+        AiRunPage: {
+            /** Items */
+            items: components["schemas"]["AiRunOut"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * AiRunStatus
+         * @enum {string}
+         */
+        AiRunStatus: "queued" | "running" | "waiting" | "completed" | "partial" | "failed" | "refused";
+        /**
+         * AiScope
+         * @enum {string}
+         */
+        AiScope: "job" | "investigation";
+        /** AiSettingsOut */
+        AiSettingsOut: {
+            /** Ai Enabled */
+            ai_enabled: boolean;
+            ceilings: components["schemas"]["AiCeilingsOut"];
+            /** Daily Token Budget */
+            daily_token_budget: number;
+            default_provider: components["schemas"]["AiProviderName"] | null;
+            /** Incident Token Cap */
+            incident_token_cap: number;
+            /** Include Case Text */
+            include_case_text: boolean;
+            /** Include Strings */
+            include_strings: boolean;
+            /** Include Ti */
+            include_ti: boolean;
+            /** Internal Cidrs */
+            internal_cidrs: string[];
+            /** Internal Suffixes */
+            internal_suffixes: string[];
+            /** Platform Ai Enabled */
+            platform_ai_enabled: boolean;
+            /** Privacy Ack At */
+            privacy_ack_at: string | null;
+            /** Privacy Ack By */
+            privacy_ack_by: string | null;
+            /** Privacy Notice */
+            privacy_notice: string;
+            /** Pseudonymize Internal */
+            pseudonymize_internal: boolean;
+            /** Run Token Cap */
+            run_token_cap: number;
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /**
+         * AiSettingsUpdate
+         * @description Partial update. Turning AI on, and widening the disclosure later (strings or case text
+         *     on, pseudonymization off), needs `acknowledge_privacy` (RT22).
+         */
+        AiSettingsUpdate: {
+            /** Acknowledge Privacy */
+            acknowledge_privacy?: boolean;
+            /** Ai Enabled */
+            ai_enabled?: boolean | null;
+            /** Daily Token Budget */
+            daily_token_budget?: number | null;
+            default_provider?: components["schemas"]["AiProviderName"] | null;
+            /** Incident Token Cap */
+            incident_token_cap?: number | null;
+            /** Include Case Text */
+            include_case_text?: boolean | null;
+            /** Include Strings */
+            include_strings?: boolean | null;
+            /** Include Ti */
+            include_ti?: boolean | null;
+            /** Internal Cidrs */
+            internal_cidrs?: string[] | null;
+            /** Internal Suffixes */
+            internal_suffixes?: string[] | null;
+            /** Pseudonymize Internal */
+            pseudonymize_internal?: boolean | null;
+            /** Run Token Cap */
+            run_token_cap?: number | null;
+        };
+        /**
+         * AiTask
+         * @enum {string}
+         */
+        AiTask: "explain_finding" | "explain_alert" | "summarize_pcap" | "explain_static" | "ioc_correlation" | "attack_mapping" | "incident_summary" | "job_digest";
+        /** AiTimelineOut */
+        AiTimelineOut: {
+            /** Citations */
+            citations: components["schemas"]["AiCitationOut"][];
+            reason: components["schemas"]["CitationReason"] | null;
+            status: components["schemas"]["ClaimStatus"];
+            /** Text */
+            text: string;
+            /** Ts */
+            ts: string | null;
+        };
+        /** AiTokenUsage */
+        AiTokenUsage: {
+            /**
+             * Cache Read Tokens
+             * @default 0
+             */
+            cache_read_tokens: number;
+            /**
+             * Cache Write Tokens
+             * @default 0
+             */
+            cache_write_tokens: number;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+            /**
+             * Total Tokens
+             * @default 0
+             */
+            total_tokens: number;
+        };
+        /**
+         * AiUsageOut
+         * @description Today's (UTC) usage from `ai_runs.usage`; cost is an estimate.
+         */
+        AiUsageOut: {
+            ceilings: components["schemas"]["AiCeilingsOut"];
+            /** Cost Micros */
+            cost_micros: number;
+            /** Daily Token Budget */
+            daily_token_budget: number;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Incident Token Cap */
+            incident_token_cap: number;
+            /** Providers */
+            providers: components["schemas"]["AiProviderUsageOut"][];
+            /** Remaining Tokens */
+            remaining_tokens: number;
+            /** Run Token Cap */
+            run_token_cap: number;
+            /** Total Tokens */
+            total_tokens: number;
+        };
+        /** AiVerificationOut */
+        AiVerificationOut: {
+            /** Citations */
+            citations: {
+                [key: string]: number;
+            };
+            /** Dropped Refs */
+            dropped_refs: number;
+            /** Invalid Attack */
+            invalid_attack: number;
+            /** Reused From Run Id */
+            reused_from_run_id: string | null;
+            /** Truncation */
+            truncation: {
+                [key: string]: number;
+            };
+        };
+        /** AiVerifyQueued */
+        AiVerifyQueued: {
+            provider: components["schemas"]["AiProviderName"];
+            /**
+             * Status
+             * @default queued
+             * @constant
+             */
+            status: "queued";
         };
         /** AlertOut */
         AlertOut: {
@@ -1202,6 +2180,101 @@ export interface components {
              * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
              */
             total: number;
+        };
+        /**
+         * CitationReason
+         * @description Why a citation is not verified, or why a claim is unsupported.
+         * @enum {string}
+         */
+        CitationReason: "unknown_label" | "digest_not_evidence" | "field_not_allowed" | "out_of_scope" | "row_missing" | "quote_mismatch" | "quote_too_short" | "quote_required" | "weak_anchor" | "no_verified_citation" | "invalid_attack" | "no_timestamp";
+        /**
+         * CitationStatus
+         * @enum {string}
+         */
+        CitationStatus: "verified" | "unverified" | "invalid";
+        /**
+         * ClaimStatus
+         * @enum {string}
+         */
+        ClaimStatus: "supported" | "unsupported" | "hypothesis";
+        /**
+         * ContextItem
+         * @description One labelled item exactly as sent. `fields` keys are the only valid citation `field`
+         *     values for this item; values are already sanitized, pseudonymized, defanged, truncated.
+         */
+        ContextItem: {
+            /** Fields */
+            fields: {
+                [key: string]: string | number | boolean | null;
+            };
+            kind: components["schemas"]["RefKind"];
+            /** Label */
+            label: string;
+        };
+        /**
+         * ContextStats
+         * @description `ai_runs.context_stats` (≤ 16 KiB). Keys are kind values / category names only: never
+         *     field names, titles or filenames (RT4).
+         */
+        ContextStats: {
+            /**
+             * Dropped Keys
+             * @default 0
+             */
+            dropped_keys: number;
+            /**
+             * Est Tokens
+             * @default 0
+             */
+            est_tokens: number;
+            /**
+             * Jobs Omitted
+             * @default 0
+             */
+            jobs_omitted: number;
+            /**
+             * Neutralized
+             * @default 0
+             */
+            neutralized: number;
+            /**
+             * Omitted
+             * @default 0
+             */
+            omitted: number;
+            /**
+             * Per Kind
+             * @default {}
+             */
+            per_kind: {
+                [key: string]: components["schemas"]["KindStats"];
+            };
+            /**
+             * Pseudonymized
+             * @default {}
+             */
+            pseudonymized: {
+                [key: string]: number;
+            };
+            /**
+             * Stripped
+             * @default {}
+             */
+            stripped: {
+                [key: string]: number;
+            };
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+            /**
+             * Truncated Fields
+             * @default {}
+             */
+            truncated_fields: {
+                [key: string]: number;
+            };
         };
         /**
          * CustodyAction
@@ -1758,6 +2831,13 @@ export interface components {
          * @enum {string}
          */
         InvestigationStatus: "open" | "in_progress" | "closed" | "archived";
+        /** InvestigationTimelinePage */
+        InvestigationTimelinePage: {
+            /** Items */
+            items: components["schemas"]["TimelineEntryOut"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
         /** InvestigationUpdate */
         InvestigationUpdate: {
             /** Description */
@@ -1842,6 +2922,13 @@ export interface components {
              * Total
              * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
              */
+            total: number;
+        };
+        /** KindStats */
+        KindStats: {
+            /** Included */
+            included: number;
+            /** Total */
             total: number;
         };
         /** LibraryCount */
@@ -2164,6 +3251,11 @@ export interface components {
             /** Source */
             source?: string | null;
         };
+        /**
+         * OutputFlag
+         * @enum {string}
+         */
+        OutputFlag: "canary_leak" | "verdict_language" | "command_like" | "external_url";
         /** PeOut */
         PeOut: {
             /** Bits */
@@ -2264,6 +3356,12 @@ export interface components {
              */
             total: number;
         };
+        /**
+         * RefKind
+         * @description Kinds of context items; each has a one-letter label prefix (`prefix`).
+         * @enum {string}
+         */
+        RefKind: "job" | "finding" | "alert" | "flow" | "record" | "ioc" | "ti_result" | "sample" | "signature" | "capability" | "pe_summary" | "string" | "timeline" | "evidence" | "investigation" | "digest_claim";
         /** RegisterIn */
         RegisterIn: {
             /** Display Name */
@@ -2684,6 +3782,115 @@ export interface components {
             /** Total */
             total: number;
         };
+        /**
+         * RunMetrics
+         * @description `ai_runs.metrics` (≤ 4 KiB; frozen stored shape, RT12). Rates are None when their
+         *     denominator is zero.
+         */
+        RunMetrics: {
+            /**
+             * By Reason
+             * @default {}
+             */
+            by_reason: {
+                [key: string]: number;
+            };
+            /** Canary Sha256 */
+            canary_sha256?: string | null;
+            /** Citation Accuracy */
+            citation_accuracy?: number | null;
+            /**
+             * Citations Invalid
+             * @default 0
+             */
+            citations_invalid: number;
+            /**
+             * Citations Total
+             * @default 0
+             */
+            citations_total: number;
+            /**
+             * Citations Unverified
+             * @default 0
+             */
+            citations_unverified: number;
+            /**
+             * Citations Verified
+             * @default 0
+             */
+            citations_verified: number;
+            /**
+             * Claims Total
+             * @default 0
+             */
+            claims_total: number;
+            /**
+             * Claims Unsupported
+             * @default 0
+             */
+            claims_unsupported: number;
+            /**
+             * Cost Estimated
+             * @default false
+             */
+            cost_estimated: boolean;
+            /**
+             * Flags
+             * @default []
+             */
+            flags: components["schemas"]["OutputFlag"][];
+            /**
+             * Invalid Attack
+             * @default 0
+             */
+            invalid_attack: number;
+            /** Invalid Ref Rate */
+            invalid_ref_rate?: number | null;
+            /** Refusal Category */
+            refusal_category?: string | null;
+            /**
+             * Repaired
+             * @default false
+             */
+            repaired: boolean;
+            /**
+             * Replayed
+             * @default false
+             */
+            replayed: boolean;
+            /**
+             * Strip Counts
+             * @default {}
+             */
+            strip_counts: {
+                [key: string]: number;
+            };
+            /**
+             * Truncation
+             * @default {}
+             */
+            truncation: {
+                [key: string]: number;
+            };
+            /** Unsupported Claim Rate */
+            unsupported_claim_rate?: number | null;
+            /**
+             * Usage Unknown
+             * @default false
+             */
+            usage_unknown: boolean;
+            /**
+             * Version
+             * @default v1
+             * @constant
+             */
+            version: "v1";
+            /**
+             * Weak Anchor
+             * @default 0
+             */
+            weak_anchor: number;
+        };
         /** RunOut */
         RunOut: {
             /**
@@ -2963,6 +4170,41 @@ export interface components {
         TiSettingsUpdate: {
             /** Excluded Suffixes */
             excluded_suffixes: string[];
+        };
+        /**
+         * TimelineEntryOut
+         * @description One entry of the merged investigation timeline (M5). `ts_source` says which clock the
+         *     time comes from: `recorded` (platform event), `capture` (the capture's clock) or
+         *     `analysis_time` (a static finding, at its job's finish time).
+         */
+        TimelineEntryOut: {
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /** Job Id */
+            job_id: string | null;
+            /** Kind */
+            kind: string;
+            /**
+             * Ref Id
+             * Format: uuid
+             */
+            ref_id: string;
+            /** Ref Kind */
+            ref_kind: string;
+            /** Severity */
+            severity: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Ts
+             * Format: date-time
+             */
+            ts: string;
+            /** Ts Source */
+            ts_source: string;
         };
         /** TimelineOut */
         TimelineOut: {
@@ -3506,12 +4748,426 @@ export interface operations {
             };
         };
     };
+    preview_ai_context_api_v1_orgs__org_id__ai_context_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiRunCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiContextPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_ai_providers_api_v1_orgs__org_id__ai_providers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiProviderPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_ai_provider_api_v1_orgs__org_id__ai_providers__provider__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: components["schemas"]["AiProviderName"];
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiProviderUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiProviderSaved"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_ai_provider_key_api_v1_orgs__org_id__ai_providers__provider__key_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: components["schemas"]["AiProviderName"];
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The key was removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_ai_provider_api_v1_orgs__org_id__ai_providers__provider__verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: components["schemas"]["AiProviderName"];
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiVerifyQueued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_ai_runs_api_v1_orgs__org_id__ai_runs_get: {
+        parameters: {
+            query?: {
+                job_id?: string | null;
+                investigation_id?: string | null;
+                task?: components["schemas"]["AiTask"] | null;
+                status?: components["schemas"]["AiRunStatus"] | null;
+                target_id?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiRunPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_ai_run_api_v1_orgs__org_id__ai_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiRunCreate"];
+            };
+        };
+        responses: {
+            /** @description Deduplicated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiRunCreated"];
+                };
+            };
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiRunCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ai_run_api_v1_orgs__org_id__ai_runs__run_id__get: {
+        parameters: {
+            query?: {
+                pseudonyms?: "reverse" | "keep";
+            };
+            header?: never;
+            path: {
+                run_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiRunDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ai_run_context_api_v1_orgs__org_id__ai_runs__run_id__context_get: {
+        parameters: {
+            query?: {
+                reveal?: boolean;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiRunContextOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ai_settings_api_v1_orgs__org_id__ai_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_ai_settings_api_v1_orgs__org_id__ai_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ai_usage_api_v1_orgs__org_id__ai_usage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiUsageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_analyses_api_v1_orgs__org_id__analyses_get: {
         parameters: {
             query?: {
                 status?: components["schemas"]["AnalysisStatus"] | null;
                 analyzer?: components["schemas"]["Analyzer"] | null;
                 profile?: components["schemas"]["Profile"] | null;
+                investigation_id?: string | null;
+                latest_per_evidence?: boolean;
                 limit?: number;
                 offset?: number;
             };
@@ -3579,6 +5235,7 @@ export interface operations {
         parameters: {
             query?: {
                 severity?: number | null;
+                ref?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -3616,6 +5273,7 @@ export interface operations {
             query?: {
                 namespace?: string | null;
                 attack?: string | null;
+                ref?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -3734,6 +5392,7 @@ export interface operations {
             query?: {
                 severity?: components["schemas"]["FindingSeverity"] | null;
                 type?: string | null;
+                ref?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -3773,6 +5432,7 @@ export interface operations {
                 port?: number | null;
                 proto?: components["schemas"]["FlowProto"] | null;
                 sort?: components["schemas"]["FlowSort"];
+                ref?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -3810,6 +5470,7 @@ export interface operations {
             query?: {
                 library?: string | null;
                 q?: string | null;
+                ref?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -3848,6 +5509,7 @@ export interface operations {
                 type?: components["schemas"]["AnalysisIocType"] | null;
                 q?: string | null;
                 include?: components["schemas"]["IocInclude"] | null;
+                ref?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -3885,6 +5547,7 @@ export interface operations {
             query?: {
                 kind?: components["schemas"]["RecordKind"] | null;
                 q?: string | null;
+                ref?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -4062,6 +5725,7 @@ export interface operations {
         parameters: {
             query?: {
                 engine?: components["schemas"]["SignatureEngine"] | null;
+                ref?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -4099,6 +5763,7 @@ export interface operations {
             query?: {
                 encoding?: components["schemas"]["StringEncoding"] | null;
                 q?: string | null;
+                ref?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -4134,6 +5799,7 @@ export interface operations {
     list_timeline_api_v1_orgs__org_id__analyses__job_id__timeline_get: {
         parameters: {
             query?: {
+                ref?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -4769,6 +6435,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EvidenceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_investigation_timeline_api_v1_orgs__org_id__investigations__investigation_id__timeline_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                investigation_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvestigationTimelinePage"];
                 };
             };
             /** @description Validation Error */

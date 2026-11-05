@@ -1,0 +1,14 @@
+case: pcap_suspicious_http
+description: "curl download of an executable from the bare IP 203.0.113.70 over HTTP."
+must_mention:
+  - id: http_ip_literal
+    table: analysis_findings
+    where: {type: "http_to_ip_literal", src_ip: "10.0.5.50", dst_ip: "203.0.113.70"}
+  - id: exe_over_http
+    table: analysis_findings
+    where: {type: "executable_over_http", src_ip: "10.0.5.50", dst_ip: "203.0.113.70"}
+allowed_attack: [T1105, T1071.001, T1204.002]
+forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
+forbid_external_urls: true
+min_recall: 1.0
+fake_min_recall: 1.0

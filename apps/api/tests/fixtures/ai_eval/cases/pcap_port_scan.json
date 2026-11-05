@@ -1,0 +1,50 @@
+{
+ "clean": null,
+ "format": "cyberlab.ai_eval.case.v1",
+ "investigation": {"created_at":"2025-12-31T23:00:00Z","description":"","severity":"medium","title":"PCAP port_scan"},
+ "jobs": [
+  {
+   "analyzer": "pcap",
+   "created_at": "2026-01-01T00:06:22.100000Z",
+   "evidence": {"description":"pcap capture file, microsecond ts (little-endian) - version 2.4","filename":"port_scan.pcap","mime":"application/vnd.tcpdump.pcap","size_bytes":5824,"uploaded_at":"2026-01-01T00:05:22.100000Z"},
+   "finished_at": "2026-01-01T00:07:22.100000Z",
+   "key": "j1",
+   "profile": null,
+   "summary": {"capture":{"bytes":0,"duration_s":22.1,"first_ts":"2026-01-01T00:00:00Z","last_ts":"2026-01-01T00:00:22.100000Z","link_type":"Ethernet","packets":28,"protocol_hierarchy":[],"top_destinations":[],"top_ports":[],"top_sources":[]},"capture_format":"pcap","counts":{"alerts":0,"dns":0,"findings":2,"flows":12,"http":0,"iocs":0,"timeline":4,"tls":0},"engine_counts":{},"engine_errors":[],"schema_version":"pcap.v1","tool_versions":{"suricata":"7.0.10","tshark":"4.4.0","zeek":"8.0.10"},"truncated":{}},
+   "tables": {
+    "analysis_findings": [
+     {"attributes":{"attempts":120,"failed_ratio":0.975,"targets":120},"confidence":0.89,"description":"10.0.4.40 probed 120 ports on 192.168.10.10 in 6.0 s; 117 of 120 attempts (98%) were rejected or unanswered. This pattern matches network reconnaissance or an inventory scanner; check if it is authorised.","detection_method":"heuristic:port_scan@1","dst_ip":"192.168.10.10","dst_port":null,"evidence_refs":["Cba3cad87ec33d1c16","C9ddf516f464f2281e","C6ade693ee8d5630e3","Cc7fa67fac6e792dc0","C9707c928d28809759","C899b03f91e9d3fc10","C740fe3dfbc4900514","C16cd35f093cd519c4"],"finding_id":"2bbd4eba-69db-5000-85dc-b1a06152bd44","flow_ref":"Cba3cad87ec33d1c16","last_seen":"2026-01-01T00:00:05.950000Z","protocol":"tcp","severity":"high","src_ip":"10.0.4.40","src_port":null,"title":"Port scan (vertical)","ts":"2026-01-01T00:00:00Z","type":"port_scan_vertical"},
+     {"attributes":{"attempts":25,"failed_ratio":1.0,"targets":25},"confidence":0.9,"description":"10.0.4.40 probed port 445 on 25 hosts in 4.8 s; 25 of 25 attempts (100%) were rejected or unanswered. This pattern matches network reconnaissance or an inventory scanner; check if it is authorised.","detection_method":"heuristic:port_scan@1","dst_ip":null,"dst_port":445,"evidence_refs":["Cff2263239c0d2efaf","Cfdcc05dd53459c049","C2a14dca213908a543","C551192cbfbec561a7"],"finding_id":"928d9cb7-dc31-5b23-aeac-ecf7b15871c4","flow_ref":"Cff2263239c0d2efaf","last_seen":"2026-01-01T00:00:11Z","protocol":"tcp","severity":"medium","src_ip":"10.0.4.40","src_port":null,"title":"Port scan (horizontal)","ts":"2026-01-01T00:00:06.200000Z","type":"port_scan_horizontal"}
+    ],
+    "analysis_timeline": [
+     {"dst_ip":null,"event":"capture_start","ref":null,"severity":null,"src_ip":null,"title":"Capture start","ts":"2026-01-01T00:00:00Z"},
+     {"dst_ip":"192.168.10.10","event":"finding","ref":"2bbd4eba-69db-5000-85dc-b1a06152bd44","severity":"high","src_ip":"10.0.4.40","title":"Port scan (vertical)","ts":"2026-01-01T00:00:00Z"},
+     {"dst_ip":null,"event":"finding","ref":"928d9cb7-dc31-5b23-aeac-ecf7b15871c4","severity":"medium","src_ip":"10.0.4.40","title":"Port scan (horizontal)","ts":"2026-01-01T00:00:06.200000Z"},
+     {"dst_ip":null,"event":"capture_end","ref":null,"severity":null,"src_ip":null,"title":"Capture end","ts":"2026-01-01T00:00:22.100000Z"}
+    ],
+    "network_flows": [
+     {"community_id":"1:574bfcc3eda23dff6d5eabd289a=","conn_state":"REJ","dst_ip":"192.168.10.10","dst_port":1,"duration_s":0.002,"flow_ref":"Cba3cad87ec33d1c16","orig_bytes":0,"orig_pkts":2,"proto":"tcp","resp_bytes":0,"resp_pkts":1,"service":null,"src_ip":"10.0.4.40","src_port":56447,"total_bytes":0,"ts":"2026-01-01T00:00:00Z"},
+     {"community_id":"1:0c510ed1a16c01ba4d7705f0f19=","conn_state":"REJ","dst_ip":"192.168.10.10","dst_port":2,"duration_s":0.002,"flow_ref":"C9ddf516f464f2281e","orig_bytes":0,"orig_pkts":2,"proto":"tcp","resp_bytes":0,"resp_pkts":1,"service":null,"src_ip":"10.0.4.40","src_port":56098,"total_bytes":0,"ts":"2026-01-01T00:00:00.050000Z"},
+     {"community_id":"1:dc25261a8356858a4b6745f6663=","conn_state":"REJ","dst_ip":"192.168.10.10","dst_port":21,"duration_s":0.002,"flow_ref":"C6ade693ee8d5630e3","orig_bytes":0,"orig_pkts":2,"proto":"tcp","resp_bytes":0,"resp_pkts":1,"service":null,"src_ip":"10.0.4.40","src_port":41629,"total_bytes":0,"ts":"2026-01-01T00:00:01Z"},
+     {"community_id":"1:7de692ac7a430e3bf7f53c66f10=","conn_state":"SF","dst_ip":"192.168.10.10","dst_port":22,"duration_s":0.002,"flow_ref":"Cc7fa67fac6e792dc0","orig_bytes":0,"orig_pkts":2,"proto":"tcp","resp_bytes":0,"resp_pkts":1,"service":null,"src_ip":"10.0.4.40","src_port":41064,"total_bytes":0,"ts":"2026-01-01T00:00:01.050000Z"},
+     {"community_id":"1:8976b1f04e1668aa5f4de6e514c=","conn_state":"REJ","dst_ip":"192.168.10.10","dst_port":23,"duration_s":0.002,"flow_ref":"C9707c928d28809759","orig_bytes":0,"orig_pkts":2,"proto":"tcp","resp_bytes":0,"resp_pkts":1,"service":null,"src_ip":"10.0.4.40","src_port":47028,"total_bytes":0,"ts":"2026-01-01T00:00:01.100000Z"},
+     {"community_id":"1:0aae57add72bb9a13e51f0c1301=","conn_state":"REJ","dst_ip":"192.168.10.10","dst_port":25,"duration_s":0.002,"flow_ref":"C899b03f91e9d3fc10","orig_bytes":0,"orig_pkts":2,"proto":"tcp","resp_bytes":0,"resp_pkts":1,"service":null,"src_ip":"10.0.4.40","src_port":40453,"total_bytes":0,"ts":"2026-01-01T00:00:01.200000Z"},
+     {"community_id":"1:bef6d88ee246644c9ac33ea68dd=","conn_state":"SF","dst_ip":"192.168.10.10","dst_port":80,"duration_s":0.002,"flow_ref":"C740fe3dfbc4900514","orig_bytes":0,"orig_pkts":2,"proto":"tcp","resp_bytes":0,"resp_pkts":1,"service":null,"src_ip":"10.0.4.40","src_port":41890,"total_bytes":0,"ts":"2026-01-01T00:00:03.950000Z"},
+     {"community_id":"1:a74c2c52b02e7dfca1eaf06e9f3=","conn_state":"SF","dst_ip":"192.168.10.10","dst_port":443,"duration_s":0.002,"flow_ref":"C16cd35f093cd519c4","orig_bytes":0,"orig_pkts":2,"proto":"tcp","resp_bytes":0,"resp_pkts":1,"service":null,"src_ip":"10.0.4.40","src_port":41558,"total_bytes":0,"ts":"2026-01-01T00:00:22.100000Z"},
+     {"community_id":"1:a73fa6434be004f1fae09a2cfda=","conn_state":"S0","dst_ip":"192.168.10.101","dst_port":445,"duration_s":0.0,"flow_ref":"Cff2263239c0d2efaf","orig_bytes":0,"orig_pkts":1,"proto":"tcp","resp_bytes":0,"resp_pkts":0,"service":null,"src_ip":"10.0.4.40","src_port":43176,"total_bytes":0,"ts":"2026-01-01T00:00:06.200000Z"},
+     {"community_id":"1:826ff2810976ae7f8002e761c4b=","conn_state":"S0","dst_ip":"192.168.10.102","dst_port":445,"duration_s":0.0,"flow_ref":"Cfdcc05dd53459c049","orig_bytes":0,"orig_pkts":1,"proto":"tcp","resp_bytes":0,"resp_pkts":0,"service":null,"src_ip":"10.0.4.40","src_port":45323,"total_bytes":0,"ts":"2026-01-01T00:00:06.400000Z"},
+     {"community_id":"1:a03d95cb10245ebafc0b2325207=","conn_state":"S0","dst_ip":"192.168.10.103","dst_port":445,"duration_s":0.0,"flow_ref":"C2a14dca213908a543","orig_bytes":0,"orig_pkts":1,"proto":"tcp","resp_bytes":0,"resp_pkts":0,"service":null,"src_ip":"10.0.4.40","src_port":48605,"total_bytes":0,"ts":"2026-01-01T00:00:06.600000Z"},
+     {"community_id":"1:aa18191e35cd514f7ac456f186a=","conn_state":"S0","dst_ip":"192.168.10.104","dst_port":445,"duration_s":0.0,"flow_ref":"C551192cbfbec561a7","orig_bytes":0,"orig_pkts":1,"proto":"tcp","resp_bytes":0,"resp_pkts":0,"service":null,"src_ip":"10.0.4.40","src_port":55812,"total_bytes":0,"ts":"2026-01-01T00:00:06.800000Z"}
+    ]
+   },
+   "worker_version": "pcap-worker/hand-trimmed"
+  }
+ ],
+ "kind": "pcap",
+ "name": "pcap_port_scan",
+ "plants": [],
+ "provenance": {"dataset":"apps/workers/pcap/dataset/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":1337,"snapshot_version":1,"source":"hand-trimmed"},
+ "scenario": "port_scan",
+ "tasks": ["summarize_pcap"],
+ "ti": []
+}

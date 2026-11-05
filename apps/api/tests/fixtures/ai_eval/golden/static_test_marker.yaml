@@ -1,0 +1,14 @@
+case: static_test_marker
+description: "Carries the CyberLab static test marker (YARA + ClamAV test signatures)."
+must_mention:
+  - id: yara_test_marker
+    table: analysis_findings
+    where: {type: "yara_match", attributes.name: "CyberLab_Test_Marker"}
+  - id: clamav_test_marker
+    table: analysis_findings
+    where: {type: "av_signature_match", attributes.name: "PUA.CyberLab.TestMarker"}
+allowed_attack: []
+forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
+forbid_external_urls: true
+min_recall: 1.0
+fake_min_recall: 1.0

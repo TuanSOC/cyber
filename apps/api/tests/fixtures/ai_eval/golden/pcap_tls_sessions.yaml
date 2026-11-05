@@ -1,0 +1,17 @@
+case: pcap_tls_sessions
+description: "Self-signed, expired and legacy-version TLS servers contacted by 10.0.1.12."
+must_mention:
+  - id: tls_self_signed
+    table: analysis_findings
+    where: {type: "tls_self_signed", src_ip: "10.0.1.12", dst_ip: "203.0.113.30"}
+  - id: tls_expired
+    table: analysis_findings
+    where: {type: "tls_expired_certificate", src_ip: "10.0.1.12", dst_ip: "203.0.113.31"}
+  - id: tls_legacy
+    table: analysis_findings
+    where: {type: "tls_legacy_version", src_ip: "10.0.1.12", dst_ip: "203.0.113.32"}
+allowed_attack: [T1573, T1573.002, T1587.003, T1588.004]
+forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
+forbid_external_urls: true
+min_recall: 0.67
+fake_min_recall: 1.0

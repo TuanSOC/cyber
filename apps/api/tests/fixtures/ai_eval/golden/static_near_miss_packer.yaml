@@ -1,0 +1,7 @@
+case: static_near_miss_packer
+description: "A single packer indicator: no finding."
+must_mention: []
+allowed_attack: []
+forbidden_terms: ["malicious", "malware", "infected", "ransomware", "trojan", "backdoor"]
+forbid_external_urls: true
+min_recall: null

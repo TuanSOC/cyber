@@ -1,0 +1,11 @@
+case: pcap_dns_anomalies
+description: "Long high-entropy TXT lookups under example.net from 10.0.3.30 (tunneling-like)."
+must_mention:
+  - id: dns_tunneling
+    table: analysis_findings
+    where: {type: "dns_tunneling_like", src_ip: "10.0.3.30", attributes.domain: "example.net"}
+allowed_attack: [T1071.004, T1572]
+forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
+forbid_external_urls: true
+min_recall: 1.0
+fake_min_recall: 1.0

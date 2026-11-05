@@ -1,0 +1,66 @@
+{
+ "clean": null,
+ "format": "cyberlab.ai_eval.case.v1",
+ "investigation": {"created_at":"2025-12-31T23:00:00Z","description":"","severity":"medium","title":"Static pe_anomalies"},
+ "jobs": [
+  {
+   "analyzer": "static",
+   "created_at": "2026-01-01T01:01:00Z",
+   "evidence": {"description":"PE32 executable for MS Windows","filename":"pe_anomalies.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":15872,"uploaded_at":"2026-01-01T01:00:00Z"},
+   "finished_at": "2026-01-01T01:02:00Z",
+   "key": "j1",
+   "profile": "full",
+   "summary": {"counts":{"capabilities":0,"exports":0,"findings":5,"imports":16,"iocs":0,"resources":0,"sections":3,"signatures":1,"strings":2},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":4070908800,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"2331ddaba5dbbe65fce9eba29efdedc3","is_dll":false,"machine":"I386","overlay_size":3584,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":2},"profile":"full","sample":{"analyzer_derived":{"imphash":"2331ddaba5dbbe65fce9eba29efdedc3","rich_header_hash":null,"ssdeep":null},"entropy":5.2,"file_type":"PE32 executable for MS Windows","md5":"9b83dad0fb49374d3c9746da82a34282","mime":"application/vnd.microsoft.portable-executable","sha1":"e86bf04d537487fec9e0c9a162f8f7beae100734","sha256":"be1c58b4976fe09d8d57b2eee613c90fa67aaac03a4416d4902eb3c1089f8af3","size":15872},"schema_version":"static.v1","tool_versions":{"capa":"9.2.1","clamav":"1.4.3","floss":"3.1.1","yara":"4.5.2"},"truncated":{}},
+   "tables": {
+    "analysis_findings": [
+     {"attributes":{"reason":"future","timestamp":4070908800},"confidence":0.8,"description":"The PE header timestamp is 2099-01-01 00:00:00 UTC (in the future). Timestamps are easily set to any value, so this only says the header was not written by a normal build.","detection_method":"heuristic:pe_anomaly@1","dst_ip":null,"dst_port":null,"evidence_refs":["pe_anomaly:timestamp_anomaly"],"finding_id":"534f40fd-d288-5409-b617-bd241a8e670f","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"Implausible compile timestamp","ts":"2026-01-01T00:00:00Z","type":"timestamp_anomaly"},
+     {"attributes":{"count":2},"confidence":0.8,"description":"The PE registers 2 TLS callback(s), which run before the entry point. Common in MinGW / Delphi runtimes; also used to run code early.","detection_method":"heuristic:pe_anomaly@1","dst_ip":null,"dst_port":null,"evidence_refs":["pe_anomaly:tls_callbacks"],"finding_id":"9311697b-f45c-5679-869f-66261db77b5a","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"TLS callbacks present (2)","ts":"2026-01-01T00:00:00Z","type":"tls_callbacks"},
+     {"attributes":{"count":1,"largest":8192},"confidence":0.8,"description":"1 resource(s) have entropy above 7.2 (largest: 8192 bytes), consistent with compressed or encrypted embedded data.","detection_method":"heuristic:pe_anomaly@1","dst_ip":null,"dst_port":null,"evidence_refs":["pe_anomaly:high_entropy_resource"],"finding_id":"b0fbdca5-01b9-59b0-a8c0-10a84ad6cb8b","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"High-entropy resources (1)","ts":"2026-01-01T00:00:00Z","type":"high_entropy_resource"},
+     {"attributes":{"size":3584},"confidence":0.8,"description":"3584 bytes follow the last section (entropy of the whole file: 6.21). Installers and self-extracting archives store payloads this way.","detection_method":"heuristic:pe_anomaly@1","dst_ip":null,"dst_port":null,"evidence_refs":["pe_anomaly:overlay"],"finding_id":"5b85ff1d-900b-5d20-9148-0636f16c0683","flow_ref":null,"last_seen":null,"protocol":null,"severity":"low","src_ip":null,"src_port":null,"title":"Overlay data after the last section (3584 bytes)","ts":"2026-01-01T00:00:00Z","type":"overlay"},
+     {"attributes":{"description":"embedded PE in the overlay","engine":"yara","name":"CyberLab_Embedded_PE_In_Overlay","namespace":"cyberlab"},"confidence":0.8,"description":"The YARA rule cyberlab:CyberLab_Embedded_PE_In_Overlay (rule-supplied description: embedded PE in the overlay) matched this file.","detection_method":"signature:yara@1","dst_ip":null,"dst_port":null,"evidence_refs":["yara:CyberLab_Embedded_PE_In_Overlay"],"finding_id":"af36c48c-8fa9-57fa-9f79-75bd920cce46","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"YARA rule match: CyberLab_Embedded_PE_In_Overlay","ts":"2026-01-01T00:00:00Z","type":"yara_match"}
+    ],
+    "malware_imports": [
+     {"function":"GetModuleHandleA","library":"KERNEL32.dll","ordinal":null},
+     {"function":"GetCommandLineA","library":"KERNEL32.dll","ordinal":null},
+     {"function":"GetLastError","library":"KERNEL32.dll","ordinal":null},
+     {"function":"ExitProcess","library":"KERNEL32.dll","ordinal":null},
+     {"function":"GetStartupInfoA","library":"KERNEL32.dll","ordinal":null},
+     {"function":"HeapAlloc","library":"KERNEL32.dll","ordinal":null},
+     {"function":"HeapFree","library":"KERNEL32.dll","ordinal":null},
+     {"function":"GetProcessHeap","library":"KERNEL32.dll","ordinal":null},
+     {"function":"CloseHandle","library":"KERNEL32.dll","ordinal":null},
+     {"function":"Sleep","library":"KERNEL32.dll","ordinal":null},
+     {"function":"printf","library":"msvcrt.dll","ordinal":null},
+     {"function":"malloc","library":"msvcrt.dll","ordinal":null},
+     {"function":"free","library":"msvcrt.dll","ordinal":null},
+     {"function":"strlen","library":"msvcrt.dll","ordinal":null},
+     {"function":"memcpy","library":"msvcrt.dll","ordinal":null},
+     {"function":"exit","library":"msvcrt.dll","ordinal":null}
+    ],
+    "malware_samples": [
+     {"elf":null,"entropy":5.2,"file_format":"pe","file_type":"PE32 executable for MS Windows","md5":"9b83dad0fb49374d3c9746da82a34282","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":4070908800,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"2331ddaba5dbbe65fce9eba29efdedc3","is_dll":false,"machine":"I386","overlay_size":3584,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":2},"sha1":"e86bf04d537487fec9e0c9a162f8f7beae100734","sha256":"be1c58b4976fe09d8d57b2eee613c90fa67aaac03a4416d4902eb3c1089f8af3","size":15872,"ssdeep":null}
+    ],
+    "malware_sections": [
+     {"entropy":6.1,"flags":["read","execute"],"index":0,"name":".text","raw_size":2048,"virtual_address":4096,"virtual_size":2048},
+     {"entropy":4.2,"flags":["read"],"index":1,"name":".rdata","raw_size":2048,"virtual_address":8192,"virtual_size":2048},
+     {"entropy":1.3,"flags":["read"],"index":2,"name":".data","raw_size":2048,"virtual_address":12288,"virtual_size":2048}
+    ],
+    "malware_signature_matches": [
+     {"engine":"yara","meta":{"description":"embedded PE in the overlay"},"name":"CyberLab_Embedded_PE_In_Overlay","namespace":"cyberlab","tags":[]}
+    ],
+    "malware_strings": [
+     {"encoding":"ascii","offset":8192,"value":"anomalies sample"},
+     {"encoding":"ascii","offset":8209,"value":"embedded"}
+    ]
+   },
+   "worker_version": "static-worker/hand-trimmed"
+  }
+ ],
+ "kind": "static",
+ "name": "static_pe_anomalies",
+ "plants": [],
+ "provenance": {"dataset":"apps/workers/static/samples/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":20261105,"snapshot_version":1,"source":"hand-trimmed"},
+ "scenario": "pe_anomalies",
+ "tasks": ["explain_static"],
+ "ti": []
+}

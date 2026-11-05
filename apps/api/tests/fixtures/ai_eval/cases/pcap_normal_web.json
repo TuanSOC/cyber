@@ -1,0 +1,58 @@
+{
+ "clean": null,
+ "format": "cyberlab.ai_eval.case.v1",
+ "investigation": {"created_at":"2025-12-31T23:00:00Z","description":"","severity":"medium","title":"PCAP normal_web"},
+ "jobs": [
+  {
+   "analyzer": "pcap",
+   "created_at": "2026-01-01T00:09:10.800000Z",
+   "evidence": {"description":"pcap capture file, microsecond ts (little-endian) - version 2.4","filename":"normal_web.pcap","mime":"application/vnd.tcpdump.pcap","size_bytes":6112,"uploaded_at":"2026-01-01T00:08:10.800000Z"},
+   "finished_at": "2026-01-01T00:10:10.800000Z",
+   "key": "j1",
+   "profile": null,
+   "summary": {"capture":{"bytes":8460,"duration_s":190.8,"first_ts":"2026-01-01T00:00:00Z","last_ts":"2026-01-01T00:03:10.800000Z","link_type":"Ethernet","packets":63,"protocol_hierarchy":[],"top_destinations":[],"top_ports":[],"top_sources":[]},"capture_format":"pcap","counts":{"alerts":0,"dns":2,"findings":0,"flows":7,"http":3,"iocs":5,"timeline":2,"tls":2},"engine_counts":{},"engine_errors":[],"schema_version":"pcap.v1","tool_versions":{"suricata":"7.0.10","tshark":"4.4.0","zeek":"8.0.10"},"truncated":{}},
+   "tables": {
+    "analysis_timeline": [
+     {"dst_ip":null,"event":"capture_start","ref":null,"severity":null,"src_ip":null,"title":"Capture start","ts":"2026-01-01T00:00:00Z"},
+     {"dst_ip":null,"event":"capture_end","ref":null,"severity":null,"src_ip":null,"title":"Capture end","ts":"2026-01-01T00:03:10.800000Z"}
+    ],
+    "iocs": [
+     {"count":4,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"dns","type":"domain","value":"www.example.com"},
+     {"count":3,"first_seen":"2026-01-01T00:00:40Z","last_seen":"2026-01-01T00:00:40Z","source":"dns","type":"domain","value":"cdn.example.net"},
+     {"count":3,"first_seen":"2026-01-01T00:00:00.500000Z","last_seen":"2026-01-01T00:00:00.500000Z","source":"flow","type":"ip","value":"198.51.100.10"},
+     {"count":2,"first_seen":"2026-01-01T00:00:41Z","last_seen":"2026-01-01T00:00:41Z","source":"flow","type":"ip","value":"198.51.100.20"},
+     {"count":1,"first_seen":"2026-01-01T00:03:10.800000Z","last_seen":"2026-01-01T00:03:10.800000Z","source":"http","type":"url","value":"http://www.example.com/news?id=7"}
+    ],
+    "network_flows": [
+     {"community_id":"1:ab946c2bd5ac62dd2ff0dc1d95d=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.06,"flow_ref":"C9023083efeb090ca8","orig_bytes":40,"orig_pkts":5,"proto":"udp","resp_bytes":90,"resp_pkts":4,"service":"dns","src_ip":"10.0.1.10","src_port":46218,"total_bytes":130,"ts":"2026-01-01T00:00:00Z"},
+     {"community_id":"1:5273f5cf69bebe80678249af5ca=","conn_state":"SF","dst_ip":"198.51.100.10","dst_port":80,"duration_s":0.06,"flow_ref":"Caca688c63738f7ac7","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.1.10","src_port":43015,"total_bytes":400,"ts":"2026-01-01T00:00:00.500000Z"},
+     {"community_id":"1:9d284f7faabca08efc7955b2276=","conn_state":"SF","dst_ip":"198.51.100.10","dst_port":80,"duration_s":0.06,"flow_ref":"C6822e5ac508538ed1","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.1.10","src_port":49032,"total_bytes":400,"ts":"2026-01-01T00:00:37.200000Z"},
+     {"community_id":"1:0260a0e648ac38ccd5aa9b1088d=","conn_state":"SF","dst_ip":"198.51.100.10","dst_port":80,"duration_s":0.06,"flow_ref":"Ca1695e1ef2952462a","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.1.10","src_port":43062,"total_bytes":400,"ts":"2026-01-01T00:03:10.800000Z"},
+     {"community_id":"1:12006fce7c056702f0dc6d1c0ac=","conn_state":"SF","dst_ip":"10.0.0.53","dst_port":53,"duration_s":0.06,"flow_ref":"Ca3a7456b4fd3f4763","orig_bytes":40,"orig_pkts":5,"proto":"udp","resp_bytes":90,"resp_pkts":4,"service":"dns","src_ip":"10.0.1.10","src_port":48786,"total_bytes":130,"ts":"2026-01-01T00:00:40Z"},
+     {"community_id":"1:d777f47f04a70d0dbeef4ded844=","conn_state":"SF","dst_ip":"198.51.100.20","dst_port":443,"duration_s":0.06,"flow_ref":"Cf7baab3666f232511","orig_bytes":900,"orig_pkts":5,"proto":"tcp","resp_bytes":2600,"resp_pkts":4,"service":"ssl","src_ip":"10.0.1.10","src_port":43269,"total_bytes":3500,"ts":"2026-01-01T00:00:41Z"},
+     {"community_id":"1:0bf3442a360db15208a7278df7f=","conn_state":"SF","dst_ip":"198.51.100.20","dst_port":443,"duration_s":0.06,"flow_ref":"C8272161e7f29d919e","orig_bytes":900,"orig_pkts":5,"proto":"tcp","resp_bytes":2600,"resp_pkts":4,"service":"ssl","src_ip":"10.0.1.10","src_port":43851,"total_bytes":3500,"ts":"2026-01-01T00:02:11.500000Z"}
+    ],
+    "network_records": [
+     {"details":{"answers":["198.51.100.10"],"qtype":"A","query":"www.example.com","rcode":"NOERROR","ttls":[300.0]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"C9023083efeb090ca8","kind":"dns","src_ip":"10.0.1.10","src_port":53000,"summary":"A www.example.com NOERROR 198.51.100.10","ts":"2026-01-01T00:00:00Z"},
+     {"details":{"host":"www.example.com","method":"GET","referrer":null,"request_body_len":null,"resp_mime_types":["text/html"],"response_body_len":null,"status_code":200,"uri":"/","user_agent":"Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/140.0"},"dst_ip":"198.51.100.10","dst_port":80,"flow_ref":"Caca688c63738f7ac7","kind":"http","src_ip":"10.0.1.10","src_port":41000,"summary":"GET www.example.com/ 200 Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/140.0","ts":"2026-01-01T00:00:00.500000Z"},
+     {"details":{"host":"www.example.com","method":"GET","referrer":null,"request_body_len":null,"resp_mime_types":["text/html"],"response_body_len":null,"status_code":200,"uri":"/about","user_agent":"Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/140.0"},"dst_ip":"198.51.100.10","dst_port":80,"flow_ref":"C6822e5ac508538ed1","kind":"http","src_ip":"10.0.1.10","src_port":41000,"summary":"GET www.example.com/about 200 Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/140.0","ts":"2026-01-01T00:00:37.200000Z"},
+     {"details":{"host":"www.example.com","method":"GET","referrer":null,"request_body_len":null,"resp_mime_types":["text/html"],"response_body_len":null,"status_code":200,"uri":"/news?id=7","user_agent":"Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/140.0"},"dst_ip":"198.51.100.10","dst_port":80,"flow_ref":"Ca1695e1ef2952462a","kind":"http","src_ip":"10.0.1.10","src_port":41000,"summary":"GET www.example.com/news?id=7 200 Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/140.0","ts":"2026-01-01T00:03:10.800000Z"},
+     {"details":{"answers":["198.51.100.20"],"qtype":"A","query":"cdn.example.net","rcode":"NOERROR","ttls":[300.0]},"dst_ip":"10.0.0.53","dst_port":53,"flow_ref":"Ca3a7456b4fd3f4763","kind":"dns","src_ip":"10.0.1.10","src_port":53000,"summary":"A cdn.example.net NOERROR 198.51.100.20","ts":"2026-01-01T00:00:40Z"},
+     {"details":{"cert_issuer":"CN=CyberLab Synthetic Test CA","cert_not_after":"2027-01-01T00:00:00Z","cert_not_before":"2025-01-01T00:00:00Z","cert_sha256":"7eea3b3ec528156d400dc7c84b1d92664eb6d0a5369c9225ffc4d2255c3a9261","cert_subject":"CN=cdn.example.net","cipher":"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256","established":true,"ja3":"3abc57eca01f743c8eb963d45811d1d8","ja3s":"6c48b873dd82f6f61588650cc2aefbe9","self_signed":false,"server_name":"cdn.example.net","validation_status":"ok","version":"TLSv12"},"dst_ip":"198.51.100.20","dst_port":443,"flow_ref":"Cf7baab3666f232511","kind":"tls","src_ip":"10.0.1.10","src_port":42000,"summary":"cdn.example.net TLSv12 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 ja3=3abc57eca01f743c8eb963d45811d1d8 CN=cdn.example.net","ts":"2026-01-01T00:00:41Z"},
+     {"details":{"cert_issuer":"CN=CyberLab Synthetic Test CA","cert_not_after":"2027-01-01T00:00:00Z","cert_not_before":"2025-01-01T00:00:00Z","cert_sha256":"7eea3b3ec528156d400dc7c84b1d92664eb6d0a5369c9225ffc4d2255c3a9261","cert_subject":"CN=cdn.example.net","cipher":"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256","established":true,"ja3":"3abc57eca01f743c8eb963d45811d1d8","ja3s":"6c48b873dd82f6f61588650cc2aefbe9","self_signed":false,"server_name":"cdn.example.net","validation_status":"ok","version":"TLSv12"},"dst_ip":"198.51.100.20","dst_port":443,"flow_ref":"C8272161e7f29d919e","kind":"tls","src_ip":"10.0.1.10","src_port":42000,"summary":"cdn.example.net TLSv12 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 ja3=3abc57eca01f743c8eb963d45811d1d8 CN=cdn.example.net","ts":"2026-01-01T00:02:11.500000Z"}
+    ]
+   },
+   "worker_version": "pcap-worker/hand-trimmed"
+  }
+ ],
+ "kind": "pcap",
+ "name": "pcap_normal_web",
+ "plants": [],
+ "provenance": {"dataset":"apps/workers/pcap/dataset/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":1337,"snapshot_version":1,"source":"hand-trimmed"},
+ "scenario": "normal_web",
+ "tasks": ["summarize_pcap"],
+ "ti": [
+  {"found":true,"ioc":{"type":"domain","value":"www.example.com"},"job":"j1","provider":"otx","status":"ok","summary":{"provider":"otx","pulse_count":1,"pulses":[{"name":"CyberLab synthetic pulse: domain www.example.com","tags":["synthetic","test"]}]},"tags":["synthetic"]},
+  {"found":true,"ioc":{"type":"domain","value":"www.example.com"},"job":"j1","provider":"misp","status":"ok","summary":{"attribute_count":1,"attributes":[{"category":"Network activity","event_id":1,"event_info":"CyberLab synthetic event: domain www.example.com","tags":["tlp:clear"],"to_ids":false,"type":"ip-dst"}],"provider":"misp","tlp":["tlp:clear"]},"tags":["tlp:clear"]}
+ ]
+}

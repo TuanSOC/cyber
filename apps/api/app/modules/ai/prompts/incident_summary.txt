@@ -1,0 +1,1 @@
+Task: incident_summary. Summarize this incident across its evidence: the key observations, a merged timeline of the main events, how the jobs relate to each other, what the activity may indicate, and recommended next steps for the investigation. Digest claims are earlier AI summaries for orientation only; cite the records they point to, never the digest claims.

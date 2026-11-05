@@ -1,0 +1,77 @@
+{
+ "clean": null,
+ "format": "cyberlab.ai_eval.case.v1",
+ "investigation": {"created_at":"2025-12-31T23:00:00Z","description":"","severity":"medium","title":"PCAP beacon"},
+ "jobs": [
+  {
+   "analyzer": "pcap",
+   "created_at": "2026-01-01T00:17:00.400000Z",
+   "evidence": {"description":"pcap capture file, microsecond ts (little-endian) - version 2.4","filename":"beacon.pcap","mime":"application/vnd.tcpdump.pcap","size_bytes":7360,"uploaded_at":"2026-01-01T00:16:00.400000Z"},
+   "finished_at": "2026-01-01T00:18:00.400000Z",
+   "key": "j1",
+   "profile": null,
+   "summary": {"capture":{"bytes":4800,"duration_s":660.7,"first_ts":"2025-12-31T23:59:59.700000Z","last_ts":"2026-01-01T00:11:00.400000Z","link_type":"Ethernet","packets":108,"protocol_hierarchy":[],"top_destinations":[],"top_ports":[],"top_sources":[]},"capture_format":"pcap","counts":{"alerts":3,"dns":0,"findings":1,"flows":12,"http":12,"iocs":3,"timeline":3,"tls":0},"engine_counts":{},"engine_errors":[],"schema_version":"pcap.v1","tool_versions":{"suricata":"7.0.10","tshark":"4.4.0","zeek":"8.0.10"},"truncated":{}},
+   "tables": {
+    "analysis_findings": [
+     {"attributes":{"connections":12,"interval_cv":0.0063,"mean_interval_s":60.06,"size_cv":0.0},"confidence":0.86,"description":"10.0.2.20 connected to 203.0.113.50:8080/tcp 12 times every 60.0 s (±0.4 s, interval CV 0.006) with similar sizes (size CV 0.000). Regular timing is typical of automated check-ins (updaters, agents, C2); confirm the client.","detection_method":"heuristic:beaconing@1","dst_ip":"203.0.113.50","dst_port":8080,"evidence_refs":["Cf23e08f1a18df453b","Cf32404c50db7cb502","C50c9d242b4e83de75","Cd69cbc18aa2418d1d","Cd3ff6ea296be0b80c","Cd15de528eae920478","Cf2ef97cab60780dd1","C427e9ea4a641e0677","Cc0aa2dcf0f4550c8c","Cf604d5e3282070288","Cc50bce479f0b214e6","C1dd7f6cc7f825be19"],"finding_id":"15f06d92-8dc1-5987-95eb-48d8a042470a","flow_ref":"Cf23e08f1a18df453b","last_seen":"2026-01-01T00:11:00.400000Z","protocol":"tcp","severity":"medium","src_ip":"10.0.2.20","src_port":null,"title":"Periodic connections (beacon-like)","ts":"2025-12-31T23:59:59.700000Z","type":"beaconing"}
+    ],
+    "analysis_timeline": [
+     {"dst_ip":null,"event":"capture_start","ref":null,"severity":null,"src_ip":null,"title":"Capture start","ts":"2025-12-31T23:59:59.700000Z"},
+     {"dst_ip":"203.0.113.50","event":"finding","ref":"15f06d92-8dc1-5987-95eb-48d8a042470a","severity":"medium","src_ip":"10.0.2.20","title":"Periodic connections (beacon-like)","ts":"2025-12-31T23:59:59.700000Z"},
+     {"dst_ip":null,"event":"capture_end","ref":null,"severity":null,"src_ip":null,"title":"Capture end","ts":"2026-01-01T00:11:00.400000Z"}
+    ],
+    "iocs": [
+     {"count":12,"first_seen":"2025-12-31T23:59:59.700000Z","last_seen":"2025-12-31T23:59:59.700000Z","source":"flow","type":"ip","value":"203.0.113.50"},
+     {"count":12,"first_seen":"2025-12-31T23:59:59.700000Z","last_seen":"2025-12-31T23:59:59.700000Z","source":"http","type":"domain","value":"updates.example.net"},
+     {"count":12,"first_seen":"2025-12-31T23:59:59.700000Z","last_seen":"2025-12-31T23:59:59.700000Z","source":"http","type":"url","value":"http://updates.example.net/api/checkin"}
+    ],
+    "network_alerts": [
+     {"category":"Misc activity","community_id":null,"dst_ip":"203.0.113.50","dst_port":8080,"flow_ref":null,"proto":"TCP","rev":1,"severity":3,"signature":"CYBERLAB TEST beacon check-in","signature_id":9000002,"src_ip":"10.0.2.20","src_port":41000,"ts":"2025-12-31T23:59:59.700000Z"},
+     {"category":"Misc activity","community_id":null,"dst_ip":"203.0.113.50","dst_port":8080,"flow_ref":null,"proto":"TCP","rev":1,"severity":3,"signature":"CYBERLAB TEST beacon check-in","signature_id":9000002,"src_ip":"10.0.2.20","src_port":41000,"ts":"2026-01-01T00:01:00.400000Z"},
+     {"category":"Misc activity","community_id":null,"dst_ip":"203.0.113.50","dst_port":8080,"flow_ref":null,"proto":"TCP","rev":1,"severity":3,"signature":"CYBERLAB TEST beacon check-in","signature_id":9000002,"src_ip":"10.0.2.20","src_port":41000,"ts":"2026-01-01T00:01:59.700000Z"}
+    ],
+    "network_flows": [
+     {"community_id":"1:8006c07d0f647b12c0f1b8f9e17=","conn_state":"SF","dst_ip":"203.0.113.50","dst_port":8080,"duration_s":0.06,"flow_ref":"Cf23e08f1a18df453b","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.2.20","src_port":44006,"total_bytes":400,"ts":"2025-12-31T23:59:59.700000Z"},
+     {"community_id":"1:78a185c610fb4d0cbad156b908b=","conn_state":"SF","dst_ip":"203.0.113.50","dst_port":8080,"duration_s":0.06,"flow_ref":"Cf32404c50db7cb502","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.2.20","src_port":58463,"total_bytes":400,"ts":"2026-01-01T00:01:00.400000Z"},
+     {"community_id":"1:506e2db76c2c295e13dcc21a090=","conn_state":"SF","dst_ip":"203.0.113.50","dst_port":8080,"duration_s":0.06,"flow_ref":"C50c9d242b4e83de75","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.2.20","src_port":48977,"total_bytes":400,"ts":"2026-01-01T00:01:59.700000Z"},
+     {"community_id":"1:41639b9276d4319bbcb5affe3bc=","conn_state":"SF","dst_ip":"203.0.113.50","dst_port":8080,"duration_s":0.06,"flow_ref":"Cd69cbc18aa2418d1d","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.2.20","src_port":46807,"total_bytes":400,"ts":"2026-01-01T00:03:00.400000Z"},
+     {"community_id":"1:b8d2dc1006dece1dbeadcf7ded4=","conn_state":"SF","dst_ip":"203.0.113.50","dst_port":8080,"duration_s":0.06,"flow_ref":"Cd3ff6ea296be0b80c","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.2.20","src_port":46467,"total_bytes":400,"ts":"2026-01-01T00:03:59.700000Z"},
+     {"community_id":"1:0817f2524ee476fabc77ba53a20=","conn_state":"SF","dst_ip":"203.0.113.50","dst_port":8080,"duration_s":0.06,"flow_ref":"Cd15de528eae920478","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.2.20","src_port":43333,"total_bytes":400,"ts":"2026-01-01T00:05:00.400000Z"},
+     {"community_id":"1:38f7d487f61c9158db2a73e410c=","conn_state":"SF","dst_ip":"203.0.113.50","dst_port":8080,"duration_s":0.06,"flow_ref":"Cf2ef97cab60780dd1","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.2.20","src_port":58329,"total_bytes":400,"ts":"2026-01-01T00:05:59.700000Z"},
+     {"community_id":"1:515d148a07594f5b57b65aaac98=","conn_state":"SF","dst_ip":"203.0.113.50","dst_port":8080,"duration_s":0.06,"flow_ref":"C427e9ea4a641e0677","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.2.20","src_port":44833,"total_bytes":400,"ts":"2026-01-01T00:07:00.400000Z"},
+     {"community_id":"1:51cf2b0dbb05e5b1879f691a86d=","conn_state":"SF","dst_ip":"203.0.113.50","dst_port":8080,"duration_s":0.06,"flow_ref":"Cc0aa2dcf0f4550c8c","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.2.20","src_port":49259,"total_bytes":400,"ts":"2026-01-01T00:07:59.700000Z"},
+     {"community_id":"1:0b848f588ca05a7d1764602bad6=","conn_state":"SF","dst_ip":"203.0.113.50","dst_port":8080,"duration_s":0.06,"flow_ref":"Cf604d5e3282070288","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.2.20","src_port":50506,"total_bytes":400,"ts":"2026-01-01T00:09:00.400000Z"},
+     {"community_id":"1:2c6352bcfc2b63bd881422a7c03=","conn_state":"SF","dst_ip":"203.0.113.50","dst_port":8080,"duration_s":0.06,"flow_ref":"Cc50bce479f0b214e6","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.2.20","src_port":42414,"total_bytes":400,"ts":"2026-01-01T00:09:59.700000Z"},
+     {"community_id":"1:3d1b7a4bdda52af6250a674b6a0=","conn_state":"SF","dst_ip":"203.0.113.50","dst_port":8080,"duration_s":0.06,"flow_ref":"C1dd7f6cc7f825be19","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.2.20","src_port":46569,"total_bytes":400,"ts":"2026-01-01T00:11:00.400000Z"}
+    ],
+    "network_records": [
+     {"details":{"host":"updates.example.net","method":"POST","referrer":null,"request_body_len":31,"resp_mime_types":["application/json"],"response_body_len":14,"status_code":200,"uri":"/api/checkin","user_agent":"agent/1.0"},"dst_ip":"203.0.113.50","dst_port":8080,"flow_ref":"Cf23e08f1a18df453b","kind":"http","src_ip":"10.0.2.20","src_port":41000,"summary":"POST updates.example.net/api/checkin 200 agent/1.0","ts":"2025-12-31T23:59:59.700000Z"},
+     {"details":{"host":"updates.example.net","method":"POST","referrer":null,"request_body_len":31,"resp_mime_types":["application/json"],"response_body_len":14,"status_code":200,"uri":"/api/checkin","user_agent":"agent/1.0"},"dst_ip":"203.0.113.50","dst_port":8080,"flow_ref":"Cf32404c50db7cb502","kind":"http","src_ip":"10.0.2.20","src_port":41000,"summary":"POST updates.example.net/api/checkin 200 agent/1.0","ts":"2026-01-01T00:01:00.400000Z"},
+     {"details":{"host":"updates.example.net","method":"POST","referrer":null,"request_body_len":31,"resp_mime_types":["application/json"],"response_body_len":14,"status_code":200,"uri":"/api/checkin","user_agent":"agent/1.0"},"dst_ip":"203.0.113.50","dst_port":8080,"flow_ref":"C50c9d242b4e83de75","kind":"http","src_ip":"10.0.2.20","src_port":41000,"summary":"POST updates.example.net/api/checkin 200 agent/1.0","ts":"2026-01-01T00:01:59.700000Z"},
+     {"details":{"host":"updates.example.net","method":"POST","referrer":null,"request_body_len":31,"resp_mime_types":["application/json"],"response_body_len":14,"status_code":200,"uri":"/api/checkin","user_agent":"agent/1.0"},"dst_ip":"203.0.113.50","dst_port":8080,"flow_ref":"Cd69cbc18aa2418d1d","kind":"http","src_ip":"10.0.2.20","src_port":41000,"summary":"POST updates.example.net/api/checkin 200 agent/1.0","ts":"2026-01-01T00:03:00.400000Z"},
+     {"details":{"host":"updates.example.net","method":"POST","referrer":null,"request_body_len":31,"resp_mime_types":["application/json"],"response_body_len":14,"status_code":200,"uri":"/api/checkin","user_agent":"agent/1.0"},"dst_ip":"203.0.113.50","dst_port":8080,"flow_ref":"Cd3ff6ea296be0b80c","kind":"http","src_ip":"10.0.2.20","src_port":41000,"summary":"POST updates.example.net/api/checkin 200 agent/1.0","ts":"2026-01-01T00:03:59.700000Z"},
+     {"details":{"host":"updates.example.net","method":"POST","referrer":null,"request_body_len":31,"resp_mime_types":["application/json"],"response_body_len":14,"status_code":200,"uri":"/api/checkin","user_agent":"agent/1.0"},"dst_ip":"203.0.113.50","dst_port":8080,"flow_ref":"Cd15de528eae920478","kind":"http","src_ip":"10.0.2.20","src_port":41000,"summary":"POST updates.example.net/api/checkin 200 agent/1.0","ts":"2026-01-01T00:05:00.400000Z"},
+     {"details":{"host":"updates.example.net","method":"POST","referrer":null,"request_body_len":31,"resp_mime_types":["application/json"],"response_body_len":14,"status_code":200,"uri":"/api/checkin","user_agent":"agent/1.0"},"dst_ip":"203.0.113.50","dst_port":8080,"flow_ref":"Cf2ef97cab60780dd1","kind":"http","src_ip":"10.0.2.20","src_port":41000,"summary":"POST updates.example.net/api/checkin 200 agent/1.0","ts":"2026-01-01T00:05:59.700000Z"},
+     {"details":{"host":"updates.example.net","method":"POST","referrer":null,"request_body_len":31,"resp_mime_types":["application/json"],"response_body_len":14,"status_code":200,"uri":"/api/checkin","user_agent":"agent/1.0"},"dst_ip":"203.0.113.50","dst_port":8080,"flow_ref":"C427e9ea4a641e0677","kind":"http","src_ip":"10.0.2.20","src_port":41000,"summary":"POST updates.example.net/api/checkin 200 agent/1.0","ts":"2026-01-01T00:07:00.400000Z"},
+     {"details":{"host":"updates.example.net","method":"POST","referrer":null,"request_body_len":31,"resp_mime_types":["application/json"],"response_body_len":14,"status_code":200,"uri":"/api/checkin","user_agent":"agent/1.0"},"dst_ip":"203.0.113.50","dst_port":8080,"flow_ref":"Cc0aa2dcf0f4550c8c","kind":"http","src_ip":"10.0.2.20","src_port":41000,"summary":"POST updates.example.net/api/checkin 200 agent/1.0","ts":"2026-01-01T00:07:59.700000Z"},
+     {"details":{"host":"updates.example.net","method":"POST","referrer":null,"request_body_len":31,"resp_mime_types":["application/json"],"response_body_len":14,"status_code":200,"uri":"/api/checkin","user_agent":"agent/1.0"},"dst_ip":"203.0.113.50","dst_port":8080,"flow_ref":"Cf604d5e3282070288","kind":"http","src_ip":"10.0.2.20","src_port":41000,"summary":"POST updates.example.net/api/checkin 200 agent/1.0","ts":"2026-01-01T00:09:00.400000Z"},
+     {"details":{"host":"updates.example.net","method":"POST","referrer":null,"request_body_len":31,"resp_mime_types":["application/json"],"response_body_len":14,"status_code":200,"uri":"/api/checkin","user_agent":"agent/1.0"},"dst_ip":"203.0.113.50","dst_port":8080,"flow_ref":"Cc50bce479f0b214e6","kind":"http","src_ip":"10.0.2.20","src_port":41000,"summary":"POST updates.example.net/api/checkin 200 agent/1.0","ts":"2026-01-01T00:09:59.700000Z"},
+     {"details":{"host":"updates.example.net","method":"POST","referrer":null,"request_body_len":31,"resp_mime_types":["application/json"],"response_body_len":14,"status_code":200,"uri":"/api/checkin","user_agent":"agent/1.0"},"dst_ip":"203.0.113.50","dst_port":8080,"flow_ref":"C1dd7f6cc7f825be19","kind":"http","src_ip":"10.0.2.20","src_port":41000,"summary":"POST updates.example.net/api/checkin 200 agent/1.0","ts":"2026-01-01T00:11:00.400000Z"}
+    ]
+   },
+   "worker_version": "pcap-worker/hand-trimmed"
+  }
+ ],
+ "kind": "pcap",
+ "name": "pcap_beacon",
+ "plants": [],
+ "provenance": {"dataset":"apps/workers/pcap/dataset/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":1337,"snapshot_version":1,"source":"hand-trimmed"},
+ "scenario": "beacon",
+ "tasks": ["summarize_pcap","explain_finding","ioc_correlation"],
+ "ti": [
+  {"found":true,"ioc":{"type":"ip","value":"203.0.113.50"},"job":"j1","provider":"otx","status":"ok","summary":{"provider":"otx","pulse_count":1,"pulses":[{"name":"CyberLab synthetic pulse: ip 203.0.113.50","tags":["synthetic","test"]}]},"tags":["synthetic"]},
+  {"found":true,"ioc":{"type":"ip","value":"203.0.113.50"},"job":"j1","provider":"misp","status":"ok","summary":{"attribute_count":1,"attributes":[{"category":"Network activity","event_id":1,"event_info":"CyberLab synthetic event: ip 203.0.113.50","tags":["tlp:clear"],"to_ids":false,"type":"ip-dst"}],"provider":"misp","tlp":["tlp:clear"]},"tags":["tlp:clear"]},
+  {"found":true,"ioc":{"type":"domain","value":"updates.example.net"},"job":"j1","provider":"otx","status":"ok","summary":{"provider":"otx","pulse_count":1,"pulses":[{"name":"CyberLab synthetic pulse: domain updates.example.net","tags":["synthetic","test"]}]},"tags":["synthetic"]},
+  {"found":true,"ioc":{"type":"domain","value":"updates.example.net"},"job":"j1","provider":"misp","status":"ok","summary":{"attribute_count":1,"attributes":[{"category":"Network activity","event_id":1,"event_info":"CyberLab synthetic event: domain updates.example.net","tags":["tlp:clear"],"to_ids":false,"type":"ip-dst"}],"provider":"misp","tlp":["tlp:clear"]},"tags":["tlp:clear"]}
+ ]
+}

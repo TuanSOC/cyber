@@ -1,0 +1,11 @@
+case: static_antidebug_imports
+description: "Imports debugger-detection APIs."
+must_mention:
+  - id: api_anti_debug
+    table: analysis_findings
+    where: {type: "api_anti_debug"}
+allowed_attack: [T1622, T1497]
+forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
+forbid_external_urls: true
+min_recall: 1.0
+fake_min_recall: 1.0

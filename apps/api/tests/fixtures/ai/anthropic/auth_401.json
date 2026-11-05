@@ -1,0 +1,24 @@
+{
+  "_source": "Hand-written from the documented response shape (no live key was available on 2026-11-05); sanitized: no key, no account-identifying request id.",
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "request-id": "req_fixture_err"
+    },
+    "json": {
+      "type": "error",
+      "error": {
+        "type": "authentication_error",
+        "message": "invalid x-api-key"
+      },
+      "request_id": "req_fixture_err"
+    }
+  },
+  "expect": {
+    "kind": "auth_failed",
+    "request_sent": true,
+    "http_status": 401,
+    "usage": null
+  }
+}

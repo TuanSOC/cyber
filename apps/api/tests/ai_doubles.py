@@ -258,7 +258,7 @@ class PassThroughVerifier:
                     citations.append(
                         CitationResult(
                             claim_path=f"{section}[{n}].citations[{m}]",
-                            section=section,  # type: ignore[arg-type]
+                            section=section,
                             claim_id=claim.id,
                             label=citation.ref,
                             kind=ref.kind if ref else None,

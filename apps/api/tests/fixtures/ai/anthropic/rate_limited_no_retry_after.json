@@ -1,0 +1,25 @@
+{
+  "_source": "Hand-written from the documented response shape (no live key was available on 2026-11-05); sanitized: no key, no account-identifying request id.",
+  "response": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "request-id": "req_fixture_err"
+    },
+    "json": {
+      "type": "error",
+      "error": {
+        "type": "rate_limit_error",
+        "message": "Rate limited."
+      },
+      "request_id": "req_fixture_err"
+    }
+  },
+  "expect": {
+    "kind": "rate_limited",
+    "request_sent": true,
+    "http_status": 429,
+    "retry_after_s": null,
+    "usage": null
+  }
+}

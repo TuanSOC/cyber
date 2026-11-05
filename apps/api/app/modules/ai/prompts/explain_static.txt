@@ -1,0 +1,1 @@
+Task: explain_static. Explain this static file analysis: the sample's properties, its structure, the signature matches and capabilities, the indicators it contains, what they may indicate, and the next investigation steps. Capabilities are static rule matches, not observed behaviour.

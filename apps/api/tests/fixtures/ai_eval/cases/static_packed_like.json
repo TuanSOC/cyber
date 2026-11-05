@@ -1,0 +1,53 @@
+{
+ "clean": null,
+ "format": "cyberlab.ai_eval.case.v1",
+ "investigation": {"created_at":"2025-12-31T23:00:00Z","description":"","severity":"medium","title":"Static packed_like"},
+ "jobs": [
+  {
+   "analyzer": "static",
+   "created_at": "2026-01-01T01:01:00Z",
+   "evidence": {"description":"PE32 executable for MS Windows","filename":"packed_like.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":8192,"uploaded_at":"2026-01-01T01:00:00Z"},
+   "finished_at": "2026-01-01T01:02:00Z",
+   "key": "j1",
+   "profile": "full",
+   "summary": {"counts":{"capabilities":1,"exports":0,"findings":4,"imports":2,"iocs":0,"resources":0,"sections":2,"signatures":2,"strings":1},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":"UPX1","has_authenticode":false,"image_base":4194304,"imphash":"080352dea0820fffa13c28e4c89a99cb","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"080352dea0820fffa13c28e4c89a99cb","rich_header_hash":null,"ssdeep":null},"entropy":5.2,"file_type":"PE32 executable for MS Windows","md5":"33a2de28aaae6fe4aad84aca02543465","mime":"application/vnd.microsoft.portable-executable","sha1":"53c7559a99c6952862fb1597d45dc31f496237d5","sha256":"67d621767aaa1563626030e46ae6eb9bddf0d8a8c1069fce8a12ff039545e6e7","size":8192},"schema_version":"static.v1","tool_versions":{"capa":"9.2.1","clamav":"1.4.3","floss":"3.1.1","yara":"4.5.2"},"truncated":{}},
+   "tables": {
+    "analysis_findings": [
+     {"attributes":{"entry_outside_text":"UPX1 (last section)","indicator_count":4,"upx_section_names":"UPX0, UPX1"},"confidence":0.8,"description":"Structural traits typical of packed or compressed executables: upx_section_names, high_entropy_section, tiny_import_table, entry_outside_text. Packing hides the real code from static analysis; it is also used to shrink legitimate programs.","detection_method":"heuristic:packer@1","dst_ip":null,"dst_port":null,"evidence_refs":["packer:packer_indicators"],"finding_id":"66cf92bc-98d7-5083-85ec-ceaf4f17f2ca","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"Packer / compression indicators (4)","ts":"2026-01-01T00:00:00Z","type":"packer_indicators"},
+     {"attributes":{"description":"UPX section names","engine":"yara","name":"CyberLab_UPX_Section_Names","namespace":"cyberlab"},"confidence":0.8,"description":"The YARA rule cyberlab:CyberLab_UPX_Section_Names (rule-supplied description: UPX section names) matched this file.","detection_method":"signature:yara@1","dst_ip":null,"dst_port":null,"evidence_refs":["yara:CyberLab_UPX_Section_Names"],"finding_id":"63791603-a365-5b2b-9fd5-cb91908d68a6","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"YARA rule match: CyberLab_UPX_Section_Names","ts":"2026-01-01T00:00:00Z","type":"yara_match"},
+     {"attributes":{"description":"UPX marker string","engine":"yara","name":"CyberLab_UPX_Marker_String","namespace":"cyberlab"},"confidence":0.8,"description":"The YARA rule cyberlab:CyberLab_UPX_Marker_String (rule-supplied description: UPX marker string) matched this file.","detection_method":"signature:yara@1","dst_ip":null,"dst_port":null,"evidence_refs":["yara:CyberLab_UPX_Marker_String"],"finding_id":"a12f59eb-f8e1-5475-a3bb-910fe0684622","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"YARA rule match: CyberLab_UPX_Marker_String","ts":"2026-01-01T00:00:00Z","type":"yara_match"},
+     {"attributes":{"attack":"T1027.002","namespaces":"anti-analysis/packer/upx","rules":"packed with UPX"},"confidence":0.8,"description":"capa found code patterns for: packed with UPX (ATT&CK T1027.002). Static capability detection; the code was not observed running.","detection_method":"capability:capa@1","dst_ip":null,"dst_port":null,"evidence_refs":["capa:capability_anti_analysis"],"finding_id":"e5b1ba2e-3bc4-5f16-bd19-f65f7d743221","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"capa: anti-analysis capabilities (1)","ts":"2026-01-01T00:00:00Z","type":"capability_anti_analysis"}
+    ],
+    "malware_capabilities": [
+     {"attack":["T1027.002"],"matches":1,"mbc":[],"name":"packed with UPX","namespace":"anti-analysis/packer/upx"}
+    ],
+    "malware_imports": [
+     {"function":"LoadLibraryA","library":"KERNEL32.DLL","ordinal":null},
+     {"function":"GetProcAddress","library":"KERNEL32.DLL","ordinal":null}
+    ],
+    "malware_samples": [
+     {"elf":null,"entropy":5.2,"file_format":"pe","file_type":"PE32 executable for MS Windows","md5":"33a2de28aaae6fe4aad84aca02543465","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":"UPX1","has_authenticode":false,"image_base":4194304,"imphash":"080352dea0820fffa13c28e4c89a99cb","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"sha1":"53c7559a99c6952862fb1597d45dc31f496237d5","sha256":"67d621767aaa1563626030e46ae6eb9bddf0d8a8c1069fce8a12ff039545e6e7","size":8192,"ssdeep":null}
+    ],
+    "malware_sections": [
+     {"entropy":0.0,"flags":["read"],"index":0,"name":"UPX0","raw_size":0,"virtual_address":4096,"virtual_size":2048},
+     {"entropy":7.9,"flags":["read","execute"],"index":1,"name":"UPX1","raw_size":2048,"virtual_address":8192,"virtual_size":2048}
+    ],
+    "malware_signature_matches": [
+     {"engine":"yara","meta":{"description":"UPX section names"},"name":"CyberLab_UPX_Section_Names","namespace":"cyberlab","tags":[]},
+     {"engine":"yara","meta":{"description":"UPX marker string"},"name":"CyberLab_UPX_Marker_String","namespace":"cyberlab","tags":[]}
+    ],
+    "malware_strings": [
+     {"encoding":"ascii","offset":8192,"value":"UPX!"}
+    ]
+   },
+   "worker_version": "static-worker/hand-trimmed"
+  }
+ ],
+ "kind": "static",
+ "name": "static_packed_like",
+ "plants": [],
+ "provenance": {"dataset":"apps/workers/static/samples/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":20261105,"snapshot_version":1,"source":"hand-trimmed"},
+ "scenario": "packed_like",
+ "tasks": ["explain_static"],
+ "ti": []
+}

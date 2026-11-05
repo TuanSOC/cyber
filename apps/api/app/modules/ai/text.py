@@ -2,7 +2,8 @@
 (M5 phase 1, FROZEN). Pure functions, no I/O.
 
 - `sanitize` strips invisible and control characters (C0 except `\\n` `\\t`, DEL, C1,
-  U+200B-200F, U+202A-202E, U+2066-2069, U+FEFF, U+E0000-E007F) and counts them;
+  U+200B-200F, U+202A-202E, U+2066-2069, U+061C, U+FEFF, U+E0000-E007F, and every other
+  format character of category Cf such as U+00AD, U+180E, U+2060-2064) and counts them;
 - `defang` / `refang`: `http(s)://` -> `hxxp(s)[:]//`, `ftp` -> `fxp`, and the dots of
   domain-like tokens -> `[.]` (IP addresses stay plain); `refang` is the exact inverse;
 - `canonical_ip` / `canonical_hash` give one spelling for comparisons;
@@ -48,12 +49,24 @@ def _category(cp: int) -> str | None:
         return None
     if cp < 0x20 or cp == 0x7F or 0x80 <= cp <= 0x9F:
         return "control"
-    if 0x200E <= cp <= 0x200F or 0x202A <= cp <= 0x202E or 0x2066 <= cp <= 0x2069:
+    if (
+        0x200E <= cp <= 0x200F
+        or 0x202A <= cp <= 0x202E
+        or 0x2066 <= cp <= 0x2069
+        or cp == 0x061C  # ARABIC LETTER MARK (M5 phase-5 security review)
+    ):
         return "bidi"
     if 0x200B <= cp <= 0x200D or cp == 0xFEFF:
         return "zero_width"
     if 0xE0000 <= cp <= 0xE007F:
         return "tag"
+    if cp < 0xAD:
+        return None
+    # Every other format character (Cf: soft hyphen U+00AD, Mongolian vowel separator
+    # U+180E, word joiner and invisible operators U+2060-2064, interlinear annotation, ...)
+    # is invisible too and counted with the zero-width characters.
+    if unicodedata.category(chr(cp)) == "Cf":
+        return "zero_width"
     return None
 
 

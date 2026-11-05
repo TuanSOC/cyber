@@ -37,6 +37,11 @@ router = APIRouter(prefix="/orgs/{org_id}/analyses/{job_id}", tags=["pcap-analys
 EvidenceRead = Annotated[OrgContext, Depends(require(Permission.EVIDENCE_READ), scope="function")]
 FindingType = Annotated[str, Query(pattern=r"^[a-z][a-z0-9_]{0,63}$")]
 Port = Annotated[int, Query(ge=0, le=65535)]
+# `ref=<row id>`: a page with just that row of the job (citation deep links; 404
+# otherwise).
+RowRef = Annotated[uuid.UUID | None, Query()]
+# Flows are cited by their Zeek uid within the job in the path (RT16).
+FlowRef = Annotated[str | None, Query(min_length=1, max_length=64, pattern=r"^[!-~]+$")]
 
 
 @router.get("/findings", response_model=FindingPage)
@@ -46,10 +51,11 @@ async def list_findings(
     page: PageParamsDep,
     severity: FindingSeverity | None = None,
     type: FindingType | None = None,  # noqa: A002 - public query parameter name
+    ref: RowRef = None,
 ) -> FindingPage:
     await repo.ensure_job(ctx.session, ctx.org_id, job_id)
     rows, total = await repo.findings(
-        ctx.session, ctx.org_id, job_id, page, severity=severity, type_=type
+        ctx.session, ctx.org_id, job_id, page, severity=severity, type_=type, ref=ref
     )
     return FindingPage(items=[FindingOut.model_validate(r) for r in rows], total=total)
 
@@ -63,6 +69,7 @@ async def list_flows(
     port: Port | None = None,
     proto: FlowProto | None = None,
     sort: FlowSort = FlowSort.BYTES,
+    ref: FlowRef = None,
 ) -> FlowPage:
     await repo.ensure_job(ctx.session, ctx.org_id, job_id)
     rows, total = await repo.flows(
@@ -74,6 +81,7 @@ async def list_flows(
         port=port,
         proto=proto,
         sort=sort,
+        ref=ref,
     )
     return FlowPage(items=[FlowOut.model_validate(r) for r in rows], total=total)
 
@@ -85,9 +93,10 @@ async def list_records(
     page: PageParamsDep,
     kind: RecordKind | None = None,
     q: Annotated[SearchTerm | None, Query()] = None,
+    ref: RowRef = None,
 ) -> RecordPage:
     await repo.ensure_job(ctx.session, ctx.org_id, job_id)
-    rows, total = await repo.records(ctx.session, ctx.org_id, job_id, page, kind=kind, q=q)
+    rows, total = await repo.records(ctx.session, ctx.org_id, job_id, page, kind=kind, q=q, ref=ref)
     return RecordPage(items=[RecordOut.model_validate(r) for r in rows], total=total)
 
 
@@ -97,9 +106,12 @@ async def list_alerts(
     ctx: EvidenceRead,
     page: PageParamsDep,
     severity: Annotated[int | None, Query(ge=1, le=4)] = None,
+    ref: RowRef = None,
 ) -> AlertPage:
     await repo.ensure_job(ctx.session, ctx.org_id, job_id)
-    rows, total = await repo.alerts(ctx.session, ctx.org_id, job_id, page, severity=severity)
+    rows, total = await repo.alerts(
+        ctx.session, ctx.org_id, job_id, page, severity=severity, ref=ref
+    )
     return AlertPage(items=[AlertOut.model_validate(r) for r in rows], total=total)
 
 
@@ -111,9 +123,10 @@ async def list_iocs(
     type: AnalysisIocType | None = None,  # noqa: A002 - public query parameter name
     q: Annotated[SearchTerm | None, Query()] = None,
     include: IocInclude | None = None,
+    ref: RowRef = None,
 ) -> IocPage:
     await repo.ensure_job(ctx.session, ctx.org_id, job_id)
-    rows, total = await repo.iocs(ctx.session, ctx.org_id, job_id, page, type_=type, q=q)
+    rows, total = await repo.iocs(ctx.session, ctx.org_id, job_id, page, type_=type, q=q, ref=ref)
     if include is IocInclude.ENRICHMENT:
         enriched = await ti_results.enrich_iocs(ctx.session, ctx.org_id, rows)
         return IocPage(items=[EnrichedIocOut.model_validate(r) for r in enriched], total=total)
@@ -121,7 +134,9 @@ async def list_iocs(
 
 
 @router.get("/timeline", response_model=TimelinePage)
-async def list_timeline(job_id: uuid.UUID, ctx: EvidenceRead, page: PageParamsDep) -> TimelinePage:
+async def list_timeline(
+    job_id: uuid.UUID, ctx: EvidenceRead, page: PageParamsDep, ref: RowRef = None
+) -> TimelinePage:
     await repo.ensure_job(ctx.session, ctx.org_id, job_id)
-    rows, total = await repo.timeline(ctx.session, ctx.org_id, job_id, page)
+    rows, total = await repo.timeline(ctx.session, ctx.org_id, job_id, page, ref=ref)
     return TimelinePage(items=[TimelineOut.model_validate(r) for r in rows], total=total)

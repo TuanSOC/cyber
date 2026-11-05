@@ -1,0 +1,22 @@
+{
+  "_source": "Hand-written from the documented response shape (no live key was available on 2026-11-05); sanitized: no key, no account-identifying request id.",
+  "response": {
+    "status": 500,
+    "headers": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "json": {
+      "error": {
+        "code": 500,
+        "message": "An internal error has occurred.",
+        "status": "INTERNAL"
+      }
+    }
+  },
+  "expect": {
+    "kind": "provider_error",
+    "request_sent": true,
+    "http_status": 500,
+    "usage": null
+  }
+}

@@ -1,0 +1,11 @@
+case: static_persistence_imports
+description: "Imports registry Run-key and service-creation APIs; Run-key path in strings."
+must_mention:
+  - id: api_persistence
+    table: analysis_findings
+    where: {type: "api_persistence"}
+allowed_attack: [T1547, T1547.001, T1543, T1543.003, T1112]
+forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
+forbid_external_urls: true
+min_recall: 1.0
+fake_min_recall: 1.0

@@ -1,0 +1,15 @@
+{
+  "_source": "Hand-written from the documented response shape (no live key was available on 2026-11-05); sanitized: no key, no account-identifying request id.",
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "text": "{\"observed\": [{\"id\": \"o1\", \"text\": \"unterminated"
+  },
+  "expect": {
+    "kind": "invalid_output",
+    "request_sent": true,
+    "usage": null
+  }
+}

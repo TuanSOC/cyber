@@ -1,0 +1,18 @@
+{
+  "_source": "Hand-written from the documented response shape (no live key was available on 2026-11-05); sanitized: no key, no account-identifying request id.",
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "json": {
+      "error": "bad request near {{KEY}}"
+    }
+  },
+  "expect": {
+    "kind": "bad_request",
+    "request_sent": true,
+    "http_status": 400,
+    "usage": null
+  }
+}

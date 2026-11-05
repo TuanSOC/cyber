@@ -1,0 +1,20 @@
+{
+  "_source": "Hand-written from the documented response shape (no live key was available on 2026-11-05); sanitized: no key, no account-identifying request id.",
+  "response": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "1"
+    },
+    "json": {
+      "error": "rate_limited"
+    }
+  },
+  "expect": {
+    "kind": "rate_limited",
+    "request_sent": true,
+    "http_status": 429,
+    "retry_after_s": 1.0,
+    "usage": null
+  }
+}

@@ -1,0 +1,59 @@
+{
+ "clean": null,
+ "format": "cyberlab.ai_eval.case.v1",
+ "investigation": {"created_at":"2025-12-31T23:00:00Z","description":"","severity":"medium","title":"PCAP tls_sessions"},
+ "jobs": [
+  {
+   "analyzer": "pcap",
+   "created_at": "2026-01-01T00:06:45Z",
+   "evidence": {"description":"pcap capture file, microsecond ts (little-endian) - version 2.4","filename":"tls_sessions.pcap","mime":"application/vnd.tcpdump.pcap","size_bytes":6016,"uploaded_at":"2026-01-01T00:05:45Z"},
+   "finished_at": "2026-01-01T00:07:45Z",
+   "key": "j1",
+   "profile": null,
+   "summary": {"capture":{"bytes":10500,"duration_s":45.0,"first_ts":"2026-01-01T00:00:00Z","last_ts":"2026-01-01T00:00:45Z","link_type":"Ethernet","packets":27,"protocol_hierarchy":[],"top_destinations":[],"top_ports":[],"top_sources":[]},"capture_format":"pcap","counts":{"alerts":0,"dns":0,"findings":3,"flows":3,"http":0,"iocs":6,"timeline":5,"tls":3},"engine_counts":{},"engine_errors":[],"schema_version":"pcap.v1","tool_versions":{"suricata":"7.0.10","tshark":"4.4.0","zeek":"8.0.10"},"truncated":{}},
+   "tables": {
+    "analysis_findings": [
+     {"attributes":{"occurrences":1,"subject":"CN=selfsigned.example.org"},"confidence":0.7,"description":"selfsigned.example.org (203.0.113.30) presented a self-signed certificate (CN=selfsigned.example.org). Normal for test and internal services; on the internet it defeats server authentication.","detection_method":"heuristic:suspicious_traffic@1","dst_ip":"203.0.113.30","dst_port":443,"evidence_refs":["C9694e90da9abfa231"],"finding_id":"39abb47b-91c7-53b1-afd8-02618faf3590","flow_ref":"C9694e90da9abfa231","last_seen":null,"protocol":"tls","severity":"low","src_ip":"10.0.1.12","src_port":null,"title":"TLS server presented a self-signed certificate","ts":"2026-01-01T00:00:00Z","type":"tls_self_signed"},
+     {"attributes":{"not_after":"2025-01-01 00:00:00+00:00","occurrences":1},"confidence":0.8,"description":"expired.example.org (203.0.113.31) presented a certificate valid from 2024-01-02 00:00:00+00:00 to 2025-01-01 00:00:00+00:00, used at 2026-01-01 00:00:20+00:00.","detection_method":"heuristic:suspicious_traffic@1","dst_ip":"203.0.113.31","dst_port":443,"evidence_refs":["Cbb9b6ae41b12de222"],"finding_id":"f5e210a1-1671-5a8e-add9-a88a5037dfd9","flow_ref":"Cbb9b6ae41b12de222","last_seen":null,"protocol":"tls","severity":"low","src_ip":"10.0.1.12","src_port":null,"title":"TLS certificate outside its validity period","ts":"2026-01-01T00:00:20Z","type":"tls_expired_certificate"},
+     {"attributes":{"occurrences":1,"version":"TLSv10"},"confidence":0.9,"description":"10.0.1.12 and legacy.example.org (203.0.113.32) negotiated TLSv10, which is deprecated (RFC 8996) and lacks modern protections.","detection_method":"heuristic:suspicious_traffic@1","dst_ip":"203.0.113.32","dst_port":443,"evidence_refs":["C3d644e973db8c1edf"],"finding_id":"eb8f627a-a9df-5fba-8407-62d34d7a3a0d","flow_ref":"C3d644e973db8c1edf","last_seen":null,"protocol":"tls","severity":"low","src_ip":"10.0.1.12","src_port":null,"title":"Legacy protocol version TLSv10","ts":"2026-01-01T00:00:45Z","type":"tls_legacy_version"}
+    ],
+    "analysis_timeline": [
+     {"dst_ip":null,"event":"capture_start","ref":null,"severity":null,"src_ip":null,"title":"Capture start","ts":"2026-01-01T00:00:00Z"},
+     {"dst_ip":"203.0.113.30","event":"finding","ref":"39abb47b-91c7-53b1-afd8-02618faf3590","severity":"low","src_ip":"10.0.1.12","title":"TLS server presented a self-signed certificate","ts":"2026-01-01T00:00:00Z"},
+     {"dst_ip":"203.0.113.31","event":"finding","ref":"f5e210a1-1671-5a8e-add9-a88a5037dfd9","severity":"low","src_ip":"10.0.1.12","title":"TLS certificate outside its validity period","ts":"2026-01-01T00:00:20Z"},
+     {"dst_ip":"203.0.113.32","event":"finding","ref":"eb8f627a-a9df-5fba-8407-62d34d7a3a0d","severity":"low","src_ip":"10.0.1.12","title":"Legacy protocol version TLSv10","ts":"2026-01-01T00:00:45Z"},
+     {"dst_ip":null,"event":"capture_end","ref":null,"severity":null,"src_ip":null,"title":"Capture end","ts":"2026-01-01T00:00:45Z"}
+    ],
+    "iocs": [
+     {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"tls","type":"domain","value":"selfsigned.example.org"},
+     {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"tls","type":"domain","value":"expired.example.org"},
+     {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"tls","type":"domain","value":"legacy.example.org"},
+     {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"flow","type":"ip","value":"203.0.113.30"},
+     {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"flow","type":"ip","value":"203.0.113.31"},
+     {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"flow","type":"ip","value":"203.0.113.32"}
+    ],
+    "network_flows": [
+     {"community_id":"1:0d8ca9f7813f3f38e2c32853e52=","conn_state":"SF","dst_ip":"203.0.113.30","dst_port":443,"duration_s":0.06,"flow_ref":"C9694e90da9abfa231","orig_bytes":900,"orig_pkts":5,"proto":"tcp","resp_bytes":2600,"resp_pkts":4,"service":"ssl","src_ip":"10.0.1.12","src_port":45247,"total_bytes":3500,"ts":"2026-01-01T00:00:00Z"},
+     {"community_id":"1:ef627739cc0b24db11464376316=","conn_state":"SF","dst_ip":"203.0.113.31","dst_port":443,"duration_s":0.06,"flow_ref":"Cbb9b6ae41b12de222","orig_bytes":900,"orig_pkts":5,"proto":"tcp","resp_bytes":2600,"resp_pkts":4,"service":"ssl","src_ip":"10.0.1.12","src_port":52760,"total_bytes":3500,"ts":"2026-01-01T00:00:20Z"},
+     {"community_id":"1:0961115020e85a5a5391879ab9d=","conn_state":"SF","dst_ip":"203.0.113.32","dst_port":443,"duration_s":0.06,"flow_ref":"C3d644e973db8c1edf","orig_bytes":900,"orig_pkts":5,"proto":"tcp","resp_bytes":2600,"resp_pkts":4,"service":"ssl","src_ip":"10.0.1.12","src_port":51047,"total_bytes":3500,"ts":"2026-01-01T00:00:45Z"}
+    ],
+    "network_records": [
+     {"details":{"cert_issuer":"CN=selfsigned.example.org","cert_not_after":"2027-01-01T00:00:00Z","cert_not_before":"2025-01-01T00:00:00Z","cert_sha256":"9cfc7d20b585bb4d3da68895a864bf2d5266c53941f5b4f66a4fed1a482b6ab2","cert_subject":"CN=selfsigned.example.org","cipher":"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256","established":true,"ja3":"76109bebead06e90b98e821bcc4c43a0","ja3s":"c2d2524d44534af2e565c963f3c754ef","self_signed":true,"server_name":"selfsigned.example.org","validation_status":"self signed certificate","version":"TLSv12"},"dst_ip":"203.0.113.30","dst_port":443,"flow_ref":"C9694e90da9abfa231","kind":"tls","src_ip":"10.0.1.12","src_port":42000,"summary":"selfsigned.example.org TLSv12 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 ja3=76109bebead06e90b98e821bcc4c43a0 CN=selfsigned.example.org","ts":"2026-01-01T00:00:00Z"},
+     {"details":{"cert_issuer":"CN=CyberLab Synthetic Test CA","cert_not_after":"2025-01-01T00:00:00Z","cert_not_before":"2024-01-02T00:00:00Z","cert_sha256":"5b6eda2423cf5db47f117f1d4e1521b2415c00bad8191fd64b4c5a66e4f302e2","cert_subject":"CN=expired.example.org","cipher":"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256","established":true,"ja3":"cfb223f4c7460a8ae7e25e7c66391a1b","ja3s":"909fc5324a485922869fef2c912ca97d","self_signed":false,"server_name":"expired.example.org","validation_status":"certificate has expired","version":"TLSv12"},"dst_ip":"203.0.113.31","dst_port":443,"flow_ref":"Cbb9b6ae41b12de222","kind":"tls","src_ip":"10.0.1.12","src_port":42000,"summary":"expired.example.org TLSv12 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 ja3=cfb223f4c7460a8ae7e25e7c66391a1b CN=expired.example.org","ts":"2026-01-01T00:00:20Z"},
+     {"details":{"cert_issuer":"CN=CyberLab Synthetic Test CA","cert_not_after":"2027-01-01T00:00:00Z","cert_not_before":"2025-01-01T00:00:00Z","cert_sha256":"8fe913841ffc14ed04dc5c750c5d6403418fab68aa5a1e79db7055b5eee89bec","cert_subject":"CN=legacy.example.org","cipher":"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256","established":true,"ja3":"4f25e95e24866585d9e087b5b5e00cb9","ja3s":"ade0d1ae038f87f93b729db92f412f4e","self_signed":false,"server_name":"legacy.example.org","validation_status":"ok","version":"TLSv10"},"dst_ip":"203.0.113.32","dst_port":443,"flow_ref":"C3d644e973db8c1edf","kind":"tls","src_ip":"10.0.1.12","src_port":42000,"summary":"legacy.example.org TLSv10 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 ja3=4f25e95e24866585d9e087b5b5e00cb9 CN=legacy.example.org","ts":"2026-01-01T00:00:45Z"}
+    ]
+   },
+   "worker_version": "pcap-worker/hand-trimmed"
+  }
+ ],
+ "kind": "pcap",
+ "name": "pcap_tls_sessions",
+ "plants": [],
+ "provenance": {"dataset":"apps/workers/pcap/dataset/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":1337,"snapshot_version":1,"source":"hand-trimmed"},
+ "scenario": "tls_sessions",
+ "tasks": ["summarize_pcap"],
+ "ti": [
+  {"found":true,"ioc":{"type":"domain","value":"selfsigned.example.org"},"job":"j1","provider":"otx","status":"ok","summary":{"provider":"otx","pulse_count":1,"pulses":[{"name":"CyberLab synthetic pulse: domain selfsigned.example.org","tags":["synthetic","test"]}]},"tags":["synthetic"]},
+  {"found":true,"ioc":{"type":"domain","value":"selfsigned.example.org"},"job":"j1","provider":"misp","status":"ok","summary":{"attribute_count":1,"attributes":[{"category":"Network activity","event_id":1,"event_info":"CyberLab synthetic event: domain selfsigned.example.org","tags":["tlp:clear"],"to_ids":false,"type":"ip-dst"}],"provider":"misp","tlp":["tlp:clear"]},"tags":["tlp:clear"]}
+ ]
+}

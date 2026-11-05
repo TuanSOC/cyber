@@ -1,0 +1,102 @@
+{
+  "_source": "Hand-written from the documented response shape (no live key was available on 2026-11-05); sanitized: no key, no account-identifying request id.",
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "json": {
+      "output": {
+        "observed": [
+          {
+            "id": "o1",
+            "text": "Host INT_IP_1 resolved evil[.]example 14 times.",
+            "confidence": "high",
+            "citations": [
+              {
+                "ref": "F1",
+                "field": "title",
+                "quote": "DNS beaconing to evil[.]example"
+              }
+            ]
+          }
+        ],
+        "interpretation": [
+          {
+            "id": "i1",
+            "text": "Periodic lookups suggest automated beaconing.",
+            "confidence": "medium",
+            "citations": [
+              {
+                "ref": "F1",
+                "field": "title"
+              }
+            ]
+          }
+        ],
+        "hypotheses": [
+          {
+            "id": "h1",
+            "text": "A scheduled implant polls a C2 domain.",
+            "confidence": "low",
+            "supporting": [
+              {
+                "ref": "F1"
+              }
+            ],
+            "contradicting": []
+          }
+        ],
+        "overall_confidence": {
+          "level": "medium",
+          "rationale": "One finding, consistent timing."
+        },
+        "next_steps": [
+          {
+            "text": "Review the process tree on INT_HOST_1.",
+            "rationale": "Find the polling process.",
+            "refs": [
+              "F1"
+            ]
+          }
+        ],
+        "limitations": [
+          "Only DNS metadata was available."
+        ],
+        "attack_techniques": [
+          {
+            "technique_id": "T1071.004",
+            "rationale": "DNS application-layer protocol.",
+            "citations": [
+              {
+                "ref": "F1",
+                "field": "title"
+              }
+            ]
+          }
+        ],
+        "timeline": []
+      },
+      "usage": {
+        "input_tokens": 400,
+        "output_tokens": 120
+      },
+      "stop_reason": "end_turn",
+      "model": "mock-1"
+    }
+  },
+  "expect": {
+    "result": {
+      "stop_reason": "end_turn",
+      "served_model": "mock-1",
+      "request_id": null,
+      "usage": {
+        "input_tokens": 400,
+        "output_tokens": 120,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+      },
+      "schema_valid": true
+    }
+  }
+}

@@ -1,0 +1,14 @@
+case: static_stack_string
+description: "A domain built on the stack, visible only through FLOSS."
+must_mention:
+  - id: capability_anti_analysis
+    table: analysis_findings
+    where: {type: "capability_anti_analysis"}
+  - id: cap_contain
+    table: malware_capabilities
+    where: {name: "contain obfuscated stackstrings"}
+allowed_attack: [T1027]
+forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
+forbid_external_urls: true
+min_recall: 1.0
+fake_min_recall: 0.5

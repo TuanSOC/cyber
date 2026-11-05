@@ -1,0 +1,30 @@
+{
+  "_source": "Hand-written from the documented response shape (no live key was available on 2026-11-05); sanitized: no key, no account-identifying request id.",
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "json": {
+      "error": {
+        "code": 400,
+        "message": "The request was blocked: prohibited content.",
+        "status": "INVALID_ARGUMENT",
+        "details": [
+          {
+            "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+            "reason": "PROHIBITED_CONTENT",
+            "domain": "generativelanguage.googleapis.com"
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "kind": "refused",
+    "request_sent": true,
+    "category": "prohibited_content",
+    "http_status": 400,
+    "usage": null
+  }
+}

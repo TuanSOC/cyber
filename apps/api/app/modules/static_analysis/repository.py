@@ -80,6 +80,7 @@ async def imports(
     *,
     library: str | None,
     q: str | None,
+    ref: uuid.UUID | None = None,
 ) -> tuple[Sequence[MalwareImport], int]:
     m = MalwareImport
     where = _scope(m, org_id, job_id)
@@ -88,7 +89,7 @@ async def imports(
         where.append(m.library.ilike(escape_like(library), escape="\\"))
     if q:
         where.append(or_(_contains(m.function, q), _contains(m.library, q)))
-    return await _page(session, m, where, (m.library, m.function, m.ordinal, m.id), page)
+    return await _page(session, m, where, (m.library, m.function, m.ordinal, m.id), page, ref=ref)
 
 
 async def exports(
@@ -116,6 +117,7 @@ async def strings(
     *,
     encoding: StringEncoding | None,
     q: str | None,
+    ref: uuid.UUID | None = None,
 ) -> tuple[Sequence[MalwareString], int]:
     m = MalwareString
     where = _scope(m, org_id, job_id)
@@ -123,7 +125,7 @@ async def strings(
         where.append(m.encoding == encoding.value)
     if q:
         where.append(_contains(m.value, q))
-    return await _page(session, m, where, (m.offset, m.id), page)
+    return await _page(session, m, where, (m.offset, m.id), page, ref=ref)
 
 
 async def signatures(
@@ -133,12 +135,13 @@ async def signatures(
     page: PageParams,
     *,
     engine: SignatureEngine | None,
+    ref: uuid.UUID | None = None,
 ) -> tuple[Sequence[MalwareSignatureMatch], int]:
     m = MalwareSignatureMatch
     where = _scope(m, org_id, job_id)
     if engine is not None:
         where.append(m.engine == engine.value)
-    return await _page(session, m, where, (m.engine, m.name, m.id), page)
+    return await _page(session, m, where, (m.engine, m.name, m.id), page, ref=ref)
 
 
 def namespace_filter(column: Any, namespace: str) -> ColumnElement[bool]:
@@ -164,6 +167,7 @@ async def capabilities(
     *,
     namespace: str | None,
     attack: str | None,
+    ref: uuid.UUID | None = None,
 ) -> tuple[Sequence[MalwareCapability], int]:
     m = MalwareCapability
     where = _scope(m, org_id, job_id)
@@ -171,4 +175,4 @@ async def capabilities(
         where.append(namespace_filter(m.namespace, namespace))
     if attack:
         where.append(attack_filter(m.attack, attack))
-    return await _page(session, m, where, (m.namespace, m.name, m.id), page)
+    return await _page(session, m, where, (m.namespace, m.name, m.id), page, ref=ref)

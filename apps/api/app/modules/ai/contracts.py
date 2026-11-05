@@ -451,6 +451,7 @@ class ProviderError(Exception):
         retry_after_s: float | None = None,
         category: str | None = None,
         request_sent: bool = False,
+        usage: "ProviderUsage | None" = None,
     ) -> None:
         super().__init__(kind.value)
         self.kind = kind
@@ -460,12 +461,15 @@ class ProviderError(Exception):
         self.category = category[:32] if category else None
         # True once the request left the process: a timeout may have been billed (RT2).
         self.request_sent = request_sent
+        # Billed usage when the provider answered (a 200 ending in refusal, max_tokens, ...);
+        # None for HTTP-level failures without a response body (phase 3 review, additive).
+        self.usage = usage
 
     def __repr__(self) -> str:
         return (
             f"ProviderError(kind={self.kind.value!r}, http_status={self.http_status}, "
             f"retry_after_s={self.retry_after_s}, category={self.category!r}, "
-            f"request_sent={self.request_sent})"
+            f"request_sent={self.request_sent}, usage={self.usage!r})"
         )
 
 

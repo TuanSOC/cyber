@@ -1,0 +1,23 @@
+case: static_pe_anomalies
+description: "Future timestamp, TLS callbacks, high-entropy resource and an overlay with an embedded PE."
+must_mention:
+  - id: timestamp_anomaly
+    table: analysis_findings
+    where: {type: "timestamp_anomaly"}
+  - id: tls_callbacks
+    table: analysis_findings
+    where: {type: "tls_callbacks"}
+  - id: high_entropy_resource
+    table: analysis_findings
+    where: {type: "high_entropy_resource"}
+  - id: overlay
+    table: analysis_findings
+    where: {type: "overlay"}
+  - id: yara_embedded_pe_in_overlay
+    table: analysis_findings
+    where: {type: "yara_match", attributes.name: "CyberLab_Embedded_PE_In_Overlay"}
+allowed_attack: [T1027, T1027.009, T1070.006, T1036]
+forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
+forbid_external_urls: true
+min_recall: 0.8
+fake_min_recall: 0.6

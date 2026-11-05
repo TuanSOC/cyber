@@ -8,9 +8,11 @@ from app.core import rate_limit
 from app.core.deps import CurrentUserDep
 from app.core.pagination import PageParamsDep
 from app.core.rbac import OrgContext, Permission, require
+from app.modules.analysis import repository as repo
 from app.modules.analysis import service
 from app.modules.analysis.models import AnalysisStatus, Analyzer
 from app.modules.analysis.schemas import AnalysisCreate, AnalysisJobOut, AnalysisJobPage
+from app.modules.investigations.timeline import ensure_investigation
 
 router = APIRouter(prefix="/orgs/{org_id}", tags=["analysis"])
 
@@ -51,8 +53,25 @@ async def list_analyses(
     status: Annotated[AnalysisStatus | None, Query()] = None,
     analyzer: Annotated[Analyzer | None, Query()] = None,
     profile: Annotated[Profile | None, Query()] = None,
+    investigation_id: Annotated[uuid.UUID | None, Query()] = None,
+    latest_per_evidence: Annotated[bool, Query()] = False,
 ) -> AnalysisJobPage:
-    return await service.list_jobs(ctx, page, status=status, analyzer=analyzer, profile=profile)
+    """`investigation_id`: only that case's evidence (404 for an unknown or foreign case);
+    `latest_per_evidence`: the newest job per evidence and kind of run (analyzer, profile)
+    among the jobs matching the other filters."""
+    if investigation_id is not None:
+        await ensure_investigation(ctx.session, ctx.org_id, investigation_id)
+    rows, total = await repo.list_rows(
+        ctx.session,
+        ctx.org_id,
+        page,
+        status=status,
+        analyzer=analyzer,
+        profile=profile,
+        investigation_id=investigation_id,
+        latest_per_evidence=latest_per_evidence,
+    )
+    return AnalysisJobPage(items=[service.to_out(r) for r in rows], total=total)
 
 
 @router.get("/analyses/{job_id}", response_model=AnalysisJobOut)

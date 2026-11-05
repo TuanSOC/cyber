@@ -1,0 +1,11 @@
+case: static_downloader_imports
+description: "URLDownloadToFile + WinExec with URLs, an IP and an email in strings."
+must_mention:
+  - id: api_downloader
+    table: analysis_findings
+    where: {type: "api_downloader"}
+allowed_attack: [T1105, T1071.001, T1204.002, T1059]
+forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
+forbid_external_urls: true
+min_recall: 1.0
+fake_min_recall: 1.0

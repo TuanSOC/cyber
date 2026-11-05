@@ -1,0 +1,45 @@
+{
+ "clean": null,
+ "format": "cyberlab.ai_eval.case.v1",
+ "investigation": {"created_at":"2025-12-31T23:00:00Z","description":"","severity":"medium","title":"Static benign_elf"},
+ "jobs": [
+  {
+   "analyzer": "static",
+   "created_at": "2026-01-01T01:01:00Z",
+   "evidence": {"description":"ELF 64-bit LSB pie executable, x86-64","filename":"benign_elf.bin","mime":"application/x-pie-executable","size_bytes":7168,"uploaded_at":"2026-01-01T01:00:00Z"},
+   "finished_at": "2026-01-01T01:02:00Z",
+   "key": "j1",
+   "profile": "full",
+   "summary": {"counts":{"capabilities":0,"exports":0,"findings":0,"imports":5,"iocs":0,"resources":0,"sections":3,"signatures":0,"strings":2},"elf":{"elf_class":64,"elf_type":"DYN","entry_point":4160,"interpreter":"/lib64/ld-linux-x86-64.so.2","machine":"x86_64","needed":["libc.so.6"],"stripped":false},"engine_errors":[],"file_format":"elf","pe":null,"profile":"full","sample":{"analyzer_derived":{"imphash":null,"rich_header_hash":null,"ssdeep":null},"entropy":5.2,"file_type":"ELF 64-bit LSB pie executable, x86-64","md5":"ae3bb48a815c507de1c45d322d42a7e3","mime":"application/x-pie-executable","sha1":"0a8c922e7890061130f9e586b96b54058aa5e32d","sha256":"47f3f56f5180046f5181bfca915ee0164278eb97fc80aad29fa8d863d723556e","size":7168},"schema_version":"static.v1","tool_versions":{"capa":"9.2.1","clamav":"1.4.3","floss":"3.1.1","yara":"4.5.2"},"truncated":{}},
+   "tables": {
+    "malware_imports": [
+     {"function":"puts","library":"libc.so.6","ordinal":null},
+     {"function":"printf","library":"libc.so.6","ordinal":null},
+     {"function":"malloc","library":"libc.so.6","ordinal":null},
+     {"function":"free","library":"libc.so.6","ordinal":null},
+     {"function":"__libc_start_main","library":"libc.so.6","ordinal":null}
+    ],
+    "malware_samples": [
+     {"elf":{"elf_class":64,"elf_type":"DYN","entry_point":4160,"interpreter":"/lib64/ld-linux-x86-64.so.2","machine":"x86_64","needed":["libc.so.6"],"stripped":false},"entropy":5.2,"file_format":"elf","file_type":"ELF 64-bit LSB pie executable, x86-64","md5":"ae3bb48a815c507de1c45d322d42a7e3","mime":"application/x-pie-executable","pe":null,"sha1":"0a8c922e7890061130f9e586b96b54058aa5e32d","sha256":"47f3f56f5180046f5181bfca915ee0164278eb97fc80aad29fa8d863d723556e","size":7168,"ssdeep":null}
+    ],
+    "malware_sections": [
+     {"entropy":6.0,"flags":["read","execute"],"index":0,"name":".text","raw_size":2048,"virtual_address":4096,"virtual_size":2048},
+     {"entropy":4.1,"flags":["read"],"index":1,"name":".rodata","raw_size":2048,"virtual_address":8192,"virtual_size":2048},
+     {"entropy":0.0,"flags":["read"],"index":2,"name":".data","raw_size":0,"virtual_address":12288,"virtual_size":2048}
+    ],
+    "malware_strings": [
+     {"encoding":"ascii","offset":8192,"value":"Hello from the CyberLab benign ELF sample"},
+     {"encoding":"ascii","offset":8234,"value":"usage: %s FILE"}
+    ]
+   },
+   "worker_version": "static-worker/hand-trimmed"
+  }
+ ],
+ "kind": "static",
+ "name": "static_benign_elf",
+ "plants": [],
+ "provenance": {"dataset":"apps/workers/static/samples/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":20261105,"snapshot_version":1,"source":"hand-trimmed"},
+ "scenario": "benign_elf",
+ "tasks": ["explain_static"],
+ "ti": []
+}

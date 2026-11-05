@@ -7,19 +7,23 @@ from app.core.pagination import PageParamsDep
 from app.core.rbac import OrgContext, Permission, require
 from app.core.validation import SearchTerm
 from app.modules.investigations import service
+from app.modules.investigations import timeline as case_timeline
 from app.modules.investigations.models import InvestigationStatus, Severity
 from app.modules.investigations.repository import Filters, SortKey
 from app.modules.investigations.schemas import (
     InvestigationCreate,
     InvestigationOut,
     InvestigationPage,
+    InvestigationTimelinePage,
     InvestigationUpdate,
+    TimelineEntryOut,
 )
 
 router = APIRouter(prefix="/orgs/{org_id}/investigations", tags=["investigations"])
 
 InvRead = Annotated[OrgContext, Depends(require(Permission.INVESTIGATION_READ), scope="function")]
 InvWrite = Annotated[OrgContext, Depends(require(Permission.INVESTIGATION_WRITE), scope="function")]
+EvidenceRead = Annotated[OrgContext, Depends(require(Permission.EVIDENCE_READ), scope="function")]
 
 
 @router.get("", response_model=InvestigationPage)
@@ -52,3 +56,23 @@ async def update_investigation(
     investigation_id: uuid.UUID, body: InvestigationUpdate, ctx: InvWrite, request: Request
 ) -> InvestigationOut:
     return await service.update_investigation(ctx, investigation_id, body, request)
+
+
+@router.get("/{investigation_id}/timeline", response_model=InvestigationTimelinePage)
+async def get_investigation_timeline(
+    investigation_id: uuid.UUID,
+    ctx: EvidenceRead,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+    limit: Annotated[int, Query(ge=1, le=case_timeline.MAX_PAGE)] = case_timeline.DEFAULT_PAGE,
+) -> InvestigationTimelinePage:
+    """Merged case timeline: custody, job lifecycle, the latest pcap job's timeline and alerts
+    per evidence, and static findings at analysis time; sorted (ts, kind, ref_id)."""
+    await case_timeline.ensure_investigation(ctx.session, ctx.org_id, investigation_id)
+    after = case_timeline.Cursor.decode(cursor) if cursor else None
+    entries = await case_timeline.page(
+        ctx.session, ctx.org_id, investigation_id, limit=limit + 1, after=after
+    )
+    return InvestigationTimelinePage(
+        items=[TimelineEntryOut.model_validate(e, from_attributes=True) for e in entries[:limit]],
+        next_cursor=case_timeline.next_cursor(entries, limit),
+    )

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 from cyberlab_jobs.static import Profile
 from sqlalchemy import Select, func, select, text
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.pagination import PageParams
@@ -39,6 +40,48 @@ async def get_row(session: AsyncSession, org_id: uuid.UUID, job_id: uuid.UUID) -
     return JobRow(row[0], row[1], row[2], row[3]) if row else None
 
 
+def matching_jobs(
+    org_id: uuid.UUID,
+    *,
+    evidence_id: uuid.UUID | None = None,
+    status: AnalysisStatus | None = None,
+    analyzer: Analyzer | None = None,
+    profile: Profile | None = None,
+    investigation_id: uuid.UUID | None = None,
+    latest_per_evidence: bool = False,
+) -> Select[uuid.UUID]:
+    """Ids of the jobs matching the list filters. `investigation_id` keeps the jobs of that
+    case's evidence (index `ix_evidence_investigation_id`, then
+    `ix_analysis_jobs_evidence_id_created_at`). `latest_per_evidence` keeps the newest job per
+    (evidence, analyzer, profile) among the jobs matching the other filters, so
+    `status=succeeded` gives the latest succeeded run of each kind."""
+    j = AnalysisJob
+    where = [j.organization_id == org_id]
+    if evidence_id is not None:
+        where.append(j.evidence_id == evidence_id)
+    if status is not None:
+        where.append(j.status == status)
+    if analyzer is not None:
+        where.append(j.analyzer == analyzer)
+    if profile is not None:
+        where.append(j.profile == profile)
+    if investigation_id is not None:
+        where += [Evidence.investigation_id == investigation_id, Evidence.organization_id == org_id]
+    stmt = (
+        select(j.id)
+        .join(
+            Evidence,
+            (Evidence.id == j.evidence_id) & (Evidence.organization_id == j.organization_id),
+        )
+        .where(*where)
+    )
+    if latest_per_evidence:
+        stmt = stmt.ext(distinct_on(j.evidence_id, j.analyzer, j.profile)).order_by(
+            j.evidence_id, j.analyzer, j.profile, j.created_at.desc(), j.id.desc()
+        )
+    return stmt
+
+
 async def list_rows(
     session: AsyncSession,
     org_id: uuid.UUID,
@@ -48,24 +91,39 @@ async def list_rows(
     status: AnalysisStatus | None = None,
     analyzer: Analyzer | None = None,
     profile: Profile | None = None,
+    investigation_id: uuid.UUID | None = None,
+    latest_per_evidence: bool = False,
 ) -> tuple[list[JobRow], int]:
-    where = [AnalysisJob.organization_id == org_id]
-    if evidence_id is not None:
-        where.append(AnalysisJob.evidence_id == evidence_id)
-    if status is not None:
-        where.append(AnalysisJob.status == status)
-    if analyzer is not None:
-        where.append(AnalysisJob.analyzer == analyzer)
-    if profile is not None:
-        where.append(AnalysisJob.profile == profile)
-    total = (await session.execute(select(func.count(AnalysisJob.id)).where(*where))).scalar_one()
-    stmt = (
-        _rows_query()
-        .where(*where)
-        .order_by(AnalysisJob.created_at.desc(), AnalysisJob.id.desc())
-        .limit(page.limit)
-        .offset(page.offset)
-    )
+    """Newest first; filters as in `matching_jobs`."""
+    order = (AnalysisJob.created_at.desc(), AnalysisJob.id.desc())
+    if investigation_id is None and not latest_per_evidence:
+        where = [AnalysisJob.organization_id == org_id]
+        if evidence_id is not None:
+            where.append(AnalysisJob.evidence_id == evidence_id)
+        if status is not None:
+            where.append(AnalysisJob.status == status)
+        if analyzer is not None:
+            where.append(AnalysisJob.analyzer == analyzer)
+        if profile is not None:
+            where.append(AnalysisJob.profile == profile)
+        count = select(func.count(AnalysisJob.id)).where(*where)
+        stmt = _rows_query().where(*where)
+    else:
+        ids = matching_jobs(
+            org_id,
+            evidence_id=evidence_id,
+            status=status,
+            analyzer=analyzer,
+            profile=profile,
+            investigation_id=investigation_id,
+            latest_per_evidence=latest_per_evidence,
+        ).subquery()
+        count = select(func.count()).select_from(ids)
+        stmt = _rows_query().where(
+            AnalysisJob.organization_id == org_id, AnalysisJob.id.in_(select(ids.c.id))
+        )
+    total = (await session.execute(count)).scalar_one()
+    stmt = stmt.order_by(*order).limit(page.limit).offset(page.offset)
     rows = (await session.execute(stmt)).all()
     return [JobRow(r[0], r[1], r[2], r[3]) for r in rows], total
 

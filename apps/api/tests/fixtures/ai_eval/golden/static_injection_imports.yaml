@@ -1,0 +1,14 @@
+case: static_injection_imports
+description: "Imports the classic remote-thread injection API set."
+must_mention:
+  - id: api_injection
+    table: analysis_findings
+    where: {type: "api_injection"}
+  - id: yara_process_injection_api_names
+    table: analysis_findings
+    where: {type: "yara_match", attributes.name: "CyberLab_Process_Injection_API_Names"}
+allowed_attack: [T1055, T1055.001, T1055.002, T1106]
+forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
+forbid_external_urls: true
+min_recall: 1.0
+fake_min_recall: 1.0

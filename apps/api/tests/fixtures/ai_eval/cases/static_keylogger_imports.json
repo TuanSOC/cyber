@@ -1,0 +1,65 @@
+{
+ "clean": null,
+ "format": "cyberlab.ai_eval.case.v1",
+ "investigation": {"created_at":"2025-12-31T23:00:00Z","description":"","severity":"medium","title":"Static keylogger_imports"},
+ "jobs": [
+  {
+   "analyzer": "static",
+   "created_at": "2026-01-01T01:01:00Z",
+   "evidence": {"description":"PE32 executable for MS Windows","filename":"keylogger_imports.bin","mime":"application/vnd.microsoft.portable-executable","size_bytes":15360,"uploaded_at":"2026-01-01T01:00:00Z"},
+   "finished_at": "2026-01-01T01:02:00Z",
+   "key": "j1",
+   "profile": "full",
+   "summary": {"counts":{"capabilities":0,"exports":0,"findings":2,"imports":18,"iocs":0,"resources":0,"sections":3,"signatures":1,"strings":2},"elf":null,"engine_errors":[],"file_format":"pe","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"619af28ffd9f7ab5850fd3b2bffdccaf","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"profile":"full","sample":{"analyzer_derived":{"imphash":"619af28ffd9f7ab5850fd3b2bffdccaf","rich_header_hash":null,"ssdeep":null},"entropy":5.2,"file_type":"PE32 executable for MS Windows","md5":"2db8ea263b0c509ffbdf1dae4de16e9e","mime":"application/vnd.microsoft.portable-executable","sha1":"1ec2db5c359e37c58e5f2107373c15b786971b0a","sha256":"b8037adb7a056129d29fccda1e920b79466bb57e6614ab429f54d39da3168b27","size":15360},"schema_version":"static.v1","tool_versions":{"capa":"9.2.1","clamav":"1.4.3","floss":"3.1.1","yara":"4.5.2"},"truncated":{}},
+   "tables": {
+    "analysis_findings": [
+     {"attributes":{"api_count":4,"apis":"SetWindowsHookExA, CallNextHookEx, GetAsyncKeyState, GetKeyState","groups":"set"},"confidence":0.75,"description":"The import table combines keyboard hooking or raw-input registration with key-state polling: SetWindowsHookExA, CallNextHookEx, GetAsyncKeyState, GetKeyState. This combination can record keystrokes; accessibility and hotkey tools also use it.","detection_method":"heuristic:suspicious_api@1","dst_ip":null,"dst_port":null,"evidence_refs":["import:SetWindowsHookExA","import:CallNextHookEx","import:GetAsyncKeyState","import:GetKeyState"],"finding_id":"4ef7b02a-a0f3-506c-8948-09c5968515ea","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"Keyboard hook / key-state API set imported","ts":"2026-01-01T00:00:00Z","type":"api_keylogging"},
+     {"attributes":{"description":"keyboard hook API names","engine":"yara","name":"CyberLab_Keyboard_Hook_API_Names","namespace":"cyberlab"},"confidence":0.8,"description":"The YARA rule cyberlab:CyberLab_Keyboard_Hook_API_Names (rule-supplied description: keyboard hook API names) matched this file.","detection_method":"signature:yara@1","dst_ip":null,"dst_port":null,"evidence_refs":["yara:CyberLab_Keyboard_Hook_API_Names"],"finding_id":"de1f2e9d-d940-5510-b917-526282eeb5d1","flow_ref":null,"last_seen":null,"protocol":null,"severity":"medium","src_ip":null,"src_port":null,"title":"YARA rule match: CyberLab_Keyboard_Hook_API_Names","ts":"2026-01-01T00:00:00Z","type":"yara_match"}
+    ],
+    "malware_imports": [
+     {"function":"GetModuleHandleA","library":"KERNEL32.dll","ordinal":null},
+     {"function":"GetCommandLineA","library":"KERNEL32.dll","ordinal":null},
+     {"function":"GetLastError","library":"KERNEL32.dll","ordinal":null},
+     {"function":"ExitProcess","library":"KERNEL32.dll","ordinal":null},
+     {"function":"GetStartupInfoA","library":"KERNEL32.dll","ordinal":null},
+     {"function":"HeapAlloc","library":"KERNEL32.dll","ordinal":null},
+     {"function":"HeapFree","library":"KERNEL32.dll","ordinal":null},
+     {"function":"GetProcessHeap","library":"KERNEL32.dll","ordinal":null},
+     {"function":"CloseHandle","library":"KERNEL32.dll","ordinal":null},
+     {"function":"Sleep","library":"KERNEL32.dll","ordinal":null},
+     {"function":"CreateFileA","library":"KERNEL32.dll","ordinal":null},
+     {"function":"WriteFile","library":"KERNEL32.dll","ordinal":null},
+     {"function":"SetWindowsHookExA","library":"USER32.dll","ordinal":null},
+     {"function":"CallNextHookEx","library":"USER32.dll","ordinal":null},
+     {"function":"GetAsyncKeyState","library":"USER32.dll","ordinal":null},
+     {"function":"GetKeyState","library":"USER32.dll","ordinal":null},
+     {"function":"GetMessageA","library":"USER32.dll","ordinal":null},
+     {"function":"UnhookWindowsHookEx","library":"USER32.dll","ordinal":null}
+    ],
+    "malware_samples": [
+     {"elf":null,"entropy":5.2,"file_format":"pe","file_type":"PE32 executable for MS Windows","md5":"2db8ea263b0c509ffbdf1dae4de16e9e","mime":"application/vnd.microsoft.portable-executable","pe":{"bits":32,"characteristics":["EXECUTABLE_IMAGE"],"compile_timestamp":1767225600,"dll_characteristics":["NX_COMPAT"],"entry_point":4096,"entry_section":".text","has_authenticode":false,"image_base":4194304,"imphash":"619af28ffd9f7ab5850fd3b2bffdccaf","is_dll":false,"machine":"I386","overlay_size":0,"rich_header_hash":null,"subsystem":"WINDOWS_CUI","tls_callbacks":0},"sha1":"1ec2db5c359e37c58e5f2107373c15b786971b0a","sha256":"b8037adb7a056129d29fccda1e920b79466bb57e6614ab429f54d39da3168b27","size":15360,"ssdeep":null}
+    ],
+    "malware_sections": [
+     {"entropy":6.1,"flags":["read","execute"],"index":0,"name":".text","raw_size":2048,"virtual_address":4096,"virtual_size":2048},
+     {"entropy":4.2,"flags":["read"],"index":1,"name":".rdata","raw_size":2048,"virtual_address":8192,"virtual_size":2048},
+     {"entropy":1.3,"flags":["read"],"index":2,"name":".data","raw_size":2048,"virtual_address":12288,"virtual_size":2048}
+    ],
+    "malware_signature_matches": [
+     {"engine":"yara","meta":{"description":"keyboard hook API names"},"name":"CyberLab_Keyboard_Hook_API_Names","namespace":"cyberlab","tags":[]}
+    ],
+    "malware_strings": [
+     {"encoding":"ascii","offset":8192,"value":"keys.log"},
+     {"encoding":"ascii","offset":8201,"value":"[%02x]"}
+    ]
+   },
+   "worker_version": "static-worker/hand-trimmed"
+  }
+ ],
+ "kind": "static",
+ "name": "static_keylogger_imports",
+ "plants": [],
+ "provenance": {"dataset":"apps/workers/static/samples/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":20261105,"snapshot_version":1,"source":"hand-trimmed"},
+ "scenario": "keylogger_imports",
+ "tasks": ["explain_static"],
+ "ti": []
+}

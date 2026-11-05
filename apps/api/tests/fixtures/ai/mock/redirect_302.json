@@ -1,0 +1,16 @@
+{
+  "_source": "Hand-written from the documented response shape (no live key was available on 2026-11-05); sanitized: no key, no account-identifying request id.",
+  "response": {
+    "status": 302,
+    "headers": {
+      "location": "http://elsewhere.example/v1/analyze"
+    },
+    "text": ""
+  },
+  "expect": {
+    "kind": "provider_error",
+    "request_sent": true,
+    "http_status": 302,
+    "usage": null
+  }
+}

@@ -1,0 +1,14 @@
+case: pcap_port_scan
+description: "Vertical (120 ports on 192.168.10.10) and horizontal (445 on 25 hosts) scans from 10.0.4.40."
+must_mention:
+  - id: scan_vertical
+    table: analysis_findings
+    where: {type: "port_scan_vertical", src_ip: "10.0.4.40", dst_ip: "192.168.10.10"}
+  - id: scan_horizontal
+    table: analysis_findings
+    where: {type: "port_scan_horizontal", src_ip: "10.0.4.40", dst_port: 445}
+allowed_attack: [T1046]
+forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
+forbid_external_urls: true
+min_recall: 1.0
+fake_min_recall: 1.0

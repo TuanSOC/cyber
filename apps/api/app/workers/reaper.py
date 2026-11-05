@@ -1,7 +1,7 @@
 """Fail jobs whose deadline passed: never started (queue TTL) or ran too long.
 
 Also the threat-intel fallback reaper (`reap_ti_runs`, M4 RT9) and the AI analyst one
-(`reap_ai_runs`, M5: a phase-1 stub that phase 2 fills).
+(`reap_ai_runs`, M5).
 """
 
 import logging
@@ -10,6 +10,10 @@ from datetime import timedelta
 from sqlalchemy import func, or_, select
 
 from app.core.tenancy import tenant_session
+from app.modules.ai import lifecycle as ai_lifecycle
+from app.modules.ai.contracts import RUN_ACTIVE as AI_RUN_ACTIVE
+from app.modules.ai.contracts import AiErrorCode, AiRunStatus
+from app.modules.ai.models import AiRun, AiRunIndex
 from app.modules.analysis import lifecycle
 from app.modules.analysis import repository as repo
 from app.modules.analysis.models import ACTIVE, AnalysisJobIndex, AnalysisStatus
@@ -115,9 +119,57 @@ async def reap_ti_runs() -> int:
 
 
 # --- AI analyst fallback (M5) ----------------------------------------------------------------
-# Phase 2 fills this: finalize runs 10 minutes past their deadline with no live lease as
-# `failed / deadline` (audited `ai.run_deadline`). Already called by the `reap` task.
+# The analyst worker owns run deadlines; this only finalizes runs it can no longer reach
+# (worker down): no live lease and the deadline passed more than 10 minutes ago ->
+# `failed / deadline`, audited `ai.run_deadline`. It writes no outputs.
+AI_GRACE = timedelta(minutes=10)
 
 
 async def reap_ai_runs() -> int:
-    return 0
+    stale_ai = (
+        AiRunIndex.status.in_([s.value for s in AI_RUN_ACTIVE]),
+        AiRunIndex.deadline_at < func.now() - AI_GRACE,
+        or_(AiRunIndex.lease_until.is_(None), AiRunIndex.lease_until < func.now()),
+    )
+    async with tenant_session(None, None) as session:
+        stale = (
+            await session.execute(
+                select(AiRunIndex.run_id, AiRunIndex.organization_id)
+                .where(*stale_ai)
+                .order_by(AiRunIndex.deadline_at)
+                .limit(BATCH)
+            )
+        ).all()
+
+    reaped = 0
+    for run_id, org_id in stale:
+        # Org taken from the index row (system data). Re-checked under the lock: the worker
+        # may have taken a lease or finished the run meanwhile.
+        async with tenant_session(org_id, None) as session:
+            # Lock order as everywhere else: the run row, then its index row.
+            await session.scalar(select(AiRun.id).where(AiRun.id == run_id).with_for_update())
+            due = await session.scalar(
+                select(AiRunIndex.run_id)
+                .where(AiRunIndex.run_id == run_id, *stale_ai)
+                .with_for_update()
+            )
+            if due is None:
+                continue
+            status = await ai_lifecycle.finalize(
+                session, run_id, AiRunStatus.FAILED, AiErrorCode.DEADLINE
+            )
+            if status is None:
+                continue
+            audit.record(
+                session,
+                action="ai.run_deadline",
+                org_id=org_id,
+                actor_id=None,
+                target_type="ai_run",
+                target_id=run_id,
+                details={"status": status.value, "error_code": "deadline", "by": "reaper"},
+            )
+            reaped += 1
+    if reaped:
+        log.info("reaped %d stale ai runs", reaped)
+    return reaped

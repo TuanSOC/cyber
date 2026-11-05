@@ -1,0 +1,19 @@
+{
+  "_source": "Hand-written from the documented response shape (no live key was available on 2026-11-05); sanitized: no key, no account-identifying request id.",
+  "response": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "json": {
+      "error": "spend_limit"
+    }
+  },
+  "expect": {
+    "kind": "spend_limit",
+    "request_sent": true,
+    "http_status": 429,
+    "retry_after_s": null,
+    "usage": null
+  }
+}

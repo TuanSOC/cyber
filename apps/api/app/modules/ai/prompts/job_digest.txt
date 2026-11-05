@@ -1,0 +1,1 @@
+Task: job_digest. Write a concise digest of this analysis job for a later incident summary: the key observations with their citations, a timeline of the main events, and the main open questions.

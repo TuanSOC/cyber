@@ -1,0 +1,1 @@
+Task: ioc_correlation. Correlate the indicators in the evidence: which indicators appear together, which findings and alerts mention them, and what the threat intelligence results add. Threat intelligence results are third-party context and never sole evidence.

@@ -1,0 +1,24 @@
+{
+  "_source": "Hand-written from the documented response shape (no live key was available on 2026-11-05); sanitized: no key, no account-identifying request id.",
+  "response": {
+    "status": 529,
+    "headers": {
+      "content-type": "application/json",
+      "request-id": "req_fixture_err"
+    },
+    "json": {
+      "type": "error",
+      "error": {
+        "type": "overloaded_error",
+        "message": "Overloaded"
+      },
+      "request_id": "req_fixture_err"
+    }
+  },
+  "expect": {
+    "kind": "overloaded",
+    "request_sent": true,
+    "http_status": 529,
+    "usage": null
+  }
+}

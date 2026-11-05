@@ -1,0 +1,11 @@
+case: pcap_beacon
+description: "Periodic HTTP check-ins from 10.0.2.20 to 203.0.113.50:8080 every 60 s."
+must_mention:
+  - id: beacon
+    table: analysis_findings
+    where: {type: "beaconing", src_ip: "10.0.2.20", dst_ip: "203.0.113.50", dst_port: 8080}
+allowed_attack: [T1071.001, T1571, T1573]
+forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
+forbid_external_urls: true
+min_recall: 1.0
+fake_min_recall: 1.0

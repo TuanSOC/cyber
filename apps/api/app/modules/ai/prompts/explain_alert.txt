@@ -1,0 +1,1 @@
+Task: explain_alert. Explain the network alert labelled $target: what the signature matched, the related flows, records and findings, what it may indicate, how confident you are, and what an analyst should check next.

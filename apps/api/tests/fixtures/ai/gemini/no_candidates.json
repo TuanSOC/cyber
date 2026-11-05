@@ -1,0 +1,30 @@
+{
+  "_source": "Hand-written from the documented response shape (no live key was available on 2026-11-05); sanitized: no key, no account-identifying request id.",
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "json": {
+      "modelVersion": "gemini-3.8-flash",
+      "responseId": "resp_fixture_0001",
+      "usageMetadata": {
+        "promptTokenCount": 2100,
+        "candidatesTokenCount": 600,
+        "thoughtsTokenCount": 150,
+        "cachedContentTokenCount": 0,
+        "totalTokenCount": 2850
+      }
+    }
+  },
+  "expect": {
+    "kind": "provider_error",
+    "request_sent": true,
+    "usage": {
+      "input_tokens": 2100,
+      "output_tokens": 750,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0
+    }
+  }
+}

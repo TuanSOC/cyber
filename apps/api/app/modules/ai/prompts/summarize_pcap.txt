@@ -1,0 +1,1 @@
+Task: summarize_pcap. Summarize this network capture analysis: the most significant findings and alerts, the hosts and indicators involved, a timeline of the key events, what they may indicate, and the next investigation steps.

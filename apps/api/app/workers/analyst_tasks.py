@@ -1,7 +1,9 @@
 """Celery task entry points of the analyst worker (sync) bridging into `analyst.py`.
 
-Phase 1: `ai.run` fails the run with `not_implemented`; `ai.resume` and `ai.verify` are
-no-ops. Phase 2 owns this module afterwards. Return values are always None.
+`ai.run` makes progress on one run (at most one provider call per message, RT2), `ai.resume`
+re-sends due runs, `ai.verify` checks one stored key. The solo pool runs one message at a
+time on one persistent event loop; `worker_init` refuses to start without a usable AI key
+pair. Return values are always None.
 """
 
 import asyncio

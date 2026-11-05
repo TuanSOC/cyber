@@ -1,0 +1,22 @@
+{
+  "_source": "Hand-written from the documented response shape (no live key was available on 2026-11-05); sanitized: no key, no account-identifying request id.",
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "json": {
+      "error": {
+        "code": 403,
+        "message": "Permission denied.",
+        "status": "PERMISSION_DENIED"
+      }
+    }
+  },
+  "expect": {
+    "kind": "auth_failed",
+    "request_sent": true,
+    "http_status": 403,
+    "usage": null
+  }
+}

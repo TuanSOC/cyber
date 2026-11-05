@@ -1,0 +1,14 @@
+case: static_keylogger_imports
+description: "Imports keyboard hook and key-state APIs."
+must_mention:
+  - id: api_keylogging
+    table: analysis_findings
+    where: {type: "api_keylogging"}
+  - id: yara_keyboard_hook_api_names
+    table: analysis_findings
+    where: {type: "yara_match", attributes.name: "CyberLab_Keyboard_Hook_API_Names"}
+allowed_attack: [T1056, T1056.001]
+forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
+forbid_external_urls: true
+min_recall: 1.0
+fake_min_recall: 1.0

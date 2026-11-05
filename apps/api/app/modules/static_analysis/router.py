@@ -49,6 +49,9 @@ router = APIRouter(prefix="/orgs/{org_id}/analyses/{job_id}", tags=["static-anal
 
 EvidenceRead = Annotated[OrgContext, Depends(require(Permission.EVIDENCE_READ), scope="function")]
 Search = Annotated[SearchTerm | None, Query()]
+# `ref=<row id>`: a page with just that row of the job (citation deep links; 404
+# otherwise).
+RowRef = Annotated[uuid.UUID | None, Query()]
 
 
 class ResultsNotAvailable(NotFound):
@@ -99,10 +102,13 @@ async def list_imports(
     page: PageParamsDep,
     library: Search = None,
     q: Search = None,
+    ref: RowRef = None,
 ) -> ImportPage:
     """`library`: case-insensitive exact DLL name; `q`: substring of function or library."""
     await repo.ensure_static_job(ctx.session, ctx.org_id, job_id)
-    rows, total = await repo.imports(ctx.session, ctx.org_id, job_id, page, library=library, q=q)
+    rows, total = await repo.imports(
+        ctx.session, ctx.org_id, job_id, page, library=library, q=q, ref=ref
+    )
     return ImportPage(items=[ImportOut.model_validate(r) for r in rows], total=total)
 
 
@@ -129,9 +135,12 @@ async def list_strings(
     page: PageParamsDep,
     encoding: StringEncoding | None = None,
     q: Search = None,
+    ref: RowRef = None,
 ) -> StringPage:
     await repo.ensure_static_job(ctx.session, ctx.org_id, job_id)
-    rows, total = await repo.strings(ctx.session, ctx.org_id, job_id, page, encoding=encoding, q=q)
+    rows, total = await repo.strings(
+        ctx.session, ctx.org_id, job_id, page, encoding=encoding, q=q, ref=ref
+    )
     return StringPage(items=[StringOut.model_validate(r) for r in rows], total=total)
 
 
@@ -141,9 +150,12 @@ async def list_signatures(
     ctx: EvidenceRead,
     page: PageParamsDep,
     engine: SignatureEngine | None = None,
+    ref: RowRef = None,
 ) -> SignaturePage:
     await repo.ensure_static_job(ctx.session, ctx.org_id, job_id)
-    rows, total = await repo.signatures(ctx.session, ctx.org_id, job_id, page, engine=engine)
+    rows, total = await repo.signatures(
+        ctx.session, ctx.org_id, job_id, page, engine=engine, ref=ref
+    )
     return SignaturePage(items=[SignatureOut.model_validate(r) for r in rows], total=total)
 
 
@@ -154,12 +166,13 @@ async def list_capabilities(
     page: PageParamsDep,
     namespace: Search = None,
     attack: Annotated[AttackId | None, Query()] = None,
+    ref: RowRef = None,
 ) -> CapabilityPage:
     """`namespace`: that capa namespace or below; `attack`: an ATT&CK technique id (its
     sub-techniques included) or sub-technique id."""
     await repo.ensure_static_job(ctx.session, ctx.org_id, job_id)
     rows, total = await repo.capabilities(
-        ctx.session, ctx.org_id, job_id, page, namespace=namespace, attack=attack
+        ctx.session, ctx.org_id, job_id, page, namespace=namespace, attack=attack, ref=ref
     )
     return CapabilityPage(items=[CapabilityOut.model_validate(r) for r in rows], total=total)
 

@@ -1,0 +1,35 @@
+case: pcap_mixed
+description: "Every pcap scenario in one capture, time-shifted by 1000 s each."
+must_mention:
+  - id: beacon
+    table: analysis_findings
+    where: {type: "beaconing", src_ip: "10.0.2.20", dst_ip: "203.0.113.50", dst_port: 8080}
+  - id: dns_tunneling
+    table: analysis_findings
+    where: {type: "dns_tunneling_like", src_ip: "10.0.3.30", attributes.domain: "example.net"}
+  - id: scan_vertical
+    table: analysis_findings
+    where: {type: "port_scan_vertical", src_ip: "10.0.4.40", dst_ip: "192.168.10.10"}
+  - id: scan_horizontal
+    table: analysis_findings
+    where: {type: "port_scan_horizontal", src_ip: "10.0.4.40", dst_port: 445}
+  - id: tls_self_signed
+    table: analysis_findings
+    where: {type: "tls_self_signed", src_ip: "10.0.1.12", dst_ip: "203.0.113.30"}
+  - id: tls_expired
+    table: analysis_findings
+    where: {type: "tls_expired_certificate", src_ip: "10.0.1.12", dst_ip: "203.0.113.31"}
+  - id: tls_legacy
+    table: analysis_findings
+    where: {type: "tls_legacy_version", src_ip: "10.0.1.12", dst_ip: "203.0.113.32"}
+  - id: http_ip_literal
+    table: analysis_findings
+    where: {type: "http_to_ip_literal", src_ip: "10.0.5.50", dst_ip: "203.0.113.70"}
+  - id: exe_over_http
+    table: analysis_findings
+    where: {type: "executable_over_http", src_ip: "10.0.5.50", dst_ip: "203.0.113.70"}
+allowed_attack: [T1046, T1071.001, T1071.004, T1105, T1204.002, T1571, T1572, T1573, T1573.002, T1587.003, T1588.004]
+forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
+forbid_external_urls: true
+min_recall: 0.8
+fake_min_recall: 0.33

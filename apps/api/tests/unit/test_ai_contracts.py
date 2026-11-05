@@ -274,7 +274,7 @@ def test_sanitize_strips_and_counts(raw: str, category: str) -> None:
 
 
 def test_sanitize_keeps_newlines_tabs_and_text() -> None:
-    value = "line 1\n\tline 2 — ünïcödé 漢字 ⁠"
+    value = "line 1\n\tline 2 — ünïcödé 漢字"
     assert text.sanitize(value) == (value, text.StripCounts())
 
 

@@ -1,0 +1,52 @@
+{
+ "clean": null,
+ "format": "cyberlab.ai_eval.case.v1",
+ "investigation": {"created_at":"2025-12-31T23:00:00Z","description":"","severity":"medium","title":"PCAP suspicious_http"},
+ "jobs": [
+  {
+   "analyzer": "pcap",
+   "created_at": "2026-01-01T00:06:00Z",
+   "evidence": {"description":"pcap capture file, microsecond ts (little-endian) - version 2.4","filename":"suspicious_http.pcap","mime":"application/vnd.tcpdump.pcap","size_bytes":5152,"uploaded_at":"2026-01-01T00:05:00Z"},
+   "finished_at": "2026-01-01T00:07:00Z",
+   "key": "j1",
+   "profile": null,
+   "summary": {"capture":{"bytes":400,"duration_s":0.0,"first_ts":"2026-01-01T00:00:00Z","last_ts":"2026-01-01T00:00:00Z","link_type":"Ethernet","packets":9,"protocol_hierarchy":[],"top_destinations":[],"top_ports":[],"top_sources":[]},"capture_format":"pcap","counts":{"alerts":1,"dns":0,"findings":2,"flows":1,"http":1,"iocs":2,"timeline":4,"tls":0},"engine_counts":{},"engine_errors":[],"schema_version":"pcap.v1","tool_versions":{"suricata":"7.0.10","tshark":"4.4.0","zeek":"8.0.10"},"truncated":{}},
+   "tables": {
+    "analysis_findings": [
+     {"attributes":{"host":"203.0.113.70","occurrences":1},"confidence":0.6,"description":"10.0.5.50 sent HTTP requests with Host '203.0.113.70' (no domain name), e.g. GET /dl/payload.exe. Common for malware staging and scanners, also for appliances and internal tools.","detection_method":"heuristic:suspicious_traffic@1","dst_ip":"203.0.113.70","dst_port":80,"evidence_refs":["C221fcf4e685787838"],"finding_id":"20602385-10bb-5ca0-903c-33cb76b27395","flow_ref":"C221fcf4e685787838","last_seen":null,"protocol":"http","severity":"low","src_ip":"10.0.5.50","src_port":null,"title":"HTTP request to a bare IP address","ts":"2026-01-01T00:00:00Z","type":"http_to_ip_literal"},
+     {"attributes":{"occurrences":1,"uri":"/dl/payload.exe"},"confidence":0.7,"description":"10.0.5.50 received application/x-dosexec content from 203.0.113.70 (/dl/payload.exe) without TLS: the file could have been tampered with in transit and its origin is unauthenticated.","detection_method":"heuristic:suspicious_traffic@1","dst_ip":"203.0.113.70","dst_port":80,"evidence_refs":["C221fcf4e685787838"],"finding_id":"b6f71546-a548-5095-8fc1-5301fa8945cc","flow_ref":"C221fcf4e685787838","last_seen":null,"protocol":"http","severity":"medium","src_ip":"10.0.5.50","src_port":null,"title":"Executable downloaded over cleartext HTTP","ts":"2026-01-01T00:00:00Z","type":"executable_over_http"}
+    ],
+    "analysis_timeline": [
+     {"dst_ip":null,"event":"capture_start","ref":null,"severity":null,"src_ip":null,"title":"Capture start","ts":"2026-01-01T00:00:00Z"},
+     {"dst_ip":"203.0.113.70","event":"finding","ref":"20602385-10bb-5ca0-903c-33cb76b27395","severity":"low","src_ip":"10.0.5.50","title":"HTTP request to a bare IP address","ts":"2026-01-01T00:00:00Z"},
+     {"dst_ip":"203.0.113.70","event":"finding","ref":"b6f71546-a548-5095-8fc1-5301fa8945cc","severity":"medium","src_ip":"10.0.5.50","title":"Executable downloaded over cleartext HTTP","ts":"2026-01-01T00:00:00Z"},
+     {"dst_ip":null,"event":"capture_end","ref":null,"severity":null,"src_ip":null,"title":"Capture end","ts":"2026-01-01T00:00:00Z"}
+    ],
+    "iocs": [
+     {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"flow","type":"ip","value":"203.0.113.70"},
+     {"count":1,"first_seen":"2026-01-01T00:00:00Z","last_seen":"2026-01-01T00:00:00Z","source":"http","type":"url","value":"http://203.0.113.70/dl/payload.exe"}
+    ],
+    "network_alerts": [
+     {"category":"Misc activity","community_id":null,"dst_ip":"203.0.113.70","dst_port":80,"flow_ref":null,"proto":"TCP","rev":1,"severity":3,"signature":"CYBERLAB TEST curl user agent","signature_id":9000001,"src_ip":"10.0.5.50","src_port":41000,"ts":"2026-01-01T00:00:00Z"}
+    ],
+    "network_flows": [
+     {"community_id":"1:c1ee1ea0950e7701ee9f5763f64=","conn_state":"SF","dst_ip":"203.0.113.70","dst_port":80,"duration_s":0.06,"flow_ref":"C221fcf4e685787838","orig_bytes":220,"orig_pkts":5,"proto":"tcp","resp_bytes":180,"resp_pkts":4,"service":"http","src_ip":"10.0.5.50","src_port":45527,"total_bytes":400,"ts":"2026-01-01T00:00:00Z"}
+    ],
+    "network_records": [
+     {"details":{"host":"203.0.113.70","method":"GET","referrer":null,"request_body_len":null,"resp_mime_types":["application/x-dosexec"],"response_body_len":470,"status_code":200,"uri":"/dl/payload.exe","user_agent":"curl/8.5.0"},"dst_ip":"203.0.113.70","dst_port":80,"flow_ref":"C221fcf4e685787838","kind":"http","src_ip":"10.0.5.50","src_port":41000,"summary":"GET 203.0.113.70/dl/payload.exe 200 curl/8.5.0","ts":"2026-01-01T00:00:00Z"}
+    ]
+   },
+   "worker_version": "pcap-worker/hand-trimmed"
+  }
+ ],
+ "kind": "pcap",
+ "name": "pcap_suspicious_http",
+ "plants": [],
+ "provenance": {"dataset":"apps/workers/pcap/dataset/generate.py","note":"built from labels.json and the detector templates; regenerate with scripts/ai_eval_snapshot.py (pipeline)","seed":1337,"snapshot_version":1,"source":"hand-trimmed"},
+ "scenario": "suspicious_http",
+ "tasks": ["summarize_pcap"],
+ "ti": [
+  {"found":true,"ioc":{"type":"ip","value":"203.0.113.70"},"job":"j1","provider":"otx","status":"ok","summary":{"provider":"otx","pulse_count":1,"pulses":[{"name":"CyberLab synthetic pulse: ip 203.0.113.70","tags":["synthetic","test"]}]},"tags":["synthetic"]},
+  {"found":true,"ioc":{"type":"ip","value":"203.0.113.70"},"job":"j1","provider":"misp","status":"ok","summary":{"attribute_count":1,"attributes":[{"category":"Network activity","event_id":1,"event_info":"CyberLab synthetic event: ip 203.0.113.70","tags":["tlp:clear"],"to_ids":false,"type":"ip-dst"}],"provider":"misp","tlp":["tlp:clear"]},"tags":["tlp:clear"]}
+ ]
+}

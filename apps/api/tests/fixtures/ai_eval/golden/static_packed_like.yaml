@@ -1,0 +1,20 @@
+case: static_packed_like
+description: "UPX-like section names, marker and tiny import table."
+must_mention:
+  - id: packer_indicators
+    table: analysis_findings
+    where: {type: "packer_indicators"}
+  - id: yara_upx_section_names
+    table: analysis_findings
+    where: {type: "yara_match", attributes.name: "CyberLab_UPX_Section_Names"}
+  - id: yara_upx_marker_string
+    table: analysis_findings
+    where: {type: "yara_match", attributes.name: "CyberLab_UPX_Marker_String"}
+  - id: cap_packed
+    table: malware_capabilities
+    where: {name: "packed with UPX"}
+allowed_attack: [T1027, T1027.002]
+forbidden_terms: ["clean", "benign", "safe", "harmless", "no threat", "nothing suspicious", "ransomware"]
+forbid_external_urls: true
+min_recall: 0.75
+fake_min_recall: 0.5

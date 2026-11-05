@@ -1,0 +1,28 @@
+{
+  "_source": "Hand-written from the documented response shape (no live key was available on 2026-11-05); sanitized: no key, no account-identifying request id.",
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "json": {
+      "output": null,
+      "usage": {
+        "input_tokens": 400,
+        "output_tokens": 120
+      },
+      "stop_reason": "max_tokens",
+      "model": "mock-1"
+    }
+  },
+  "expect": {
+    "kind": "max_tokens",
+    "request_sent": true,
+    "usage": {
+      "input_tokens": 400,
+      "output_tokens": 120,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0
+    }
+  }
+}

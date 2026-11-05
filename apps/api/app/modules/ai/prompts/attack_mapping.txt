@@ -1,0 +1,1 @@
+Task: attack_mapping. Map the evidence to possible MITRE ATT&CK Enterprise techniques. For each technique, cite the findings, capabilities, signature matches or alerts that support it and explain the mapping. Omit techniques the evidence does not support.

@@ -130,6 +130,2558 @@
         "title": "AbuseIpdbSummary",
         "type": "object"
       },
+      "AiAttackOut": {
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/AiCitationOut"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CitationReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ClaimStatus"
+          },
+          "technique_id": {
+            "title": "Technique Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "technique_id",
+          "rationale",
+          "status",
+          "reason",
+          "citations"
+        ],
+        "title": "AiAttackOut",
+        "type": "object"
+      },
+      "AiCeilingsOut": {
+        "description": "Operator ceilings over the per-org budgets (`AI_CEILINGS`).",
+        "properties": {
+          "daily_token_budget": {
+            "title": "Daily Token Budget",
+            "type": "integer"
+          },
+          "incident_token_cap": {
+            "title": "Incident Token Cap",
+            "type": "integer"
+          },
+          "run_token_cap": {
+            "title": "Run Token Cap",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "daily_token_budget",
+          "run_token_cap",
+          "incident_token_cap"
+        ],
+        "title": "AiCeilingsOut",
+        "type": "object"
+      },
+      "AiChildRunOut": {
+        "properties": {
+          "citation_accuracy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citation Accuracy"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "flags": {
+            "items": {
+              "$ref": "#/components/schemas/OutputFlag"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "refusal_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal Category"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AiRunStatus"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/AiTokenUsage"
+          }
+        },
+        "required": [
+          "id",
+          "job_id",
+          "status",
+          "error_code",
+          "refusal_category",
+          "flags",
+          "citation_accuracy",
+          "usage",
+          "finished_at"
+        ],
+        "title": "AiChildRunOut",
+        "type": "object"
+      },
+      "AiCitationOut": {
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RefKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiDeepLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CitationReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ref_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref Id"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CitationStatus"
+          }
+        },
+        "required": [
+          "label",
+          "kind",
+          "status",
+          "reason",
+          "field",
+          "quote",
+          "ref_id",
+          "job_id",
+          "stale",
+          "link"
+        ],
+        "title": "AiCitationOut",
+        "type": "object"
+      },
+      "AiClaimOut": {
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/AiCitationOut"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "confidence": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Confidence",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CitationReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ClaimStatus"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "confidence",
+          "status",
+          "reason",
+          "citations"
+        ],
+        "title": "AiClaimOut",
+        "type": "object"
+      },
+      "AiContextPreviewOut": {
+        "description": "What a run would send (pseudonyms shown, never the map). Nothing is persisted.",
+        "properties": {
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "context_sha256": {
+            "title": "Context Sha256",
+            "type": "string"
+          },
+          "context_stats": {
+            "$ref": "#/components/schemas/ContextStats"
+          },
+          "inclusions": {
+            "$ref": "#/components/schemas/AiInclusions"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ContextItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/AiProviderName"
+          },
+          "task": {
+            "$ref": "#/components/schemas/AiTask"
+          }
+        },
+        "required": [
+          "task",
+          "provider",
+          "model",
+          "context_sha256",
+          "context_stats",
+          "items",
+          "categories",
+          "inclusions"
+        ],
+        "title": "AiContextPreviewOut",
+        "type": "object"
+      },
+      "AiContextStageOut": {
+        "properties": {
+          "context_sha256": {
+            "title": "Context Sha256",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ContextItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "pseudonym_map": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pseudonym Map"
+          },
+          "stage": {
+            "enum": [
+              "base",
+              "reduce"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "stats": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContextStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task": {
+            "$ref": "#/components/schemas/AiTask"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "context_sha256",
+          "version",
+          "task",
+          "items",
+          "stats",
+          "pseudonym_map"
+        ],
+        "title": "AiContextStageOut",
+        "type": "object"
+      },
+      "AiDeepLink": {
+        "description": "An internal deep link (never a URL): the web app maps it to its own route.",
+        "properties": {
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "route": {
+            "enum": [
+              "pcap",
+              "malware",
+              "evidence",
+              "investigation"
+            ],
+            "title": "Route",
+            "type": "string"
+          },
+          "tab": {
+            "anyOf": [
+              {
+                "enum": [
+                  "overview",
+                  "findings",
+                  "alerts",
+                  "flows",
+                  "dns",
+                  "http",
+                  "tls",
+                  "iocs",
+                  "timeline",
+                  "signatures",
+                  "capabilities",
+                  "sections",
+                  "strings"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tab"
+          }
+        },
+        "required": [
+          "route",
+          "job_id",
+          "tab",
+          "ref"
+        ],
+        "title": "AiDeepLink",
+        "type": "object"
+      },
+      "AiHypothesisOut": {
+        "properties": {
+          "confidence": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Confidence",
+            "type": "string"
+          },
+          "contradicting": {
+            "items": {
+              "$ref": "#/components/schemas/AiCitationOut"
+            },
+            "title": "Contradicting",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CitationReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ClaimStatus"
+          },
+          "supporting": {
+            "items": {
+              "$ref": "#/components/schemas/AiCitationOut"
+            },
+            "title": "Supporting",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "confidence",
+          "status",
+          "reason",
+          "supporting",
+          "contradicting"
+        ],
+        "title": "AiHypothesisOut",
+        "type": "object"
+      },
+      "AiInclusions": {
+        "properties": {
+          "include_case_text": {
+            "title": "Include Case Text",
+            "type": "boolean"
+          },
+          "include_strings": {
+            "title": "Include Strings",
+            "type": "boolean"
+          },
+          "include_ti": {
+            "title": "Include Ti",
+            "type": "boolean"
+          },
+          "pseudonymize_internal": {
+            "title": "Pseudonymize Internal",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pseudonymize_internal",
+          "include_strings",
+          "include_ti",
+          "include_case_text"
+        ],
+        "title": "AiInclusions",
+        "type": "object"
+      },
+      "AiModelOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "price": {
+            "$ref": "#/components/schemas/AiModelPrice"
+          },
+          "verified": {
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "price",
+          "verified"
+        ],
+        "title": "AiModelOut",
+        "type": "object"
+      },
+      "AiModelPrice": {
+        "description": "USD per million tokens (an estimate: prices change; see `price_version`).",
+        "properties": {
+          "cache_read": {
+            "title": "Cache Read",
+            "type": "number"
+          },
+          "cache_write": {
+            "title": "Cache Write",
+            "type": "number"
+          },
+          "input": {
+            "title": "Input",
+            "type": "number"
+          },
+          "output": {
+            "title": "Output",
+            "type": "number"
+          }
+        },
+        "required": [
+          "input",
+          "output",
+          "cache_read",
+          "cache_write"
+        ],
+        "title": "AiModelPrice",
+        "type": "object"
+      },
+      "AiNextStepOut": {
+        "properties": {
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "refs": {
+            "items": {
+              "$ref": "#/components/schemas/AiCitationOut"
+            },
+            "title": "Refs",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "rationale",
+          "refs"
+        ],
+        "title": "AiNextStepOut",
+        "type": "object"
+      },
+      "AiOutputOut": {
+        "description": "The verified output, display-ready: claim statuses, resolved citations, and the text\nwith pseudonyms reversed (unless `?pseudonyms=keep`).",
+        "properties": {
+          "attack_techniques": {
+            "items": {
+              "$ref": "#/components/schemas/AiAttackOut"
+            },
+            "title": "Attack Techniques",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "flags": {
+            "items": {
+              "$ref": "#/components/schemas/OutputFlag"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "hypotheses": {
+            "items": {
+              "$ref": "#/components/schemas/AiHypothesisOut"
+            },
+            "title": "Hypotheses",
+            "type": "array"
+          },
+          "interpretation": {
+            "items": {
+              "$ref": "#/components/schemas/AiClaimOut"
+            },
+            "title": "Interpretation",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "next_steps": {
+            "items": {
+              "$ref": "#/components/schemas/AiNextStepOut"
+            },
+            "title": "Next Steps",
+            "type": "array"
+          },
+          "observed": {
+            "items": {
+              "$ref": "#/components/schemas/AiClaimOut"
+            },
+            "title": "Observed",
+            "type": "array"
+          },
+          "overall_confidence": {
+            "$ref": "#/components/schemas/AiOverallConfidenceOut"
+          },
+          "pseudonyms": {
+            "enum": [
+              "reversed",
+              "kept"
+            ],
+            "title": "Pseudonyms",
+            "type": "string"
+          },
+          "timeline": {
+            "items": {
+              "$ref": "#/components/schemas/AiTimelineOut"
+            },
+            "title": "Timeline",
+            "type": "array"
+          },
+          "verification": {
+            "$ref": "#/components/schemas/AiVerificationOut"
+          }
+        },
+        "required": [
+          "observed",
+          "interpretation",
+          "hypotheses",
+          "overall_confidence",
+          "next_steps",
+          "limitations",
+          "attack_techniques",
+          "timeline",
+          "flags",
+          "verification",
+          "pseudonyms",
+          "created_at"
+        ],
+        "title": "AiOutputOut",
+        "type": "object"
+      },
+      "AiOverallConfidenceOut": {
+        "properties": {
+          "level": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "level",
+          "rationale"
+        ],
+        "title": "AiOverallConfidenceOut",
+        "type": "object"
+      },
+      "AiProviderName": {
+        "enum": [
+          "anthropic",
+          "gemini",
+          "mock"
+        ],
+        "title": "AiProviderName",
+        "type": "string"
+      },
+      "AiProviderOut": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "default_model": {
+            "title": "Default Model",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "key_last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Last4"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/AiModelOut"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "name": {
+            "$ref": "#/components/schemas/AiProviderName"
+          },
+          "paid_tier_ack_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Tier Ack At"
+          },
+          "platform_key": {
+            "title": "Platform Key",
+            "type": "boolean"
+          },
+          "price_version": {
+            "title": "Price Version",
+            "type": "string"
+          },
+          "privacy_note": {
+            "title": "Privacy Note",
+            "type": "string"
+          },
+          "requires_paid_tier_ack": {
+            "title": "Requires Paid Tier Ack",
+            "type": "boolean"
+          },
+          "terms_ack_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms Ack At"
+          },
+          "tos_note": {
+            "title": "Tos Note",
+            "type": "string"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ai_disabled_platform",
+                  "prod_mock",
+                  "gemini_billing_required"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Reason"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          },
+          "verify_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerifyStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "models",
+          "default_model",
+          "price_version",
+          "tos_note",
+          "privacy_note",
+          "available",
+          "unavailable_reason",
+          "platform_key",
+          "requires_paid_tier_ack",
+          "configured",
+          "enabled",
+          "model",
+          "key_last4",
+          "verify_status",
+          "verified_at",
+          "last_error_code",
+          "terms_ack_at",
+          "paid_tier_ack_at"
+        ],
+        "title": "AiProviderOut",
+        "type": "object"
+      },
+      "AiProviderPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AiProviderOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "platform_ai_enabled": {
+            "title": "Platform Ai Enabled",
+            "type": "boolean"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "platform_ai_enabled"
+        ],
+        "title": "AiProviderPage",
+        "type": "object"
+      },
+      "AiProviderSaved": {
+        "description": "A PUT's answer plus whether a key check (`ai.verify`) was queued: only after a new\nkey, within the per-provider verify limit, and when the broker took it.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "default_model": {
+            "title": "Default Model",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "key_last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Last4"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/AiModelOut"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "name": {
+            "$ref": "#/components/schemas/AiProviderName"
+          },
+          "paid_tier_ack_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Tier Ack At"
+          },
+          "platform_key": {
+            "title": "Platform Key",
+            "type": "boolean"
+          },
+          "price_version": {
+            "title": "Price Version",
+            "type": "string"
+          },
+          "privacy_note": {
+            "title": "Privacy Note",
+            "type": "string"
+          },
+          "requires_paid_tier_ack": {
+            "title": "Requires Paid Tier Ack",
+            "type": "boolean"
+          },
+          "terms_ack_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms Ack At"
+          },
+          "tos_note": {
+            "title": "Tos Note",
+            "type": "string"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ai_disabled_platform",
+                  "prod_mock",
+                  "gemini_billing_required"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Reason"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          },
+          "verify_queued": {
+            "title": "Verify Queued",
+            "type": "boolean"
+          },
+          "verify_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerifyStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "models",
+          "default_model",
+          "price_version",
+          "tos_note",
+          "privacy_note",
+          "available",
+          "unavailable_reason",
+          "platform_key",
+          "requires_paid_tier_ack",
+          "configured",
+          "enabled",
+          "model",
+          "key_last4",
+          "verify_status",
+          "verified_at",
+          "last_error_code",
+          "terms_ack_at",
+          "paid_tier_ack_at",
+          "verify_queued"
+        ],
+        "title": "AiProviderSaved",
+        "type": "object"
+      },
+      "AiProviderUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledge_paid_tier": {
+            "title": "Acknowledge Paid Tier",
+            "type": "boolean"
+          },
+          "acknowledge_terms": {
+            "title": "Acknowledge Terms",
+            "type": "boolean"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "title": "AiProviderUpdate",
+        "type": "object"
+      },
+      "AiProviderUsageOut": {
+        "properties": {
+          "cost_micros": {
+            "title": "Cost Micros",
+            "type": "integer"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/AiProviderName"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/AiTokenUsage"
+          }
+        },
+        "required": [
+          "provider",
+          "runs",
+          "usage",
+          "cost_micros"
+        ],
+        "title": "AiProviderUsageOut",
+        "type": "object"
+      },
+      "AiRunContextOut": {
+        "properties": {
+          "context_sha256": {
+            "title": "Context Sha256",
+            "type": "string"
+          },
+          "revealed": {
+            "title": "Revealed",
+            "type": "boolean"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/AiContextStageOut"
+            },
+            "title": "Stages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_id",
+          "context_sha256",
+          "revealed",
+          "stages"
+        ],
+        "title": "AiRunContextOut",
+        "type": "object"
+      },
+      "AiRunCreate": {
+        "additionalProperties": false,
+        "description": "`POST /ai/runs` and `/ai/context-preview` (the frozen `AiRunRequest`; `regenerate`\nwithout a schema default).",
+        "properties": {
+          "investigation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Investigation Id"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiProviderName"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "regenerate": {
+            "title": "Regenerate",
+            "type": "boolean"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "task": {
+            "$ref": "#/components/schemas/AiTask"
+          }
+        },
+        "required": [
+          "task"
+        ],
+        "title": "AiRunCreate",
+        "type": "object"
+      },
+      "AiRunCreated": {
+        "properties": {
+          "deduplicated": {
+            "title": "Deduplicated",
+            "type": "boolean"
+          },
+          "run": {
+            "$ref": "#/components/schemas/AiRunOut"
+          }
+        },
+        "required": [
+          "run",
+          "deduplicated"
+        ],
+        "title": "AiRunCreated",
+        "type": "object"
+      },
+      "AiRunDetail": {
+        "properties": {
+          "child_runs": {
+            "items": {
+              "$ref": "#/components/schemas/AiChildRunOut"
+            },
+            "title": "Child Runs",
+            "type": "array"
+          },
+          "children": {
+            "title": "Children",
+            "type": "integer"
+          },
+          "citation_accuracy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citation Accuracy"
+          },
+          "claims_unsupported": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claims Unsupported"
+          },
+          "context_sha256": {
+            "title": "Context Sha256",
+            "type": "string"
+          },
+          "context_stats": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContextStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cost_estimated": {
+            "title": "Cost Estimated",
+            "type": "boolean"
+          },
+          "cost_micros": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Micros"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deadline_at": {
+            "format": "date-time",
+            "title": "Deadline At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "flags": {
+            "items": {
+              "$ref": "#/components/schemas/OutputFlag"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "investigation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Investigation Id"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunMetrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiOutputOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "output_schema": {
+            "title": "Output Schema",
+            "type": "string"
+          },
+          "output_withheld": {
+            "title": "Output Withheld",
+            "type": "boolean"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id"
+          },
+          "price_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Version"
+          },
+          "prompt_version": {
+            "title": "Prompt Version",
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/AiProviderName"
+          },
+          "refusal_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal Category"
+          },
+          "requested_by": {
+            "format": "uuid",
+            "title": "Requested By",
+            "type": "string"
+          },
+          "requested_by_name": {
+            "title": "Requested By Name",
+            "type": "string"
+          },
+          "resume_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume At"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/AiScope"
+          },
+          "served_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Served Model"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AiRunStatus"
+          },
+          "supersedes_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Run Id"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "target_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "finding",
+                  "alert"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Kind"
+          },
+          "task": {
+            "$ref": "#/components/schemas/AiTask"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/AiTokenUsage"
+          }
+        },
+        "required": [
+          "id",
+          "task",
+          "scope",
+          "job_id",
+          "investigation_id",
+          "target_kind",
+          "target_id",
+          "parent_run_id",
+          "supersedes_run_id",
+          "provider",
+          "model",
+          "served_model",
+          "prompt_version",
+          "output_schema",
+          "status",
+          "error_code",
+          "refusal_category",
+          "context_sha256",
+          "deadline_at",
+          "resume_at",
+          "usage",
+          "cost_micros",
+          "cost_estimated",
+          "price_version",
+          "citation_accuracy",
+          "claims_unsupported",
+          "children",
+          "requested_by",
+          "requested_by_name",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "context_stats",
+          "metrics",
+          "flags",
+          "child_runs",
+          "output",
+          "output_withheld"
+        ],
+        "title": "AiRunDetail",
+        "type": "object"
+      },
+      "AiRunOut": {
+        "properties": {
+          "children": {
+            "title": "Children",
+            "type": "integer"
+          },
+          "citation_accuracy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citation Accuracy"
+          },
+          "claims_unsupported": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claims Unsupported"
+          },
+          "context_sha256": {
+            "title": "Context Sha256",
+            "type": "string"
+          },
+          "cost_estimated": {
+            "title": "Cost Estimated",
+            "type": "boolean"
+          },
+          "cost_micros": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Micros"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deadline_at": {
+            "format": "date-time",
+            "title": "Deadline At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "investigation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Investigation Id"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "output_schema": {
+            "title": "Output Schema",
+            "type": "string"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id"
+          },
+          "price_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Version"
+          },
+          "prompt_version": {
+            "title": "Prompt Version",
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/AiProviderName"
+          },
+          "refusal_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal Category"
+          },
+          "requested_by": {
+            "format": "uuid",
+            "title": "Requested By",
+            "type": "string"
+          },
+          "requested_by_name": {
+            "title": "Requested By Name",
+            "type": "string"
+          },
+          "resume_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume At"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/AiScope"
+          },
+          "served_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Served Model"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AiRunStatus"
+          },
+          "supersedes_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Run Id"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "target_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "finding",
+                  "alert"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Kind"
+          },
+          "task": {
+            "$ref": "#/components/schemas/AiTask"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/AiTokenUsage"
+          }
+        },
+        "required": [
+          "id",
+          "task",
+          "scope",
+          "job_id",
+          "investigation_id",
+          "target_kind",
+          "target_id",
+          "parent_run_id",
+          "supersedes_run_id",
+          "provider",
+          "model",
+          "served_model",
+          "prompt_version",
+          "output_schema",
+          "status",
+          "error_code",
+          "refusal_category",
+          "context_sha256",
+          "deadline_at",
+          "resume_at",
+          "usage",
+          "cost_micros",
+          "cost_estimated",
+          "price_version",
+          "citation_accuracy",
+          "claims_unsupported",
+          "children",
+          "requested_by",
+          "requested_by_name",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "AiRunOut",
+        "type": "object"
+      },
+      "AiRunPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AiRunOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "AiRunPage",
+        "type": "object"
+      },
+      "AiRunStatus": {
+        "enum": [
+          "queued",
+          "running",
+          "waiting",
+          "completed",
+          "partial",
+          "failed",
+          "refused"
+        ],
+        "title": "AiRunStatus",
+        "type": "string"
+      },
+      "AiScope": {
+        "enum": [
+          "job",
+          "investigation"
+        ],
+        "title": "AiScope",
+        "type": "string"
+      },
+      "AiSettingsOut": {
+        "properties": {
+          "ai_enabled": {
+            "title": "Ai Enabled",
+            "type": "boolean"
+          },
+          "ceilings": {
+            "$ref": "#/components/schemas/AiCeilingsOut"
+          },
+          "daily_token_budget": {
+            "title": "Daily Token Budget",
+            "type": "integer"
+          },
+          "default_provider": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiProviderName"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "incident_token_cap": {
+            "title": "Incident Token Cap",
+            "type": "integer"
+          },
+          "include_case_text": {
+            "title": "Include Case Text",
+            "type": "boolean"
+          },
+          "include_strings": {
+            "title": "Include Strings",
+            "type": "boolean"
+          },
+          "include_ti": {
+            "title": "Include Ti",
+            "type": "boolean"
+          },
+          "internal_cidrs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Internal Cidrs",
+            "type": "array"
+          },
+          "internal_suffixes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Internal Suffixes",
+            "type": "array"
+          },
+          "platform_ai_enabled": {
+            "title": "Platform Ai Enabled",
+            "type": "boolean"
+          },
+          "privacy_ack_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Privacy Ack At"
+          },
+          "privacy_ack_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Privacy Ack By"
+          },
+          "privacy_notice": {
+            "title": "Privacy Notice",
+            "type": "string"
+          },
+          "pseudonymize_internal": {
+            "title": "Pseudonymize Internal",
+            "type": "boolean"
+          },
+          "run_token_cap": {
+            "title": "Run Token Cap",
+            "type": "integer"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "ai_enabled",
+          "platform_ai_enabled",
+          "privacy_ack_at",
+          "privacy_ack_by",
+          "default_provider",
+          "pseudonymize_internal",
+          "internal_cidrs",
+          "internal_suffixes",
+          "include_strings",
+          "include_ti",
+          "include_case_text",
+          "daily_token_budget",
+          "run_token_cap",
+          "incident_token_cap",
+          "ceilings",
+          "privacy_notice",
+          "updated_at"
+        ],
+        "title": "AiSettingsOut",
+        "type": "object"
+      },
+      "AiSettingsUpdate": {
+        "additionalProperties": false,
+        "description": "Partial update. Turning AI on, and widening the disclosure later (strings or case text\non, pseudonymization off), needs `acknowledge_privacy` (RT22).",
+        "properties": {
+          "acknowledge_privacy": {
+            "title": "Acknowledge Privacy",
+            "type": "boolean"
+          },
+          "ai_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Enabled"
+          },
+          "daily_token_budget": {
+            "anyOf": [
+              {
+                "maximum": 1000000000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Token Budget"
+          },
+          "default_provider": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiProviderName"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "incident_token_cap": {
+            "anyOf": [
+              {
+                "maximum": 1000000000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incident Token Cap"
+          },
+          "include_case_text": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Case Text"
+          },
+          "include_strings": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Strings"
+          },
+          "include_ti": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Ti"
+          },
+          "internal_cidrs": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internal Cidrs"
+          },
+          "internal_suffixes": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internal Suffixes"
+          },
+          "pseudonymize_internal": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pseudonymize Internal"
+          },
+          "run_token_cap": {
+            "anyOf": [
+              {
+                "maximum": 1000000000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Token Cap"
+          }
+        },
+        "title": "AiSettingsUpdate",
+        "type": "object"
+      },
+      "AiTask": {
+        "enum": [
+          "explain_finding",
+          "explain_alert",
+          "summarize_pcap",
+          "explain_static",
+          "ioc_correlation",
+          "attack_mapping",
+          "incident_summary",
+          "job_digest"
+        ],
+        "title": "AiTask",
+        "type": "string"
+      },
+      "AiTimelineOut": {
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/AiCitationOut"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CitationReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ClaimStatus"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "ts": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts"
+          }
+        },
+        "required": [
+          "ts",
+          "text",
+          "status",
+          "reason",
+          "citations"
+        ],
+        "title": "AiTimelineOut",
+        "type": "object"
+      },
+      "AiTokenUsage": {
+        "properties": {
+          "cache_read_tokens": {
+            "default": 0,
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cache_write_tokens": {
+            "default": 0,
+            "title": "Cache Write Tokens",
+            "type": "integer"
+          },
+          "input_tokens": {
+            "default": 0,
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "default": 0,
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "default": 0,
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "title": "AiTokenUsage",
+        "type": "object"
+      },
+      "AiUsageOut": {
+        "description": "Today's (UTC) usage from `ai_runs.usage`; cost is an estimate.",
+        "properties": {
+          "ceilings": {
+            "$ref": "#/components/schemas/AiCeilingsOut"
+          },
+          "cost_micros": {
+            "title": "Cost Micros",
+            "type": "integer"
+          },
+          "daily_token_budget": {
+            "title": "Daily Token Budget",
+            "type": "integer"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "incident_token_cap": {
+            "title": "Incident Token Cap",
+            "type": "integer"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/AiProviderUsageOut"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "remaining_tokens": {
+            "title": "Remaining Tokens",
+            "type": "integer"
+          },
+          "run_token_cap": {
+            "title": "Run Token Cap",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "providers",
+          "total_tokens",
+          "cost_micros",
+          "daily_token_budget",
+          "remaining_tokens",
+          "run_token_cap",
+          "incident_token_cap",
+          "ceilings"
+        ],
+        "title": "AiUsageOut",
+        "type": "object"
+      },
+      "AiVerificationOut": {
+        "properties": {
+          "citations": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/CitationStatus"
+            },
+            "title": "Citations",
+            "type": "object"
+          },
+          "dropped_refs": {
+            "title": "Dropped Refs",
+            "type": "integer"
+          },
+          "invalid_attack": {
+            "title": "Invalid Attack",
+            "type": "integer"
+          },
+          "reused_from_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reused From Run Id"
+          },
+          "truncation": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Truncation",
+            "type": "object"
+          }
+        },
+        "required": [
+          "citations",
+          "dropped_refs",
+          "invalid_attack",
+          "truncation",
+          "reused_from_run_id"
+        ],
+        "title": "AiVerificationOut",
+        "type": "object"
+      },
+      "AiVerifyQueued": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/AiProviderName"
+          },
+          "status": {
+            "const": "queued",
+            "default": "queued",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "AiVerifyQueued",
+        "type": "object"
+      },
       "AlertOut": {
         "properties": {
           "category": {
@@ -883,6 +3435,168 @@
           "total"
         ],
         "title": "CapabilityPage",
+        "type": "object"
+      },
+      "CitationReason": {
+        "description": "Why a citation is not verified, or why a claim is unsupported.",
+        "enum": [
+          "unknown_label",
+          "digest_not_evidence",
+          "field_not_allowed",
+          "out_of_scope",
+          "row_missing",
+          "quote_mismatch",
+          "quote_too_short",
+          "quote_required",
+          "weak_anchor",
+          "no_verified_citation",
+          "invalid_attack",
+          "no_timestamp"
+        ],
+        "title": "CitationReason",
+        "type": "string"
+      },
+      "CitationStatus": {
+        "enum": [
+          "verified",
+          "unverified",
+          "invalid"
+        ],
+        "title": "CitationStatus",
+        "type": "string"
+      },
+      "ClaimStatus": {
+        "enum": [
+          "supported",
+          "unsupported",
+          "hypothesis"
+        ],
+        "title": "ClaimStatus",
+        "type": "string"
+      },
+      "ContextItem": {
+        "additionalProperties": false,
+        "description": "One labelled item exactly as sent. `fields` keys are the only valid citation `field`\nvalues for this item; values are already sanitized, pseudonymized, defanged, truncated.",
+        "properties": {
+          "fields": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Fields",
+            "type": "object"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/RefKind"
+          },
+          "label": {
+            "maxLength": 16,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "kind",
+          "fields"
+        ],
+        "title": "ContextItem",
+        "type": "object"
+      },
+      "ContextStats": {
+        "additionalProperties": false,
+        "description": "`ai_runs.context_stats` (\u2264 16 KiB). Keys are kind values / category names only: never\nfield names, titles or filenames (RT4).",
+        "properties": {
+          "dropped_keys": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Dropped Keys",
+            "type": "integer"
+          },
+          "est_tokens": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Est Tokens",
+            "type": "integer"
+          },
+          "jobs_omitted": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Jobs Omitted",
+            "type": "integer"
+          },
+          "neutralized": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Neutralized",
+            "type": "integer"
+          },
+          "omitted": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Omitted",
+            "type": "integer"
+          },
+          "per_kind": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/KindStats"
+            },
+            "default": {},
+            "propertyNames": {
+              "$ref": "#/components/schemas/RefKind"
+            },
+            "title": "Per Kind",
+            "type": "object"
+          },
+          "pseudonymized": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Pseudonymized",
+            "type": "object"
+          },
+          "stripped": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Stripped",
+            "type": "object"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "truncated_fields": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "propertyNames": {
+              "$ref": "#/components/schemas/RefKind"
+            },
+            "title": "Truncated Fields",
+            "type": "object"
+          }
+        },
+        "title": "ContextStats",
         "type": "object"
       },
       "CustodyAction": {
@@ -2463,6 +5177,34 @@
         "title": "InvestigationStatus",
         "type": "string"
       },
+      "InvestigationTimelinePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "InvestigationTimelinePage",
+        "type": "object"
+      },
       "InvestigationUpdate": {
         "additionalProperties": false,
         "properties": {
@@ -2713,6 +5455,27 @@
           "total"
         ],
         "title": "IocPage",
+        "type": "object"
+      },
+      "KindStats": {
+        "additionalProperties": false,
+        "properties": {
+          "included": {
+            "minimum": 0.0,
+            "title": "Included",
+            "type": "integer"
+          },
+          "total": {
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "included",
+          "total"
+        ],
+        "title": "KindStats",
         "type": "object"
       },
       "LibraryCount": {
@@ -3606,6 +6369,16 @@
         "title": "OtxValidation",
         "type": "object"
       },
+      "OutputFlag": {
+        "enum": [
+          "canary_leak",
+          "verdict_language",
+          "command_like",
+          "external_url"
+        ],
+        "title": "OutputFlag",
+        "type": "string"
+      },
       "PeOut": {
         "properties": {
           "bits": {
@@ -3881,6 +6654,29 @@
         ],
         "title": "RecordPage",
         "type": "object"
+      },
+      "RefKind": {
+        "description": "Kinds of context items; each has a one-letter label prefix (`prefix`).",
+        "enum": [
+          "job",
+          "finding",
+          "alert",
+          "flow",
+          "record",
+          "ioc",
+          "ti_result",
+          "sample",
+          "signature",
+          "capability",
+          "pe_summary",
+          "string",
+          "timeline",
+          "evidence",
+          "investigation",
+          "digest_claim"
+        ],
+        "title": "RefKind",
+        "type": "string"
       },
       "RegisterIn": {
         "properties": {
@@ -4979,6 +7775,186 @@
         "title": "RunItemPage",
         "type": "object"
       },
+      "RunMetrics": {
+        "additionalProperties": false,
+        "description": "`ai_runs.metrics` (\u2264 4 KiB; frozen stored shape, RT12). Rates are None when their\ndenominator is zero.",
+        "properties": {
+          "by_reason": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "propertyNames": {
+              "$ref": "#/components/schemas/CitationReason"
+            },
+            "title": "By Reason",
+            "type": "object"
+          },
+          "canary_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canary Sha256"
+          },
+          "citation_accuracy": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citation Accuracy"
+          },
+          "citations_invalid": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Citations Invalid",
+            "type": "integer"
+          },
+          "citations_total": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Citations Total",
+            "type": "integer"
+          },
+          "citations_unverified": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Citations Unverified",
+            "type": "integer"
+          },
+          "citations_verified": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Citations Verified",
+            "type": "integer"
+          },
+          "claims_total": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Claims Total",
+            "type": "integer"
+          },
+          "claims_unsupported": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Claims Unsupported",
+            "type": "integer"
+          },
+          "cost_estimated": {
+            "default": false,
+            "title": "Cost Estimated",
+            "type": "boolean"
+          },
+          "flags": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/OutputFlag"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "invalid_attack": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Invalid Attack",
+            "type": "integer"
+          },
+          "invalid_ref_rate": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invalid Ref Rate"
+          },
+          "refusal_category": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal Category"
+          },
+          "repaired": {
+            "default": false,
+            "title": "Repaired",
+            "type": "boolean"
+          },
+          "replayed": {
+            "default": false,
+            "title": "Replayed",
+            "type": "boolean"
+          },
+          "strip_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Strip Counts",
+            "type": "object"
+          },
+          "truncation": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Truncation",
+            "type": "object"
+          },
+          "unsupported_claim_rate": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unsupported Claim Rate"
+          },
+          "usage_unknown": {
+            "default": false,
+            "title": "Usage Unknown",
+            "type": "boolean"
+          },
+          "version": {
+            "const": "v1",
+            "default": "v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "weak_anchor": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Weak Anchor",
+            "type": "integer"
+          }
+        },
+        "title": "RunMetrics",
+        "type": "object"
+      },
       "RunOut": {
         "properties": {
           "created_at": {
@@ -5710,6 +8686,78 @@
           "excluded_suffixes"
         ],
         "title": "TiSettingsUpdate",
+        "type": "object"
+      },
+      "TimelineEntryOut": {
+        "description": "One entry of the merged investigation timeline (M5). `ts_source` says which clock the\ntime comes from: `recorded` (platform event), `capture` (the capture's clock) or\n`analysis_time` (a static finding, at its job's finish time).",
+        "properties": {
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "ref_id": {
+            "format": "uuid",
+            "title": "Ref Id",
+            "type": "string"
+          },
+          "ref_kind": {
+            "title": "Ref Kind",
+            "type": "string"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "ts": {
+            "format": "date-time",
+            "title": "Ts",
+            "type": "string"
+          },
+          "ts_source": {
+            "title": "Ts Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ts",
+          "ts_source",
+          "kind",
+          "title",
+          "severity",
+          "evidence_id",
+          "job_id",
+          "ref_kind",
+          "ref_id"
+        ],
+        "title": "TimelineEntryOut",
         "type": "object"
       },
       "TimelineOut": {
@@ -6822,8 +9870,750 @@
         ]
       }
     },
+    "/api/v1/orgs/{org_id}/ai/context-preview": {
+      "post": {
+        "description": "What a run with this body would send (pseudonyms shown). Nothing is persisted.",
+        "operationId": "preview_ai_context_api_v1_orgs__org_id__ai_context_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiRunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiContextPreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Ai Context",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ai/providers": {
+      "get": {
+        "description": "The AI provider catalog with this org's configuration status (never a key).",
+        "operationId": "list_ai_providers_api_v1_orgs__org_id__ai_providers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ai Providers",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ai/providers/{provider}": {
+      "put": {
+        "description": "Store a key (sealed, write-only), enable/disable, acknowledge the terms (and, for\nGemini, the paid tier), pick a model. A new key is checked after the commit\n(`ai.verify`) within the per-provider verify limit; `verify_queued` says whether it was.",
+        "operationId": "update_ai_provider_api_v1_orgs__org_id__ai_providers__provider__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AiProviderName"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiProviderUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderSaved"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Ai Provider",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ai/providers/{provider}/key": {
+      "delete": {
+        "operationId": "remove_ai_provider_key_api_v1_orgs__org_id__ai_providers__provider__key_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AiProviderName"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The key was removed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Ai Provider Key",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ai/providers/{provider}/verify": {
+      "post": {
+        "description": "Queue a check of the stored key (the analyst worker calls the provider).",
+        "operationId": "verify_ai_provider_api_v1_orgs__org_id__ai_providers__provider__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AiProviderName"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVerifyQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Ai Provider",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ai/runs": {
+      "get": {
+        "description": "Top-level runs, newest first (incident digests are listed in their parent).",
+        "operationId": "list_ai_runs_api_v1_orgs__org_id__ai_runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "job_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "investigation_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Investigation Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "task",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AiTask"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AiRunStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRunPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ai Runs",
+        "tags": [
+          "ai"
+        ]
+      },
+      "post": {
+        "description": "Freeze the context and queue an analysis (an incident also queues one digest per\njob). An identical active or completed run is returned instead (200), unless\n`regenerate`.",
+        "operationId": "request_ai_run_api_v1_orgs__org_id__ai_runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiRunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRunCreated"
+                }
+              }
+            },
+            "description": "Deduplicated"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRunCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Ai Run",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ai/runs/{run_id}": {
+      "get": {
+        "description": "The run with its output read model when completed: claim statuses, resolved\ncitations (deep links for verified ones only) and pseudonyms reversed unless `keep`.",
+        "operationId": "get_ai_run_api_v1_orgs__org_id__ai_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pseudonyms",
+            "required": false,
+            "schema": {
+              "default": "reverse",
+              "enum": [
+                "reverse",
+                "keep"
+              ],
+              "title": "Pseudonyms",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRunDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ai Run",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ai/runs/{run_id}/context": {
+      "get": {
+        "description": "The exact frozen context(s) sent; `reveal=true` adds the pseudonym map.",
+        "operationId": "get_ai_run_context_api_v1_orgs__org_id__ai_runs__run_id__context_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "reveal",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Reveal",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRunContextOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ai Run Context",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ai/settings": {
+      "get": {
+        "description": "The org's AI settings (the defaults until saved), the ceilings and the privacy notice.",
+        "operationId": "get_ai_settings_api_v1_orgs__org_id__ai_settings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ai Settings",
+        "tags": [
+          "ai"
+        ]
+      },
+      "put": {
+        "description": "Partial update. Turning AI on, or widening what is sent later, needs\n`acknowledge_privacy`; budgets stay within the operator ceilings.",
+        "operationId": "update_ai_settings_api_v1_orgs__org_id__ai_settings_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Ai Settings",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ai/usage": {
+      "get": {
+        "description": "Today's (UTC) tokens and estimated cost per provider, against the budget.",
+        "operationId": "get_ai_usage_api_v1_orgs__org_id__ai_usage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiUsageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ai Usage",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
     "/api/v1/orgs/{org_id}/analyses": {
       "get": {
+        "description": "`investigation_id`: only that case's evidence (404 for an unknown or foreign case);\n`latest_per_evidence`: the newest job per evidence and kind of run (analyzer, profile)\namong the jobs matching the other filters.",
         "operationId": "list_analyses_api_v1_orgs__org_id__analyses_get",
         "parameters": [
           {
@@ -6882,6 +10672,33 @@
                 }
               ],
               "title": "Profile"
+            }
+          },
+          {
+            "in": "query",
+            "name": "investigation_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Investigation Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "latest_per_evidence",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Latest Per Evidence",
+              "type": "boolean"
             }
           },
           {
@@ -7034,6 +10851,23 @@
           },
           {
             "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -7143,6 +10977,23 @@
                 }
               ],
               "title": "Attack"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
             }
           },
           {
@@ -7426,6 +11277,23 @@
           },
           {
             "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -7563,6 +11431,25 @@
           },
           {
             "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[!-~]+$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -7673,6 +11560,23 @@
                 }
               ],
               "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
             }
           },
           {
@@ -7804,6 +11708,23 @@
           },
           {
             "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -7911,6 +11832,23 @@
                 }
               ],
               "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
             }
           },
           {
@@ -8272,6 +12210,23 @@
           },
           {
             "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -8383,6 +12338,23 @@
           },
           {
             "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -8456,6 +12428,23 @@
               "format": "uuid",
               "title": "Org Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
             }
           },
           {
@@ -9725,6 +13714,89 @@
         "summary": "Upload Evidence",
         "tags": [
           "evidence"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/investigations/{investigation_id}/timeline": {
+      "get": {
+        "description": "Merged case timeline: custody, job lifecycle, the latest pcap job's timeline and alerts\nper evidence, and static findings at analysis time; sorted (ts, kind, ref_id).",
+        "operationId": "get_investigation_timeline_api_v1_orgs__org_id__investigations__investigation_id__timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "investigation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Investigation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvestigationTimelinePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Investigation Timeline",
+        "tags": [
+          "investigations"
         ]
       }
     },

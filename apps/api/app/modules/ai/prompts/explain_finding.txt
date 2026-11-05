@@ -1,0 +1,1 @@
+Task: explain_finding. Explain the finding labelled $target: what was observed, why the analyzer may have raised it, which related records support or contradict it, how confident you are, and what an analyst should check next.

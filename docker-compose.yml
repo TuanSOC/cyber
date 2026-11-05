@@ -510,6 +510,8 @@ services:
       - ./apps/api:/srv/api
       - ./packages/py-jobs:/packages/py-jobs
       - upload_tmp_test:${UPLOAD_TMP_DIR}
+      # The ai-mock server's own unit tests import it in-process.
+      - ./infra/ai-mock:/srv/ai-mock:ro
     networks: [backend]
     depends_on:
       postgres:
