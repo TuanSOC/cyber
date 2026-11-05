@@ -86,12 +86,43 @@ It never edits `components/ti/**`; it reuses `attack-chips.tsx` read-only.
 6. Component tests (Vitest + Testing Library) with a hostile output fixture (`javascript:` text, markdown links, bidi, unsupported claims, invalid citations): no anchor except verified internal links, text rendered literally.
 
 ## Success Criteria
-- [ ] No `href` derives from model text; hostile-output component tests pass; unsupported claims are hidden by default.
-- [ ] Each verified chip lands on the exact cited row (deep-link tests per tab).
-- [ ] Every run state and error code has a message; viewers cannot start runs; a disabled org shows the off state.
-- [ ] `pnpm --filter web test`, lint and typecheck are green; the phase-11 e2e covers the flows.
+- [x] No `href` derives from model text; hostile-output component tests pass; unsupported claims are hidden by default. — `components/ai/analysis-output.test.tsx` ("renders no anchor except verified internal links", "renders model text literally (no HTML, no markdown)", "hides unsupported statements by default behind a counter"); the `lib/ai.test.ts` "AI view sources" scan: no `dangerouslySetInnerHTML`, `innerHTML`, markdown or `<a `, and every `href={…}` comes from `chip.href`, `target`, `back`, `orgPath(` or a literal `/o/` path (5e9b97e).
+- [x] Each verified chip lands on the exact cited row (deep-link tests per tab). — `lib/ai.test.ts` `deepLinkHref` (internal routes only, URL-encoded flow ref RT16, unknown routes / tabs / non-uuid ids dropped, never absolute); `lib/pcap-results.test.ts` "reads ref on every citable PCAP tab", "queries just the cited row, ignoring the other filters and the page"; `lib/static-results.test.ts` "reads ref on every citable static tab"; server side `test_result_ref_filters.py::test_ref_returns_exactly_that_row` (5e9b97e, 83f24a1). The browser check is in `e2e/ai-analyst.spec.ts` (pending gate).
+- [x] Every run state and error code has a message; viewers cannot start runs; a disabled org shows the off state. — `lib/ai.test.ts` "labels every status and maps every state to a message", "names unknown codes verbatim"; `components/ai/ai-access.tsx` (`canRun = can("evidence.write")`, the "AI is off for this organization" notice). There is no component test of that gate; the API refuses viewers (`test_ai_api_runs.py::test_viewer_reads_but_cannot_request`).
+- [ ] `pnpm --filter web test`, lint and typecheck are green; the phase-11 e2e covers the flows. — **pending gate:** `pnpm verify:prod` is still running. `pnpm --filter web test` gives 316 passed at 6b52742. Lint, typecheck and the dev e2e (`apps/web/e2e/ai-analyst.spec.ts`) run inside that gate.
 
 ## Risk Assessment
 - **Poll load** with many open tabs. Poll only active runs, with backoff, and stop on final.
 - **Long outputs** (40 observed claims) hurt readability. Group by section, collapse after 10, and keep the counts visible.
 - **Contract shape changes** from the group-B merge. This phase starts only after the contracts are regenerated; seams go to the parent.
+
+## Implementation Notes (2026-11-06)
+- **Commits:**
+  - 5e9b97e: phases 8 and 9 together (49 files). `lib/ai.ts`, `lib/use-ai.ts`, `components/ai/**` (17 components), the runs list `/o/{org}/ai-analyst` and the run page `/ai-analyst/{runId}`, and `ref` on the pcap and static result tabs.
+  - 6b52742: the context viewer's reveal toggle is hidden for viewers; the Playwright spec.
+- **Rendering:**
+  - Model text is rendered only as React text (`model-text.tsx`).
+  - Links come only from the API descriptors of verified citations. `deepLinkHref` maps them over a route and tab allowlist, with `encodeURIComponent` and a cap on the ref length.
+  - `ai-banner.tsx` shows the "verify before acting" banner on every AI view.
+- **Wording (RT21):**
+  - "backed by cited evidence", never "verified" or "true" ("says 'backed by cited evidence', never 'verified' or 'true' (RT21)");
+  - "Confidence in this interpretation", with neutral badges;
+  - the source scan forbids `malicious|benign|clean|safe|verdict|harmless` in the AI sources ("keeps fixed texts verdict-free").
+- **Claims:** unsupported claims sit behind a counter; sections collapse after 10 items ("collapses long sections after 10 items").
+- **Chips:**
+  - verified chips link, with the field and quote in the tooltip;
+  - unverified and invalid chips are grey and show their reason ("never links unverified or invalid citations, even if a descriptor is present").
+- **Polling** (`use-ai.ts`): every 2 s while a run is active, until `resume_at` while it waits, never once final.
+- **Context and footer:**
+  - notes state the truncation and pseudonymization counts, make bidi controls visible, and show the cost as ≈;
+  - `context-preview-dialog.tsx` and `context-viewer.tsx` ("Show original names" → `reveal`);
+  - `run-footer.tsx`, and `run-history.tsx` with a superseded marker ("picks the newest run per task and marks superseded runs").
+- **Explain drawers** (`explain-drawer.tsx`): on the pcap findings and alerts tabs and the static findings. They reuse an existing completed run for the row.
+- **Incident card** (`incident-card.tsx`):
+  - preview first, then the parent status with "n of m" digests, the timeline and the next steps;
+  - child flags shown on the parent (RT23: "carries child flags to the incident parent (RT23) and counts digests").
+- **Investigation analyses:** `investigation-analyses.tsx` uses the server filter `investigation_id` + `latest_per_evidence` instead of the newest-100 client filter.
+- **Nav** (`lib/nav.ts`): `plannedFor` is dropped from the AI item, and the Integrations summary now mentions AI provider keys.
+- **Deviations:**
+  - Phases 8 and 9 shipped in one commit.
+  - The viewer and AI-off gates have no component test. They are covered by the API RBAC tests and the dev e2e (pending gate).

@@ -91,12 +91,56 @@ Catalog changes (model ids, prices) are proposed to the parent, never edited her
 6. The model check script; phase notes with the verified ids and prices and the resolved SDK versions.
 
 ## Success Criteria
-- [ ] Every fixture maps to the specified `ProviderResult` / `ProviderError` kind (`test_ai_provider_*.py`).
-- [ ] No request carries `temperature` or tools; the Anthropic request carries `output_config.format` and a cached system block (request-shape tests).
-- [ ] The sentinel key never appears in reprs, errors or logs.
-- [ ] Model ids are verified or explicitly marked unverified in the phase notes, and the parent is notified of catalog changes.
+- [x] Every fixture maps to the specified `ProviderResult` / `ProviderError` kind (`test_ai_provider_*.py`). — `test_every_fixture_maps_to_its_typed_outcome` in `test_ai_provider_anthropic.py`, `test_ai_provider_gemini.py` and `test_ai_provider_mock.py`, over `tests/fixtures/ai/` (anthropic 21, gemini 21, mock 15 fixtures) (83f24a1).
+- [x] No request carries `temperature` or tools; the Anthropic request carries `output_config.format` and a cached system block (request-shape tests). — `test_ai_provider_anthropic.py::test_the_request_shape_on_the_wire` (`FORBIDDEN_PARAMS`: `temperature`, `top_p`, `top_k`, `tools`, `tool_choice`, `thinking`, `fallbacks` … disjoint from the body; `output_config` format and effort; system block `cache_control: ephemeral`; no `beta`), `test_count_tokens_uses_the_same_shape_and_is_never_billed`; Gemini body keys are exactly `contents`, `systemInstruction`, `generationConfig` (`test_ai_provider_gemini.py::test_the_request_shape_on_the_wire`) (83f24a1).
+- [x] The sentinel key never appears in reprs, errors or logs. — every `test_every_fixture_maps_to_its_typed_outcome` asserts the key is absent from DEBUG caplog (including each provider's `key_echo_400.json`); `test_the_adapter_is_an_llm_provider_with_a_redacted_repr` (×3); `test_ai_http.py::test_key_auth_is_redacted_and_never_a_client_header`, `test_unsafe_keys_are_refused_without_quoting_them` (83f24a1); `test_ai_key_leak.py::test_providers_and_errors_never_print_the_key` (6b52742).
+- [x] Model ids are verified or explicitly marked unverified in the phase notes, and the parent is notified of catalog changes. — every vendor model is explicitly unverified (`verified=False` in `catalog.py`; only the local `mock-1` is verified): `scripts/check_ai_models.py` exists but has not been run, because no key was available. The catalog was not changed, so there was no change to notify (see the notes).
 
 ## Risk Assessment
 - **SDK transport and API drift** (`httpx2`, the streaming helpers). The versions are pinned below the next major in phase 1; tests run at the transport, and the verified shapes are recorded.
 - **Gemini ids and API surface are volatile.** The adapter is isolated and gated, so the feature can ship with Anthropic only if Gemini verification fails (documented).
 - **A provider that silently ignores the JSON schema.** The worker always re-validates; `invalid_output` is the fallback.
+
+## Implementation Notes (2026-11-06)
+- **Commit:** 83f24a1 (lane run, see phase 2). It adds:
+  - `providers/{anthropic,gemini,mock,errors}.py`, `http.py` and `registry.py`;
+  - 57 handcrafted replay fixtures, replayed through `httpx2.MockTransport` / `httpx.MockTransport`;
+  - `scripts/check_ai_models.py`.
+- **Resolved SDKs:** `anthropic 2.5.0` on `httpx2 2.16.0` (pin `>=2.5,<3`); `google-genai 2.34.0` on `httpx 0.28.1` (pin `>=2.34,<3`). SDK retries are off in both (`max_retries=0`): the worker owns every retry.
+- **Model ids and prices** (`PRICE_VERSION = "2026-11-05"`, USD per MTok for input / output / cache read / cache write). **All vendor ids are unverified.**
+  - `claude-sonnet-5` (default): $2 / $10 / $0.20 / $2.50;
+  - `claude-opus-5-5`: $4 / $20 / $0.20 / $5.00;
+  - `gemini-3.8-flash`: $1.50 / $7.50 / $0.375 / $1.50.
+  - The Anthropic ids match the claude-api reference (RT24). The Gemini id comes from the research report only. `claude-sonnet-5-5` and `claude-haiku-5-5` are not in the allowlist.
+- **Anthropic call:**
+  - `messages.stream` + `get_final_message`, `max_tokens` 16 000;
+  - one cached system block;
+  - `output_config {format: json_schema, effort}`, effort from `AI_ANTHROPIC_EFFORT` (medium); a per-request override is allowed (`test_a_request_effort_overrides_the_setting`).
+- **Timeouts (RT2):** idle 60 s, reset by any chunk including SSE `ping`; total 300 s.
+  - Tests: `test_the_idle_timer_aborts_a_stalled_stream`, `test_ping_keep_alives_reset_the_idle_timer`, `test_the_total_timeout_bounds_a_slow_but_alive_stream`.
+- **Stop reasons (RT19, RT24):**
+  - `refusal` → `refused`, with the open category kept as is (≤ 32 characters);
+  - `max_tokens` → `max_tokens`;
+  - `model_context_window_exceeded` → `context_too_large`;
+  - `pause_turn` and unknown reasons → `provider_error`.
+  - Errors are mapped by SDK exception class or the structured `error.type`, never by message text.
+  - Fixtures: `refusal_cyber`, `refusal_no_details`, `pause_turn`, `context_window_exceeded`, `unknown_stop_reason`, `overloaded_in_stream`.
+- **Review (phase 3):**
+  - `ProviderError.usage` (an additive frozen change): an answer that ended in a refusal or `max_tokens` carries its billed usage to the settlement (phase 2).
+  - `count_tokens` failures are never billed (`test_count_tokens_failures_are_never_billed`).
+- **Gemini:**
+  - not streamed; `count_tokens` is not used, the estimate applies (`test_count_tokens_is_not_used`);
+  - `vertexai=False` with an explicit base URL, so no environment variable can redirect it (`test_environment_variables_cannot_redirect_the_client`);
+  - errors are mapped by status plus `ErrorInfo.reason`; `SAFETY` / `PROHIBITED_CONTENT` / `RECITATION` and blocked prompts → `refused` (fixtures `finish_*`, `prompt_blocked`, `safety_400`).
+  - The billing gate (`GEMINI_BILLING_ENABLED` plus the per-key attestation) is enforced in the registry and the API (phase 7).
+- **HTTP clients** (`http.py`):
+  - `trust_env=False` and no redirects;
+  - a method + path allowlist on one origin per provider, checked before anything is sent (`test_anthropic_client_refuses_everything_else`, `test_a_request_outside_the_allowlist_never_leaves`, `test_every_client_ignores_the_environment_and_redirects`);
+  - the models list is allowed for the check script only (`test_the_models_list_is_allowed_for_the_check_script_only`);
+  - base-URL overrides are refused in prod (`test_base_url_overrides_apply_outside_prod_only`);
+  - mock body cap 2 MiB with strict JSON (`test_read_capped_refuses_oversize_and_encoded_bodies`, `test_loads_strict_refuses`).
+- **Registry:** `test_models_outside_the_allowlist_are_refused`, `test_the_mock_is_refused_in_prod`, `test_availability_is_rechecked`, `test_a_missing_or_unusable_key_is_auth_failed`, `test_unknown_and_in_process_providers_are_never_built`.
+- **Live:** `unit/test_ai_provider_live.py::test_live_verify_and_analyze` is skipped unless `AI_EVAL_LIVE=1` and a key file are given. It was never run: no key.
+- **Deviations:**
+  - `scripts/record_ai_fixtures.py` was cut (RT14), so the fixtures are handcrafted from the documented shapes, not recorded.
+  - The Gemini adapter is built and tested, but it stays behind the operator billing gate.

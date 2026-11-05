@@ -81,10 +81,44 @@ Write the M5 documentation from the merged group-B implementation (not from the 
 5. Cross-check every test name and route cited in the docs against the code (a grep script in the phase notes).
 
 ## Success Criteria
-- [ ] `docs/AI_ANALYST.md` covers sections 1–13 and matches the code (routes, codes, settings, defaults).
-- [ ] THREAT_MODEL has the M5 section with tests named per row and the residuals.
-- [ ] ARCHITECTURE, DATABASE, API, DEPLOYMENT, ROADMAP, PRD and README are updated; no doc claims an unverified model id or price as verified.
+- [x] `docs/AI_ANALYST.md` covers sections 1–13 and matches the code (routes, codes, settings, defaults). — 0f776a3 (355 lines: what it is, pipeline, providers, tasks, context rules, privacy, output contract, citation verification, run lifecycle, budgets, keys, evaluation, limitations), corrected in 6b52742 (ai-mock markers, reveal permission, `_refund_call`, per-minute limits). Check on 2026-11-06: all 12 `/ai/*` routes in `router_*.py` appear in docs/API.md, and all 132 test names cited in AI_ANALYST.md and the THREAT_MODEL M5 section exist in the test trees. The phase-11 reviewer pass is still open.
+- [x] THREAT_MODEL has the M5 section with tests named per row and the residuals. — docs/THREAT_MODEL.md: the (M5) asset, trust boundary 8, "M5: AI analyst and prompt injection" with 24 rows naming their tests, and 13 accepted residuals (0f776a3, 6b52742).
+- [x] ARCHITECTURE, DATABASE, API, DEPLOYMENT, ROADMAP, PRD and README are updated; no doc claims an unverified model id or price as verified. — all seven were updated in 0f776a3; AI_ANALYST.md marks every vendor model "Verified: **no**", and THREAT_MODEL lists "Unverified model ids and prices" as a residual.
 
 ## Risk Assessment
 - **Docs drifting from phase 8 / 9 wording.** Phase 11 reconciles the UI strings and screenshots.
 - **Overstating protection.** The prompt-injection text must say that integrity attacks are bounded and detected, not prevented.
+
+## Implementation Notes (2026-11-06)
+- **Commits:**
+  - 0f776a3: 11 files, +652;
+  - 6b52742: corrections to AI_ANALYST, API, TESTING and THREAT_MODEL after the phase-11 fixes.
+- **AI_ANALYST.md:**
+  - It follows the plan's sections 1–13.
+  - It records: the providers table (SDK versions, call shapes, `Verified: no`); the tasks and caps; labels, allowlists and the transform order; privacy and pseudonymization coverage; the `ai.v1` contract; the citation and claim rules with every reason code; the error-code table; budgets and ceilings; the rotation runbook; the evaluation results; the limitations.
+- **THREAT_MODEL.md, the M5 table (24 rows):**
+  - the OWASP-LLM rows: LLM01, LLM02, LLM05, LLM06, LLM07, LLM10;
+  - the red-team rows: RT1 (citation forgery), RT4 (text outside the block), RT15 (pseudonym spoofing), RT5 (Gemini free tier), RT7 (long calls), RT17 (platform key);
+  - key theft, a compromised worker, forged messages, key leakage, adapter allowlist, mock in prod, refusals.
+- **THREAT_MODEL.md, the residuals (13):**
+  - integrity attacks are detected, not prevented; anchoring is heuristic;
+  - public IOCs and file facts are disclosed; pseudonymization is pattern-based;
+  - unrestricted egress and the full app DB role (RT26);
+  - the Gemini attestation cannot be verified; model ids and prices are unverified;
+  - no retention or purge (RT28); no TLP flag; provider retention;
+  - a member can spend the org's budget; the AI private keys are in a host file; there is no batch re-seal tool.
+- **Wording rule kept:** prompt injection is "bounded and detected, not prevented" (AI_ANALYST "Prompt structure and injection defenses", TESTING, THREAT_MODEL).
+- **Other docs:**
+  - ARCHITECTURE: the analyst-worker on `enrich` + `egress`;
+  - DATABASE: the 0011 tables, triggers and grants;
+  - API: every `/ai/*` route with permissions, error codes and limits, plus the timeline, analyses and `ref` filters;
+  - DEPLOYMENT: AI seal keys, the prod override with 2 replicas, `BROKER_ANALYST_PASSWORD`, `GEMINI_BILLING_ENABLED`, the platform-key overlay;
+  - ROADMAP: M5 ✅, plus the M6 note that reports embed `ai_outputs` through `ai_context_refs` / `ai_citations`;
+  - PRD and README: the feature, the opt-in, BYOK.
+- **Metric provenance:** the docs say "offline" and "live: none recorded" (TESTING: "AI evidence citation accuracy (§14) | ✅ offline … ⏳ live: none recorded").
+- **Cross-check (implementation step 5), run 2026-11-06:**
+  - `grep -oE 'test_[a-z0-9_]+'` over docs/AI_ANALYST.md and lines 161–215 of docs/THREAT_MODEL.md finds 132 unique names;
+  - each one was searched in `apps/api/tests`, `packages/py-worker-kit/tests` and `apps/workers/*/tests`: 0 missing;
+  - the route list of `apps/api/app/modules/ai/router_*.py` (12 routes) matches docs/API.md.
+- **Deviation:** 0f776a3 also edited `docs/TESTING.md` (owned by phase 11) and `.env.example` (owned by phase 1): the M5 suites table and the `AI_ANTHROPIC_EFFORT` comment. Phase 11 later corrected TESTING.
+- **Open:** the phase-11 reviewer pass and `pnpm verify:prod` (pending gate) may still require doc edits.

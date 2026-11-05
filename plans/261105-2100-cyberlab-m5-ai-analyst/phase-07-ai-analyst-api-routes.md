@@ -102,12 +102,56 @@ The API only builds and freezes the context, seals keys, records and publishes; 
 5. `idor_cases_ai.py`: the AI cases and a victim extender (provider config, settings, a run with context); `test_idor_routes.py` passes in this lane (the timeline case lives in phase 4's module and is checked at the merge); `test_ai_api_rbac.py` role matrix. Builder-dependent tests monkeypatch `fake_build_run` / `fake_preview` from `tests/ai_doubles.py` over the stub (RT12).
 
 ## Success Criteria
-- [ ] The IDOR and RLS enumerators cover every AI route and table, and they pass.
-- [ ] No response, audit detail, error envelope or log line contains the sentinel key, the pseudonym map (unless `reveal`), or context text in audit.
-- [ ] A run request commits the run, index, inputs, refs and audit atomically; caps and dedupe hold under concurrency.
-- [ ] The read model never exposes a link for an unverified or invalid citation, and never returns a canary-leak body.
+- [x] The IDOR and RLS enumerators cover every AI route and table, and they pass. — `security/test_idor_routes.py` with `idor_cases_ai.py` (all 12 `/ai/*` routes; the victim extender seeds a provider config, settings and a run with its context, and `{run_id}` is overridden per template), `integration/test_rls_coverage.py` (all 8 `ai_*` tables), `test_ai_api_rbac.py::test_ai_role_matrix` (83f24a1, 6b52742); full API suite 3441 passed / 42 skipped.
+- [x] No response, audit detail, error envelope or log line contains the sentinel key, the pseudonym map (unless `reveal`), or context text in audit. — `test_ai_api_providers.py::test_sentinel_key_never_leaks` (responses, audit rows, DEBUG caplog, 422 bodies), `test_sealed_key_opens_only_with_the_ai_private_key`; `test_ai_api_runs.py::test_run_creation_commits_everything_and_dedupes` (scans the `ai.run_requested` audit row for every free-text context value), `test_revealing_the_pseudonym_map_is_audited` (83f24a1); `test_ai_key_leak.py::test_the_key_never_leaves_its_sealed_columns`, `test_providers_and_errors_never_print_the_key`, container-log scan `scripts/check-ai-key-leak.mjs` (6b52742).
+- [x] A run request commits the run, index, inputs, refs and audit atomically; caps and dedupe hold under concurrency. — `test_ai_api_runs.py::test_run_creation_commits_everything_and_dedupes`, `test_incident_creates_children_in_one_transaction`, `test_concurrent_identical_requests_create_one_run`, `test_global_cap_holds_under_concurrent_creation`, `test_active_caps_count_children`, `test_failed_runs_are_not_deduplicated` (83f24a1).
+- [x] The read model never exposes a link for an unverified or invalid citation, and never returns a canary-leak body. — `test_ai_api_outputs.py::test_claims_citations_and_deep_links`, `test_static_evidence_and_record_links`, `test_canary_leak_body_is_never_returned`, `test_refused_run_returns_its_category` (83f24a1).
 
 ## Risk Assessment
 - **Preview as a data-exfil or DoS path.** It is behind the same opt-in, permission and per-user limit, with no persistence.
 - **Pseudonym reversal leaks internal names to viewers.** Members can already read the same rows; reversal uses the run's own map only, never across orgs.
 - **Building a large context inside the request** holds a DB session. The caps bound the work; measure p95 and, if it is too slow, note it for phase 11 (async build is out of scope).
+
+## Implementation Notes (2026-11-06)
+- **Commits:**
+  - 83f24a1 (lane run, see phase 2): `router_{providers,settings,runs}.py`, `service_{providers,settings,runs,outputs}.py`, `schemas.py`, `repository.py`, `runs.py`; contracts regenerated (`packages/contracts/openapi.json`, `src/schema.d.ts`);
+  - 6b52742: the reveal permission and the provider `limits`.
+- **Routes (12):**
+  - providers: `GET /ai/providers`, `PUT /ai/providers/{provider}`, `DELETE /ai/providers/{provider}/key` (204), `POST /ai/providers/{provider}/verify` (202);
+  - settings and usage: `GET` / `PUT /ai/settings`, `GET /ai/usage`;
+  - runs: `POST /ai/runs` (202 for a new run, 200 when deduplicated), `POST /ai/context-preview`, `GET /ai/runs`, `GET /ai/runs/{run_id}`, `GET /ai/runs/{run_id}/context`.
+- **Providers:**
+  - Keys are write-only: 8–256 printable ASCII characters, `422 invalid_api_key` without echo. The API seals with the public key only.
+  - A replace bumps the version; a remove keeps the version floor (`test_replace_bumps_version_and_remove_keeps_it`). Concurrent PUTs serialize on the org row (`test_concurrent_puts_serialize`).
+  - Verify is limited to 10 per provider per 10 minutes (`test_verify_is_queued_and_rate_limited`).
+  - Error codes: `terms_not_acknowledged`, `paid_tier_not_acknowledged`, `model_not_allowed`, `provider_unavailable`, `limit_above_ceiling`.
+- **Review (Low), Gemini attestation per key:**
+  - A new Gemini key clears `paid_tier_ack_*`. If the provider stays enabled, the attestation must come in the same request.
+  - Tests: `test_a_new_gemini_key_needs_a_new_paid_tier_attestation`, `test_gemini_needs_billing_and_a_paid_tier_attestation`.
+- **Settings:**
+  - off by default and readable by viewers;
+  - turning AI on needs `acknowledge_privacy`;
+  - budgets stay within the ceilings (`422 budget_above_ceiling`);
+  - CIDR and suffix lists hold at most 50 entries each (`test_cidr_and_suffix_lists`).
+- **Review (Low), re-consent:**
+  - These changes widen the disclosure and need `acknowledge_privacy` again (`422 privacy_not_acknowledged`): turning `include_ti`, `include_strings` or `include_case_text` on; turning pseudonymization off; removing any CIDR or suffix entry.
+  - Adding entries never does.
+  - Tests: `test_widening_the_disclosure_needs_a_new_acknowledgement`, `test_re_ack_when_less_is_pseudonymized_or_ti_is_included`, `test_adding_internal_entries_needs_no_new_acknowledgement`.
+- **Run creation:**
+  - One transaction holds the run, index, inputs, refs and the audit row; the audit carries ids and counts only.
+  - Locks: a per-org advisory lock, then the global one.
+  - Caps: 12 active runs per org and 40 overall, children included (RT8; `409 ai_busy`).
+  - Limits: 10 run requests per user per 10 minutes; the daily budget is pre-checked against the DB (RT9, `409 budget_exhausted`, `test_daily_budget_is_checked_against_the_db`).
+  - A publish failure still answers 202 (`test_publish_failure_still_answers_202`).
+- **Dedupe:** on (task, scope, target, provider, model, `context_sha256`); failed runs are never deduplicated; `regenerate` sets `supersedes_run_id`.
+- **Preview:** 30 per user per 10 minutes; nothing is persisted or audited (`test_preview_persists_nothing`).
+- **Read model** (`service_outputs.py`):
+  - Every claim and citation carries its status and reason.
+  - A deep-link descriptor `{route, job_id, tab, ref}` exists only for verified citations, built from the stored kind, ref and job.
+  - Pseudonyms are reversed in whole tokens only (`test_reverser_replaces_whole_tokens_only`), or kept with `?pseudonyms=keep`.
+  - The incident parent shows the child flags (RT23, `test_incident_parent_shows_child_flags`).
+- **Review (Low), reveal audit:**
+  - `GET …/context?reveal=true` adds the pseudonym map and writes `ai.context_revealed` (run, actor and stages, never a name).
+  - 6b52742 restricted it to `evidence.write`, so viewers get 403.
+- **Phase-11 addition (6b52742):** an org may set its own per-minute request limit within the ceiling (`test_an_org_sets_its_own_request_limit_within_the_ceiling`).
+- **Not done:** no p95 was recorded for building the context inside the request (a plan risk item).

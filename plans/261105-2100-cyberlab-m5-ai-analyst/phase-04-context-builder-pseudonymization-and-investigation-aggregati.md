@@ -92,12 +92,60 @@ It also adds the server-side reads that investigation-level analysis and the cit
    - no field name, title or filename appears in `context_stats` (only kinds and counts), and hostile attribute keys are dropped (RT4).
 
 ## Success Criteria
-- [ ] The same DB state gives byte-identical canonical context and sha256; the selection order is documented.
-- [ ] With pseudonymization on, no RFC 1918 / ULA / org-CIDR address, internal hostname or username from the seeded cases appears in the context (property and fixture tests).
-- [ ] Credentials and payload bytes are never selected; every truncation and omission is recorded in `context_stats`.
-- [ ] The investigation timeline, the analyses-by-investigation filter and the `ref` filters are tested, including cross-org isolation.
+- [x] The same DB state gives byte-identical canonical context and sha256; the selection order is documented. — `test_ai_context_builder.py::test_summarize_pcap_is_deterministic_and_pseudonymized`, `test_ai_context_fields.py::test_hash_is_stable_under_row_insertion_order`, `test_canonical_json_matches_the_frozen_context`, `test_ai_context_pseudonymize.py::test_numbering_is_deterministic`, `test_ai_eval_invariants.py::test_contexts_do_not_depend_on_the_org` (83f24a1); order in docs/AI_ANALYST.md "Tasks" and "Labels and selection" (0f776a3).
+- [x] With pseudonymization on, no RFC 1918 / ULA / org-CIDR address, internal hostname or username from the seeded cases appears in the context (property and fixture tests). — property `test_ai_context_pseudonymize.py::test_no_internal_value_survives` (hypothesis, 200 examples), `test_internal_addresses_are_replaced`, `test_org_cidrs_are_internal_and_garbage_is_ignored`, `test_special_use_hostnames_are_replaced`, `test_usernames_in_paths`, `test_schemeless_query_values_never_leave` (83f24a1); through the real worker `test_ai_pipeline.py::test_nothing_internal_leaves_with_pseudonymization_on` (6b52742).
+- [x] Credentials and payload bytes are never selected; every truncation and omission is recorded in `context_stats`. — `test_ai_context_fields.py::test_allowlists_hold_no_credential_field`, `test_no_credential_or_hostile_key_is_ever_selected`, `test_record_fields_never_carry_query_values_or_referrer`, `test_stats_never_carry_field_names_titles_or_keys`; `test_ai_context_pseudonymize.py::test_truncation_is_counted_and_marked`; `test_ai_context_builder.py::test_caps_are_honoured`, `test_budget_fill_stops_in_priority_order`, `test_incident_jobs_over_the_cap_are_counted` (83f24a1).
+- [x] The investigation timeline, the analyses-by-investigation filter and the `ref` filters are tested, including cross-org isolation. — `test_investigation_timeline.py` (5 tests, including `test_errors_and_isolation`, `test_cursor_pages_cover_everything_once`), `test_analyses_by_investigation.py::test_foreign_or_unknown_investigation_is_404`, `test_investigation_filter_uses_the_indexes`, `test_result_ref_filters.py::test_ref_never_crosses_organizations`, `test_flows_are_referenced_by_flow_ref_within_the_job`; the timeline IDOR case is in `idor_cases_reads.py` (83f24a1).
 
 ## Risk Assessment
 - **The token estimate is wrong for hash-heavy or non-ASCII content.** It is conservative by construction, and the worker's `count_tokens` preflight catches overshoot (`context_too_large`).
 - **Pseudonymization is pattern-based** and misses internal names outside the listed patterns. The org settings for CIDRs and suffixes and the preview UI make this visible; the docs state the residual.
 - **Context too thin to be useful** after the caps. The caps are settings; the eval (phase 6) measures golden recall to tune them.
+
+## Implementation Notes (2026-11-06)
+- **Commit:** 83f24a1 (lane run, see phase 2). It adds:
+  - `context/{builder,select,fields,transform,pseudonymize,assemble,encode,estimate,reduce}.py` and `investigations/timeline.py`;
+  - the analyses filter and the `ref` filters in the analysis, pcap and static repositories and routers.
+- **Caps** (`select.py`):
+  - F 40, A 30 groups (by sid), I 50, S 50, C 60, E 100, R 50, X 30, K 50, related rows 20;
+  - N: the flows the findings name (≤ 40) plus the top 10 by bytes;
+  - scan limit 500 rows.
+- **Budget:**
+  - The estimate is `ceil(len(canonical JSON) / 3)`, against `AI_MAX_INPUT_TOKENS` (60 000) minus 4 000 tokens of prompt overhead.
+  - The first item that does not fit ends the fill and rolls back its pseudonyms (`test_budget_stops_at_the_first_item_that_does_not_fit_and_rolls_back_names`).
+  - Nothing fitting is `422 context_empty` (`test_nothing_fits_is_context_empty`).
+- **Ordering:** the explain tasks put the target first (`test_explain_finding_puts_the_target_first`, `test_explain_alert_puts_the_target_first`); strings are opt-in (`test_explain_static_with_and_without_strings`).
+- **Attribute keys (RT4):**
+  - grammar `^[a-z0-9_]{1,32}(\.[a-z0-9_]{1,32}){0,2}$`, at most 16 per finding, field names ≤ 64 characters;
+  - anything else is dropped and counted in `dropped_keys`;
+  - tests: `test_attribute_key_grammar`, `test_attribute_count_is_capped`, `test_nested_attributes_flatten_with_depth_and_name_limits`.
+- **Transform order:**
+  1. sanitize;
+  2. neutralize planted pseudonym-shaped tokens (RT15: `test_planted_pseudonyms_are_neutralized`, `test_transform_order_planted_tokens_cannot_collide`);
+  3. replace URL query values;
+  4. pseudonymize;
+  5. defang;
+  6. truncate to 256 characters with a marker.
+- **Pseudonymization:**
+  - IPs: RFC 1918, CGNAT, loopback, link-local, ULA, IPv4-mapped forms (`test_ipv4_mapped_form_shares_the_pseudonym`) and the org CIDRs (≤ 50).
+  - Hostnames: special-use TLDs, PTR names under `arpa`, the org suffixes, and single-label names in hostname fields only.
+  - Usernames: profile paths, where `Public` and `Default` stay; the local part of an internal email.
+  - `INT_IP_n` / `INT_HOST_n` / `USER_n` are numbered in first-appearance order. One pseudonymizer serves the whole incident tree (`test_incident_children_root_and_shared_pseudonyms`).
+- **Review (Medium), schemeless URL query leakage:** queries in free text without a scheme (`host/path?a=b`, `GET /login.php?user=…`) leaked their values.
+  - Now any `?` directly followed by `key=` is redacted, together with its fragment.
+  - URI-typed attributes (`uri`, `url`, `path`, `uri_path`, `request`, `referrer`, `location`) lose even a bare query.
+  - Tests: `test_schemeless_query_values_never_leave`, `test_uri_and_host_attributes`.
+  - HTTP records select only `uri_path` and `uri_query_keys`.
+- **Eval-found bug:** the pseudonymizer treated structural values such as `detection_method: heuristic:dns_anomaly@1` as email addresses and rewrote them.
+  - Now structural fields (types, methods, ids, hashes) are never pseudonymized, and `x@1`-shaped values are not emails.
+  - Tests: `test_not_an_email`, `test_structural_fields_are_never_pseudonymized`, `test_structural_registry_covers_known_kinds`.
+- **Reduce** (`reduce.py`):
+  - The child's digest claims become `J{n}:D{k}` items, marked untrusted and carrying the child's flags (RT23).
+  - The child's cited items are copied as `J{n}:F3`, with their original values.
+  - The budget cuts copied items before claims (`test_budget_cuts_copies_after_claims`, `test_copied_items_keep_the_child_values_and_refs`).
+- **Investigation surfaces:**
+  - `GET /orgs/{org}/investigations/{id}/timeline`: cursor-paged; merges every source in order; only the latest pcap job contributes (`test_only_the_latest_pcap_job_contributes`);
+  - `GET …/analyses?investigation_id=&latest_per_evidence=true`;
+  - `ref=<row id>` on the pcap findings, alerts, IOCs, records and timeline, and on the static tabs;
+  - flows are keyed by (`job_id`, `flow_ref`) (RT16).
+- **Deviation:** the API only estimates tokens (it has no egress). The precise `count_tokens` preflight runs in the worker (phase 2), as planned. No separate selection-order document was written: it lives in AI_ANALYST.md.

@@ -146,11 +146,11 @@ After this phase the stack runs as before. The analyst-worker starts and fails a
 8. **Lane setup for group B (parent, after the commit; plan.md "Parallel execution on this host"):** rebuild `cyberlab/api:dev`, create `cyberlab_b2_test` … `cyberlab_b7_test`, create the six worktrees with their edited `.env` copies, and run `tests/unit/test_ai_contracts.py` once in each lane as a smoke test.
 
 ## Success Criteria
-- [ ] Every M4 seal test passes unchanged, and the pre-refactor ciphertext still opens. An AI ciphertext never opens under the TI domain, another org, provider, kid or version.
-- [ ] The analyst env holds no JWT, MinIO, app Redis or TI private key (dev and prod configs). The enrich env holds no AI private or platform key.
-- [ ] Broker ACL and network tests confine `analyst`; analyzers and `enrich` cannot reach `analyst*`.
-- [ ] Migration 0011 is applied and tested. The contracts, output schema, catalog, stubs and doubles are committed and documented in the phase notes as frozen.
-- [ ] `pnpm verify` green on a fresh clone (dev AI key pair, no platform key file needed).
+- [x] Every M4 seal test passes unchanged, and the pre-refactor ciphertext still opens. An AI ciphertext never opens under the TI domain, another org, provider, kid or version. — `test_ti_seal.py::test_prerefactor_ciphertext_still_opens` (fixture `tests/fixtures/seal/ti_prerefactor.json`, written by the M4 code) next to the unchanged M4 seal tests; `test_ai_seal.py::test_an_ai_ciphertext_never_opens_as_ti_and_vice_versa`, `test_each_domain_refuses_the_others_providers`, `test_wrong_org_or_provider_fails`, `test_wrong_version_or_kid_fails`, `test_a_flipped_byte_fails` (dcd681a).
+- [x] The analyst env holds no JWT, MinIO, app Redis or TI private key (dev and prod configs). The enrich env holds no AI private or platform key. — `unit/test_config.py::test_analyst_role_refuses_api_secrets_and_ti_keys`, `test_only_the_analyst_may_hold_ai_private_or_platform_keys`, `test_the_rendered_prod_env_of_every_role_is_accepted` (`tests/fixtures/compose/*.prod.env.json`); `container/test_analyst_network.py::test_its_environment_holds_no_api_secrets_or_ti_keys` (dcd681a); `container/test_enrich_network.py::test_it_holds_no_ai_private_key` and `scripts/check-analyst-env.mjs` over the rendered dev / test / prod configs (6b52742; re-run by the `--prod` gate).
+- [x] Broker ACL and network tests confine `analyst`; analyzers and `enrich` cannot reach `analyst*`. — `integration/test_analyst_acl.py::test_analyst_user_is_confined`, `test_analyzers_and_enrich_cannot_touch_analyst`, `test_api_and_ingest_users_can_publish_to_analyst`; `container/test_analyst_network.py` (19 passed inside `analyst-worker-test`) (dcd681a); `packages/py-worker-kit/tests/test_isolation.py::test_ai_hosts_are_not_reachable` (6b52742).
+- [x] Migration 0011 is applied and tested. The contracts, output schema, catalog, stubs and doubles are committed and documented in the phase notes as frozen. — `integration/test_ai_schema.py` (21 tests: RLS, cross-org FKs, append-only also for the owner, transitions, immutable finals and identity, `key_version` guard, no DELETE, column grants), `test_migrations.py` (upgrade / downgrade), `test_rls_coverage.py` (all 8 `ai_*` tables); the frozen list is "Frozen interfaces (as built)" above (dcd681a).
+- [ ] `pnpm verify` green on a fresh clone (dev AI key pair, no platform key file needed). — **pending gate:** `pnpm verify:prod` is still running. The phase-1 run had `pnpm e2e` 6 passed / 1 skipped / 1 failed (Windows Defender quarantined `.e2e-data/static/packed_like.bin`); 4222bdd moved the samples into a Docker volume. A separate fresh-clone run was not done.
 
 ## Risk Assessment
 - **The seal refactor could change bytes and orphan stored TI keys.** The pre-refactor fixture test is the guard; the wrappers keep the AAD byte for byte.
@@ -231,3 +231,43 @@ Phase 1 as implemented (2026-11-05). Everything below is frozen for group B; cha
 - `infra/` is not mounted in `api-test`, so the dev AI pair's consistency is proven by the dev analyst-worker's startup check, not by a unit test.
 
 **Verification (2026-11-05).** Full API gate in `api-test` (ruff, format, mypy strict, pytest): 2566 passed, 38 skipped. `analyst-worker-test` network suite: 19 passed. `node scripts/check-enrich-env.mjs` unchanged and green; `node scripts/gen-contracts.mjs` produced no diff (the AI routers are still empty). Dev stack `docker compose up -d --wait` healthy with `analyst-worker` (startup key check passed on the dev pair) and `ai-mock` (healthy). `pnpm e2e`: 6 passed, 1 skipped, 1 failed: `threat-intel.spec.ts` could not upload `.e2e-data/static/packed_like.bin` because host Windows Defender quarantines that generated sample (`Get-MpThreatDetection`), not because of this phase.
+
+## Implementation Notes (2026-11-06)
+- **Commits:**
+  - dcd681a: phase 1 (74 files, +7339): migration 0011, `core/sealbox*.py`, the `analyst` role, compose, ai-mock skeleton, frozen contracts, stubs and doubles;
+  - 6edfa9b: `scripts/lane-test.sh` for the group-B lanes;
+  - 4222bdd: e2e samples moved off the bind mount;
+  - later follow-ups: 83f24a1 deleted `integration/test_analyst_noop.py` (phase 2 took over `workers/analyst.py`); 6b52742 added `scripts/check-analyst-env.mjs` and the AI checks in `test_enrich_network.py` and `test_isolation.py`.
+- **Frozen interfaces:** the full as-built list (signatures, stubs, doubles, deviations) is the "Frozen interfaces (as built)" section above. This section records only what happened afterwards.
+- **Frozen-file changes during group B** (additive, made by the parent, in 83f24a1). No signature was removed or renamed.
+  - `ProviderError` gained `usage: ProviderUsage | None`, also shown in its `repr`. Phase-3 review: a billed refusal or `max_tokens` answer carries its usage to the budget settlement.
+  - `text.sanitize` now also strips U+061C (as bidi) and every other Unicode `Cf` code point (U+00AD, U+180E, U+2060–2064 …, as zero-width). Phase-5 security review. `test_ai_contracts.py::test_sanitize_keeps_newlines_tabs_and_text` lost its U+2060.
+  - `ai_doubles.PassThroughVerifier` lost a stale `type: ignore`.
+- **Sealing:**
+  - TI keeps `cyberlab.ti.v1` byte for byte; AI has its own domain `cyberlab.ai.v1` and key pair.
+  - Import guard: `test_ai_import_guard.py::test_one_role_never_holds_both_unseals`, `test_sealbox_open_only_from_the_unseal_wrappers`, `test_adapters_may_never_import_unseal`, `test_only_the_analyst_worker_imports_providers_sdks_and_unseal`.
+- **Prod guards (RT6, RT17, RT25):**
+  - kid checks per role: `test_role_scoped_kid_guards`, `test_prod_needs_the_active_ai_kid_for_the_roles_that_seal_or_open`;
+  - the committed dev keys are refused in every role (`test_prod_refuses_the_committed_dev_ai_public_key_in_any_role`);
+  - the platform key is refused in prod, even for the analyst (`test_prod_refuses_the_platform_key_even_for_the_analyst`);
+  - `broker_url` is part of the `change-me` check.
+- **Schema 0011:**
+  - 8 tables with FORCE RLS; triggers `ai_run_transition` and `ai_key_version_guard`; `forbid_mutation` on the 4 append-only tables; column UPDATE grants.
+  - Tests: `test_the_api_and_the_worker_may_update_their_columns`, `test_run_identity_is_immutable_even_for_the_owner`, `test_an_incident_tree_and_its_children`, `test_orm_round_trip_counts`.
+- **Contracts** (`unit/test_ai_contracts.py`, 27 tests):
+  - provider schemas closed and inlined (`test_anthropic_schema_drops_unsupported_bounds`, `test_gemini_schema_keeps_array_bounds`);
+  - the worst case fits 64 KiB only after `coerce_caps` (`test_the_serialized_worst_case_fits_the_body_column`; deviation recorded above);
+  - `test_frozen_context_hash_covers_only_what_is_sent`, `test_fake_provider_is_deterministic_and_schema_valid`, `test_errors_never_carry_secrets`.
+- **IDOR split (RT11):** `tests/security/idor_types.py`, plus one case module per owner: `idor_cases_reads.py` (phase 4) and `idor_cases_ai.py` (phase 7). `test_idor_routes.py` merges both. It held at the merge and in the full suite.
+- **Lanes (RT3):**
+  - Every test-profile broker URL is `/${TEST_BROKER_DB:-1}` (`test_analyst_acl.py::test_the_test_profile_uses_the_lane_broker_db`). The parent created `cyberlab_b2_test` … `cyberlab_b7_test`.
+  - **Deviation:** the plan edited `.env` copies by hand. Instead, `scripts/lane-test.sh <2..7> <cmd>` (6edfa9b) derives each lane's DB, app Redis and broker URLs from `.env` and runs `api-test` with `--no-deps`.
+  - A `mkdir`-lock semaphore (`LANE_SLOTS`, default 3) caps the lane containers that run at once.
+- **E2E fix (4222bdd):** Windows Defender quarantined the generated packer-marker PE in the `.e2e-data` bind mount. Samples and captures now live only in the `cyberlab_e2e_samples` volume. `ingest-worker` and `ingest-beat` got a restart policy, so a broker recreate no longer leaves them dead.
+- **Dependencies:**
+  - `anthropic 2.5.0` (on `httpx2 2.16.0`) and `google-genai 2.34.0`; `httpx` stays 0.28.1 (RT20);
+  - `pyyaml` was added as a dev dependency in 83f24a1 (golden files).
+- **Test totals:**
+  - phase-1 gate: 2566 passed / 38 skipped;
+  - at 6b52742: full API suite 3441 passed / 42 skipped, web 316 passed.
+  - `pnpm verify:prod` is pending.

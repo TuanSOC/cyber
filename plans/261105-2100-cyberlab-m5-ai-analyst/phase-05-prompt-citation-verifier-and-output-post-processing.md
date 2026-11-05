@@ -71,11 +71,51 @@ Everything here is provider-agnostic, deterministic and testable without a model
 5. Phase notes: the claim rules and reason codes as implemented (consumed by phases 7, 8 and 10).
 
 ## Success Criteria
-- [ ] Every reason code and claim rule has a test; the `HostileProvider`-style payloads (invented labels, cross-org refs, mismatched quotes, link markup, bidi, canary echo, invalid ATT&CK) never yield a verified citation, a supported claim or a link (unit tables now; phase 6's harness re-proves it end to end).
-- [ ] Prompt templates are versioned and pinned; evidence appears only inside the delimiter block.
-- [ ] Post-processing is idempotent and strips all link and markup syntax (property tests).
+- [x] Every reason code and claim rule has a test; the `HostileProvider`-style payloads (invented labels, cross-org refs, mismatched quotes, link markup, bidi, canary echo, invalid ATT&CK) never yield a verified citation, a supported claim or a link (unit tables now; phase 6's harness re-proves it end to end). — `unit/test_ai_verify.py` (27 tests: `test_observed_citation_reasons`, `test_row_states_make_citations_invalid`, `test_label_without_a_stored_ref_is_unknown`, `test_anchor_rule`, `test_observed_claim_rules`, `test_attack_rules`, `test_canary_leak_variants`, `test_canary_split_across_fields_and_in_keys`, `test_hostile_next_step_refs_are_dropped`, `test_body_is_plain_defanged_text`), `integration/test_ai_verify_db.py::test_rows_are_requeried_inside_the_org_and_the_run_scope` (83f24a1); end to end `test_ai_eval_invariants.py::test_hostile_provider_holds_every_floor_on_every_case` (1220 hostile runs, 0 violations, 0 of 488 invalid ATT&CK ids shown).
+- [x] Prompt templates are versioned and pinned; evidence appears only inside the delimiter block. — `test_ai_prompt.py::test_templates_are_pinned_to_the_prompt_version`, `test_render_is_deterministic_and_spotlighted`, `test_render_golden_shape`, `test_outside_block_bytes_come_from_the_allowlist` (RT4), `test_render_refuses_a_delimiter_or_canary_inside_the_evidence` (83f24a1).
+- [x] Post-processing is idempotent and strips all link and markup syntax (property tests). — hypothesis `test_ai_postprocess_properties.py::test_clean_text_is_idempotent`, `test_clean_text_is_display_safe`, `test_urls_survive_as_defanged_text`; `test_ai_postprocess.py::test_clean_text`, `test_sanitize_strips_every_format_character` (83f24a1).
 
 ## Risk Assessment
 - **Quote matching too strict** (model paraphrases, whitespace, defang variants) lowers the measured accuracy, while **too loose** lets mismatches through. Start strict with normalization and measure in phase 6 (live / replay); any loosening is a `PROMPT_VERSION`-level decision recorded in the metric report. The anchor rule (RT1) is heuristic: it stops trivial quotes, not a claim that cites a real token but misdescribes it; the integrity ASR measures that residual.
 - **The verdict-language regex** produces false positives on negations ("not clean"). It is only a flag, shown as a note, never used to drop content.
 - **Re-querying rows** per citation could be slow for large outputs. Batch by table with `id = ANY(...)`; there are at most a few hundred citations per run.
+
+## Implementation Notes (2026-11-06)
+- **Commit:** 83f24a1 (lane run, see phase 2). It adds `prompt.py`, `prompts/*.txt` (`common`, `user_head`, `user_tail` and one template per task), `verify.py` (+1099) and `postprocess.py`.
+- **Prompt** (`PROMPT_VERSION = "m5.1"`):
+  - The delimiter is 32 random hex characters per call. The canary is a random URL-safe token per call, in the user turn, so the system block stays cache-identical. Only the canary's sha256 is kept.
+  - Rendering refuses a delimiter or canary that occurs inside the evidence, and the worker regenerates them.
+  - The repair hint names JSON paths and error types only, and is bounded (`test_repair_hint_names_paths_only`, `test_repair_hint_is_bounded`).
+- **Re-query:**
+  - Cited rows are re-read in the org's tenant session, batched per table with `id = ANY(...)`, inside the run scope (the job ids, or the investigation's evidence) (`test_investigation_scope_covers_its_jobs_and_evidence`).
+  - `D` items are never evidence (`digest_not_evidence`); a field that was not sent is `field_not_allowed`.
+  - Stale rows stay verified, flagged `stale` (`test_stale_rows_stay_verified_but_flagged`).
+- **Quote rules (RT1):**
+  - `MIN_QUOTE_CHARS = 8`. A quote is `quote_too_short` when it is shorter than `min(8, len(value))` or has no letter or digit, unless it is one whole structured token (IP, hash, domain, ATT&CK id).
+  - An observed claim must be anchored to a salient token of a verified quote, else it is `weak_anchor`.
+- **Review (Medium), RT1 anchor bypass through short enum fields:** a quote such as `high` from `severity`, or `tcp` from `proto`, could anchor an arbitrary claim.
+  - Now a quote that matched only low-cardinality fields anchors only through a structured token. These fields are `ENUM_FIELDS` (severity, status, type, kind, proto / protocol, method, confidence, engine, qtype, rcode, tls_version …), booleans, and `count.*` / `*count` fields.
+  - Tests: `test_short_enum_value_cannot_support_an_arbitrary_claim`, `test_enum_field_quotes_anchor_only_through_structured_tokens`, `test_enum_fields`, `test_anchor_enum_mode`.
+- **Claim rules:**
+  - An interpretation needs ≥ 1 verified citation; the quote is optional (`test_interpretation_without_quote_is_verified`).
+  - Hypotheses keep their status and drop invalid refs (`test_hypotheses_keep_their_status_and_drop_invalid_refs`).
+  - `next_steps` refs are verified like citations (RT21).
+  - An ATT&CK id must be in the pinned v20 index, not revoked or deprecated, and carry a verified citation; otherwise it is dropped (`invalid_attack`).
+  - A timeline entry takes its time from its first verified cited row, else `no_timestamp` (`test_timeline_time_comes_from_the_first_verified_row`).
+- **Flags:**
+  - `canary_leak`: in any case, split across fields, or inside keys;
+  - `verdict_language`: a flag only, it never drops content;
+  - `command_like`;
+  - `external_url`: URLs that appear in the cited evidence do not count (`test_urls_from_cited_evidence_are_not_external`).
+- **Post-processing** (`postprocess.clean_text`):
+  - markup becomes text and URLs are defanged;
+  - caps never leave a fresh domain at the cut (`test_cap_never_leaves_a_fresh_domain_behind`);
+  - over-cap outputs are truncated, not rejected (RT19, `test_over_cap_outputs_are_truncated_not_rejected`);
+  - schema failures raise `ValidationFailed`, which drives the worker's repair (`test_schema_failures_raise_validation_failed`).
+- **Review (Low), sanitize format characters:** `text.sanitize` (an additive frozen change) now strips U+061C and every other Unicode `Cf` code point: soft hyphen, U+180E, U+2060–2064 … (`test_sanitize_strips_every_format_character`, `test_sanitize_keeps_visible_text`).
+- **Eval-found bug:** the verifier ran its defang pass over citation `field` names, so dotted names such as `attributes.domain` or `pe.sections.text` no longer matched the sent fields. Field names are now kept verbatim (`test_structural_fields_are_kept_verbatim`).
+- **Metrics** (`RunMetrics`, ≤ 4 KiB):
+  - `citation_accuracy` = verified / all, dropped citations included;
+  - rates are null when their denominator is zero (`test_empty_output_metrics`);
+  - `test_fake_provider_output_verifies_cleanly`.
+- **Residual:** anchoring stays heuristic. A claim that cites a real token but misdescribes it still counts as supported (THREAT_MODEL; measured by golden recall and ASR once live runs exist).

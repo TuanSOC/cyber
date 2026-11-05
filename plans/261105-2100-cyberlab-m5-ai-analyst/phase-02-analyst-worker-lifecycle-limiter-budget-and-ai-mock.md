@@ -116,13 +116,73 @@ This phase calls the frozen entry points of other phases (`registry.build_provid
    - a log scan (caplog) for absence of context text and the sentinel key.
 
 ## Success Criteria
-- [ ] Every typed outcome ends in the specified status with honest `metrics` (`test_analyst_worker.py`).
-- [ ] No duplicate provider calls under redelivery or concurrent replicas (lease tests).
-- [ ] The budget never overshoots under concurrent reservations (two workers, one org), and the limiter fails closed.
-- [ ] An incident run completes only after its children, reuses an identical digest without a call, and ends `partial` when some children fail.
-- [ ] `ai-mock` serves every marker deterministically; the e2e default answer is schema-valid.
+- [x] Every typed outcome ends in the specified status with honest `metrics` (`test_analyst_worker.py`). — `test_analyst_worker.py::test_terminal_outcomes`, `test_refusals_are_final_with_their_category`, `test_spend_limit_fails_and_parks_the_provider_until_midnight`, `test_auth_failed_verifies_inline`, `test_overloaded_backs_off_then_fails`, `test_rate_limited_waits_for_the_cooldown`, `test_invalid_output_twice_fails`, `test_a_canary_leak_fails_and_keeps_the_output_for_review`, `test_timeouts_after_the_request_was_sent_stay_charged_and_cap_at_three_calls`, `test_happy_path_persists_output_citations_usage_and_metrics` (83f24a1); end to end `test_ai_pipeline.py::test_failures_are_typed` (6b52742).
+- [x] No duplicate provider calls under redelivery or concurrent replicas (lease tests). — `test_analyst_worker.py::test_redelivery_and_concurrent_replicas_make_one_call`, `test_a_live_lease_held_elsewhere_exits`, `test_a_worker_that_lost_its_lease_never_touches_the_run`; `test_ai_lifecycle.py::test_only_the_lease_holder_may_park_or_end_the_run` (83f24a1).
+- [x] The budget never overshoots under concurrent reservations (two workers, one org), and the limiter fails closed. — `test_ai_budget.py::test_concurrent_reservations_never_overshoot`, `test_daily_budget_is_all_or_nothing_and_settles_to_actual`, `test_broker_errors_fail_closed`; `test_ai_ratelimit.py::test_broker_errors_fail_closed`; `test_analyst_worker.py::test_the_limiter_fails_closed` (83f24a1).
+- [x] An incident run completes only after its children, reuses an identical digest without a call, and ends `partial` when some children fail. — `test_analyst_worker.py::test_an_incident_waits_for_its_children_then_reduces`, `test_an_identical_digest_is_reused_without_a_call`, `test_an_incident_is_partial_when_a_child_fails`, `test_an_incident_without_any_digest_fails` (83f24a1); through the real worker `test_ai_pipeline.py::test_an_incident_maps_its_jobs_and_reduces_their_digests` (6b52742).
+- [x] `ai-mock` serves every marker deterministically; the e2e default answer is schema-valid. — `test_ai_mock_server.py::test_error_markers`, `test_body_markers`, `test_fabricate_echo_and_inject`, `test_rate_limited_once_per_marker`, `test_slow_markers_answer_late`, `test_the_first_known_marker_wins`, `test_default_answer_is_schema_valid_and_cites_exact_quotes` (83f24a1); the real-prompt fix `test_the_default_answer_reads_the_real_prompt` and `test_ai_pipeline.py::test_every_pcap_task_completes_with_verified_citations` (6b52742). The browser run of the default answer is in the dev e2e (pending gate).
 
 ## Risk Assessment
 - **The solo pool and long calls.** Two replicas and one call per message bound the head-of-line blocking; per-org active caps (phase 7) bound one tenant's share. Fairness stays approximate (documented).
 - **Clock and deadline drift between the DB and the worker.** Use the DB `now()` for every deadline and lease decision, as M4 did.
 - **Reusing the M4 limiter by import** may tempt edits to `threat_intel/ratelimit.py`. Forbidden: clone instead.
+
+## Implementation Notes (2026-11-06)
+- **Commits:**
+  - 83f24a1: phases 2–7, merged after the parallel lanes. Phase 2 is `workers/analyst.py` (+1654), `lifecycle.py`, `ratelimit.py`, `budget.py`, `reap_ai_runs` and `infra/ai-mock/server.py`.
+  - 6b52742: phase-11 fixes: `_refund_call`, ai-mock prompt parsing, new markers.
+- **Parallel execution (group B, phases 2–7):**
+  - Six lanes, each with its own test DB (`cyberlab_b{n}_test`), app Redis db and broker db, all run through `scripts/lane-test.sh` (6edfa9b). A 3-slot semaphore limits the containers running at once (host RAM).
+  - Each lane checked its own tests, ruff, format and mypy. The full suite ran after the merge (83f24a1 says "full API suite pending").
+  - An API session-limit interruption stopped the agents mid-way. They were resumed from the working tree.
+- **Lease** (`lifecycle.py`, `analyst.py`):
+  - `lease_until = now() + 60 s`, renewed every 20 s, each renewal in its own transaction. Every decision uses the DB `now()`.
+  - `ai.resume` runs every 30 s from ingest-beat (`test_resume_resends_due_runs_once`).
+  - `test_a_waiting_run_is_not_due_before_resume_at`.
+  - Deadlines 1200 s / 3600 s; children inherit the parent's deadline (`test_children_inherit_the_parent_deadline`, `test_past_the_deadline_fails_without_a_call`).
+- **Review (Low), lease ownership:**
+  - Every write checks `lease_owner`: the call counter and its refund, the renewals, `set_waiting`, `finalize`, and the output insert (which re-reads the owner `FOR UPDATE`).
+  - A worker that lost the lease writes nothing and releases its reservation.
+  - Tests: `test_a_worker_that_lost_its_lease_never_touches_the_run`, `test_only_the_lease_holder_may_park_or_end_the_run`.
+- **Call cap (RT2):**
+  - `ai_run_index.calls` is committed before each call (`_count_call`); the cap is `AI_MAX_CALLS_PER_RUN` = 3 (`test_the_call_cap_ends_the_run`).
+  - **6b52742:** an unbilled 429 or 529 gives its call back (`_refund_call`). Tests: `test_an_unbilled_rate_limit_does_not_use_up_a_call`, `test_a_rate_limit_with_the_call_cap_used_still_waits`, `test_an_overload_at_the_call_cap_backs_off_instead_of_failing`.
+- **Timeouts (RT2, RT7):**
+  - After the request was sent, a timeout keeps the full reservation charged and sets `metrics.usage_unknown` (`test_timeouts_after_the_request_was_sent_stay_charged_and_cap_at_three_calls`).
+  - A transport error before sending is not charged (`test_a_transport_error_before_sending_is_not_charged`).
+  - No DB session is open during the call (`test_no_session_is_open_during_a_slow_call`, using `ai-mock:slow`); `test_the_hard_call_timeout`.
+- **Typed outcomes:**
+  - 429 → `waiting` until `Retry-After` (clamped 1–3600 s), else the next minute;
+  - 529 / 503 back off 30 / 60 / 120 s, then the run fails `overloaded`;
+  - a spend limit parks the provider until 00:00 UTC;
+  - 401 / 403 run an inline verify;
+  - one repair call with a hint that names paths only (`test_one_repair_retry_with_the_hint`);
+  - refusals are final, with no fallback model (RT10).
+- **Limiter** (`ratelimit.py`):
+  - Cloned from M4 under `{prefix}analyst.ai:*`; `threat_intel/ratelimit.py` is untouched.
+  - Token bucket per (provider, org); cooldowns can only be extended.
+  - The per-minute limit lowers but never raises (`test_effective_per_minute_lowers_but_never_raises`). Keys outside the ACL pattern are refused (`test_keys_outside_the_acl_pattern_are_refused`).
+  - Broker errors fail closed, and the run waits 30 s.
+- **Budget** (`budget.py`):
+  - One Lua reserve over the day, tree and platform keys (all or nothing), then a settle to the actual usage.
+  - RT9: a missing day key is seeded from the DB with `SET NX` (`test_the_day_key_is_seeded_from_the_db_after_a_broker_flush`).
+  - Tree cap: `test_the_incident_tree_cap`. Platform ceiling of 200 000 tokens per day: `test_the_platform_key_and_its_global_ceiling`.
+- **Review (Low), tree and platform re-seed:**
+  - The tree and platform keys are also re-seeded from the DB (`_seed_tree`, `_seed_platform`); the platform seed is approximate, over at most 1000 orgs without their own key. A key that cannot be seeded fails closed.
+  - Tests: `test_a_lost_tree_key_is_reseeded_from_the_db`, `test_a_lost_platform_key_is_reseeded_from_the_db`, `test_ai_budget.py::test_missing_tree_and_platform_keys_are_seeded_from_the_db`, `test_missing_tree_or_platform_keys_without_a_seed_fail_closed`.
+- **Review (Low), refusal settlement:**
+  - A refusal that comes with usage (a 200 with `stop_reason: refusal`, or an error that carries `usage`) is settled to that usage, instead of releasing the reservation.
+  - `NOT_BILLED` errors without usage release it.
+  - Tests: `test_refusals_are_final_with_their_category`, `test_an_error_with_reported_usage_is_settled_to_it`, `test_errors_without_usage_settle_the_budget`.
+- **Incident map-reduce:**
+  - The parent polls every 30 s until every child is final, then freezes `ai_run_inputs(stage=reduce)`, so a redelivered parent reuses it (`test_a_redelivered_parent_reuses_its_frozen_reduce_input`).
+  - It ends `partial` when some child did not complete, and `failed / no_digest` when none did.
+- **Keys:**
+  - the verify verdict is recorded once per key version (`test_verify_records_the_verdict_once_per_key_version`);
+  - lazy re-seal under the active kid (RT18, `test_a_key_under_an_old_kid_is_resealed_under_the_active_one`);
+  - an unseal failure is `auth_failed` and leaves `verify_status` untouched.
+- **Reaper:** `reap_ai_runs` fails runs 10 minutes past their deadline that hold no live lease, and audits `ai.run_deadline` (`test_ai_lifecycle.py::test_reaper_fails_runs_long_past_their_deadline_without_a_lease`).
+- **Secrets:** `test_logs_and_selects_carry_no_secrets_or_content` checks caplog, and that the worker never selects `pseudonym_map` (RT26).
+- **ai-mock** (stdlib):
+  - markers `429`, `429-nora`, `529`, `spend`, `401`, `500`, `slow`, `slow-<n>`, `oversize`, `malformed`, `schema`, `refuse`, `maxtokens`, `fabricate`, `echo`, `inject`; 6b52742 added `429-once-<label>` and `hostile`.
+  - **Eval-found bug (fixed in 6b52742):** ai-mock never parsed the real prompt; it understood only the test doubles' context object. So every real run got the empty answer.
