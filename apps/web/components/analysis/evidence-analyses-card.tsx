@@ -38,12 +38,14 @@ import {
 } from "@/lib/analysis";
 import { ApiError, api, errorMessage, unwrap } from "@/lib/api";
 import { formatDate } from "@/lib/format";
+import { apiErrorText } from "@/lib/http-errors";
 import { orgPath } from "@/lib/nav";
 import { useNow } from "@/lib/use-now";
 
 const PAGE = 10;
 // Refusals the API explains itself (already active, queue full / rate limited, too large, archived).
 const EXPLAINED = new Set([409, 413, 429]);
+export const PURGED_NOTE = "Evidence purged by retention; new analyses cannot run.";
 
 type Page = Schemas["AnalysisJobPage"];
 
@@ -107,7 +109,7 @@ export function EvidenceAnalysesCard({
       ]);
     },
     onError: async (error) => {
-      toast.error(errorMessage(error));
+      toast.error(apiErrorText(error) ?? errorMessage(error));
       // 409 analysis_active: someone else started one; show it.
       await queryClient.invalidateQueries({ queryKey: [...evidenceKey, "analyses"] });
     },
@@ -115,7 +117,9 @@ export function EvidenceAnalysesCard({
 
   const items = jobs.data?.items;
   const now = useNow(items?.some((job) => job.status === "running") ?? false);
-  const runnable = canWrite && !investigationArchived && evidence.status !== "archived";
+  // M7: purged bytes cannot be analyzed again (the API answers 410 evidence_purged).
+  const purged = Boolean(evidence.purged_at);
+  const runnable = canWrite && !investigationArchived && evidence.status !== "archived" && !purged;
   const refusal = run.error instanceof ApiError && EXPLAINED.has(run.error.status) ? run.error : null;
   const { primary, more } = offeredRuns(evidenceKind(evidence));
   // One active job per analyzer and evidence (the API refuses a second one with 409).
@@ -180,6 +184,7 @@ export function EvidenceAnalysesCard({
             <AlertDescription>{errorMessage(refusal)}</AlertDescription>
           </Alert>
         )}
+        {purged && <p className="text-sm text-muted-foreground">{PURGED_NOTE}</p>}
         {jobs.isError ? (
           <QueryError error={jobs.error} onRetry={() => void jobs.refetch()} />
         ) : !items ? (

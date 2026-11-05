@@ -246,6 +246,6 @@ Recorded during the M6 build (report-worker image, local); phase 9 records the g
 - **veraPDF** is not in CI; only PDF/A-3a is claimed, PDF/UA-1 is not.
 - **External redaction is pattern-based**, and the report-level map is not stored (RT29).
 - **No images or charts** (the fetcher stays deny-all), no per-org templates, no rich text, no report approvals, comments or multi-signer reviews, no sharing outside the platform, no TAXII / MISP push, no org-wide IOC watchlists.
-- **No retention or purge** of reports or notes; signed objects are GOVERNANCE-locked for `EVIDENCE_LOCK_DAYS` and versions are never deleted.
+- **Retention (M7):** signed snapshots, versions, citations and notes are **never** purged; snapshot objects are GOVERNANCE-locked for `EVIDENCE_LOCK_DAYS`, and the purge MinIO user has an explicit Deny on `*/snapshot.json`. Renditions (PDF, HTML, Markdown) of cases closed longer than `closed_case_days` are purgeable: the render row is marked `purged` (hash and size kept), its object is deleted, and a new render can be requested from the signed snapshot. A case legal hold also sets the S3 legal hold on the case's report snapshots (retention worker).
 - **RBAC is org-wide:** viewers (`evidence.read`) can download any report, TLP:RED included; every download is audited (RT31).
 - **One render at a time per renderer replica**; the global cap counts per replica.

@@ -1,6 +1,6 @@
 # Database
 
-PostgreSQL 17. Schema owned by Alembic (`apps/api/alembic/versions`): `0001` is M1, `0002`–`0005` M2 (analysis jobs, pcap results), `0006`–`0008` M3 (static analyzer, malware results, storage quota), `0009`–`0010` M4 (threat intelligence), `0011` M5 (AI analyst), `0012` and `0013` M6 (reports and case management; `0013` adds same-org composite FKs, review L4).
+PostgreSQL 17. Schema owned by Alembic (`apps/api/alembic/versions`): `0001` is M1, `0002`–`0005` M2 (analysis jobs, pcap results), `0006`–`0008` M3 (static analyzer, malware results, storage quota), `0009`–`0010` M4 (threat intelligence), `0011` M5 (AI analyst), `0012` and `0013` M6 (reports and case management; `0013` adds same-org composite FKs, review L4), `0014` M7 (platform operations: retention, legal holds, correlation, job outcomes, search indexes; see [M7](#platform-operations-m7-migration-0014)).
 
 ## Roles
 
@@ -9,8 +9,9 @@ PostgreSQL 17. Schema owned by Alembic (`apps/api/alembic/versions`): `0001` is 
 | `postgres` | init script only | superuser |
 | `cyberlab_owner` | `migrate` service, test setup/cleanup | owns `cyberlab` / `cyberlab_test` and every table |
 | `cyberlab_app` | the API process and the trusted workers (ingest, enrich, analyst) | `NOSUPERUSER NOBYPASSRLS`, explicit per-table grants, `idle_in_transaction_session_timeout=60s`, `statement_timeout=30s` |
+| `cyberlab_retention` (M7) | the retention worker only | `LOGIN NOSUPERUSER NOBYPASSRLS`; SELECT on what the selector reads, DELETE on the purgeable tables only, INSERT on runs, run items, tombstones, custody and audit, a few column UPDATEs ([grants](#platform-operations-m7-migration-0014)). Created by `infra/postgres/init/02-m7-roles.sh` on a fresh volume and by the idempotent `db-bootstrap` service (`infra/postgres/bootstrap.sh`) on existing volumes, lanes and restores; 0014 fails with a clear message when it is missing |
 
-The API never receives owner credentials (`Settings` has no field for them; compose passes `MIGRATION_DATABASE_URL` only to `migrate` and `api-test`).
+The API never receives owner credentials (`Settings` has no field for them; compose passes `MIGRATION_DATABASE_URL` only to `migrate` and `api-test`). Backups and `restore_verify` connect as the `postgres` superuser, because FORCE RLS binds the owner (`pg_dump` runs with `row_security=off`).
 
 ## Tables
 
@@ -144,18 +145,18 @@ Threat intel (migrations 0009/0010; details in [THREAT_INTEL.md](THREAT_INTEL.md
 - `iocs` is unchanged: results join on `ioc_key`, computed in Python.
 - Rate-limited, quota and deadline outcomes are item states, never `ti_results` rows; the history shows only what a provider said.
 - A cache hit is the newest unexpired `ok` / `not_found` row of the same org (DB clock).
-- `ti_results` is never purged yet (no retention policy).
+- `ti_results` is append-only; since M7 only the retention worker may delete old answers, together with their run items, under an org policy (`ti_results_days`; see [M7](#platform-operations-m7-migration-0014)).
 
 AI analyst (migration 0011; details in [AI_ANALYST.md](AI_ANALYST.md)):
 - The API writes a run, its index row, its base input, its refs and the audit row in one transaction (incident children with them); the analyst-worker writes the output, the citations and the run's usage / cost / metrics in one transaction.
 - `ai_runs.context_stats` never carries field names, titles or filenames (RT4); `ai_run_inputs.context` is exactly what was sent.
-- Nothing in `ai_*` is ever purged yet (no retention policy, RT28).
+- Since M7 the retention worker may delete whole completed AI run trees (runs, index, inputs, refs, outputs, citations) under an org policy (`ai_runs_days`); runs cited by a report are kept. Nobody else deletes `ai_*` rows.
 
 Reports and case management (migration 0012; details in [REPORTS.md](REPORTS.md)):
 - Finalize writes a version, its citations, the PDF render, its index row and the audit row in one short transaction, after the snapshot object was stored and locked outside any transaction; a version whose write fails leaves a logged orphan object, never a row without an object.
 - The snapshot bytes live in MinIO (`reports` bucket, exact `object_version_id`); the row keeps their sha256, size, the signed manifest and the signature, so every read is verified.
 - `ti_run_items.reason` gains `policy_blocked` (the share-policy outcome of the enrich-worker); `ai_runs.error_code` has no CHECK, so its `policy_blocked` needed no change.
-- Notes, collections, mappings, reports and versions are never purged (no retention policy); versions and note versions are append-only, and a deleted note keeps its versions.
+- Notes, collections, mappings, reports and versions are never purged (M7 retention leaves them too); versions and note versions are append-only, and a deleted note keeps its versions. M7 retention may only mark a `succeeded` rendition `purged` and delete its object; the signed snapshot stays.
 
 ## Tenant isolation (RLS)
 
@@ -171,7 +172,8 @@ app_user_id() = NULLIF(current_setting('app.user_id', true), '')::uuid
 | Table | Command | Policy |
 |---|---|---|
 | investigations, evidence, evidence_hashes, evidence_custody_events, audit_logs, analysis_jobs, pcap result tables, `malware_*`, `ti_*` except `ti_run_index`, `ai_*` except `ai_run_index`, the M6 tables except `report_render_index` | ALL | `organization_id = app_org_id()` (USING + CHECK) |
-| analysis_job_index, ti_run_index, ai_run_index, report_render_index | ALL | `app_org_id() IS NULL OR organization_id = app_org_id()`: trusted workers' system sessions see every row, tenant sessions only their org's |
+| the M7 tenant tables (`org_retention_policies`, `legal_holds`, `retention_runs`, `retention_run_items`, `evidence_purges`, `correlation_keys`, `correlation_job_state`) | ALL | `organization_id = app_org_id()` (USING + CHECK) |
+| analysis_job_index, ti_run_index, ai_run_index, report_render_index, `retention_policy_index` (M7) | ALL | `app_org_id() IS NULL OR organization_id = app_org_id()`: trusted workers' system sessions see every row, tenant sessions only their org's |
 | organization_members | SELECT | `organization_id = app_org_id() OR user_id = app_user_id()` |
 | organization_members | INSERT / UPDATE / DELETE | `organization_id = app_org_id()` |
 | organizations | SELECT | `id = app_org_id() OR id IN (memberships of app_user_id())` |
@@ -232,7 +234,7 @@ The enrich and analyst workers use the same `cyberlab_app` role as the API (no d
 
 ## Triggers
 
-- `forbid_mutation()` — `BEFORE UPDATE OR DELETE` on the four append-only tables, on `ti_results` (M4), on `ai_run_inputs`, `ai_context_refs`, `ai_outputs`, `ai_citations` (M5) and on `investigation_status_events`, `analyst_note_versions`, `report_versions`, `report_citations` (M6); it fires for the owner too.
+- `forbid_mutation()` — `BEFORE UPDATE OR DELETE` on the four append-only tables, on `investigation_status_events`, `analyst_note_versions`, `report_versions`, `report_citations` (M6) and on `retention_run_items`, `evidence_purges` (M7); it fires for the owner too. Since M7, `ti_results` (M4) and `ai_run_inputs`, `ai_context_refs`, `ai_outputs`, `ai_citations` (M5) use `forbid_mutation_except_retention()` instead ([M7](#platform-operations-m7-migration-0014)).
 - `analyst_note_guard()` (M6) — `BEFORE UPDATE` on `analyst_notes`: `current_version` never decreases, `deleted_at/by` are set once, identity columns (id, org, case, creator, `created_at`) are immutable.
 - `ioc_collection_item_guard()` (M6) — `BEFORE UPDATE` on `ioc_collection_items`: the removal is set once; type, value, key, source, job, IOC, adder and `added_at` are immutable.
 - `report_guard()` (M6) — `BEFORE UPDATE` on `reports`: a discarded report is final; `revision` increases by exactly one per update; `latest_version` never decreases; a report with versions cannot be discarded; identity columns (id, org, case, template, creator, `created_at`) are immutable.
@@ -244,6 +246,76 @@ The enrich and analyst workers use the same `cyberlab_app` role as the API (no d
 - `evidence_immutable()` — `BEFORE UPDATE` on `evidence`; every column except `status` and `description` is immutable (incl. `id`, detected type, storage location/version, uploader, timestamps).
 
 **Trust boundary:** grants + triggers stop the app role (and accidental owner `UPDATE`/`DELETE`). The table owner can still `TRUNCATE` or drop triggers; it is a trusted admin identity and its credentials never reach the API. Test cleanup relies on owner `TRUNCATE` against `cyberlab_test` only (the harness refuses any database not ending in `_test`).
+
+## Platform operations (M7, migration 0014)
+
+`0014_m7_platform_ops` follows the M4–M6 conventions: FORCE RLS on every tenant table, composite same-org FKs, SELECT / INSERT grants plus per-column UPDATE, named checks, **no DELETE grant to the app role**. It also runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and seeds one system user. Later schema needs go into `0015`.
+
+### Tables
+
+| Table | Scope | Notes |
+|---|---|---|
+| `org_retention_policies` | tenant (PK org) | `ti_results_days`, `ai_runs_days`, `closed_case_days` (NULL = keep forever; checks: NULL or 30–36 500; the API also enforces closed cases ≥ `EVIDENCE_LOCK_DAYS`, `422 policy_floor`); `pending_*` + `effective_at` for a lowered value; `enforce`, `pending_enforce`, `enforce_effective_at` (turning enforce on waits for the delay, RT1); `updated_by/at` |
+| `retention_policy_index` | system lookup (PK org) | `updated_at`; upserted by the API in the same transaction as every policy PUT and every hold placement (an org with holds but no policy still gets its S3 hold sync); the sweep's org list (RT3) |
+| `legal_holds` | tenant | `scope` org / investigation (`investigation_id` NULL exactly for org scope, composite FK), `reason` 1–500, `placed_by/at`, `released_by/at` (set together), `release_reason`, `s3_synced_at` (retention worker); index on (org, released_at) for "active or released within the delay" |
+| `retention_runs` | tenant | `mode` dry_run / enforce, `trigger` schedule / manual (manual ⇔ `requested_by`), `status` queued / running / completed / partial / failed, `policy` jsonb ≤ 4 KiB (the values used), `counts` jsonb ≤ 8 KiB, `sample` jsonb ≤ 64 KiB, `error` code, `started_at`, `finished_at` |
+| `retention_run_items` | tenant, append-only | `run_id`, `category` ti_results / ai_runs / closed_case, `ref_table`, `ref_id`, `job_id`, `rows`, `bytes`, `object_key` + `object_version_id` (set together), `outcome` purged / skipped_hold / skipped_locked / object_delete_failed / kept_cited |
+| `evidence_purges` | tenant, append-only (PK `evidence_id`, composite FK) | the tombstone: `run_id`, `object_version_id`, `sha256`, `purged_at`. The evidence row itself never changes; `EvidenceOut.purged_at` and the `410 evidence_purged` answers come from here. `reconcile_orphans.py` reports a tombstoned version still stored as `purged_pending_delete` and a pinned version missing **without** a tombstone as `missing_unexplained` |
+| `correlation_keys` | tenant | `investigation_id`, `evidence_id`, `job_id`, `kind` (ipv4, ipv6, domain, url, email, md5, sha1, sha256, ja3, ja3s, cert_sha256), `key` (sha256 hex: the M6 `normalize_item` `ioc_key`), `value_norm` ≤ 2 048, `source_table` iocs / malware_samples / evidence_hashes, `source_id`, `first_seen`, `last_seen`; unique (job_id, kind, key); index (org, kind, key); trigram GIN on `value_norm` |
+| `correlation_job_state` | tenant (PK `job_id`) | `indexed_at`, `keys`, `truncated`: a job is indexed exactly once |
+| `job_outcomes` | system (no org id, no tenant data, no RLS) | `kind` pcap / static / ti / ai / report, `subkind` (profile, provider or format; sanitized to `other`), `status`, `error_code` (sanitized), `queue_ms`, `run_ms`, `finished_at`; indexes (finished_at), (kind, finished_at) |
+| `evidence` (+ columns) | existing | `declared_type` (≤ 32, the extension family) and `type_mismatch`, nullable, write-once (see triggers) |
+| `evidence_custody_events` | existing | the enum `custody_action` gains `purged` and `sent_to_sandbox` (reserved) in an autocommit block; the downgrade cannot drop enum values and leaves them |
+| `report_renders` | existing | `status` gains `purged`; the dedupe index `ux_report_renders_version_id_format_renderer` is recreated `WHERE status NOT IN ('failed', 'purged')`, so a purged rendition can be re-rendered (RT11) |
+| `users` (seed row) | existing | the fixed system user `retention@system.invalid` (`00000000-0000-4000-8000-00000000a7e0`), inactive, with a non-argon2 hash nobody can log in with: the custody actor of purges (RT12) |
+
+**Search indexes** (plain `CREATE INDEX` in the migration transaction, RT20; FTS config `simple`, every nullable column wrapped in `coalesce(…, '')`, and the search queries use the identical expressions): FTS on `investigations` (title ‖ description), `analysis_findings` (title ‖ description), `network_alerts` (signature), `analyst_note_versions` (body); trigram on `investigations.case_number::text`, `evidence.original_filename` and `correlation_keys.value_norm`. **Under RLS these GIN indexes are not used** (`@@`, `%` and `ILIKE` are not `LEAKPROOF`, so the planner cannot push them below the `tenant_isolation` qual): search is a per-org scan for now, see [ARCHITECTURE](ARCHITECTURE.md#search).
+
+### Grants (M7)
+
+| Table | `cyberlab_app` | `cyberlab_retention` |
+|---|---|---|
+| `org_retention_policies` | SELECT, INSERT; UPDATE on the values, `pending_*`, `effective_at`, `enforce`, `pending_enforce`, `enforce_effective_at`, `updated_by`, `updated_at` | SELECT |
+| `retention_policy_index` | SELECT, INSERT; UPDATE on `updated_at` | SELECT |
+| `legal_holds` | SELECT, INSERT; UPDATE on `released_by, released_at, release_reason` | SELECT; UPDATE on `s3_synced_at` |
+| `retention_runs` | SELECT, INSERT (a manual or preview run requested through the API) | SELECT, INSERT; UPDATE on `status, counts, sample, started_at, finished_at, error` |
+| `retention_run_items`, `evidence_purges` | SELECT | SELECT, INSERT |
+| `correlation_keys`, `correlation_job_state` | SELECT, INSERT | none (never purged, RT9) |
+| `job_outcomes` | SELECT (rows come from the `SECURITY DEFINER` trigger) | SELECT, DELETE (rows older than 90 days) |
+| `evidence_custody_events`, `audit_logs` | (M1) | SELECT, INSERT |
+| bulk derived rows: `network_flows`, `network_records`, `analysis_timeline`, `malware_strings`, `malware_sections`, `malware_imports`, `malware_exports`, `malware_resources` | (M2/M3) | SELECT, DELETE |
+| `ti_results`, `ti_run_items` | (M4) | SELECT, DELETE |
+| `ai_runs`, `ai_run_index`, `ai_run_inputs`, `ai_context_refs`, `ai_outputs`, `ai_citations` | (M5) | SELECT, DELETE |
+| `report_renders` | (M6) | SELECT; UPDATE on `status` (`succeeded → purged` only, by trigger) |
+| `investigations`, `investigation_status_events`, `evidence`, `evidence_hashes`, `analysis_jobs`, `analysis_job_index`, `ti_enrichment_runs`, `reports`, `report_versions`, `report_citations` | — | SELECT only |
+
+The retention role also has `USAGE` on the schema and `EXECUTE` on `app_org_id()` / `app_user_id()`. It is bound by RLS like the app (the policies have no `TO` clause) and works in per-org tenant sessions; its only system read is `retention_policy_index` (and `job_outcomes`, which has no RLS). It has no DELETE on any metadata table, on `correlation_*`, on audit, custody or hashes, or on report versions and citations.
+
+### Triggers (M7)
+
+- `forbid_mutation_except_retention()` — replaces `forbid_mutation()` on `ti_results`, `ai_run_inputs`, `ai_context_refs`, `ai_outputs`, `ai_citations`: **DELETE only when `current_user = 'cyberlab_retention'`**, UPDATE never. Not `SECURITY DEFINER`, so `current_user` is the role running the statement. Referential actions run as the table owner, so no cascade from another table can delete from these tables; the purge deletes children explicitly in FK order (RT10). Every other append-only table keeps `forbid_mutation()`, and `audit_logs` refuses DELETE even for the retention role.
+- `forbid_mutation()` on `retention_run_items` and `evidence_purges`.
+- `org_retention_policy_touch()` — `BEFORE UPDATE`: org and `created_at` immutable; sets `updated_at`.
+- `legal_hold_guard()` — `BEFORE UPDATE`: a hold is released once; scope, case, reason, placer and `placed_at` are immutable.
+- `retention_run_guard()` — `BEFORE UPDATE`: final runs (`completed`, `partial`, `failed`) never change; mode, trigger, requester, policy and `created_at` are immutable.
+- `record_job_outcome()` — `AFTER UPDATE OF status` on `analysis_jobs` (→ succeeded / failed), `ti_enrichment_runs` (→ completed / partial / failed), `ai_runs` (→ completed / partial / failed / refused) and `report_renders` (→ succeeded / failed); `SECURITY DEFINER` (owner), `REVOKE ALL … FROM PUBLIC`; copies codes and durations only, and turns any error into a WARNING so it never fails the transition it observes.
+- `report_render_transition()` (updated) — adds the edge `succeeded → purged`, for `cyberlab_retention` only and changing the status only; `purged` is final.
+- `evidence_immutable()` (updated) — `declared_type` and `type_mismatch` are write-once: a NULL may become a value only in the transaction that inserted the row.
+
+### §11 table names → implementation
+
+`requirement.txt` §11 names tables that the platform implements under other names or as computed views. The mapping:
+
+| §11 name | Implemented as | Notes |
+|---|---|---|
+| `users`, `organizations`, `organization_members`, `investigations`, `evidence`, `evidence_hashes`, `analysis_jobs`, `network_flows`, `network_alerts`, `malware_samples`, `iocs`, `analyst_notes`, `reports`, `audit_logs` | same names | |
+| `analysis_results` | the per-type result tables (`network_flows`, `network_records`, `network_alerts`, `analysis_timeline`, `malware_*`, `analysis_findings`, `iocs`) + `analysis_jobs.summary` + the job's object in the `results` bucket (pinned by `analysis_jobs.result_version_id`) | one validated `pcap.v1` / `static.v1` stream per job, ingested in one transaction |
+| `malware_findings` | `analysis_findings` of static jobs | shared with the pcap analyzer (M3) |
+| `threat_intelligence` | `ti_results` (+ `ti_enrichment_runs`, `ti_run_items`, `ti_run_index`, `ti_provider_configs`, `ti_org_settings`) | append-only answers; the history is the cache (M4) |
+| `attack_techniques` | the pinned offline JSON index `apps/api/app/modules/attack/data/attack_enterprise_v20.0.json` (not a table) + `case_attack_mappings` for the analyst-confirmed case links | read-only reference data; rebuilt with `scripts/build_attack_index.py` |
+| `investigation_timeline` | computed: `analysis_timeline` rows merged with status, custody and note events in `investigations/timeline.py` (`GET …/investigations/{id}/timeline`) | no stored timeline table |
+| `api_keys` | the **sealed provider keys** in `ti_provider_configs` and `ai_provider_configs` (sealed boxes per domain; the API encrypts only) | **platform API keys** (programmatic or service-account access to CyberLab) are not implemented: ROADMAP "Later" |
+| `forensic_artifacts`, `memory_findings` | not implemented | belong to the disk / memory forensics modules (ROADMAP "Later"; memory forensics is M8) |
 
 ## Migrations
 

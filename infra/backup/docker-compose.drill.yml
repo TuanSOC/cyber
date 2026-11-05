@@ -1,0 +1,25 @@
+# Restore drill overlay (M7 phase 2, `pnpm restore:drill` only): always used with
+#   docker compose -p cyberlab-drill -f docker-compose.yml [-f docker-compose.prod.yml] \
+#     -f infra/backup/docker-compose.drill.yml [-f infra/backup/docker-compose.drill-dev.yml]
+# The drill starts only postgres, redis, redis-broker, minio, minio-init, db-bootstrap, migrate
+# and api (about 1.2 GB): `up -d api` and its dependencies, never the whole file. Its volumes
+# and networks are the project's own (cyberlab-drill_*); nothing is published.
+#
+# Backups stay inside Docker (RT6): the drill's backup goes to the volume
+# `cyberlab-drill_backups`, created and removed by scripts/restore-drill.mjs outside this
+# model (so the mid-drill `down -v` keeps it). The `down -v` guard (scripts/lib/stack.mjs,
+# RT2) only ever runs against this project.
+services:
+  # Not started by the drill; published ports dropped anyway.
+  gateway:
+    ports: !reset []
+
+  api:
+    environment:
+      # Short GOVERNANCE lock for the seeded evidence (the tombstoned version is deleted with
+      # the drill root and governance bypass, RT17).
+      EVIDENCE_LOCK_DAYS: "1"
+      # The seeder registers three users and logs in from one container IP.
+      RATE_LIMIT_REGISTER_PER_IP_PER_10MIN: "100"
+      RATE_LIMIT_LOGIN_PER_IP_PER_MIN: "100"
+      RATE_LIMIT_LOGIN_FAILURES_PER_15MIN: "100"

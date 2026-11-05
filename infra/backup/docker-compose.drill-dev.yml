@@ -1,0 +1,19 @@
+# Restore drill, dev keys (M7 phase 2): added after docker-compose.drill.yml when the drill
+# runs without --prod. It pins the committed dev key material whatever .env says, so the drill
+# never needs (or touches) real keys: the dev report signing pair (kid dev-report-1), the dev
+# MinIO KMS key (`cyberlab-dev-kms`) and the empty metrics token. With --prod the prod overlay's
+# .secrets/ keys are used instead (minio-init refuses the dev KMS key in prod).
+services:
+  api:
+    environment:
+      ENV: dev
+      REPORT_SIGNING_ACTIVE_KID: dev-report-1
+      REPORT_SIGNING_PUBLIC_KEYS: '{"dev-report-1":"zS2iP9napZDeshJwfCiTwYl8amzPuWJEJwHK8CpnF2k="}'
+
+secrets:
+  report_signing_private:
+    file: ./infra/reports/dev-signing-private.json
+  minio_kms_key:
+    file: ./infra/minio/dev-kms-key
+  metrics_token:
+    file: ./infra/ops/dev-metrics-token

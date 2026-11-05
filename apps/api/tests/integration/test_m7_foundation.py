@@ -1,14 +1,18 @@
-"""M7 phase 1 plumbing: the frozen 501 routes (membership first, bodies validated), the
-`/internal/metrics` access rules, the worker and beat registrations, the purge MinIO user's
-policy, SSE-S3 on the buckets and the M7 test helpers."""
+"""M7 plumbing, final state: every M7 route exists and none is a 501 stub any more
+(membership first, bodies validated), the `/internal/metrics` access rules, the worker and
+beat registrations, the purge MinIO user's policy, SSE-S3 on the buckets and the M7 test
+helpers."""
 
+import inspect
 import io
 import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
+from fastapi.routing import APIRoute
 from minio.commonconfig import GOVERNANCE
 from minio.deleteobjects import DeleteObject
 from minio.error import S3Error
@@ -19,13 +23,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from app.core.config import get_settings
 from app.core.tenancy import tenant_session
 from app.main import app
-from app.modules.correlation import indexer
 from app.modules.ops import internal
 from app.workers import retention, retention_tasks  # noqa: F401 (registers the tasks)
 from app.workers import tasks as ingest_tasks
 from app.workers.celery_app import celery_app
 from app.workers.retention_app import celery_app as retention_celery
-from tests.factories import csrf, new_client, register
+from tests.factories import Registered, csrf, new_client, register
 from tests.integration.seed import seed_tenant
 from tests.ops_helpers import (
     SHARED_IOCS,
@@ -51,19 +54,34 @@ def _org_routes() -> set[tuple[str, str]]:
     }
 
 
-def test_every_m7_route_exists_and_is_pending() -> None:
-    pending = frozenset().union(*(module.PENDING_ROUTES for module in M7_MODULES))
-    assert len(pending) == 14
-    assert pending <= _org_routes(), sorted(pending - _org_routes())
-    assert all(not module.ROUTE_CASES for module in M7_MODULES)
+def test_every_m7_route_exists_and_none_is_pending() -> None:
+    routes = frozenset().union(*(module.ROUTE_CASES for module in M7_MODULES))
+    assert len(routes) == 14
+    assert routes <= _org_routes(), sorted(routes - _org_routes())
+    assert all(not module.PENDING_ROUTES for module in M7_MODULES)
 
 
-async def test_m7_routes_check_membership_first_then_answer_501() -> None:
+def test_no_route_still_raises_the_501_stub() -> None:
+    """Generic over the route table: no endpoint body raises `not_implemented()` any more
+    (every frozen M6 / M7 stub has been replaced by its phase)."""
+    stubbed = sorted(
+        route.path
+        for route in app.routes
+        if isinstance(route, APIRoute) and "not_implemented(" in inspect.getsource(route.endpoint)
+    )
+    assert not stubbed, stubbed
+
+
+def _body(user: Registered, body: dict[str, Any] | None) -> dict[str, Any]:
+    return {"json": body, "headers": csrf(user.client)} if body is not None else {}
+
+
+async def test_m7_routes_check_membership_first_and_none_answers_501() -> None:
     owner = await register(org_name="M7 Org")
     outsider = await register(org_name="Outsider Org")
     base = ORG.format(org_id=owner.org_id)
     job, case, run, hold = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-    requests = [
+    requests: list[tuple[str, str, dict[str, Any] | None]] = [
         ("GET", f"{base}/retention/policy", None),
         (
             "PUT",
@@ -83,24 +101,21 @@ async def test_m7_routes_check_membership_first_then_answer_501() -> None:
         ("POST", f"{base}/legal-holds", {"scope": "org", "reason": "Litigation"}),
         ("POST", f"{base}/legal-holds/{hold}/release", {"reason": "Done"}),
         ("GET", f"{base}/analyses/{job}/correlations", None),
-        ("GET", f"{base}/correlations?kind=domain&value=example.com", None),
+        ("POST", f"{base}/correlations/lookup", {"kind": "domain", "value": "example.com"}),
         ("GET", f"{base}/investigations/{case}/related", None),
         ("POST", f"{base}/search", {"q": "beacon"}),
         ("GET", f"{base}/ops/metrics?window=7d", None),
     ]
     anonymous = new_client()
     for method, url, body in requests:
-        kwargs = {"json": body, "headers": csrf(owner.client)} if body is not None else {}
-        response = await owner.client.request(method, url, **kwargs)
-        assert response.status_code == 501, (method, url, response.text)
-        assert response.json()["error"]["code"] == "not_implemented"
-        other = await outsider.client.request(
-            method,
-            url,
-            **({"json": body, "headers": csrf(outsider.client)} if body is not None else {}),
-        )
+        other = await outsider.client.request(method, url, **_body(outsider, body))
         assert other.status_code == 404, (method, url)
         assert (await anonymous.request(method, url, json=body)).status_code in (401, 403)
+        if method == "GET" or url.endswith(("/search", "/correlations/lookup")):
+            # The owner's reads (no side effects): implemented, whatever they answer.
+            response = await owner.client.request(method, url, **_body(owner, body))
+            assert response.status_code != 501, (method, url, response.text)
+            assert response.status_code < 500, (method, url, response.text)
 
 
 @pytest.mark.parametrize(
@@ -115,7 +130,7 @@ async def test_m7_routes_check_membership_first_then_answer_501() -> None:
         ("/retention/preview", {"ti_results_days": 0}),
     ],
 )
-async def test_m7_bodies_are_validated_before_the_stub(url: str, body: dict[str, object]) -> None:
+async def test_m7_bodies_are_validated(url: str, body: dict[str, object]) -> None:
     owner = await register(org_name="M7 Org")
     method = "PUT" if url == "/retention/policy" else "POST"
     response = await owner.client.request(
@@ -152,16 +167,14 @@ async def test_internal_metrics_needs_the_bearer_token(metrics_token: str) -> No
     good = {"Authorization": f"Bearer {metrics_token}"}
     # Defence in depth: never answered for a proxied request (the gateway never forwards it).
     proxied = await client.get("/internal/metrics", headers={**good, "X-Forwarded-For": "1.2.3.4"})
-    assert proxied.status_code == 404
+    assert proxied.status_code == 403
     response = await client.get("/internal/metrics", headers=good)
-    assert response.status_code == 501  # phase 5 renders the metrics
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
     assert "/internal/metrics" not in {p for p in app.openapi()["paths"] if p.startswith("/api")}
 
 
-async def test_worker_stubs_and_registrations() -> None:
-    assert await indexer.index_pending(5) == 0
-    assert await retention.sweep() == 0
-    assert await retention.sync_holds(uuid.uuid4()) == 0
+def test_worker_registrations() -> None:
     schedule = celery_app.conf.beat_schedule
     assert schedule["index-correlation-keys"]["task"] == "correlation.index_pending"
     assert schedule["index-correlation-keys"]["schedule"] == 60.0

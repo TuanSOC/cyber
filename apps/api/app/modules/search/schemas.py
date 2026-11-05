@@ -9,6 +9,7 @@ OpenSearch is deferred with criteria (ARCHITECTURE).
 import uuid
 from typing import Annotated, Literal
 
+from cyberlab_jobs.report import TLP
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 SearchType = Literal["observable", "case", "evidence", "finding", "alert", "note"]
@@ -39,6 +40,14 @@ class SearchIn(BaseModel):
     cursor: Cursor | None = None
 
 
+class TextRange(BaseModel):
+    """One query match inside `SearchHit.snippet`: `[start, end)` in UTF-16 code units (the
+    JavaScript string index), so the browser builds `<mark>` elements without re-matching."""
+
+    start: int
+    end: int
+
+
 class SearchHit(BaseModel):
     type: SearchType
     id: str
@@ -54,15 +63,24 @@ class SearchHit(BaseModel):
     kind: str | None
     # The app path of the deep link (relative, under /o/{org}).
     href: str
+    # Additive (M7 follow-up). The TLP of the hit's case: every hit belongs to a case the
+    # caller can already read (RLS + the explicit org filter), so this adds no visibility.
+    tlp: TLP | None = None
+    # The query words found in `snippet` (case-insensitive, merged, at most 20 ranges);
+    # empty when the snippet is a summary rather than matched text (observables).
+    snippet_ranges: list[TextRange] = Field(default_factory=list)
 
 
 class SearchGroup(BaseModel):
     type: SearchType
     hits: list[SearchHit]
     next_cursor: str | None
+    # Additive (M7 follow-up): `timeout` when this type hit the statement timeout (its `hits`
+    # are then empty); the other types still answer.
+    error: Literal["timeout"] | None = None
 
 
 class SearchOut(BaseModel):
     groups: list[SearchGroup]
-    # True when a type hit the statement timeout and returned partial results.
+    # True when at least one group carries `error: "timeout"` (kept for older clients).
     partial: bool

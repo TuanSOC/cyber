@@ -6,7 +6,7 @@ from typing import Any
 from starlette.requests import HTTPConnection
 
 from app.core.client_ip import client_ip, user_agent
-from app.core.errors import Conflict, NotFound
+from app.core.errors import Conflict, EvidencePurged, NotFound
 from app.core.pagination import PageParams
 from app.core.rbac import OrgContext
 from app.modules.audit import service as audit
@@ -33,6 +33,11 @@ def to_out(row: repo.EvidenceRow) -> EvidenceOut:
         hashes=row.hashes,
         ai_excluded=row.ai_excluded,
         ti_excluded=row.ti_excluded,
+        purged_at=row.purged_at,
+        purged_by_run_id=row.purge_run_id,
+        legal_hold=row.legal_hold,
+        declared_type=e.declared_type,
+        type_mismatch=e.type_mismatch,
     )
 
 
@@ -98,6 +103,18 @@ async def list_for_investigation(
         raise NotFound()
     rows, total = await repo.list_for_investigation(ctx.session, ctx.org_id, investigation_id, page)
     return EvidencePage(items=[to_out(r) for r in rows], total=total)
+
+
+def ensure_not_purged(row: repo.EvidenceRow) -> None:
+    """`410 evidence_purged` once retention purged the bytes (after the org check, so other
+    orgs' evidence still answers 404)."""
+    if row.purged_at is not None:
+        raise EvidencePurged(
+            extra={
+                "purged_at": row.purged_at.isoformat(),
+                "run_id": str(row.purge_run_id) if row.purge_run_id else None,
+            }
+        )
 
 
 async def get_evidence(ctx: OrgContext, evidence_id: uuid.UUID) -> EvidenceOut:

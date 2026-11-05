@@ -3,7 +3,8 @@ seeding the phase-3 report tests share (a case with pcap / static results, AI ru
 dispatch and case-IOC stand-ins).
 
 Every report route has a case. The victim extender seeds a report with a finalized version
-(its snapshot object in `reports-test`, signed with a test key) and a second report with no
+(its snapshot object in `reports-test`, signed with a test key whose public half is
+published for the test) and a second report with no
 version (the only kind `discard` accepts), and patches the cross-phase stubs this lane runs
 against (`dispatch.create_render` / `dispatch_render` of phase 4) and the api's signing key
 (api-test holds none), only while they are absent. `{report_id}` is a resource parameter.
@@ -50,7 +51,7 @@ from tests.ai_doubles import make_context
 from tests.ai_helpers import seed_ai_run
 from tests.factories import Registered, csrf, register
 from tests.integration.seed import Tenant
-from tests.report_helpers import new_signing_keys, seed_report, seed_version
+from tests.report_helpers import SigningKeys, new_signing_keys, seed_report, seed_version
 from tests.security.idor_types import (
     PathOverrides,
     RouteCases,
@@ -410,11 +411,25 @@ async def _install_stand_ins() -> None:
         report_signing._private_keys = lambda: {kid: key}  # type: ignore[method-assign]
 
 
+def _publish_seed_key(keys: SigningKeys) -> None:
+    """The seeded version must be genuinely valid: the content and snapshot routes serve
+    bytes only when its signature verifies with a published key (M6 review), so the test
+    key's public half joins REPORT_SIGNING_PUBLIC_KEYS. Plain assignment (a new dict):
+    `test_idor_routes._no_publish` registers the original with monkeypatch first."""
+    settings = get_settings()
+    settings.report_signing_public_keys = {
+        **settings.report_signing_public_keys,
+        keys.kid: keys.public_b64,
+    }
+
+
 async def _extend(owner: Registered, victim: Victim) -> dict[str, str]:
     await _install_stand_ins()
     tenant = Tenant(victim.org_id, owner.user_id, uuid.UUID(victim.investigation_id))
     report_id = await seed_report(tenant, title="Victim report", draft=draft())
-    await seed_version(tenant, report_id, new_signing_keys())
+    keys = new_signing_keys()
+    _publish_seed_key(keys)
+    await seed_version(tenant, report_id, keys)
     discardable = await seed_report(tenant, title="Victim draft", draft=draft())
     async with tenant_session(victim.org_id, owner.user_id) as s:
         revision = await s.scalar(select(Report.revision).where(Report.id == report_id))

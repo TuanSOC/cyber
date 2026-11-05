@@ -30,6 +30,9 @@ class EvidenceOut(BaseModel):
     # then answer 410 `evidence_purged`), whether a legal hold covers the evidence's case or
     # org (phase 3), and the declared type vs the detected type (phase 6, NULL before M7).
     purged_at: datetime | None = None
+    # Additive (M7 follow-up): the retention run that purged the bytes (with `purged_at`).
+    # The run detail itself stays `audit.read`; the id alone reveals nothing more.
+    purged_by_run_id: uuid.UUID | None = None
     legal_hold: bool = False
     declared_type: str | None = None
     type_mismatch: bool | None = None

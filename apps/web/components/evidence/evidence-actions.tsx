@@ -8,9 +8,15 @@ import { toast } from "sonner";
 import { ConfirmButton } from "@/components/confirm-button";
 import { Button } from "@/components/ui/button";
 import { api, errorMessage, unwrap } from "@/lib/api";
+import { apiErrorText } from "@/lib/http-errors";
 
 type Evidence = Schemas["EvidenceOut"];
 type Verify = Schemas["VerifyOut"];
+
+/** Toast text for a failed action: the plain-language text for known codes (410 evidence_purged). */
+export function actionErrorText(error: unknown): string {
+  return apiErrorText(error) ?? errorMessage(error);
+}
 
 export function EvidenceActions({
   orgId,
@@ -41,7 +47,7 @@ export function EvidenceActions({
       onVerified(result);
       await refreshCustody();
     },
-    onError: (error) => toast.error(errorMessage(error)),
+    onError: (error) => toast.error(actionErrorText(error)),
   });
 
   const archive = useMutation({
@@ -52,7 +58,7 @@ export function EvidenceActions({
       await refreshCustody();
       toast.success("Evidence archived");
     },
-    onError: (error) => toast.error(errorMessage(error)),
+    onError: (error) => toast.error(actionErrorText(error)),
   });
 
   async function download() {
@@ -60,7 +66,7 @@ export function EvidenceActions({
     try {
       unwrap(await api.GET("/api/v1/orgs/{org_id}/evidence/{evidence_id}", { params: { path } }));
     } catch (error) {
-      toast.error(errorMessage(error));
+      toast.error(actionErrorText(error));
       return;
     }
     // `download` keeps the app on screen even if the server answers with an error.

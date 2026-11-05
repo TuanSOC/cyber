@@ -1,3 +1,4 @@
+import contextlib
 import uuid
 from typing import Annotated
 
@@ -5,10 +6,14 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import StringConstraints
 
+from app.core import audit_dedupe
+from app.core.clients import get_redis
+from app.core.config import get_settings
 from app.core.deps import CurrentUserDep
 from app.core.filenames import content_disposition
 from app.core.pagination import PageParamsDep
 from app.core.rbac import OrgContext, Permission, require
+from app.modules.audit import service as audit
 from app.modules.evidence import service, share_policy, transfer, uploads
 from app.modules.evidence.schemas import CustodyPage, EvidenceOut, EvidencePage, VerifyOut
 from app.modules.investigations.schemas import EvidenceSharePolicyIn, EvidenceSharePolicyOut
@@ -26,6 +31,36 @@ DOWNLOAD_HEADERS = {
     "Cache-Control": "no-store",
     "Content-Security-Policy": "sandbox",
 }
+
+VIEWED = "evidence.viewed"
+CUSTODY_VIEWED = "evidence.custody_viewed"
+
+
+async def _audit_view(ctx: OrgContext, evidence_id: uuid.UUID, action: str) -> None:
+    """M7 (§10 auditable access): one `audit_logs` row per (user, evidence, action) per
+    `EVIDENCE_VIEW_AUDIT_DEDUPE_S` (15 min), after the read found the evidence (a 404 for
+    another org writes nothing). In the request's tenant session, committed here (these read
+    routes otherwise never commit). No details beyond the ids and no IP: the row carries the
+    actor. The list routes are not audited (the detail and custody views are the access).
+    A Redis failure raises (503): the audit fails closed. If the commit fails, the dedupe key
+    is given back so the next view records the row."""
+    key = f"{ctx.user.id}:{evidence_id}:{action}"
+    if not await audit_dedupe.once_per(key, get_settings().evidence_view_audit_dedupe_s):
+        return
+    try:
+        audit.record(
+            ctx.session,
+            action=action,
+            org_id=ctx.org_id,
+            actor_id=ctx.user.id,
+            target_type="evidence",
+            target_id=evidence_id,
+        )
+        await ctx.session.commit()
+    except Exception:
+        with contextlib.suppress(Exception):
+            await get_redis().delete(audit_dedupe.PREFIX + key)
+        raise
 
 
 @router.post(
@@ -69,7 +104,9 @@ async def list_evidence(
 
 @router.get("/evidence/{evidence_id}", response_model=EvidenceOut)
 async def get_evidence(evidence_id: uuid.UUID, ctx: EvidenceRead) -> EvidenceOut:
-    return await service.get_evidence(ctx, evidence_id)
+    out = await service.get_evidence(ctx, evidence_id)
+    await _audit_view(ctx, evidence_id, VIEWED)
+    return out
 
 
 @router.get(
@@ -110,7 +147,9 @@ async def archive_evidence(
 async def evidence_custody(
     evidence_id: uuid.UUID, ctx: EvidenceRead, page: PageParamsDep
 ) -> CustodyPage:
-    return await service.custody(ctx, evidence_id, page)
+    out = await service.custody(ctx, evidence_id, page)
+    await _audit_view(ctx, evidence_id, CUSTODY_VIEWED)
+    return out
 
 
 # --- share policy (M6) ----------------------------------------------------------------------

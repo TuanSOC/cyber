@@ -4902,6 +4902,42 @@
         "title": "ClaimStatus",
         "type": "string"
       },
+      "CollectionRefOut": {
+        "description": "An IOC collection of the org holding the key (an item not removed).",
+        "properties": {
+          "archived": {
+            "title": "Archived",
+            "type": "boolean"
+          },
+          "case_ref": {
+            "title": "Case Ref",
+            "type": "string"
+          },
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "investigation_id": {
+            "format": "uuid",
+            "title": "Investigation Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collection_id",
+          "investigation_id",
+          "case_ref",
+          "name",
+          "archived"
+        ],
+        "title": "CollectionRefOut",
+        "type": "object"
+      },
       "ContextItem": {
         "additionalProperties": false,
         "description": "One labelled item exactly as sent. `fields` keys are the only valid citation `field`\nvalues for this item; values are already sanitized, pseudonymized, defanged, truncated.",
@@ -5033,11 +5069,58 @@
         "title": "ContextStats",
         "type": "object"
       },
+      "CorrelationLookupIn": {
+        "additionalProperties": false,
+        "description": "`POST /correlations/lookup`: the observable travels in the JSON body only, never in a\nURL (an IOC value in a query string lands in the uvicorn and gateway access logs and the\nbrowser history, like a search query, RT13). It is never logged or audited.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "ipv4",
+              "ipv6",
+              "domain",
+              "url",
+              "email",
+              "md5",
+              "sha1",
+              "sha256",
+              "ja3",
+              "ja3s",
+              "cert_sha256"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "value"
+        ],
+        "title": "CorrelationLookupIn",
+        "type": "object"
+      },
       "CorrelationLookupOut": {
-        "description": "`GET /correlations?kind=&value=`: the server normalizes the value (M6\n`normalize_item`, RT8). `key` is null when the value does not normalize.",
+        "description": "`POST /correlations/lookup` (`{kind, value}` in the body): the server normalizes the\nvalue (M6 `normalize_item`, RT8). A value that does not normalize as `kind` answers\n`422 search_query_invalid` (the error never echoes the value), so `value_norm` and `key`\nare always set in a 200; they stay nullable for older clients only.",
         "properties": {
           "cases": {
             "title": "Cases",
+            "type": "integer"
+          },
+          "collections": {
+            "items": {
+              "$ref": "#/components/schemas/CollectionRefOut"
+            },
+            "title": "Collections",
+            "type": "array"
+          },
+          "collections_total": {
+            "default": 0,
+            "title": "Collections Total",
             "type": "integer"
           },
           "common": {
@@ -5106,6 +5189,17 @@
               }
             ],
             "title": "Last Seen"
+          },
+          "ti_results": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ti Results"
           },
           "value_norm": {
             "anyOf": [
@@ -5901,6 +5995,18 @@
               }
             ],
             "title": "Purged At"
+          },
+          "purged_by_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purged By Run Id"
           },
           "size_bytes": {
             "title": "Size Bytes",
@@ -8412,6 +8518,17 @@
             "title": "Job Id",
             "type": "string"
           },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
           "total_keys": {
             "title": "Total Keys",
             "type": "integer"
@@ -10218,6 +10335,13 @@
             "title": "Items",
             "type": "array"
           },
+          "recent_failures": {
+            "items": {
+              "$ref": "#/components/schemas/RecentFailureOut"
+            },
+            "title": "Recent Failures",
+            "type": "array"
+          },
           "window": {
             "enum": [
               "1h",
@@ -10557,6 +10681,88 @@
         "title": "ProviderName",
         "type": "string"
       },
+      "RecentFailureOut": {
+        "description": "One failed analysis job of the org (newest first), with its error class and the app\npath of its deep link (relative, under /o/{org}).",
+        "properties": {
+          "error_class": {
+            "$ref": "#/components/schemas/ErrorClass"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "investigation_id": {
+            "format": "uuid",
+            "title": "Investigation Id",
+            "type": "string"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "pcap",
+              "static"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "subkind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subkind"
+          }
+        },
+        "required": [
+          "job_id",
+          "kind",
+          "subkind",
+          "error_code",
+          "error_class",
+          "finished_at",
+          "investigation_id",
+          "evidence_id",
+          "href"
+        ],
+        "title": "RecentFailureOut",
+        "type": "object"
+      },
       "RecordKind": {
         "enum": [
           "dns",
@@ -10801,6 +11007,13 @@
               }
             ],
             "title": "Last Seen"
+          },
+          "sample_keys": {
+            "items": {
+              "$ref": "#/components/schemas/SharedKeyOut"
+            },
+            "title": "Sample Keys",
+            "type": "array"
           },
           "shared_keys": {
             "title": "Shared Keys",
@@ -13197,6 +13410,11 @@
             "title": "Items",
             "type": "array"
           },
+          "items_matching": {
+            "default": 0,
+            "title": "Items Matching",
+            "type": "integer"
+          },
           "items_total": {
             "title": "Items Total",
             "type": "integer"
@@ -13208,6 +13426,22 @@
             ],
             "title": "Mode",
             "type": "string"
+          },
+          "outcome_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "purged",
+                "skipped_hold",
+                "skipped_locked",
+                "object_delete_failed",
+                "kept_cited"
+              ]
+            },
+            "title": "Outcome Counts",
+            "type": "object"
           },
           "policy": {
             "anyOf": [
@@ -14276,6 +14510,18 @@
       },
       "SearchGroup": {
         "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "const": "timeout",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
           "hits": {
             "items": {
               "$ref": "#/components/schemas/SearchHit"
@@ -14403,9 +14649,26 @@
             ],
             "title": "Snippet"
           },
+          "snippet_ranges": {
+            "items": {
+              "$ref": "#/components/schemas/TextRange"
+            },
+            "title": "Snippet Ranges",
+            "type": "array"
+          },
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "tlp": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TLP"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "type": {
             "enum": [
@@ -14665,6 +14928,13 @@
             "title": "Other Jobs",
             "type": "integer"
           },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Ids",
+            "type": "array"
+          },
           "top_cases": {
             "items": {
               "$ref": "#/components/schemas/CaseRefOut"
@@ -14752,6 +15022,42 @@
           "reasons"
         ],
         "title": "SharePolicyOut",
+        "type": "object"
+      },
+      "SharedKeyOut": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "ipv4",
+              "ipv6",
+              "domain",
+              "url",
+              "email",
+              "md5",
+              "sha1",
+              "sha256",
+              "ja3",
+              "ja3s",
+              "cert_sha256"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "value",
+          "key"
+        ],
+        "title": "SharedKeyOut",
         "type": "object"
       },
       "SignatureEngine": {
@@ -15355,6 +15661,25 @@
           "deprecated"
         ],
         "title": "TechniqueLabel",
+        "type": "object"
+      },
+      "TextRange": {
+        "description": "One query match inside `SearchHit.snippet`: `[start, end)` in UTF-16 code units (the\nJavaScript string index), so the browser builds `<mark>` elements without re-matching.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "TextRange",
         "type": "object"
       },
       "TiIocType": {
@@ -18156,7 +18481,7 @@
     },
     "/api/v1/orgs/{org_id}/analyses/{job_id}/correlations": {
       "get": {
-        "description": "The job's keys that other jobs of the org share (\"also seen in\").",
+        "description": "The job's keys that other jobs of the org share (\"also seen in\"); `kind` narrows to\none kind, `include_unique` adds the keys seen nowhere else, `cursor` continues\n(`400 invalid_cursor`).",
         "operationId": "job_correlations_api_v1_orgs__org_id__analyses__job_id__correlations_get",
         "parameters": [
           {
@@ -18177,6 +18502,64 @@
               "format": "uuid",
               "title": "Org Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "ipv4",
+                    "ipv6",
+                    "domain",
+                    "url",
+                    "email",
+                    "md5",
+                    "sha1",
+                    "sha256",
+                    "ja3",
+                    "ja3s",
+                    "cert_sha256"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_unique",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Unique",
+              "type": "boolean"
             }
           }
         ],
@@ -19959,10 +20342,10 @@
         ]
       }
     },
-    "/api/v1/orgs/{org_id}/correlations": {
-      "get": {
-        "description": "Where one observable was seen in the org (the server normalizes `value`).",
-        "operationId": "lookup_api_v1_orgs__org_id__correlations_get",
+    "/api/v1/orgs/{org_id}/correlations/lookup": {
+      "post": {
+        "description": "Where one observable was seen in the org (the server normalizes `value`; `422\nsearch_query_invalid` when it does not normalize as `kind`), with the stored threat\nintel answer count and the IOC collections holding it. A POST so the value stays out of\nevery URL and access log (RT13); a read, so it writes nothing and is not audited.",
+        "operationId": "lookup_api_v1_orgs__org_id__correlations_lookup_post",
         "parameters": [
           {
             "in": "path",
@@ -19973,41 +20356,18 @@
               "title": "Org Id",
               "type": "string"
             }
-          },
-          {
-            "in": "query",
-            "name": "kind",
-            "required": true,
-            "schema": {
-              "enum": [
-                "ipv4",
-                "ipv6",
-                "domain",
-                "url",
-                "email",
-                "md5",
-                "sha1",
-                "sha256",
-                "ja3",
-                "ja3s",
-                "cert_sha256"
-              ],
-              "title": "Kind",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "value",
-            "required": true,
-            "schema": {
-              "maxLength": 2048,
-              "minLength": 1,
-              "title": "Value",
-              "type": "string"
-            }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrelationLookupIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
@@ -24444,7 +24804,7 @@
     },
     "/api/v1/orgs/{org_id}/retention/preview": {
       "post": {
-        "description": "What a run would select now (counts, bytes, a bounded sample). Writes nothing.",
+        "description": "What a run would select now (counts, bytes, a bounded sample). Deletes nothing; it is\nrecorded as a manual dry-run run and audited `retention.previewed`.",
         "operationId": "preview_api_v1_orgs__org_id__retention_preview_post",
         "parameters": [
           {
@@ -24617,6 +24977,7 @@
     },
     "/api/v1/orgs/{org_id}/retention/runs/{retention_run_id}": {
       "get": {
+        "description": "The run with one page of its items (`limit`, `offset`, `outcome` filter) and the item\ncount per outcome.",
         "operationId": "get_run_api_v1_orgs__org_id__retention_runs__retention_run_id__get",
         "parameters": [
           {
@@ -24637,6 +24998,53 @@
               "format": "uuid",
               "title": "Org Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 1000000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "outcome",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "purged",
+                    "skipped_hold",
+                    "skipped_locked",
+                    "object_delete_failed",
+                    "kept_cited"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Outcome"
             }
           }
         ],
@@ -25367,6 +25775,22 @@
                 }
               ],
               "title": "X-Forwarded-For"
+            }
+          },
+          {
+            "in": "header",
+            "name": "forwarded",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Forwarded"
             }
           }
         ],

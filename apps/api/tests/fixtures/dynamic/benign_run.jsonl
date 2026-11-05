@@ -1,0 +1,14 @@
+{"kind":"header","schema_version":"dynamic.v1","job_id":"6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b","route":"sinkhole","engine":"cape","engine_version":"2.4-fixture"}
+{"kind":"process","pid":2412,"ppid":1088,"image":"C:\\Users\\analyst\\AppData\\Local\\Temp\\invoice.exe","cmdline":"\"C:\\Users\\analyst\\AppData\\Local\\Temp\\invoice.exe\" /quiet","start_ms":0,"end_ms":41250}
+{"kind":"process","pid":3020,"ppid":2412,"image":"C:\\Windows\\System32\\cmd.exe","cmdline":"cmd.exe /c whoami\t& ipconfig /all","start_ms":1800,"end_ms":2310}
+{"kind":"file","op":"create","path":"C:\\Users\\analyst\\AppData\\Roaming\\svc\\updater.dll","sha256":"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f"}
+{"kind":"file","op":"read","path":"C:\\Users\\analyst\\Documents\\notes.txt"}
+{"kind":"registry","op":"set","key":"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run","value_name":"svcupdater"}
+{"kind":"registry","op":"read","key":"HKLM\\SYSTEM\\CurrentControlSet\\Services\\Disk\\Enum"}
+{"kind":"network","proto":"udp","dst":"update.example-c2.invalid","port":53,"dns_query":"update.example-c2.invalid","bytes":61,"route":"sinkhole"}
+{"kind":"network","proto":"tcp","dst":"203.0.113.45","port":443,"bytes":517,"route":"sinkhole"}
+{"kind":"signature","name":"persistence_autorun","severity":"medium","description":"Installs itself for autorun at Windows startup","attack_ids":["T1547.001"]}
+{"kind":"signature","name":"antivm_disk_enum","severity":"low","description":"Queries the disk enumeration key (a common VM check)","attack_ids":["T1497.001"]}
+{"kind":"dropped","sha256":"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f","size":94208,"path":"C:\\Users\\analyst\\AppData\\Roaming\\svc\\updater.dll"}
+{"kind":"summary","status":"succeeded","route":"sinkhole","duration_ms":120000,"vm_image_digest":"sha256:abababababababababababababababababababababababababababababababab","revert_verified":true,"counts":{"process":2,"file":2,"registry":2,"network":2,"signature":2,"dropped":1}}
+{"kind":"trailer","line_count":13,"sha256":"ebda88837f9df26dd84d2852038da7ff109b21c7e883bbbf10f04b25db36ac67"}

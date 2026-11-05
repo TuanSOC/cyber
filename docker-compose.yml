@@ -699,6 +699,8 @@ services:
       - ./scripts:/srv/scripts:ro
       # What ai-mock received (outbound-privacy and call-count assertions); read-only.
       - ai_mock_state:/srv/ai-mock-state:ro
+      # The gateway config (M7: test_internal_metrics.py checks it never routes /internal/*).
+      - ./infra/caddy:/srv/infra/caddy:ro
     networks: [backend]
     depends_on:
       postgres:

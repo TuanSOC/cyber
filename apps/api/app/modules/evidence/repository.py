@@ -1,5 +1,6 @@
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.pagination import PageParams
 from app.modules.evidence.models import Evidence, EvidenceCustodyEvent, EvidenceHash
 from app.modules.investigations.models import EvidenceSharePolicy, Investigation
+from app.modules.retention.holds import active_holds
+from app.modules.retention.models import EvidencePurge
 from app.modules.users.models import User
 
 
@@ -18,6 +21,11 @@ class EvidenceRow:
     # M6: the evidence's share-policy flags (no `evidence_share_policies` row = both off).
     ai_excluded: bool = False
     ti_excluded: bool = False
+    # M7: the retention tombstone (bytes purged; hashes and custody remain) and whether a
+    # legal hold (case or org, active or released less than the delay ago) covers it.
+    purged_at: datetime | None = None
+    purge_run_id: uuid.UUID | None = None
+    legal_hold: bool = False
 
 
 async def get_investigation(
@@ -61,6 +69,45 @@ async def _flags(
     return {evidence_id: (ai, ti) for evidence_id, ai, ti in rows.all()}
 
 
+async def _purges(
+    session: AsyncSession, org_id: uuid.UUID, evidence_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, tuple[datetime, uuid.UUID]]:
+    if not evidence_ids:
+        return {}
+    p = EvidencePurge
+    rows = await session.execute(
+        select(p.evidence_id, p.purged_at, p.run_id).where(
+            p.organization_id == org_id, p.evidence_id.in_(evidence_ids)
+        )
+    )
+    return {evidence_id: (at, run_id) for evidence_id, at, run_id in rows.all()}
+
+
+async def _rows(
+    session: AsyncSession, org_id: uuid.UUID, rows: list[tuple[Evidence, str]]
+) -> list[EvidenceRow]:
+    ids = [e.id for e, _ in rows]
+    hashes = await _hashes(session, ids)
+    flags = await _flags(session, org_id, ids)
+    purges = await _purges(session, org_id, ids)
+    holds = await active_holds(session, org_id, now=datetime.now(UTC)) if ids else None
+    out = []
+    for e, name in rows:
+        purged_at, run_id = purges.get(e.id, (None, None))
+        out.append(
+            EvidenceRow(
+                e,
+                name,
+                hashes[e.id],
+                *flags.get(e.id, (False, False)),
+                purged_at=purged_at,
+                purge_run_id=run_id,
+                legal_hold=holds is not None and holds.covers(e.investigation_id),
+            )
+        )
+    return out
+
+
 async def list_for_investigation(
     session: AsyncSession, org_id: uuid.UUID, investigation_id: uuid.UUID, page: PageParams
 ) -> tuple[list[EvidenceRow], int]:
@@ -74,13 +121,8 @@ async def list_for_investigation(
         .limit(page.limit)
         .offset(page.offset)
     )
-    rows = (await session.execute(stmt)).all()
-    ids = [e.id for e, _ in rows]
-    hashes = await _hashes(session, ids)
-    flags = await _flags(session, org_id, ids)
-    return [
-        EvidenceRow(e, name, hashes[e.id], *flags.get(e.id, (False, False))) for e, name in rows
-    ], total
+    rows = [(e, name) for e, name in (await session.execute(stmt)).all()]
+    return await _rows(session, org_id, rows), total
 
 
 async def get_row(
@@ -97,9 +139,7 @@ async def get_row(
     if row is None:
         return None
     evidence, name = row
-    hashes = (await _hashes(session, [evidence.id]))[evidence.id]
-    flags = (await _flags(session, org_id, [evidence.id])).get(evidence.id, (False, False))
-    return EvidenceRow(evidence, name, hashes, *flags)
+    return (await _rows(session, org_id, [(evidence, name)]))[0]
 
 
 async def lock_evidence_for_policy(

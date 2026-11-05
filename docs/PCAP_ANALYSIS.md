@@ -1,7 +1,9 @@
 # PCAP Analysis (Milestone 2)
 
-The first analysis engine: uploaded PCAP/PCAPNG evidence is analyzed by TShark, Zeek and
-Suricata in an isolated worker. Results are normalized into a versioned stream (`pcap.v1`), ingested by a
+The first analysis engine: uploaded PCAP/PCAPNG evidence is analyzed by Zeek, Suricata and
+TShark in an isolated worker. Zeek does most of the work (flows, DNS / HTTP / TLS records, file
+hashes); Suricata adds signature alerts and JA3; **TShark contributes only the protocol hierarchy**
+(`-z io,phs`) and capinfos the capture facts. Results are normalized into a versioned stream (`pcap.v1`), ingested by a
 trusted worker into tenant tables, and shown in the PCAP Analyzer UI.
 
 ## Pipeline
@@ -149,9 +151,11 @@ detectors.
   - The "registered domain" is the last two labels (no public-suffix list).
   - Thresholds are static.
   - There are no allow-lists yet (e.g. known updaters for beaconing).
+- **Flows are Zeek `conn.log` connection records.** There is no TCP stream reassembly for the analyst (no follow-stream view, no payload search) and no file carving: transferred files appear as Zeek file records with hashes, never as extracted files.
 - **Not covered in M2:**
+  - TCP stream reassembly and file carving (ROADMAP "Later").
   - Compressed captures (refused).
   - Interfaces other than Ethernet/IP (not tested).
   - JA4.
-  - OpenSearch (results live in Postgres).
+  - OpenSearch (results live in Postgres; M7 adds org-wide Postgres search and deterministic correlation of the IOCs, JA3 and hashes, see [ARCHITECTURE.md](ARCHITECTURE.md#platform-operations-m7)).
   - Per-org fair scheduling (one FIFO queue).

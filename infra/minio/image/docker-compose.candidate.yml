@@ -1,0 +1,110 @@
+# Throwaway object-store candidate for the conformance suite (M7 phase 6). Its own compose
+# project, volume and INTERNAL network (`cyberlab-objstore_conformance`, no egress, nothing
+# published): never the main stack's `cyberlab_backend`, so no main-stack service can reach
+# an unvetted image, and it can reach none of them. Only the `conformance` test container
+# joins both networks (the candidate's, and `cyberlab_backend` for the test DB, Redis and the
+# current MinIO). Heavy step (image pull, a second MinIO in RAM, an api-test container): run
+# it alone, with the main stack up (`pnpm dev` or the test profile's dependencies).
+#
+# The image is pinned by digest, structurally: the reference is
+# `${CANDIDATE_MINIO_IMAGE}@${CANDIDATE_MINIO_DIGEST}`, both required, so compose fails before
+# any pull without a digest, and Docker refuses a digest that is not `sha256:<64 hex>`.
+# Verify the signature of that digest first (`cosign verify pgsty/silo@sha256:...`, see
+# plans/reports/researcher-261106-m7-object-store.md). For the option (b) source build
+# (infra/minio/image/Dockerfile), push it to a registry you control and use its digest.
+#
+#   export CANDIDATE_MINIO_IMAGE=pgsty/silo CANDIDATE_MINIO_DIGEST=sha256:<64 hex>
+#   export CANDIDATE_ROOT_PASSWORD=$(openssl rand -hex 16)
+#   # A lane DB / Redis db of its own (as scripts/lane-test.sh derives them; lane 6 here):
+#   export TEST_BROKER_DB=6 \
+#     CONFORMANCE_DATABASE_URL=<TEST_DATABASE_URL with db cyberlab_b6_test> \
+#     CONFORMANCE_MIGRATION_DATABASE_URL=<TEST_MIGRATION_DATABASE_URL with db cyberlab_b6_test> \
+#     CONFORMANCE_REDIS_URL=<TEST_REDIS_URL with db 6>
+#   C="docker compose -p cyberlab-objstore --env-file .env -f infra/minio/image/docker-compose.candidate.yml"
+#   $C up -d --wait candidate
+#   $C run --rm conformance
+#   # RT7: the same with -e OBJECT_STORE_RESTART_PHASE=prepare, then `$C restart candidate`,
+#   #   then -e OBJECT_STORE_RESTART_PHASE=verify.
+#   $C down -v
+name: cyberlab-objstore
+
+x-hardened: &hardened
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  candidate:
+    <<: *hardened
+    image: "${CANDIDATE_MINIO_IMAGE:?set CANDIDATE_MINIO_IMAGE (repository[:tag], no digest)}@${CANDIDATE_MINIO_DIGEST:?set CANDIDATE_MINIO_DIGEST=sha256:<64 hex> (pin the candidate by digest)}"
+    # Upstream-style images take the server command (bitnami's entrypoint supplied it). The
+    # certs dir is moved to the tmpfs so the root filesystem can stay read-only.
+    command: ["server", "/data", "--console-address", ":9001", "--certs-dir", "/tmp/minio-certs"]
+    # Root inside the container (a fresh named volume is root-owned) but with no capability:
+    # it can write only what root owns (/data, the tmpfs), and cannot gain privileges.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    environment:
+      MINIO_ROOT_USER: ${CANDIDATE_ROOT_USER:-conformance-root}
+      MINIO_ROOT_PASSWORD: ${CANDIDATE_ROOT_PASSWORD:?set a throwaway CANDIDATE_ROOT_PASSWORD}
+      # The committed dev KMS key (same format as the main stack): SSE-S3 and IAM encryption.
+      MINIO_KMS_SECRET_KEY_FILE: /run/secrets/candidate_kms_key
+      HOME: /tmp
+    secrets: [candidate_kms_key]
+    volumes:
+      - candidate_data:/data
+    networks:
+      conformance:
+        aliases: [objstore-candidate]
+    mem_limit: 512m
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  # The only container on the candidate's network besides the candidate: api-test's image and
+  # environment (main docker-compose.yml), pointed at a lane DB / Redis db of its own, with
+  # just the source mounts. `run --rm conformance` only (profile).
+  conformance:
+    <<: *hardened
+    extends:
+      file: ../../../docker-compose.yml
+      service: api-test
+    profiles: !override ["conformance"]
+    environment:
+      DATABASE_URL: ${CONFORMANCE_DATABASE_URL:?set CONFORMANCE_DATABASE_URL (a lane test DB, never cyberlab_test)}
+      MIGRATION_DATABASE_URL: ${CONFORMANCE_MIGRATION_DATABASE_URL:?set CONFORMANCE_MIGRATION_DATABASE_URL}
+      TEST_MIGRATION_DATABASE_URL: ${CONFORMANCE_MIGRATION_DATABASE_URL:?set CONFORMANCE_MIGRATION_DATABASE_URL}
+      REDIS_URL: ${CONFORMANCE_REDIS_URL:?set CONFORMANCE_REDIS_URL (a lane Redis db)}
+      OBJECT_STORE_CANDIDATE_URL: http://objstore-candidate:9000
+      OBJECT_STORE_CANDIDATE_ROOT_USER: ${CANDIDATE_ROOT_USER:-conformance-root}
+      OBJECT_STORE_CANDIDATE_ROOT_PASSWORD: ${CANDIDATE_ROOT_PASSWORD:?set a throwaway CANDIDATE_ROOT_PASSWORD}
+    volumes: !override
+      - ../../../apps/api:/srv/api
+      - ../../../packages/py-jobs:/packages/py-jobs:ro
+    networks: !override
+      - backend
+      - conformance
+    depends_on: !override
+      candidate:
+        condition: service_healthy
+    command: ["uv", "run", "pytest", "-q", "-p", "no:cacheprovider", "tests/integration/test_object_store_conformance.py"]
+
+networks:
+  # The candidate's own network: internal (no egress), only `conformance` joins it.
+  conformance:
+    internal: true
+  # The main stack's backend, for the conformance container only (never the candidate).
+  backend:
+    external: true
+    name: cyberlab_backend
+
+secrets:
+  candidate_kms_key:
+    file: ../dev-kms-key
+
+volumes:
+  candidate_data: {}

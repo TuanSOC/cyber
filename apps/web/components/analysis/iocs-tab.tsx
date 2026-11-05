@@ -102,7 +102,7 @@ export function IocsTab({
           {(cited.ref || cited.invalid) && <CitedRefBar invalid={cited.invalid} onClear={onClearRef} />}
           {run && <RunProgress orgId={orgId} run={run} />}
           {/* M7 slot: "also seen in" (phase 8). */}
-          <IocSeenIn orgId={orgId} jobId={jobId} />
+          <IocSeenIn orgId={orgId} jobId={jobId} rows={iocs.data?.items} />
           <p className="text-xs text-muted-foreground">
             Observables extracted from the {source}. Threat intel chips quote each provider&apos;s own answer with its
             date (hover a chip); they are attributed statements, not our assessment. Values are copied, never opened.

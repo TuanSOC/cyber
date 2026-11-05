@@ -22,10 +22,12 @@ Base path `/api/v1`, served through the gateway. Interactive docs (dev only): `/
 | 401 | `unauthorized`, `invalid_token`, `invalid_credentials`, `invalid_refresh`, `stale_refresh` (another tab rotated: retry once), `refresh_reused` (session revoked) |
 | 403 | `forbidden`, `csrf_failed`, `cannot_modify_self` |
 | 404 | `not_found` (also for orgs you are not a member of), `user_not_found`, `results_not_available` (static job without stored results) |
-| 409 | `conflict`, `registration_failed`, `already_member`, `last_owner`, `invalid_transition`, `investigation_archived`, `evidence_archived`, `evidence_content_missing`, `org_limit_reached` (user already owns `MAX_OWNED_ORGS_PER_USER` orgs) |
+| 409 | `conflict`, `registration_failed`, `already_member`, `last_owner`, `invalid_transition`, `investigation_archived`, `evidence_archived`, `evidence_content_missing`, `org_limit_reached` (user already owns `MAX_OWNED_ORGS_PER_USER` orgs); M7: `retention_run_active`, `legal_hold_released` |
 | 405 | `method_not_allowed` |
+| 410 | M7: `evidence_purged` (download, verify and new analyses of evidence whose bytes retention purged; `purged_at` and `run_id` in the body; hashes, custody and metadata stay readable) |
 | 413 / 415 | `payload_too_large`, `storage_quota_exceeded` (upload would exceed the org quota), `unsupported_media_type` |
-| 429 | `rate_limited` (+ `Retry-After`) |
+| 422 | `validation_error`; M7: `policy_floor` (`fields` lists the values below their floor), `retention_acknowledgement_required`, `hold_scope_invalid`, `search_query_invalid` |
+| 429 | `rate_limited` (+ `Retry-After`): the route limits, and since M7 the global per-user limit (`RATE_LIMIT_USER_PER_MIN`, 600 / min on every authenticated request except `GET /auth/me`) |
 | 500 | `internal_error` (details only in server logs) |
 | 503 | `service_unavailable` (Redis down: the API fails closed) |
 
@@ -109,6 +111,16 @@ Base path `/api/v1`, served through the gateway. Interactive docs (dev only): `/
 | GET | `/orgs/{org_id}/reports/{report_id}/versions/{version}/renders` · `/orgs/{org_id}/report-renders/{render_id}` | `investigation.read` |
 | GET | `/orgs/{org_id}/report-renders/{render_id}/download` (streamed, re-hashed, audited `report.downloaded`) | `evidence.read` |
 | GET | `/orgs/{org_id}/cited-by?kind&ref_id&job_id` (AI outputs and report versions citing one row) | `evidence.read` |
+| GET / PUT | `/orgs/{org_id}/retention/policy` (M7; PUT replaces `{ti_results_days, ai_runs_days, closed_case_days, enforce, acknowledge_destruction?}`) | `org.read` / `org.update` |
+| POST | `/orgs/{org_id}/retention/preview` `{ti_results_days?, ai_runs_days?, closed_case_days?}` (read-only candidates; recorded as a manual dry run) | `org.update` |
+| GET | `/orgs/{org_id}/retention/runs` · `/orgs/{org_id}/retention/runs/{retention_run_id}` (counts, sample, items) | `audit.read` |
+| POST | `/orgs/{org_id}/retention/runs` `{dry_run?}` → 202 (mode from the DB policy) | `org.update` |
+| GET | `/orgs/{org_id}/legal-holds?investigation_id&active_only` | `investigation.read` |
+| POST | `/orgs/{org_id}/legal-holds` `{scope: org\|investigation, investigation_id?, reason}` → 201 · `/orgs/{org_id}/legal-holds/{hold_id}/release` `{reason}` | `org.update` |
+| GET | `/orgs/{org_id}/analyses/{job_id}/correlations` ("also seen in") · `/orgs/{org_id}/correlations?kind&value` (lookup) · `/orgs/{org_id}/investigations/{investigation_id}/related` | `investigation.read` |
+| POST | `/orgs/{org_id}/search` `{q, types?, cursor?}` (30 / min per user; never logged) | `investigation.read` |
+| GET | `/orgs/{org_id}/ops/metrics?window=1h\|24h\|7d` (the org's failure rate, latency, parse success) | `audit.read` |
+| GET | `/internal/metrics` (**outside `/api/v1`, never routed by the gateway**; Prometheus text) | bearer `METRICS_TOKEN` (operators) |
 
 Roles: **viewer** = all `*.read`; **analyst** = viewer + `investigation.write`, `evidence.write`; **admin** = analyst + `org.update`, `members.manage`, `audit.read`, `integrations.manage` (M4; also AI providers and settings, M5); **owner** = admin + owner-role management. So viewers read AI runs (pseudonyms kept), pseudonymized contexts and settings, analysts request runs, see outputs with original names and reveal pseudonym maps, and only admins and owners store AI keys or turn AI on. In M6, viewers read notes, collections, mappings and report versions and download reports and exports (defanged only); analysts write notes, collections, mappings and report drafts, finalize and request renders, and turn share-policy exclusions on; only admins and owners lower a TLP below the case or turn an exclusion off. RBAC stays org-wide: there is no per-case access control.
 
@@ -121,6 +133,8 @@ curl -X POST "https://host/api/v1/orgs/$ORG/investigations/$CASE/evidence?filena
 ```
 
 The body is the raw file (no multipart). Max 2 GiB (`MAX_EVIDENCE_BYTES`); at most 2 concurrent uploads per user. Each org has a storage quota (`DEFAULT_STORAGE_QUOTA_BYTES`, 20 GiB, unless an operator set a per-org value); active and archived evidence both count. An upload that would exceed it gets `413 storage_quota_exceeded`: before the body is read when `Content-Length` is declared, otherwise after spooling (the stored version is then discarded). Response includes `hashes.md5/sha1/sha256`. Downloads are `application/octet-stream` attachments with `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox`, `Cache-Control: no-store`.
+
+M7 additions to `EvidenceOut`: `declared_type` (the extension family) and `type_mismatch` (declared vs detected by magic; write-once, NULL on older rows). A mismatch is audited `evidence.type_mismatch` and **never rejects the upload**. `purged_at` is set once retention purged the bytes (then download, verify and new analyses answer `410 evidence_purged`), and `legal_hold` tells whether a hold covers the evidence. `GET /evidence/{id}` and `GET /evidence/{id}/custody` are audited (`evidence.viewed`, `evidence.custody_viewed`), at most once per user, evidence and action every 15 minutes. `InvestigationOut.legal_hold` is the case-level flag.
 
 `investigations.allowed_transitions` lists the valid next statuses for the current one.
 
@@ -222,3 +236,32 @@ Details: [REPORTS.md](REPORTS.md). Cursor-paged lists (`next_cursor`) replace li
 | 422 | `validation_error` (also a draft over 1 MiB, an analyst section over 20 000 characters), `status_reason_required`, `tlp_downgrade_not_acknowledged` (case TLP), `ref_out_of_scope` (note refs, mapping sources), `too_many_items` (10 000 active items per collection), `invalid_technique` (unknown, revoked or deprecated), `selection_out_of_scope`, `distribution_required` (TLP:RED, AMBER+STRICT or `external`), `external_review_required`, `report_too_large` (snapshot > 8 MiB), `report_too_large_to_render` (render units > `REPORT_MAX_RENDER_UNITS`; with `render_units`, `section_units`, `section_counts`), `invalid_range` (timeline export) |
 | 429 | `rate_limited` (preview, finalize, renders, the public signing keys) |
 | 503 | `signing_unavailable` (no usable signing key at finalize) |
+
+## Platform operations (M7)
+
+Design: [ARCHITECTURE.md](ARCHITECTURE.md#platform-operations-m7). Every route below is in the IDOR enumerator (`security/idor_cases_{retention,correlation,ops}.py`) and RLS-bound.
+
+**Retention policy.** `GET /retention/policy` answers the effective values, the `pending_*` values with `effective_at`, `enforce`, `pending_enforce` with `enforce_effective_at`, `delay_days` and the `floors`; with no row every value is null (keep forever) and `enforce` is off. `PUT` replaces the whole policy (every value is required; null = keep forever):
+- a **raised** value (or null) applies at once; a **lowered** one is stored as `pending_*` and applies after `RETENTION_POLICY_DELAY_DAYS` (7);
+- turning `enforce` on needs `acknowledge_destruction: true` (`422 retention_acknowledgement_required`) and is stored as `pending_enforce` until the delay passes; turning it off applies at once;
+- floors: 30 days for TI and AI, closed cases at least `max(30, EVIDENCE_LOCK_DAYS)` (`422 policy_floor`);
+- audited `retention.policy_changed` / `retention.enforce_changed`.
+
+**Preview and runs.** `POST /retention/preview` computes what a run would select now (counts per category with rows, bytes, `kept_cited`, `skipped_hold`, `skipped_locked`, a bounded sample, `truncated`, `holds_active`) through the same selector as the worker. It deletes nothing, accepts trial values (an omitted value previews the effective one), and is recorded as a manual dry run (audited `retention.previewed`). `POST /retention/runs` queues a manual run: its mode comes from the effective DB policy, never from the request (`dry_run: true` forces a dry run); `409 retention_run_active` while a run of the org is queued or running; audited `retention.run_requested`. Run reads (`audit.read`) list status, counts and timings; the detail adds the sample and the run items with their `outcome` (`purged`, `skipped_hold`, `skipped_locked`, `object_delete_failed`, `kept_cited`).
+
+**Legal holds.** `POST /legal-holds` places an org hold (no `investigation_id`) or a case hold (`investigation_id` required; `422 hold_scope_invalid` otherwise, `404` for another org's case); audited `legal_hold.placed`. The answer has `s3_sync: pending` until the retention worker mirrored a case hold as S3 legal holds (`synced`, `s3_synced_at`). `POST /legal-holds/{id}/release` needs a reason, works once (`409 legal_hold_released`), is audited `legal_hold.released`, and the hold keeps protecting until `protects_until` (release + the delay); `active` is false from the release.
+
+**Correlation** (`investigation.read`; deterministic, counts only, never across orgs):
+- `GET /analyses/{job_id}/correlations`: the job's keys shared with other jobs of the org, each with `other_jobs`, `other_cases`, first / last seen, `common` and the top cases; `indexed: false` until the indexer reached the job; `truncated` when the job hit `CORRELATION_MAX_KEYS_PER_JOB`.
+- `GET /correlations?kind&value`: where one observable was seen (the server normalizes `value`, `422 search_query_invalid` without echo when it cannot; `kind` ∈ ipv4, ipv6, domain, url, email, md5, sha1, sha256, ja3, ja3s, cert_sha256).
+- `GET /investigations/{id}/related`: cases sharing at least one non-common key, ranked by shared keys with a count per kind; `common_keys_excluded` counts the keys left out.
+
+**Search.** `POST /search` `{q, types?, cursor?}`; `q` is stripped and must be 2–256 characters without control characters (`422 search_query_invalid`); `types` ⊆ observable, case, evidence, finding, alert, note (default all); `cursor` continues one type. The answer groups hits per type (at most 20 each, plain-text `title` and `snippet`, `match` exact / fts / trigram, the ids needed for the deep link and a relative `href`) and sets `partial` when a type hit the 3 s statement timeout. 30 searches / min per user (`429`). The query travels only in the body and is **never logged or audited**; errors never echo it.
+
+**Operations metrics.** `GET /ops/metrics?window=1h|24h|7d` (`audit.read`): per kind (pcap, static, ti, ai, report) and subkind, the totals, `failure_ratio`, `parse_success_ratio` (analyzers), queue and run latency quantiles and the failures per error class, plus the active counts, computed from the org's own tenant tables.
+
+**`GET /internal/metrics`** (operators only). Mounted on the root app, not under `/api/v1`, so the gateway never forwards it; call it from the `backend` network. `404` while no `METRICS_TOKEN_FILE` is configured (the route is off), 60 requests / min per peer, `401 invalid_token` without `Authorization: Bearer <token>`, `403 proxied_request` when `X-Forwarded-For` or `Forwarded` is present. The body is Prometheus text 0.0.4 with no tenant data; `Cache-Control: no-store`.
+
+**Global rate limit.** Every request authenticated by the access cookie counts once against `RATE_LIMIT_USER_PER_MIN` (600 / min per user) after the token check; `GET /auth/me` is exempt. `429 rate_limited` + `Retry-After`; a Redis failure answers `503` (fail closed). Unauthenticated routes keep their own per-IP limits; there is no anonymous global limit.
+
+**New audit actions:** `retention.policy_changed`, `retention.enforce_changed`, `retention.previewed`, `retention.run_requested`, `legal_hold.placed`, `legal_hold.released`, `evidence.purged`, `retention.run_completed` and `retention.run_downgraded` (an enforce run whose enforce is no longer effective runs as a dry run; all three by the retention worker), `evidence.viewed`, `evidence.custody_viewed`, `evidence.type_mismatch`. The custody chain gains the action `purged` (actor: the system user `retention@system.invalid`).

@@ -1,8 +1,8 @@
 import enum
 import re
 import uuid
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import ColumnElement, Select, UnaryExpression, func, or_, select, tuple_, update
@@ -17,6 +17,7 @@ from app.modules.investigations.models import (
     Severity,
 )
 from app.modules.organizations.models import Organization
+from app.modules.retention.holds import active_holds
 from app.modules.users.models import User
 
 _CASE_REF = re.compile(r"^(?:case-?)?0*(\d{1,9})$", re.IGNORECASE)
@@ -42,6 +43,9 @@ class Row:
     investigation: Investigation
     created_by_name: str
     evidence_count: int
+    # M7: a legal hold covers the case (its own or an org hold; active or released less
+    # than RETENTION_POLICY_DELAY_DAYS ago). Archiving stays allowed: a flag only.
+    legal_hold: bool = False
 
 
 def escape_like(term: str) -> str:
@@ -114,6 +118,13 @@ _ORDER: dict[SortKey, tuple[UnaryExpression[Any], ...]] = {
 }
 
 
+async def _with_holds(session: AsyncSession, org_id: uuid.UUID, rows: list[Row]) -> list[Row]:
+    if not rows:
+        return rows
+    holds = await active_holds(session, org_id, now=datetime.now(UTC))
+    return [replace(r, legal_hold=holds.covers(r.investigation.id)) for r in rows]
+
+
 async def list_investigations(
     session: AsyncSession, org_id: uuid.UUID, filters: Filters, page: PageParams
 ) -> tuple[list[Row], int]:
@@ -121,7 +132,7 @@ async def list_investigations(
     total = (await session.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
     stmt = stmt.order_by(*_ORDER[filters.sort]).limit(page.limit).offset(page.offset)
     rows = [Row(inv, name, count) for inv, name, count in (await session.execute(stmt)).all()]
-    return rows, total
+    return await _with_holds(session, org_id, rows), total
 
 
 async def get_row(
@@ -136,7 +147,9 @@ async def get_row(
         # FOR NO KEY UPDATE: does not block evidence inserts (their FK takes KEY SHARE).
         stmt = stmt.with_for_update(of=Investigation, key_share=True)
     result = (await session.execute(stmt)).one_or_none()
-    return Row(result[0], result[1], result[2]) if result else None
+    if result is None:
+        return None
+    return (await _with_holds(session, org_id, [Row(result[0], result[1], result[2])]))[0]
 
 
 async def list_status_events(

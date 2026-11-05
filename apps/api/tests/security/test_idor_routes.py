@@ -20,6 +20,7 @@ from typing import Any
 import pytest
 from httpx import AsyncClient
 
+from app.core.config import get_settings
 from app.main import app
 from app.modules.organizations.models import MemberRole
 from app.modules.reports import dispatch
@@ -206,10 +207,13 @@ def _no_publish(monkeypatch: pytest.MonkeyPatch) -> None:
     takes part in these tests (analysis jobs are still queued for real, as before).
 
     The M6 victim extenders may install stand-ins by plain assignment (the report signing
-    key loader, the render dispatch; `idor_cases_reports._install_stand_ins`): registering
-    the current objects with monkeypatch first restores them after every test, so no
-    stand-in outlives this module (it broke `report_signing.reset_cache` in later tests)."""
+    key loader, the render dispatch; `idor_cases_reports._install_stand_ins`; the seeded
+    version's public key, `_publish_seed_key`): registering the current objects with
+    monkeypatch first restores them after every test, so no stand-in outlives this module
+    (it broke `report_signing.reset_cache` in later tests)."""
     capture_sends(monkeypatch, analyses=False)
+    settings = get_settings()
+    monkeypatch.setattr(settings, "report_signing_public_keys", settings.report_signing_public_keys)
     monkeypatch.setattr(report_signing, "_private_keys", report_signing._private_keys)
     monkeypatch.setattr(dispatch, "create_render", dispatch.create_render)
     monkeypatch.setattr(dispatch, "dispatch_render", dispatch.dispatch_render)

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// One command for the whole M1 gate: `pnpm verify` (add `--prod` to also check the prod stack).
-// Runs on the host with Node 22 + Docker; every tool runs inside containers.
+// One command for the whole gate: `pnpm verify` (add `--prod` to also check the prod stack and
+// run the M7 restore drill as its last, exclusive step). Runs on the host with Node 22 +
+// Docker; every tool runs inside containers, except the host-side dynamic gate checks (Python
+// 3 with pytest and PyYAML). `pnpm ops:metrics` (the heavy replay) is never part of the gate.
 // Set COMPOSE_PROJECT_NAME to run against a separate project with fresh volumes.
 import { spawnSync } from "node:child_process";
 
@@ -21,11 +23,17 @@ function fail(step, detail = "") {
   throw new StepFailed(detail ? `${step}\n  ${detail}` : step);
 }
 
-function run(step, command) {
-  console.log(`\n▶ ${step}\n  $ ${command}`);
-  const result = spawnSync(command, { shell: true, stdio: "inherit" });
+// `env`: extra variables for this step only (set here, not as a `NAME=value cmd` prefix,
+// which cmd.exe does not understand). Returns the step's duration in seconds.
+function run(step, command, env = {}) {
+  const shown = Object.entries(env).map(([k, v]) => `${k}=${v} `).join("");
+  console.log(`\n▶ ${step}\n  $ ${shown}${command}`);
+  const begun = Date.now();
+  const result = spawnSync(command, { shell: true, stdio: "inherit", env: { ...process.env, ...env } });
   if (result.status !== 0) fail(step, `exit ${result.status}`);
-  console.log(`✔ ${step}`);
+  const seconds = Math.round((Date.now() - begun) / 1000);
+  console.log(`✔ ${step} (${seconds} s)`);
+  return seconds;
 }
 
 // HTTP probes: a refused connection is a step failure too, not an unhandled rejection.
@@ -155,6 +163,15 @@ async function verifyProd() {
     headerProblems("https://localhost:8443", { hsts: true }),
   );
   run("Prod E2E: Playwright smoke over TLS (incl. the report flow on the real renderer)", "node scripts/e2e.mjs --prod");
+  // M7 phase 11: the restore drill is the LAST step, alone. It takes every lane slot and
+  // refuses while the main project's heavy services run, so stop the prod stack first
+  // (never `-v`: the dev volumes stay); `restoreDev()` brings the dev stack back afterwards.
+  run("Prod stack down (volumes kept) before the restore drill", `${COMPOSE_PROD} down`);
+  const drill = run(
+    "Restore drill (--prod): seed, backup, destroy, restore, verify, download; 0 mismatches",
+    "pnpm -s restore:drill --prod",
+  );
+  console.log(`  restore drill: ${drill} s (record it in the M7 gate addendum)`);
 }
 
 // Always put the dev stack back, even when a prod step failed (both share one compose project).
@@ -184,6 +201,14 @@ try {
     // REPORT_E2E=1 (M6): the render pipeline tests go through report-worker-test, which the
     // reload step started on the default lane's broker db.
     'docker compose --profile test run --rm -e CYBERLAB_LIVE_TI=0 -e AI_EVAL_LIVE=0 -e REPORT_E2E=1 api-test sh -c "uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest -q"',
+  );
+  // The dynamic-analysis gate's broker and compose checks (M7 phase 7) read repository files
+  // that api-test does not mount, so they skip there: run them on the host (stdlib, pytest
+  // and PyYAML only, no app import; see the test's docstring).
+  run(
+    "Dynamic gate (host): no dynamic / sandbox broker user, compose service or export",
+    'python -m pytest --noconftest -q -p no:cacheprovider apps/api/tests/unit/test_dynamic_gate.py -k "broker or compose or enabled or export"',
+    { PYTHONPATH: "packages/py-jobs/src" },
   );
   run(
     "Enrich worker network: only Postgres, the broker and egress (review M2)",

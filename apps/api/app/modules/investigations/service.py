@@ -78,6 +78,7 @@ def _to_out(row: repo.Row) -> InvestigationOut:
         ai_excluded=inv.ai_excluded,
         ti_excluded=inv.ti_excluded,
         share_policy=_share_policy(inv),
+        legal_hold=row.legal_hold,
     )
 
 

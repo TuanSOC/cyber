@@ -10,7 +10,7 @@ import uuid
 import magic
 from starlette.requests import ClientDisconnect, Request
 
-from app.core import storage
+from app.core import filetypes, storage
 from app.core.config import get_settings
 from app.core.deps import CurrentUser
 from app.core.errors import AppError
@@ -19,6 +19,7 @@ from app.core.hashing import ALGORITHMS, Spooled, TooLarge, spool
 from app.core.rbac import OrgContext, Permission, org_session
 from app.core.upload_slots import slot
 from app.modules.analysis import service as analysis_service
+from app.modules.audit import service as audit
 from app.modules.evidence import repository as repo
 from app.modules.evidence.locking import discard_version, lock_version
 from app.modules.evidence.models import CustodyAction, Evidence, EvidenceHash, HashAlgorithm
@@ -56,6 +57,18 @@ def _sniff(head: bytes) -> tuple[str, str]:
         return "application/octet-stream", "unknown"
 
 
+def _type_check(filename: str, mime: str, head: bytes) -> tuple[str | None, str | None, bool]:
+    """(declared family, detected family, mismatch). Metadata only: never raises, never
+    rejects, and the analyzers' routing is unchanged."""
+    try:
+        declared = filetypes.declared_family(filename)
+        detected = filetypes.detected_family(mime, filetypes.magic_route(head))
+    except Exception:  # a classification bug must not lose the evidence
+        log.exception("file type classification failed")
+        return None, None, False
+    return declared, detected, filetypes.type_mismatch(declared, detected)
+
+
 def _check_request(request: Request) -> int:
     """Validates the headers; returns the declared length (0 when not declared)."""
     content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
@@ -84,10 +97,12 @@ async def _insert_records(
     # its audit row (KEY SHARE on the org) can then never wait in a cycle with this upload.
     await quota.reserve(ctx, spooled.size)
     mime, kind = _sniff(spooled.head)
+    stored_name = sanitize_filename(filename)
+    declared, detected, mismatch = _type_check(stored_name, mime, spooled.head)
     evidence = Evidence(
         organization_id=ctx.org_id,
         investigation_id=investigation_id,
-        original_filename=sanitize_filename(filename),
+        original_filename=stored_name,
         detected_mime=mime,
         detected_description=kind,
         size_bytes=spooled.size,
@@ -96,6 +111,9 @@ async def _insert_records(
         storage_version_id=version_id,
         description=description,
         uploaded_by=ctx.user.id,
+        # M7: set at INSERT, write-once (evidence_immutable).
+        declared_type=declared,
+        type_mismatch=mismatch,
     )
     ctx.session.add(evidence)
     await ctx.session.flush()
@@ -123,7 +141,20 @@ async def _insert_records(
             "sha256": sha256,
         },
     )
-    return to_out(repo.EvidenceRow(evidence, ctx.user.display_name, dict(spooled.hashes)))
+    if mismatch:
+        # Flagged and audited in the upload's transaction; never rejected (decision).
+        audit.record(
+            ctx.session,
+            action="evidence.type_mismatch",
+            org_id=ctx.org_id,
+            actor_id=ctx.user.id,
+            target_type="evidence",
+            target_id=evidence.id,
+            details={"declared_type": declared, "detected_type": detected},
+            request=request,
+        )
+    out = to_out(repo.EvidenceRow(evidence, ctx.user.display_name, dict(spooled.hashes)))
+    return out.model_copy(update={"declared_type": declared, "type_mismatch": mismatch})
 
 
 async def upload(

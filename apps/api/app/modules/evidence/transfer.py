@@ -16,7 +16,7 @@ from app.core.rbac import Permission, org_session
 from app.core.upload_slots import slot
 from app.modules.evidence.models import CustodyAction
 from app.modules.evidence.schemas import VerifyOut
-from app.modules.evidence.service import get_row, record_event
+from app.modules.evidence.service import ensure_not_purged, get_row, record_event
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +46,7 @@ async def download(
 ) -> Download:
     async with org_session(org_id, user, Permission.EVIDENCE_READ) as ctx:
         row = await get_row(ctx, evidence_id)
+    ensure_not_purged(row)  # M7: 410 after the org check (404 for other orgs)
     e = row.evidence
     chunks = storage.iter_version(e.storage_bucket, e.storage_key, e.storage_version_id)
     try:
@@ -72,6 +73,7 @@ async def verify(
 ) -> VerifyOut:
     async with org_session(org_id, user, Permission.EVIDENCE_WRITE) as ctx:
         row = await get_row(ctx, evidence_id)
+    ensure_not_purged(row)  # M7: nothing left to re-hash; hashes and custody remain
     e, expected = row.evidence, row.hashes
     result: Literal["ok", "mismatch", "missing"]
     reason: Literal["hash", "size", "missing"] | None = None

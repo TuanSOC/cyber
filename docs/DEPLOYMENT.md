@@ -14,6 +14,7 @@ pnpm verify               # full gate (see TESTING.md)
 - Init scripts (`infra/postgres/init`, MinIO buckets) run only on empty volumes. After changing them: `docker compose down -v`.
 - Dependency changes need a rebuild: `pnpm dev` already passes `--build --renew-anon-volumes`. Since M4 the `backend` network has no egress and `UV_NO_SYNC=1` / `UV_OFFLINE=1` are set, so `uv run` never syncs at runtime: after editing `pyproject.toml`, relock with `docker compose run --rm --no-deps -e UV_FROZEN= api uv lock` while the network is up, then `docker compose build api`.
 - MinIO console: not published (MinIO sits only on internal networks, which cannot publish ports). Use the client inside the container, e.g. `docker compose exec minio mc ls local/` after `docker compose exec minio mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"`.
+- Upgrading an existing checkout to M7: **take a backup first** if the data matters (below). Add the M7 block of `.env.example` to `.env` (`POSTGRES_RETENTION_PASSWORD`, `BROKER_RETENTION_PASSWORD`, `MINIO_PURGE_ACCESS_KEY` / `MINIO_PURGE_SECRET_KEY`, `RETENTION_POLICY_DELAY_DAYS`, `RATE_LIMIT_USER_PER_MIN`; the dev compose file falls back to `change-me` values), restart `redis-broker` (ACL user `retention`), recreate `minio` (it now starts with the KMS key; the dev key is `infra/minio/dev-kms-key`) and `minio-init` (SSE-S3 bucket defaults, the purge user), and run `db-bootstrap` then the migrations (`0014` refuses to run without the `cyberlab_retention` role): `docker compose up -d` does all of it in order. Enabling the KMS key on an existing volume makes MinIO encrypt its IAM and config with it from then on: keep that key (see [SSE-S3 and the KMS key](#sse-s3-and-the-kms-key)).
 - Upgrading an existing checkout to M6: add `BROKER_REPORT_PASSWORD`, `REPORTS_BUCKET`, `REPORTS_TEST_BUCKET`, the `REPORT_SIGNING_*` lines and (optionally) `PUBLIC_BASE_URL` from `.env.example` to `.env` (the dev compose file falls back to a `change-me` broker password and the dev signing pair), restart `redis-broker` (new ACL user `report`) and `minio-init` (creates the object-locked `reports` / `reports-test` buckets and the new policy), build the `cyberlab/report-worker` image (`docker compose build report-worker`) and run the migrations (`0012`, `0013`).
 - Upgrading an existing checkout to M5: add `BROKER_ANALYST_PASSWORD`, the `AI_*` lines and `AI_MOCK_EXPECTED_KEY` from `.env.example` to `.env` (the dev compose file falls back to a `change-me` broker password for an older `.env`, RT25), rebuild the api image (new dependencies `anthropic`, `google-genai`) and run the migrations (`0011`).
 - Upgrading an existing checkout to M4: `docker compose --profile test --profile e2e down` once (the `backend` network must be recreated as `internal`), add `BROKER_ENRICH_PASSWORD`, the `TI_*` lines and `TI_MOCK_EXPECTED_KEY` from `.env.example` to `.env`, then `pnpm dev`.
@@ -27,6 +28,8 @@ pnpm prod:down
 ```
 
 Differences from dev: API `prod` target (non-root, no reload, `ENV=prod` refuses insecure cookies and `change-me` secrets), Next.js standalone server, Swagger UI disabled, MinIO console not published, HSTS + COOP headers, nonce CSP without `'unsafe-eval'` (dev adds it, and `ws:` for HMR), prod worker images (no test tooling).
+
+**M7 prod secrets.** The prod overlay requires `POSTGRES_RETENTION_PASSWORD`, `BROKER_RETENTION_PASSWORD` and `MINIO_PURGE_SECRET_KEY` (no `change-me` fallback) and reads `.secrets/minio_kms_key` ([SSE-S3 and the KMS key](#sse-s3-and-the-kms-key)) and `.secrets/metrics_token` ([Runtime metrics](#runtime-metrics)). The prod retention-worker runs `cyberlab/api:prod` with `ENV=prod` and still no JWT secret, app Redis, api MinIO user or key material. Run `pnpm verify:prod` on a fresh compose project while the dev volume's KMS key differs from the prod one (see the shared-volume caveat).
 
 **Threat-intel seal keys (M4).** `ENV=prod` refuses the committed dev seal key (`dev-` kids). Before the first prod start, generate a key pair from the repo root:
 
@@ -91,7 +94,7 @@ It writes `.secrets/report_signing_private.json` (mode 0400, chowned to uid 1000
 
 **`PUBLIC_BASE_URL`** (api): the origin printed in front of the citation paths of internal reports (e.g. `https://cyberlab.example`). Empty: paths only. Prod requires `https` (plain `http` only for localhost); `external` reports never carry it.
 
-**Backups.** A report is a DB row (`report_versions`: sha256, manifest, signature, object version id) plus the locked objects in `reports`. Back up the database and the `reports` bucket (all versions) together: a snapshot object without its row is an orphan, and a row without its object answers `409 integrity_failed`. `apps/api/app/scripts/reconcile_orphans.py` lists object versions without a row in both buckets: evidence, and in `reports` the snapshots without a `report_versions` row (a finalize that failed after the put, also logged by the API as "orphan report snapshot" with its key and version id) and the render artifacts no render recorded (an upload ingest refused, or a render still running).
+**Backups.** A report is a DB row (`report_versions`: sha256, manifest, signature, object version id) plus the locked objects in `reports`, so the database and the MinIO volume must be backed up **together**, with their version ids: since M7 `pnpm backup` does exactly that ([Backup and restore](#backup-and-restore-m7)), and `restore_verify --objects` re-hashes every snapshot and checks its signature. A snapshot object without its row is an orphan, and a row without its object answers `409 integrity_failed`. `apps/api/app/scripts/reconcile_orphans.py` lists object versions without a row in both buckets: evidence, and in `reports` the snapshots without a `report_versions` row (a finalize that failed after the put, also logged by the API as "orphan report snapshot" with its key and version id) and the render artifacts no render recorded (an upload ingest refused, or a render still running).
 
 ## Environment variables
 
@@ -129,7 +132,18 @@ It writes `.secrets/report_signing_private.json` (mode 0400, chowned to uid 1000
 | `INGEST_TMP_DIR` | ingest-worker | disk-backed volume for result validation (results up to 256 MiB compressed, 1 GiB inflated) |
 | `SURICATA_RULES` | pcap-worker-test only | small local rule file instead of the ET Open snapshot |
 | `STATIC_CLAMAV_DB`, `STATIC_YARA_TEST_RULES`, `STATIC_CAPA_RULES`, `STATIC_CAPA`, `STATIC_FLOSS` | static-worker-test only | test DB / rules and engine switches; prod uses the baked defaults |
-| `PROCESS_ROLE` | api (`api`), ingest-* (`ingest`), enrich-* (`enrich`), analyst-* (`analyst`) | `enrich` and `analyst` refuse `JWT_SECRET`, `MINIO_*` credentials and `REDIS_URL`; only `enrich` accepts `TI_SEAL_PRIVATE_KEYS_FILE`; only `analyst` accepts `AI_SEAL_PRIVATE_KEYS_FILE` and `AI_PLATFORM_KEY_FILE` |
+| `POSTGRES_RETENTION_PASSWORD` | postgres init (`02-m7-roles.sh`), db-bootstrap, retention-worker (in its `DATABASE_URL`), api-test (`RETENTION_TEST_DATABASE_URL`) | M7: password of `cyberlab_retention`; required in prod |
+| `BROKER_RETENTION_PASSWORD` | redis-broker (ACL user `retention`), retention-worker | M7: confined to `retention*` / `test.retention*` keys; required in prod |
+| `MINIO_PURGE_ACCESS_KEY`, `MINIO_PURGE_SECRET_KEY` | minio-init (creates the user), retention-worker only (test profile: `TEST_MINIO_PURGE_*`) | M7: the purge user (version delete, legal hold, no `PutObject`, no bypass, Deny on report snapshots); refused by every other `PROCESS_ROLE`; the secret is required in prod |
+| `RETENTION_POLICY_DELAY_DAYS` | api, retention-worker | M7: delay of a lowered value, of turning `enforce` on and of a hold release (default 7) |
+| `RATE_LIMIT_USER_PER_MIN` | api | M7: global per-user request limit (default 600; the test profile raises it) |
+| `MINIO_KMS_SECRET_KEY_FILE` (compose secret `minio_kms_key`) | minio, minio-init (name check only) | M7: SSE-S3 key `<name>:<base64 32 bytes>`; dev: `infra/minio/dev-kms-key` (name `cyberlab-dev-kms`, refused in prod); prod: `.secrets/minio_kms_key`. Refused by every app `PROCESS_ROLE` |
+| `MINIO_SSE_ENABLED` | minio-init | M7: `true` (default) sets the SSE-S3 bucket default on every bucket |
+| `MINIO_IMAGE`, `MC_IMAGE`, `MINIO_DATA_DIR` | minio, minio-init, backup / restore | M7: object-store image switch (defaults: `bitnamilegacy/minio:2025.5.24`, `bitnamilegacy/minio-client:2025.5.21`, `/bitnami/minio/data`) |
+| `METRICS_TOKEN_FILE` (compose secret `metrics_token`; dev override `METRICS_TOKEN_SECRET_FILE`) | api only | M7: bearer token of `/internal/metrics`; empty or unset = the route is off (dev default: an empty file) |
+| `BACKUP_DIR` | `pnpm backup` | M7: default `./backups/` (gitignored); never a path git tracks or `.secrets/` |
+| `RETENTION_BATCH_ROWS`, `RETENTION_BATCH_OBJECTS`, `RETENTION_RUN_SLICE_S`, `RETENTION_SAMPLE_LIMIT`, `RETENTION_JOB_OUTCOMES_DAYS`, `CORRELATION_COMMON_KEY_JOBS`, `CORRELATION_MAX_KEYS_PER_JOB`, `CORRELATION_INDEX_BUDGET_S`, `CORRELATION_INDEX_BATCH_JOBS`, `SEARCH_MIN_QUERY_CHARS`, `SEARCH_MAX_QUERY_CHARS`, `SEARCH_HITS_PER_TYPE`, `SEARCH_STATEMENT_TIMEOUT_S`, `SEARCH_PER_USER_PER_MIN`, `EVIDENCE_VIEW_AUDIT_DEDUPE_S` | api / workers | M7 settings with defaults 5 000, 200, 120 s, 50, 90 days, 50, 20 000, 10 s, 5, 2, 256, 20, 3 s, 30, 900 s; compose does not pass them |
+| `PROCESS_ROLE` | api (`api`), ingest-* (`ingest`), enrich-* (`enrich`), analyst-* (`analyst`), retention-worker (`retention`, M7: refuses `JWT_SECRET`, `REDIS_URL`, the api MinIO user, every seal / signing / platform key file and the metrics token, and requires the `cyberlab_retention` DB URL and the purge keys) | `enrich` and `analyst` refuse `JWT_SECRET`, `MINIO_*` credentials and `REDIS_URL`; only `enrich` accepts `TI_SEAL_PRIVATE_KEYS_FILE`; only `analyst` accepts `AI_SEAL_PRIVATE_KEYS_FILE` and `AI_PLATFORM_KEY_FILE` |
 | `BROKER_ENRICH_PASSWORD` | redis-broker (ACL user `enrich`), enrich-worker | confined to `enrich*` / `test.enrich*` keys |
 | `TI_ENABLED` | api, ingest-*, enrich-worker | default `true`; `false` hides every provider (`provider_unavailable`) |
 | `TI_SEAL_ACTIVE_KID`, `TI_SEAL_PUBLIC_KEYS` | api, ingest-*, enrich-worker | kid and `{kid: base64 X25519 public key}` JSON; dev: the committed `dev-1` pair. Prod takes them from `TI_PROD_SEAL_ACTIVE_KID` / `TI_PROD_SEAL_PUBLIC_KEYS` (a `dev-` kid is refused) |
@@ -176,7 +190,9 @@ It writes `.secrets/report_signing_private.json` (mode 0400, chowned to uid 1000
 
 | Service | Image | Trust | Notes |
 |---|---|---|---|
-| `redis-broker` | redis 7.4 | — | separate from the app Redis; ACL users `api`, `ingest`, `pcap`, `static`, `enrich`, `analyst`, `report` (+ `healthcheck`), no persistence, `maxmemory 256mb noeviction` |
+| `redis-broker` | redis 7.4 | — | separate from the app Redis; ACL users `api`, `ingest`, `pcap`, `static`, `enrich`, `analyst`, `report`, `retention` (M7) (+ `healthcheck`), no persistence, `maxmemory 256mb noeviction` |
+| `db-bootstrap` | postgres 17.11-alpine | operator (superuser), one-shot | M7: creates / updates `cyberlab_retention` (`infra/postgres/bootstrap.sh`, idempotent) before `migrate`; `backend` only |
+| `retention-worker` | `cyberlab/api` | trusted, destructive | M7: `celery -A app.workers.retention_app worker -Q retention --pool solo` without gossip/mingle/heartbeat; `backend` only, uid 10001, read-only rootfs, tmpfs `/tmp`, `cap_drop: ALL`, no-new-privileges, 384 MiB; least-privilege env (`x-retention-env`, never `*api-env`); dry run unless the DB policy says `enforce` is effective |
 | `pcap-worker` | `cyberlab/pcap-worker` (Zeek 8 base + tshark + suricata) | untrusted | `analysis` network only, read-only rootfs, `cap_drop: ALL` + 6 caps, tini init, `restart: unless-stopped` (fails closed), 2 GiB / 2 CPUs |
 | `static-worker` | `cyberlab/static-worker` (python 3.12-slim-trixie + ClamAV, yara-python, pefile, pyelftools, capa, FLOSS) | untrusted | same isolation as pcap-worker (`analysis` network, read-only rootfs, caps, tini, fail-closed restart), 3 GiB / 2 CPUs |
 | `ingest-worker` | `cyberlab/api` | trusted | `celery worker --pool solo`, app DB role + scoped MinIO user |
@@ -191,7 +207,7 @@ It writes `.secrets/report_signing_private.json` (mode 0400, chowned to uid 1000
 
 | Network | Internal | Members |
 |---|---|---|
-| `backend` | yes (no egress) | postgres, redis, redis-broker, minio, minio-init, migrate, api, ingest-worker, ingest-beat, gateway, api-test |
+| `backend` | yes (no egress) | postgres, redis, redis-broker, minio, minio-init, db-bootstrap (M7), migrate, api, ingest-worker, ingest-beat, retention-worker(-test) (M7), gateway, api-test |
 | `enrich` | yes | postgres, redis-broker, enrich-worker(-test), analyst-worker(-test): the workers' data path, without the app Redis, MinIO, the API or the gateway |
 | `frontend` | no | web, gateway, e2e |
 | `analysis` | yes | pcap-worker(-test), static-worker(-test), report-worker(-test), redis-broker, minio |
@@ -205,6 +221,7 @@ Runtime egress per service (checked 2026-11-05 on Docker Desktop 4.x / WSL2: `/p
 | minio, minio-init | no | none | `mc` talks to `minio:9000`; dev console port dropped |
 | migrate, api, api-test | no | none | `UV_NO_SYNC` / `UV_OFFLINE`; the API never calls a provider or resolves an external name (MISP URLs are checked syntactically) |
 | ingest-worker, ingest-beat | no | none | broker, Postgres, MinIO only |
+| retention-worker(-test), db-bootstrap | no | none | M7: `backend` only (Postgres, the broker, MinIO) |
 | pcap-worker, static-worker | no | none | `analysis` (unchanged); rules and AV DB are baked at build time |
 | report-worker(-test) | no | none | `analysis`; fonts and templates baked into the image; the render subprocess cannot open inet sockets at all (`apps/workers/report/tests/test_isolation.py`, `test_sandbox.py`) |
 | enrich-worker(-test) | **yes** (provider APIs) | via `egress` | one of two (with the analyst-worker); on `enrich` + `egress`, never `backend` or `analysis` (`tests/container/test_enrich_network.py`, run by the gate inside `enrich-worker-test`) |
@@ -221,6 +238,133 @@ Runtime egress per service (checked 2026-11-05 on Docker Desktop 4.x / WSL2: `/p
 
 ## Operations
 
-- Orphan check (report-only): see `apps/api/app/scripts/reconcile_orphans.py` (runs as the Postgres superuser).
+- Orphan check (report-only): see `apps/api/app/scripts/reconcile_orphans.py` (runs as the Postgres superuser). Since M7 it also reports `purged_pending_delete` (a tombstoned version still stored; the next retention run retries the delete) and `missing_unexplained` (a pinned version gone **without** a tombstone: a deletion outside retention, e.g. by the api's cleanup grant after the lock expired; investigate it).
+- Correlation backfill for a large install (outside the ingest worker): `docker compose run --rm --no-deps ingest-worker uv run python -m app.scripts.backfill_correlation [--batch 20]` (idempotent, may run next to the beat task, which also backfills at most 5 jobs per minute).
 - Per-org storage quota: as the DB owner, `UPDATE organizations SET storage_quota_bytes = <bytes> WHERE id = '<org>'` (NULL returns to `DEFAULT_STORAGE_QUOTA_BYTES`). The app role cannot write this column. Usage is shown in the org settings page (`GET /orgs/{org}/storage`).
 - Governance-locked evidence can only be removed by the MinIO root user with bypass — an administrative, audited-outside-the-app action.
+- Retention, legal holds and the M7 operations: see the sections below.
+
+## Backup and restore (M7)
+
+Offline, quiesced, single node: the whole stack is one maintenance window of a few minutes at this scale (it grows with the MinIO volume: a 20 GiB tar takes minutes). Design and rationale: [ARCHITECTURE.md](ARCHITECTURE.md#backup-and-restore). Online backup (Postgres PITR, MinIO site replication) needs a second site and is not provided.
+
+### What a backup is (TLP:RED)
+
+`backups/<UTC timestamp>/` (or `--out <dir>`; `BACKUP_DIR` changes the parent) holds `postgres.dump` (`pg_dump -Fc` as the superuser), `globals.sql` (roles without passwords, for reference), `security.json` (RLS flags, policies, grants, triggers, role attributes), `tables.json` (exact row counts), `objects.json` (every object version with size, etag, retention and legal hold), `minio-data.tar` (the MinIO data volume, relative to `MINIO_DATA_DIR`) and `manifest.json` (sha256 and size of every file, alembic head, image ids, `MINIO_IMAGE`, `MINIO_DATA_DIR`, `EVIDENCE_LOCK_DAYS`, the KMS key name and sha256 fingerprint, never the key).
+
+It contains **every org's evidence** (malware samples included; objects written before SSE-S3 are plaintext in the tar), notes, reports, TI and AI results, the argon2 password hashes, the refresh-token hashes, the sealed provider keys and MinIO's IAM store. It holds no plaintext secret, but it is the prime exfiltration target:
+- store it on an encrypted target **excluded from host antivirus** (AV quarantines evidence bytes, as it does the e2e samples, and can lock `minio-data.tar` mid-write);
+- encrypt it offline, e.g. `tar -C backups/<ts> -cf - . | age -r <recipient> -o cyberlab-<ts>.tar.age`;
+- the script refuses a target git would track and anything inside `.secrets/`; backups are never committed.
+
+**Secrets are not in the backup.** Back them up separately, encrypted, every time they change: `.env` (DB, MinIO and broker passwords, `JWT_SECRET`) and `.secrets/*` (the TI and AI seal private keys: without them the sealed provider keys are unrecoverable; the report signing keys; the MinIO KMS key: without it MinIO cannot read its IAM, config or any SSE object; the metrics token):
+
+```bash
+tar -C . -cf - .env .secrets | age -r <recipient> -o cyberlab-secrets.tar.age
+```
+
+Redis and the broker are not backed up (denylist, rate limits, queues): the reapers fail jobs that were in flight.
+
+### Take a backup
+
+```bash
+pnpm backup                         # dev stack; -- --prod for the prod-like stack
+pnpm backup -- --out D:/cyberlab-backups/2026-11-06 --drain-timeout 900
+```
+
+1. Preconditions: the stack is up and healthy; no test-profile or `compose run` container of the project runs (they share Postgres and MinIO); free disk ≥ 1.2 × (pgdata + MinIO volume) (`--force` skips the disk check).
+2. **Drain:** it waits until no analysis job, TI run, AI run, render or retention run is queued or running (`--drain-timeout`, default 600 s; then it refuses unless `--force`, which turns in-flight work into reaper failures). Announce the window: the gateway and web stop too.
+3. It stops every writer, dumps Postgres, captures `objects.json` while MinIO is still up, stops MinIO, tars its volume, writes the manifest and **restarts what was running, also after a failure**. It then prints what the backup holds and the secrets checklist.
+
+Keep several generations according to your own backup-retention policy; the platform does not prune backups. A purge is not retroactive in older backups.
+
+### Restore
+
+A restore only fills an **empty** stack. It never removes a volume.
+
+```bash
+docker compose down -v                                   # deliberately: this destroys the current data
+pnpm restore -- --from backups/20261106T101500Z --replace-empty-stack            # dev
+pnpm restore -- --from <dir> --replace-empty-stack --prod                        # prod-like stack
+```
+
+1. **Before:** restore `.env` and `.secrets/` from the encrypted secrets backup of the same period. The restore refuses a KMS key whose fingerprint differs from the manifest's, a manifest or file hash mismatch, and a backup whose alembic head is newer than the image's (an older one is upgraded by `migrate`).
+2. It refuses non-empty volumes (MinIO with `.minio.sys`, or `cyberlab` with an `alembic_version`) with exit code 3 and prints the `down -v` command.
+3. postgres alone (its init creates the databases and roles), `db-bootstrap`, `pg_restore --exit-on-error --single-transaction` as the superuser, then **`restore_verify --db`** at once (security fingerprint and row counts equal the backup's).
+4. Untar the MinIO volume into the target image's data dir, start minio and `minio-init`, then **`restore_verify --objects`** (every version of `objects.json` with its size, etag, retention and legal hold; evidence re-hashed against `evidence_hashes`; report snapshots re-hashed and their signatures checked with `REPORT_SIGNING_PUBLIC_KEYS`; renders and job results re-hashed). `--sample N` re-hashes a random sample of the evidence instead of all of it. A tombstoned evidence version still present is the warning `purged_pending_delete`; a pinned version missing without a tombstone is an error.
+5. `migrate`, then **every refresh token is revoked** (`--keep-sessions` opts out), the stack starts and **`restore_verify --rls`** probes isolation as `cyberlab_app`.
+
+After the restore:
+- **After an incident, rotate `JWT_SECRET`** (and restart the api): Redis is not restored, so access tokens logged out after the backup point are valid again until they expire (≤ 15 min, RT26). Rotating it signs everyone out and invalidates in-flight render tokens.
+- **After restoring an older backup, run retention again** (it is idempotent): request a manual run per org (`POST /api/v1/orgs/{org}/retention/runs`) or wait for the daily sweep.
+- Run `reconcile_orphans.py` (Operations) if anything looked off: it lists objects without a row, `purged_pending_delete` and `missing_unexplained` versions.
+
+### Restore drill
+
+`pnpm restore:drill` proves the whole cycle on throwaway data in the project `cyberlab-drill` (own volumes and networks, no published ports, about 1.2 GB) and never touches the main project's data: `down -v` is refused for any project but the literal `cyberlab-drill`. Run it **alone**: it takes every lane slot and refuses while the main project's analyzers or renderer run. `--target-minio-image <img> [--target-minio-data-dir <dir>]` restores the seeded bitnami volume into another MinIO image (the image-switch proof). Results: `infra/backup/last-drill.json`. Details: [TESTING.md](TESTING.md#restore-drill).
+
+## SSE-S3 and the KMS key
+
+- MinIO's built-in KMS key (`MINIO_KMS_SECRET_KEY_FILE`, compose secret `minio_kms_key`, format `<key-name>:<base64 of 32 bytes>`) and `mc encrypt set sse-s3` on every bucket (`minio-init`, `MINIO_SSE_ENABLED=true`). Presigned uploads and downloads are unaffected.
+- **New objects only.** Objects written before the key was enabled stay plaintext on disk and in backups until rewritten.
+- **The key also encrypts MinIO's IAM and config** (RT7). Losing or changing it leaves MinIO unable to read its users and policies, not only the encrypted objects. Never change the key of an existing volume; back it up encrypted with the other secrets.
+- Dev uses the committed `infra/minio/dev-kms-key` (name `cyberlab-dev-kms`); `minio-init` refuses that name when `ENV=prod`. Prod: generate once and keep it out of git:
+
+  ```bash
+  python -c "import os,base64;print('cyberlab-kms-1:'+base64.b64encode(os.urandom(32)).decode())" > .secrets/minio_kms_key
+  ```
+- **Shared volume caveat for `pnpm verify:prod`:** the dev and prod-like stacks run in one compose project and share the `miniodata` volume. Once dev MinIO has written its IAM with the dev key, starting the prod overlay with `.secrets/minio_kms_key` (a different key) leaves MinIO unable to read its users. Run the prod gate on a fresh project (`COMPOSE_PROJECT_NAME=cyberlab-clean pnpm verify:prod`, then `COMPOSE_PROJECT_NAME=cyberlab-clean docker compose down -v`) until the gate's key handling is settled (M7 phase 11). Do not "fix" it by copying the dev key into `.secrets/`: prod refuses it.
+- The key sits on the same host: SSE-S3 protects against the loss of a volume or disk, not against a host compromise. A restore refuses a key with another fingerprint than the backup's.
+
+## Object-store image
+
+Upstream MinIO archived its community repository (2026-04-25) and ships no images; the default stays the frozen `bitnamilegacy/minio:2025.5.24` / `bitnamilegacy/minio-client:2025.5.21`, which carry known unpatched issues (CVE-2025-62506; SN-2026-015/016, a GOVERNANCE retention bypass). Recorded in THREAT_MODEL. **Recommended, pending the user's decision:** `pgsty/silo` (the maintained, on-disk-compatible fork; AGPL-3.0) pinned by digest after `cosign verify` ([researcher report](../plans/reports/researcher-261106-m7-object-store.md)).
+
+Switch procedure (only through `MINIO_IMAGE` / `MC_IMAGE` / `MINIO_DATA_DIR`, which keep the on-disk format and so every pinned version id):
+1. `pnpm backup` first: Silo cannot roll back once it has written its new IAM history.
+2. Prove the candidate: the object-store conformance suite against a throwaway candidate (`infra/minio/image/docker-compose.candidate.yml`, `OBJECT_STORE_CANDIDATE_URL=http://objstore-candidate:9000`, see TESTING), then `pnpm restore:drill -- --target-minio-image pgsty/silo@sha256:<digest> --target-minio-data-dir /data`.
+3. Set `MINIO_IMAGE=pgsty/silo@sha256:<digest>` and `MINIO_DATA_DIR=/data`; the minio service then needs `command: ["server", "/data", "--console-address", ":9001"]` (bitnami's entrypoint supplied it). Keep `MC_IMAGE` on the bitnami client until `infra/minio/init.sh` accepts the `mcli` binary of `pgsty/mc`. The console stays unpublished.
+4. Restore the backup into the new image (`pnpm restore`), which untars into the new data dir.
+
+Fallback: an own source build of the last upstream release (`infra/minio/image/Dockerfile`; no future patches). RustFS, SeaweedFS and Ceph RGW cannot read MinIO's format: moving to them breaks every version-id pin.
+
+## Retention operations
+
+Concepts: [ARCHITECTURE.md](ARCHITECTURE.md#retention-purge-and-legal-hold). Every org starts with **no policy: nothing is ever purged**.
+
+- **Policy** (org settings → Retention, `org.update`): `ti_results_days`, `ai_runs_days` (≥ 30) and `closed_case_days` (≥ max(30, `EVIDENCE_LOCK_DAYS`)). A raised value applies at once; a lowered one, turning `enforce` on (with the destruction acknowledgement) and a hold release take effect after `RETENTION_POLICY_DELAY_DAYS` (7). Until `enforce` is effective every run is a dry run.
+- **Preview first:** the preview shows the candidates, counts and bytes now, read-only, through the same selector as the purge, and is kept as a manual dry run in the run list. Read a run's items (`audit.read`) to see what was purged, skipped (`skipped_hold`, `skipped_locked`), kept because a report cites it (`kept_cited`) or failed to delete (`object_delete_failed`, retried by the next run).
+- **Schedule:** `ingest-beat` sends `retention.sweep` daily at 02:30 UTC; one run per org with an effective policy, time-sliced and resumed. A manual run waits for none of that (`409` while one runs). The sweep also deletes `job_outcomes` rows older than `RETENTION_JOB_OUTCOMES_DAYS` (90).
+- **Legal holds** (org or case, `org.update`, a reason is required): held data is excluded from every category. The retention worker mirrors **case** holds as S3 legal holds (`s3_sync: pending` until it ran; it runs on each placement and every sweep). An **org** hold is DB-only. A released hold keeps protecting for the delay.
+- **Identities:** the worker connects as `cyberlab_retention` (`POSTGRES_RETENTION_PASSWORD`; created by `db-bootstrap`) with the broker user `retention` and the MinIO user `cyberlab-purge` (`MINIO_PURGE_*`, created by `minio-init` from `infra/minio/purge-policy.template.json`). Custody events of a purge name the inactive system user `retention@system.invalid`, which cannot log in.
+- **What a purge leaves:** case, evidence and job metadata, hashes, custody (`purged`), audit (`evidence.purged`), findings, alerts, IOCs, correlation keys and signed snapshots. The evidence page shows "bytes purged"; download and verify answer `410 evidence_purged`. A purged rendition can be re-rendered.
+- **Never purged by policy:** notes, collections, audit logs, custody, signed report snapshots and versions. Governance-locked or legal-held object versions are skipped, never bypassed.
+
+## Runtime metrics
+
+- **Token:** create `.secrets/metrics_token` (prod overlay), or point the dev stack at a token file with `METRICS_TOKEN_SECRET_FILE` (the dev default is an empty file, which turns the route off):
+
+  ```bash
+  python -c "import secrets;print(secrets.token_urlsafe(32))" > .secrets/metrics_token
+  ```
+- `/internal/metrics` is served by the api on port 8000 outside `/api`; **the gateway never routes it**, so a scraper must join the `backend` network (it is internal: the scraper gets no egress there). No Prometheus server is part of compose. Example scrape config for a Prometheus container attached to `cyberlab_backend`:
+
+  ```yaml
+  scrape_configs:
+    - job_name: cyberlab
+      scrape_interval: 60s
+      metrics_path: /internal/metrics
+      scheme: http
+      authorization:
+        type: Bearer
+        credentials_file: /etc/prometheus/cyberlab_metrics_token
+      static_configs:
+        - targets: ["api:8000"]
+  ```
+  Do not put a proxy in between that adds `X-Forwarded-For` (the endpoint answers 403). 60 requests / min per peer.
+- Per-org numbers for admins: org settings → Operations (`GET /orgs/{org}/ops/metrics`, `audit.read`).
+- `pnpm ops:metrics` replays the synthetic datasets through the real workers and writes `plans/reports/ops-metric-YYMMDD.md` (heavy: run alone, with the dev stack up). `pnpm live:run` runs the budgeted live TI / AI checks with your own keys (`CYBERLAB_LIVE=1`, `.secrets/live.env`, `--max-calls`, `--max-usd`); it is never part of the gate.
+
+## Global rate limit
+
+`RATE_LIMIT_USER_PER_MIN` (api, default 600) caps authenticated requests per user and minute (`429` + `Retry-After`; Redis down: `503`). Raise it for automation-heavy users or the e2e (the test profile uses 100 000). Search has its own `SEARCH_PER_USER_PER_MIN` (30). There is no anonymous or gateway-level flood limit: put a rate-limiting proxy or WAF in front of a real deployment.

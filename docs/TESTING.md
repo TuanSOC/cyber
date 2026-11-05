@@ -12,8 +12,14 @@
 | `pnpm test:workers` | The analyzers and the renderer, each inside its real image (tools, seccomp, caps): ruff, format, mypy, engine, evaluation and fuzz-lite tests of the pcap worker, then of the static worker; the shared worker kit suite (sandbox, isolation, broker ACL) runs in both images; then the report-worker suite in `report-worker-test` (ruff, format, mypy, sandbox, isolation, renderers; M6) |
 | `pnpm e2e` | Playwright golden path against the running stack (`pnpm e2e --prod` for the prod-like stack; `pnpm e2e reports` runs only the specs whose name matches) |
 | `pnpm gen:contracts` | Regenerate the OpenAPI contract and TS types (`verify` fails on drift) |
+| `node --test scripts/lib/stack.test.mjs` | M7: the backup / restore / drill helpers on the host, no container (the `down -v` guard, RT2; the lane lock root, RT25; SQL copies in sync) |
+| `pnpm restore:drill` | M7 heavy step, **run alone**: seed → backup → `down -v` → restore → verify → login + download in the project `cyberlab-drill` (about 1.2 GB; `--target-minio-image` restores into another image); timings in `infra/backup/last-drill.json` |
+| `pnpm ops:metrics` | M7 heavy step, never in the gate: replays the M2 dataset and the M3 sample set through the real workers and writes `plans/reports/ops-metric-YYMMDD.md` |
+| `pnpm live:run` | M7, never in the gate: budgeted live TI / AI runs (`CYBERLAB_LIVE=1`, `.secrets/live.env`, `--max-calls`, `--max-usd`); writes `plans/reports/live-run-YYMMDD.md`, "not run" when refused |
 
 To prove the gate from empty volumes without touching dev data, stop the dev stack (`pnpm down`, volumes kept) and run `COMPOSE_PROJECT_NAME=cyberlab-clean pnpm verify`, then `COMPOSE_PROJECT_NAME=cyberlab-clean docker compose down -v`.
+
+**M7 KMS caveat for `verify:prod`:** the dev and prod-like stacks share one compose project and so one MinIO volume. Dev MinIO encrypts that volume's IAM and config with the committed dev KMS key; the prod overlay starts MinIO with `.secrets/minio_kms_key`, a different key, and MinIO could then not read its users. Run the prod gate on a fresh project (`COMPOSE_PROJECT_NAME=cyberlab-clean pnpm verify:prod`) until phase 11 settles how the gate shares keys ([DEPLOYMENT](DEPLOYMENT.md#sse-s3-and-the-kms-key)).
 
 Test isolation: the API suite uses `cyberlab_test`, Redis db 1 and the `evidence-test` bucket; the harness refuses any database not ending in `_test` and Redis db 0, truncates tables and flushes Redis around each test, and purges the test bucket (including locked versions) at session start/end.
 
@@ -31,6 +37,7 @@ Test isolation: the API suite uses `cyberlab_test`, Redis db 1 and the `evidence
 - API (M4 additions): the threat-intel suites, the enrich worker pipeline through `ti-mock` and the network tests; see [M4 threat intelligence suites](#m4-threat-intelligence-suites).
 - API (M5 additions): the AI analyst suites, the evaluation harness and the analyst network tests; see [M5 AI analyst suites](#m5-ai-analyst-suites).
 - API and report-worker (M6 additions): case management, share policy, reports, signing, renders and the renderer's sandbox; see [M6 reports and case management suites](#m6-reports-and-case-management-suites).
+- API (M7 additions): schema and grants, backup / restore verification, retention and legal hold, correlation, search, job outcomes and metrics, the hardening items and the dynamic-analysis gate; see [M7 platform operations suites](#m7-platform-operations-suites).
 - Web: unit tests (redirect safety, CSP builder, pcap and static result helpers, TI wording and helpers), typecheck, lint, production build.
 - E2E: Playwright specs, run against dev (`pnpm e2e`) and the prod-like stack over TLS (`pnpm e2e --prod`, part of `verify:prod`), with no console errors:
   - `smoke.spec.ts`: register → create case → upload (hash checked against a locally computed SHA-256) → verify → custody chain → sign out;
@@ -67,13 +74,18 @@ E2E runs against the real stack, not the test database. Each run:
 | Evidence retention lock | ✅ | `test_evidence.py::test_uploaded_version_is_retention_locked`, `test_storage_minio.py` |
 | Positive control for every IDOR case (owner request succeeds) | ✅ | `test_idor_routes.py::test_owner_request_succeeds` |
 | Malware scanning of uploads | ✅ M3: ClamAV + YARA on every non-empty upload ≤ 64 MiB; never "clean" when not fully scanned | `test_analysis_static.py::test_auto_run_matrix`, static worker `test_engines.py` |
-| Data retention / expiry policy | ⏳ later (only the 30-day governance lock exists) | — |
-| Backup / restore | ⏳ later | — |
-| Parser vulnerabilities | ⏳ M2+ (no parsers yet; evidence is never parsed in M1) | — |
-| Prompt injection | ✅ M5: spotlighting, verifier, scope re-checks, text-only output; HostileProvider and P1–P8 adversarial twins (integrity attacks detected, not prevented) | `test_ai_prompt.py`, `test_ai_verify.py`, `test_ai_postprocess*.py`, `ai_eval/test_ai_eval_invariants.py` |
-| AI evidence citation accuracy (§14) | ✅ offline (FakeProvider 1.000, HostileProvider 0 violations); ⏳ live: none recorded | [M5 metric](#m5-metric-ai-evidence-citation-accuracy) |
+| Data retention / expiry policy | ✅ M7: per-org policy with floors and a 7-day delay on every loosening, dry run by default, legal hold (DB and S3), least-privilege purge with tombstones (dry-run / enforce equality on the same seed) | `test_retention_policy.py`, `test_retention_preview.py`, `test_retention_runs.py`, `test_retention_purge.py`, `test_retention_holds.py`, `test_retention_objects.py`, `test_retention_acl.py`, `test_retention_append_only_exception.py`, `unit/test_retention_select.py` |
+| Backup / restore | ✅ M7 (offline): manifest, three-phase `restore_verify`, `down -v` guard; the end-to-end restore drill is a heavy gate step ([M7](#m7-platform-operations-suites)) | `unit/test_backup_manifest.py`, `unit/test_restore_verify.py`, `integration/test_restore_verify_db.py`, `scripts/lib/stack.test.mjs`, `pnpm restore:drill` |
+| Prompt injection | ✅ M5: spotlighting, verifier, scope re-checks, text-only output; HostileProvider and P1–P8 adversarial twins (integrity attacks **detected, not prevented**) | `test_ai_prompt.py`, `test_ai_verify.py`, `test_ai_postprocess*.py`, `ai_eval/test_ai_eval_invariants.py` |
+| AI evidence citation accuracy (§14) | ✅ offline only: FakeProvider 1.000 (pipeline check, not a model); HostileProvider 0 floor violations, but attack success rate **0.290** (84 canary leaks, 28 external URLs, 20 forbidden verdicts, 14 severity downgrades, all **detected and withheld or flagged, not prevented**); ⏳ live: none recorded | [M5 metric](#m5-metric-ai-evidence-citation-accuracy) |
 | AI provider keys sealed, write-only, never exposed | ✅ M5 (own seal domain, analyst-only private key) | `test_ai_seal.py`, `test_ai_import_guard.py`, `test_ai_api_providers.py::test_sentinel_key_never_leaks` |
-| Sandbox escape assumptions | ⏳ dynamic analysis milestone | — |
+| Sandbox escape assumptions | ✅ for the workers (analyzers and renderer: seccomp, uid, no egress, kill-by-uid); dynamic analysis: ⏳ designed, not enabled, and a gate test fails if it is wired ([SANDBOX_SECURITY.md](SANDBOX_SECURITY.md)) | `py-worker-kit/tests/test_sandbox.py`, `report/tests/test_isolation.py`, `tests/container/test_egress.py`, `unit/test_dynamic_gate.py` |
+| Rate limiting (§13) | ✅ M7: global per-user limit (429 + `Retry-After`, fail closed) plus the M1–M6 route limits; ⏳ no anonymous / gateway-level limit | `test_global_rate_limit.py`, `test_auth_rate_limit.py` |
+| File type verification (§13) | ✅ M7: declared vs detected type flagged and audited, never rejected | `test_type_mismatch.py`, `unit/test_filetypes.py` |
+| Secure object storage (§13) | ✅ M7: SSE-S3 on every bucket (new objects), object lock, legal hold, purge user conformance; ⏳ the MinIO image is unpatched (THREAT_MODEL) | `test_storage_sse.py`, `test_object_store_conformance.py` |
+| Auditable access (§10) | ✅ M7: evidence detail and custody views audited, deduplicated | `test_evidence_view_audit.py`, `unit/test_audit_dedupe.py` |
+| Worker failure rate, analysis latency, parsing success over real runs (§14) | ✅ M7 instrumented (`job_outcomes` triggers, `/internal/metrics`, org page); numbers from a replay of the **synthetic** datasets in `ops-metric-*.md` once recorded | `test_job_outcomes_triggers.py`, `test_internal_metrics.py`, `test_ops_metrics.py`, `unit/test_error_classes.py`, [M7 metrics](#m7-metrics) |
+| Cross-tenant search and correlation | ✅ M7: never another org's rows | `test_search.py`, `test_correlation_reads.py`, `test_correlation_related.py`, IDOR enumerator |
 | Controlled PCAP dataset (normal web, DNS, TLS, beacon, DNS anomalies, port scans, suspicious HTTP) | ✅ synthetic, generated at test time with ground-truth labels | `apps/workers/pcap/dataset/` |
 | Detection precision/recall, parsing success, latency | ✅ (synthetic) | `tests/evaluation/test_detection_quality.py` |
 | Parser vulnerabilities (posture) | ✅ isolation + fuzz-lite (50 mutated captures and 50 mutated PE/ELF end cleanly); upstream fuzzing not replicated | `tests/evaluation/test_fuzz_lite.py` (both workers), `test_sandbox.py`, `test_parsers.py`, `test_hostile_output.py` |
@@ -82,7 +94,7 @@ E2E runs against the real stack, not the test database. Each run:
 | Threat-intel API keys encrypted, never exposed to the browser | ✅ M4: sealed, write-only, never in reprs or error paths (full sentinel crawl: phase 7) | `test_ti_seal.py`, `test_ti_http.py`, `test_ti_api_integrations.py` |
 | IOC enrichment: cache, rate limits, history, source attribution | ✅ M4 (fixtures and `ti-mock`; no live provider) | `test_ti_cache.py`, `test_ti_ratelimit.py`, `test_enrich_worker.py`, `test_ti_pipeline.py`, `ti-wording.test.ts` |
 | SSRF (org-supplied MISP URL) | ✅ M4 | `test_ti_ssrf.py`, `test_ti_ssrf_resolve.py`, `test_ti_misp_worker.py` |
-| IOC enrichment success metric | ⏳ M4 phase 7 (placeholder below) | `apps/api/tests/ti/test_enrichment_metric.py` |
+| IOC enrichment success metric (§14) | ✅ 0.978 over 600 lookups under **synthetic faults** (fixture handlers, no live provider; `plans/reports/ti-metric-261105.md`); ⏳ live: none recorded | `apps/api/tests/ti/test_enrichment_metric.py`, [M4 metric](#m4-metric-ioc-enrichment-success-resilience-under-synthetic-faults) |
 | Professional reports with evidence citations (§1, §9) | ✅ M6: signed snapshot, `[Cn]` citations re-queried in scope with field hashes, offline verification | `test_report_citations.py`, `test_report_finalize.py`, `test_verify_report_script.py` |
 | Case management: notes, IOC collections, status, ATT&CK, timeline (§10) | ✅ M6 | `test_case_notes.py`, `test_case_ioc_collections.py`, `test_case_status.py`, `test_case_attack.py`, `test_timeline_export.py` |
 | Preserve analysis history (§10) | ✅ M6: append-only note versions, status events, report versions and citations (also for the owner) | `test_case_notes.py::test_version_rows_refuse_update_in_the_db`, `test_case_status.py::test_history_rows_refuse_mutation_by_the_owner_too`, `test_report_finalize.py::test_versions_and_citations_are_append_only` |
@@ -101,8 +113,8 @@ E2E runs against the real stack, not the test database. Each run:
 | Fuzz-lite (50 mutants) | 50/50 terminal: 23 results, 22 unparseable, 3 unsupported format, 2 zeek_failed; 0 hangs/crashes |
 | Ingest of 100 k flows | ≈ 20 s (validation ≈ 4 s, inserts ≈ 12 s) |
 
-These are synthetic numbers: they show the detectors behave as specified, not real-world quality.
-Regenerate them with `EVALUATION_OUT=/tmp/eval.json` in the worker test container. Worker failure rate is the fuzz-lite outcome distribution. IOC enrichment and AI citation accuracy are M4/M5 metrics.
+These are synthetic numbers: they show the detectors behave as specified, not real-world quality. The dataset was generated together with the detectors; there is no real-world or third-party labelled capture set.
+Regenerate them with `EVALUATION_OUT=/tmp/eval.json` in the worker test container. The fuzz-lite distribution is a robustness check, not the runtime worker failure rate, which M7 measures from `job_outcomes` ([M7 metrics](#m7-metrics)). IOC enrichment and AI citation accuracy are M4/M5 metrics.
 
 ## M3 metrics (synthetic sample set, test ClamAV DB)
 
@@ -228,7 +240,7 @@ After changing AI code, recreate the workers (`docker compose --profile test up 
 | Replay (**replayed**) | 0 | no cassettes committed | | | | | | | | | |
 | Live Anthropic / Gemini (**live**) | 0 | **none recorded**: no key available locally | | | | | | | | | |
 
-Recorded 2026-11-05 (`python scripts/ai_eval.py`, offline) over the cases regenerated that day from the real pipelines (`scripts/ai_eval_snapshot.py`: pcap-worker-test and static-worker-test on the synthetic dataset and samples, normalized rows only; `provenance.source = pipeline`). Tokens, cost and latency (p50 / p95) and the per-payload ASR (P1–P8) are only meaningful for a model and have no value until a live or replayed run exists. The HostileProvider "ASR" counts the attacks its scripts attempt, not attacks that got through: the floor violations column (0) is the gate.
+Recorded 2026-11-05 (`python scripts/ai_eval.py`, offline) over the cases regenerated that day from the real pipelines (`scripts/ai_eval_snapshot.py`: pcap-worker-test and static-worker-test on the synthetic dataset and samples, normalized rows only; `provenance.source = pipeline`). Tokens, cost and latency (p50 / p95) and the per-payload ASR (P1–P8) are only meaningful for a model and have no value until a live or replayed run exists. The HostileProvider "ASR" counts the attacks its scripts attempt, not attacks that got through: the floor violations column (0) is the gate. Read the two together: **0 floor violations** means nothing unverified was shown as verified; it does **not** mean the injections failed. In 0.290 of the hostile runs the scripted model did what the injection asked (84 canary leaks among them), and the platform detected it and withheld, flagged or hid the output. Prompt injection is detected, not prevented.
 
 CI floors are exact invariants (0 unverified or invalid citations counted as verified, 0 supported claims without a verified citation, 0 supported observed claims on trivial or unanchored quotes, 0 links persisted, 0 cross-org refs accepted, 0 invalid ATT&CK shown, 0 schema-invalid outputs persisted, every canary leak caught, every stripped code point removed). Live floors are reported, never gating: citation accuracy ≥ 0.95, unsupported ≤ 0.05, integrity ASR ≤ 0.05, utility ≥ 0.9. These offline numbers prove the verifier, not a model; the §14 metric has no live value yet.
 
@@ -260,7 +272,7 @@ After changing renderer code, recreate the workers (`docker compose --profile te
 
 ## M6 metric: report quality
 
-Recorded during the build in the report-worker image; phase 9 records the gate run (citation resolution accuracy, render success rate, latency per format, deterministic-render rate, hostile-fixture escapes and the local veraPDF result) in `plans/reports/report-metric-YYMMDD.md` and here.
+Recorded during the build in the report-worker image. The gate-run report promised by M6 phase 9 (`plans/reports/report-metric-YYMMDD.md`: citation resolution accuracy, render success rate, latency per format, deterministic-render rate, hostile-fixture escapes and the local veraPDF result) **has not been written yet**; until it is, the table below is the only record. PDF/A-3a is structurally checked by `test_render_pdf.py`; veraPDF runs only locally and does not gate.
 
 | Metric | Value |
 |---|---|
@@ -269,3 +281,45 @@ Recorded during the build in the report-worker image; phase 9 records the gate r
 | Deterministic renders (same image) | byte-identical PDF (`test_render_pdf.py::test_rendering_twice_gives_identical_bytes`, `::test_the_hostile_snapshot_renders_reproducibly`) |
 | Hostile-fixture escapes | 0 (`test_render_html.py::test_hostile_payloads_are_inert_visible_text`, `test_render_md.py::test_the_hostile_document_has_no_links_images_or_html`) |
 | veraPDF PDF/A-3a | local check only, not gating |
+
+## M7 platform operations suites
+
+All run in `pnpm test:api` (api-test) unless noted. Retention tests run the executor **in-process** as `cyberlab_retention` with the purge MinIO user (`RETENTION_TEST_DATABASE_URL`, `TEST_MINIO_PURGE_*`; `lane-test.sh` rewrites the retention URL per lane, RT15), on the test buckets.
+
+| Area | Tests |
+|---|---|
+| Schema and plumbing | `integration/test_m7_schema.py` (RLS on every new tenant table, the system lookup, the retention role's grants: DELETE on purgeable tables only and never on correlation keys, the system user cannot log in, purged renders free the dedupe slot, write-once evidence type columns); `integration/test_m7_foundation.py` (every M7 route exists and is no stub, membership first, the `/internal/metrics` access rules, worker and beat registrations, the purge user's policy, SSE on the buckets); `test_migrations.py` (0014 down / up; the enum values stay); `test_rls_coverage.py`, `test_append_only.py`; `unit/test_config.py` (the retention role's refusals and the confinement of the purge keys, the retention DB URL and the metrics token) |
+| Backup and restore | `unit/test_backup_manifest.py` (file hashes and sizes, KMS key fingerprint, a newer alembic head refused), `unit/test_restore_verify.py` (fingerprint drift: a policy missing, a grant changed, FORCE RLS lost; row counts; object versions: retain-until shortened, legal hold lost, a version added or missing, a tombstoned version absent), `integration/test_restore_verify_db.py` (the verifier's queries on the lane DB and the test buckets); `scripts/lib/stack.test.mjs` on the host (the `down -v` guard, RT2) |
+| Retention and legal hold | `unit/test_retention_select.py` (run trees, counting, holds, the effective policy and its delay); `integration/test_retention_policy.py` (floors, delay on every loosening, raises at once, the acknowledgement, the index upsert, audit, permissions); `test_retention_preview.py` (aged closed / archived cases selected; reopened, too recent, pre-M6 and busy cases not, RT24; held cases and recently released holds excluded); `test_retention_purge.py` (**dry run == enforce on the same seed**; tombstone, custody, audit and run items; `410 evidence_purged`; cited rows `kept_cited`; TI after its run items; AI run trees; renders re-render after a purge); `test_retention_runs.py` (manual runs, mode from the DB, one at a time, time slicing); `test_retention_holds.py`, `test_retention_objects.py` (S3 legal hold ON / OFF by the worker, the delay after a release, the purge refuses held and locked versions); `test_retention_append_only_exception.py` (the exception tables accept DELETE from the retention role only; `audit_logs`, hashes, custody, report and note versions never); `test_retention_acl.py` (broker user `retention` confined) |
+| Correlation | `unit/test_correlation_normalize.py` (keys equal M6 `normalize_item` byte for byte, so they join `ti_results` and collections); `integration/test_correlation_indexer.py` (each succeeded job indexed once within the per-tick bounds and the per-job cap; never across orgs); `test_correlation_reads.py` ("also seen in", lookup, common keys, normalization without echo); `test_correlation_related.py` (ranking, common keys excluded, archived cases labelled, never another org) |
+| Search | `integration/test_search.py` (every type finds its row and never another org's, cursors, hostile queries, `422` without echo, `GET` 405 and CSRF, the rate limit, a timeout isolated per type with **nothing logging the query**, the query fragments equal the 0014 index expressions; the "indexes used under RLS" check is a **strict xfail**: non-LEAKPROOF operators); `test_search_perf.py` (heavy-lite: about 200 k correlation keys, 50 k findings, 50 k alerts and 5 k cases over two orgs; asserts p95 < 1 s per type and < 3 s per search, no `partial`, no cross-org hit; prints the plans) |
+| Metrics | `integration/test_job_outcomes_triggers.py` (one tenant-free row per terminal transition, reaper fail paths included, none for non-terminal changes), `test_internal_metrics.py` (404 without a token, 401, 403 when proxied, 60 / min, `no-store`, valid exposition), `test_ops_metrics.py` (the org's own numbers equal a hand count; `audit.read` only), `unit/test_prometheus_render.py`, `unit/test_error_classes.py` |
+| Hardening | `integration/test_global_rate_limit.py`, `test_evidence_view_audit.py` + `unit/test_audit_dedupe.py`, `test_type_mismatch.py` + `unit/test_filetypes.py`, `test_storage_sse.py` (SSE-S3 on the upload, analyzer and renderer write paths), `test_object_store_conformance.py` (13 checks; see below) |
+| Dynamic analysis gate | `unit/test_dynamic_contract.py` (fixtures round-trip, `internet` / Tor routes refused), `unit/test_dynamic_gate.py` (no analyzer value, queue, broker user, service or route) |
+| Security | every M7 route in `security/test_idor_routes.py` via `idor_cases_retention.py`, `idor_cases_correlation.py`, `idor_cases_ops.py`; `test_tenant_session_guard.py` allows the retention worker and the correlation indexer |
+| Web | `lib/{retention,legal-holds,search,correlation,ops-metrics,http-errors}.test.ts`, `components/{retention,legal-holds,search,correlation,ops,evidence/evidence-integrity-strip}` tests |
+
+**Object-store conformance** (`test_object_store_conformance.py`; fresh locked, versioned buckets, its own api and purge users from the template policies, SSE-S3 defaults): versioning, lock config without default retention, exact-version GET and `ListObjectVersions`, GOVERNANCE set / extend / refuse to shorten, a locked delete refused for api, purge and root without bypass, a real version delete by the purge user, the `snapshot.json` Deny, legal hold ON / OFF by the purge user only (every delete refused while ON, root with bypass included), presigned POST with `content-length-range`, presigned version GET (tampered id refused), SSE-S3 status, no admin rights for the app users. On the current bitnami image (2026-11-06): 13 passed, 1 skipped (the KMS restart step, `OBJECT_STORE_RESTART_PHASE=prepare|verify`). Against a candidate image: `OBJECT_STORE_CANDIDATE_URL` with `infra/minio/image/docker-compose.candidate.yml` (not run yet). The SN-2026-015/016 GOVERNANCE bypass uses another path and is not reproduced by this suite.
+
+### Restore drill
+
+`pnpm restore:drill` (`scripts/restore-drill.mjs`; `--prod` uses the prod images; `--target-minio-image <img> [--target-minio-data-dir <dir>]` restores into another MinIO image):
+
+1. Takes every lane slot (the `lane-test.sh` lock root) and refuses while the main project's analyzers or renderer run; about 1.2 GB in the project `cyberlab-drill` (postgres, redis, redis-broker, minio, minio-init, db-bootstrap, migrate, api), no published ports.
+2. Seeds through the real HTTP API (`app/scripts/drill_seed.py`, a one-off container): two orgs, locked evidence, notes, a collection, a legal hold, a retention policy, a finalized signed report, an evidence purge tombstone and synthetic TI / AI rows labelled `drill`.
+3. Backs up into the Docker volume `cyberlab-drill_backups` (never the host disk), `down -v`, restores, runs `restore_verify --db`, `--objects` and `--rls`, then logs in as a seeded user and compares the sha256 of a downloaded evidence item.
+4. `down -v` (guarded), and writes timings, peak memory and verify stats to `infra/backup/last-drill.json` (gitignored).
+
+It is the last, exclusive step of `verify:prod` (phase 11); it never runs a real retention purge (RT38: the pipeline test covers that).
+
+## M7 metrics
+
+Labels are honest by construction: every number below comes from **synthetic** datasets or seeded volumes on one developer host, not from production traffic or real providers.
+
+| Metric | Value | Source |
+|---|---|---|
+| Worker failure rate, run / queue latency p50 / p95, parse success per analyzer (replay of the M2 dataset and the M3 sample set through the real workers, 3 rounds) | **not recorded yet** (phase 11 runs `pnpm ops:metrics`) | `plans/reports/ops-metric-YYMMDD.md` |
+| Search p95 per type and per request (about 200 k keys, 50 k findings, 50 k alerts, 5 k cases; per-org scan under RLS) | **not recorded yet**; the test asserts p95 < 1 s per type and < 3 s per search | `test_search_perf.py` output (`SEARCH_PERF`) |
+| Restore drill: duration per step, peak memory, 0 verify mismatches | **not recorded yet** | `infra/backup/last-drill.json` |
+| Live TI smoke / live AI eval (citation accuracy on a real model) | **not run** (needs the user's keys and budget) | `plans/reports/live-run-YYMMDD.md` |
+| Object-store conformance, bitnami 2025.5.24 | 13 passed, 1 skipped | `plans/reports/researcher-261106-m7-object-store.md` |

@@ -462,7 +462,9 @@ export interface paths {
         };
         /**
          * Job Correlations
-         * @description The job's keys that other jobs of the org share ("also seen in").
+         * @description The job's keys that other jobs of the org share ("also seen in"); `kind` narrows to
+         *     one kind, `include_unique` adds the keys seen nowhere else, `cursor` continues
+         *     (`400 invalid_cursor`).
          */
         get: operations["job_correlations_api_v1_orgs__org_id__analyses__job_id__correlations_get"];
         put?: never;
@@ -778,20 +780,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/orgs/{org_id}/correlations": {
+    "/api/v1/orgs/{org_id}/correlations/lookup": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
+        get?: never;
+        put?: never;
         /**
          * Lookup
-         * @description Where one observable was seen in the org (the server normalizes `value`).
+         * @description Where one observable was seen in the org (the server normalizes `value`; `422
+         *     search_query_invalid` when it does not normalize as `kind`), with the stored threat
+         *     intel answer count and the IOC collections holding it. A POST so the value stays out of
+         *     every URL and access log (RT13); a read, so it writes nothing and is not audited.
          */
-        get: operations["lookup_api_v1_orgs__org_id__correlations_get"];
-        put?: never;
-        post?: never;
+        post: operations["lookup_api_v1_orgs__org_id__correlations_lookup_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1793,7 +1798,8 @@ export interface paths {
         put?: never;
         /**
          * Preview
-         * @description What a run would select now (counts, bytes, a bounded sample). Writes nothing.
+         * @description What a run would select now (counts, bytes, a bounded sample). Deletes nothing; it is
+         *     recorded as a manual dry-run run and audited `retention.previewed`.
          */
         post: operations["preview_api_v1_orgs__org_id__retention_preview_post"];
         delete?: never;
@@ -1830,7 +1836,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Run */
+        /**
+         * Get Run
+         * @description The run with one page of its items (`limit`, `offset`, `outcome` filter) and the item
+         *     count per outcome.
+         */
         get: operations["get_run_api_v1_orgs__org_id__retention_runs__retention_run_id__get"];
         put?: never;
         post?: never;
@@ -3653,6 +3663,28 @@ export interface components {
          */
         ClaimStatus: "supported" | "unsupported" | "hypothesis";
         /**
+         * CollectionRefOut
+         * @description An IOC collection of the org holding the key (an item not removed).
+         */
+        CollectionRefOut: {
+            /** Archived */
+            archived: boolean;
+            /** Case Ref */
+            case_ref: string;
+            /**
+             * Collection Id
+             * Format: uuid
+             */
+            collection_id: string;
+            /**
+             * Investigation Id
+             * Format: uuid
+             */
+            investigation_id: string;
+            /** Name */
+            name: string;
+        };
+        /**
          * ContextItem
          * @description One labelled item exactly as sent. `fields` keys are the only valid citation `field`
          *     values for this item; values are already sanitized, pseudonymized, defanged, truncated.
@@ -3737,13 +3769,37 @@ export interface components {
             };
         };
         /**
+         * CorrelationLookupIn
+         * @description `POST /correlations/lookup`: the observable travels in the JSON body only, never in a
+         *     URL (an IOC value in a query string lands in the uvicorn and gateway access logs and the
+         *     browser history, like a search query, RT13). It is never logged or audited.
+         */
+        CorrelationLookupIn: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ipv4" | "ipv6" | "domain" | "url" | "email" | "md5" | "sha1" | "sha256" | "ja3" | "ja3s" | "cert_sha256";
+            /** Value */
+            value: string;
+        };
+        /**
          * CorrelationLookupOut
-         * @description `GET /correlations?kind=&value=`: the server normalizes the value (M6
-         *     `normalize_item`, RT8). `key` is null when the value does not normalize.
+         * @description `POST /correlations/lookup` (`{kind, value}` in the body): the server normalizes the
+         *     value (M6 `normalize_item`, RT8). A value that does not normalize as `kind` answers
+         *     `422 search_query_invalid` (the error never echoes the value), so `value_norm` and `key`
+         *     are always set in a 200; they stay nullable for older clients only.
          */
         CorrelationLookupOut: {
             /** Cases */
             cases: number;
+            /** Collections */
+            collections?: components["schemas"]["CollectionRefOut"][];
+            /**
+             * Collections Total
+             * @default 0
+             */
+            collections_total: number;
             /** Common */
             common: boolean;
             /** First Seen */
@@ -3761,6 +3817,8 @@ export interface components {
             kind: "ipv4" | "ipv6" | "domain" | "url" | "email" | "md5" | "sha1" | "sha256" | "ja3" | "ja3s" | "cert_sha256";
             /** Last Seen */
             last_seen: string | null;
+            /** Ti Results */
+            ti_results?: number | null;
             /** Value Norm */
             value_norm: string | null;
         };
@@ -4124,6 +4182,8 @@ export interface components {
             original_filename: string;
             /** Purged At */
             purged_at?: string | null;
+            /** Purged By Run Id */
+            purged_by_run_id?: string | null;
             /** Size Bytes */
             size_bytes: number;
             status: components["schemas"]["EvidenceStatus"];
@@ -5000,6 +5060,8 @@ export interface components {
              * Format: uuid
              */
             job_id: string;
+            /** Next Cursor */
+            next_cursor?: string | null;
             /** Total Keys */
             total_keys: number;
             /** Truncated */
@@ -5654,6 +5716,8 @@ export interface components {
             generated_at: string;
             /** Items */
             items: components["schemas"]["KindMetricsOut"][];
+            /** Recent Failures */
+            recent_failures?: components["schemas"]["RecentFailureOut"][];
             /**
              * Window
              * @enum {string}
@@ -5779,6 +5843,42 @@ export interface components {
          */
         ProviderName: "virustotal" | "abuseipdb" | "urlhaus" | "malwarebazaar" | "otx" | "misp" | "mock";
         /**
+         * RecentFailureOut
+         * @description One failed analysis job of the org (newest first), with its error class and the app
+         *     path of its deep link (relative, under /o/{org}).
+         */
+        RecentFailureOut: {
+            error_class: components["schemas"]["ErrorClass"];
+            /** Error Code */
+            error_code: string | null;
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /** Finished At */
+            finished_at: string | null;
+            /** Href */
+            href: string;
+            /**
+             * Investigation Id
+             * Format: uuid
+             */
+            investigation_id: string;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "pcap" | "static";
+            /** Subkind */
+            subkind: string | null;
+        };
+        /**
          * RecordKind
          * @enum {string}
          */
@@ -5863,6 +5963,8 @@ export interface components {
             };
             /** Last Seen */
             last_seen: string | null;
+            /** Sample Keys */
+            sample_keys?: components["schemas"]["SharedKeyOut"][];
             /** Shared Keys */
             shared_keys: number;
             status: components["schemas"]["InvestigationStatus"];
@@ -6872,6 +6974,11 @@ export interface components {
             id: string;
             /** Items */
             items: components["schemas"]["RetentionRunItemOut"][];
+            /**
+             * Items Matching
+             * @default 0
+             */
+            items_matching: number;
             /** Items Total */
             items_total: number;
             /**
@@ -6879,6 +6986,10 @@ export interface components {
              * @enum {string}
              */
             mode: "dry_run" | "enforce";
+            /** Outcome Counts */
+            outcome_counts?: {
+                [key: string]: number;
+            };
             policy: components["schemas"]["RetentionValues"] | null;
             /** Requested By */
             requested_by: string | null;
@@ -7292,6 +7403,8 @@ export interface components {
         };
         /** SearchGroup */
         SearchGroup: {
+            /** Error */
+            error?: "timeout" | null;
             /** Hits */
             hits: components["schemas"]["SearchHit"][];
             /** Next Cursor */
@@ -7325,8 +7438,11 @@ export interface components {
             match: "exact" | "fts" | "trigram";
             /** Snippet */
             snippet: string | null;
+            /** Snippet Ranges */
+            snippet_ranges?: components["schemas"]["TextRange"][];
             /** Title */
             title: string;
+            tlp?: components["schemas"]["TLP"] | null;
             /**
              * Type
              * @enum {string}
@@ -7410,6 +7526,8 @@ export interface components {
             other_cases: number;
             /** Other Jobs */
             other_jobs: number;
+            /** Source Ids */
+            source_ids?: string[];
             /** Top Cases */
             top_cases: components["schemas"]["CaseRefOut"][];
             /** Value */
@@ -7446,6 +7564,18 @@ export interface components {
             reasons: string[];
             /** Ti Blocked */
             ti_blocked: boolean;
+        };
+        /** SharedKeyOut */
+        SharedKeyOut: {
+            /** Key */
+            key: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ipv4" | "ipv6" | "domain" | "url" | "email" | "md5" | "sha1" | "sha256" | "ja3" | "ja3s" | "cert_sha256";
+            /** Value */
+            value: string;
         };
         /**
          * SignatureEngine
@@ -7670,6 +7800,17 @@ export interface components {
             technique_id: string;
             /** Url */
             url: string | null;
+        };
+        /**
+         * TextRange
+         * @description One query match inside `SearchHit.snippet`: `[start, end)` in UTF-16 code units (the
+         *     JavaScript string index), so the browser builds `<mark>` elements without re-matching.
+         */
+        TextRange: {
+            /** End */
+            end: number;
+            /** Start */
+            start: number;
         };
         /**
          * IocType
@@ -8941,7 +9082,11 @@ export interface operations {
     };
     job_correlations_api_v1_orgs__org_id__analyses__job_id__correlations_get: {
         parameters: {
-            query?: never;
+            query?: {
+                kind?: ("ipv4" | "ipv6" | "domain" | "url" | "email" | "md5" | "sha1" | "sha256" | "ja3" | "ja3s" | "cert_sha256") | null;
+                cursor?: string | null;
+                include_unique?: boolean;
+            };
             header?: never;
             path: {
                 job_id: string;
@@ -9606,19 +9751,20 @@ export interface operations {
             };
         };
     };
-    lookup_api_v1_orgs__org_id__correlations_get: {
+    lookup_api_v1_orgs__org_id__correlations_lookup_post: {
         parameters: {
-            query: {
-                kind: "ipv4" | "ipv6" | "domain" | "url" | "email" | "md5" | "sha1" | "sha256" | "ja3" | "ja3s" | "cert_sha256";
-                value: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 org_id: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorrelationLookupIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -12043,7 +12189,11 @@ export interface operations {
     };
     get_run_api_v1_orgs__org_id__retention_runs__retention_run_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+                offset?: number;
+                outcome?: ("purged" | "skipped_hold" | "skipped_locked" | "object_delete_failed" | "kept_cited") | null;
+            };
             header?: never;
             path: {
                 retention_run_id: string;
@@ -12417,6 +12567,7 @@ export interface operations {
             header?: {
                 authorization?: string | null;
                 "x-forwarded-for"?: string | null;
+                forwarded?: string | null;
             };
             path?: never;
             cookie?: never;

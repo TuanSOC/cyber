@@ -153,9 +153,15 @@ class RetentionRunItemOut(BaseModel):
 
 class RetentionRunDetail(RetentionRunOut):
     sample: list[RetentionCandidateOut]
-    # The first items of the run (bounded); `items_total` counts all of them.
+    # One page of the run's items, oldest first: `?limit=` (1..100, default 100),
+    # `?offset=` and `?outcome=` (M7 follow-up; without them, the first 100 of every
+    # outcome). `items_total` counts all of the run's items, whatever the filter.
     items: list[RetentionRunItemOut]
     items_total: int
+    # Additive (M7 follow-up): the items matching `outcome` (`items_total` without a filter),
+    # for the pager, and the run's item count per outcome (outcomes with none are omitted).
+    items_matching: int = 0
+    outcome_counts: dict[ItemOutcome, int] = Field(default_factory=dict)
 
 
 class LegalHoldCreate(_Strict):

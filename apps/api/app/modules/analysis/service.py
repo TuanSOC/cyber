@@ -110,6 +110,7 @@ async def _create(
     settings = get_settings()
     row = await evidence_service.get_row(ctx, evidence_id, for_update=True)
     evidence = row.evidence
+    evidence_service.ensure_not_purged(row)  # M7: 410 evidence_purged
     if evidence.status == EvidenceStatus.ARCHIVED:
         raise Conflict("Archived evidence cannot be analyzed", code="evidence_archived")
     await evidence_service.ensure_open_investigation(ctx, evidence.investigation_id)

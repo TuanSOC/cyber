@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run api-test (or another test-profile service) against an isolated test lane (parallel
 # development agents).
-#   scripts/lane-test.sh <lane 2..7> [--service <test service>] <command...>
+#   scripts/lane-test.sh <lane 2..8> [--service <test service>] <command...>
 #   e.g. scripts/lane-test.sh 3 uv run pytest -q -p no:cacheprovider tests/unit/test_ai_providers.py
 #        scripts/lane-test.sh 4 --service report-worker-test pytest -q tests/   (M6, RT21)
 # `--print-lock-root` prints the slot lock root and exits (M7 restore drill, RT25).
@@ -18,9 +18,9 @@ if [ "${1:-}" = "--print-lock-root" ]; then
   exit 0
 fi
 
-lane="${1:?lane number 2..7}"
+lane="${1:?lane number 2..8}"
 shift
-case "$lane" in [2-7]) ;; *) echo "lane must be 2..7" >&2; exit 2 ;; esac
+case "$lane" in [2-8]) ;; *) echo "lane must be 2..8" >&2; exit 2 ;; esac
 
 service="api-test"
 if [ "${1:-}" = "--service" ]; then
