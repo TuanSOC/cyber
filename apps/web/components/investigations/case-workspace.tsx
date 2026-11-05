@@ -6,6 +6,7 @@ import { AttackTab } from "@/components/case-attack/attack-tab";
 import { InvestigationAnalyses } from "@/components/analysis/investigation-analyses";
 import { CaseAiTab } from "@/components/investigations/case-ai-tab";
 import { CaseEvidenceTab } from "@/components/investigations/case-evidence-tab";
+import { LegalHoldBadge } from "@/components/investigations/legal-hold-badge";
 import { OverviewTab } from "@/components/investigations/overview-tab";
 import { CaseIocsTab } from "@/components/ioc-collections/case-iocs-tab";
 import { NotesTab } from "@/components/notes/notes-tab";
@@ -46,6 +47,8 @@ export function CaseWorkspace({
 
   return (
     <Tabs value={tab} onValueChange={select}>
+      {/* M7 slot: the legal-hold badge of the case (phase 9). */}
+      <LegalHoldBadge legalHold={inv.legal_hold} />
       <TabsList aria-label="Case sections" className="max-w-full overflow-x-auto">
         {CASE_TABS.map(([value, label]) => (
           <TabsTrigger key={value} value={value}>

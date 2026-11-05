@@ -1,5 +1,5 @@
-"""Migrations replay from scratch in one alembic run (M3 RT7); 0013, 0012, 0011, 0010, 0009 and
-0006 downgrade cleanly.
+"""Migrations replay from scratch in one alembic run (M3 RT7); 0014, 0013, 0012, 0011, 0010,
+0009 and 0006 downgrade cleanly (0014 leaves its enum values and the inactive system user).
 
 `env.py` applies every pending revision in a single transaction; 0006 adds an enum value,
 which Postgres will not let that same transaction use. The session fixture already upgrades
@@ -130,9 +130,71 @@ async def _m6_tables(engine: AsyncEngine) -> list[object]:
         return [t for t in (await conn.execute(text(M6_REGCLASSES))).one() if t is not None]
 
 
+# 0014 (M7 platform operations).
+M7_TABLES = (
+    "org_retention_policies",
+    "retention_policy_index",
+    "legal_holds",
+    "retention_runs",
+    "retention_run_items",
+    "evidence_purges",
+    "correlation_keys",
+    "correlation_job_state",
+    "job_outcomes",
+)
+M7_REGCLASSES = "SELECT " + ", ".join(f"to_regclass('{t}')::text" for t in M7_TABLES)
+M7_FUNCTIONS = (
+    "SELECT proname::text FROM pg_proc WHERE proname IN ('forbid_mutation_except_retention', "
+    "'legal_hold_guard', 'org_retention_policy_touch', 'record_job_outcome', "
+    "'retention_run_guard') ORDER BY proname"
+)
+M7_EVIDENCE_COLUMNS = (
+    "SELECT column_name FROM information_schema.columns WHERE table_name = 'evidence' "
+    "AND column_name IN ('declared_type', 'type_mismatch') ORDER BY column_name"
+)
+EXCEPTION_TRIGGERS = (
+    "SELECT c.relname::text || ':' || p.proname::text FROM pg_trigger g "
+    "JOIN pg_class c ON c.oid = g.tgrelid JOIN pg_proc p ON p.oid = g.tgfoid "
+    "WHERE g.tgname LIKE '%_append_only' AND c.relname IN ('ti_results', 'ai_run_inputs', "
+    "'ai_context_refs', 'ai_outputs', 'ai_citations') ORDER BY 1"
+)
+RENDER_INDEX_PREDICATE = (
+    "SELECT pg_get_expr(i.indpred, i.indrelid) FROM pg_index i "
+    "WHERE i.indexrelid = to_regclass('ux_report_renders_version_id_format_renderer')"
+)
+CUSTODY_VALUES = "SELECT unnest(enum_range(NULL::custody_action))::text"
+TRGM = "SELECT extname::text FROM pg_extension WHERE extname = 'pg_trgm'"
+SYSTEM_USER = "SELECT is_active FROM users WHERE email = 'retention@system.invalid'"
+
+
+async def _m7_tables(engine: AsyncEngine) -> list[object]:
+    async with engine.connect() as conn:
+        return [t for t in (await conn.execute(text(M7_REGCLASSES))).one() if t is not None]
+
+
+def _exception_triggers(function: str) -> list[str]:
+    tables = ("ai_citations", "ai_context_refs", "ai_outputs", "ai_run_inputs", "ti_results")
+    return [f"{table}:{function}" for table in tables]
+
+
 async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine) -> None:
     await get_engine().dispose()
     try:
+        _alembic("downgrade", "0013")  # 0014 (M7) goes away; enum values and the user stay
+        assert await _m7_tables(owner_engine) == []
+        assert await _scalars(owner_engine, M7_FUNCTIONS) == []
+        assert await _scalars(owner_engine, M7_EVIDENCE_COLUMNS) == []
+        assert await _scalars(owner_engine, EXCEPTION_TRIGGERS) == _exception_triggers(
+            "forbid_mutation"
+        )
+        assert await _scalars(owner_engine, RENDER_INDEX_PREDICATE) == [
+            "((status)::text <> 'failed'::text)"
+        ]
+        assert await _scalars(owner_engine, TRGM) == []
+        # Enum values cannot be dropped (documented in 0014): they stay, unused.
+        assert {"purged", "sent_to_sandbox"} <= set(
+            map(str, await _scalars(owner_engine, CUSTODY_VALUES))
+        )
         _alembic("downgrade", "0012")  # 0013 (M6 review L4) restores the plain FKs
         assert await _scalars(owner_engine, SAME_ORG_FKS) == [
             "fk_ioc_collection_items_ioc_id_iocs",
@@ -168,7 +230,25 @@ async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine)
         _alembic("upgrade", "head")  # never leave the shared test database half-migrated
         await get_engine().dispose()
 
-    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0013"]
+    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0014"]
+    assert await _m7_tables(owner_engine) == list(M7_TABLES)
+    assert await _scalars(owner_engine, M7_FUNCTIONS) == [
+        "forbid_mutation_except_retention",
+        "legal_hold_guard",
+        "org_retention_policy_touch",
+        "record_job_outcome",
+        "retention_run_guard",
+    ]
+    assert await _scalars(owner_engine, M7_EVIDENCE_COLUMNS) == ["declared_type", "type_mismatch"]
+    assert await _scalars(owner_engine, EXCEPTION_TRIGGERS) == _exception_triggers(
+        "forbid_mutation_except_retention"
+    )
+    assert await _scalars(owner_engine, RENDER_INDEX_PREDICATE) == [
+        "((status)::text <> ALL ((ARRAY['failed'::character varying, "
+        "'purged'::character varying])::text[]))"
+    ]
+    assert await _scalars(owner_engine, TRGM) == ["pg_trgm"]
+    assert await _scalars(owner_engine, SYSTEM_USER) == [False]
     assert await _scalars(owner_engine, SAME_ORG_FKS) == [
         "fk_ioc_collection_items_ioc_id_organization_id_iocs",
         "fk_report_citations_ai_citation_id_organization_id_ai_citations",

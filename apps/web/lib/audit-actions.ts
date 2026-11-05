@@ -37,4 +37,14 @@ export const AUDIT_ACTIONS = [
   "report.rendered",
   "report.render_failed",
   "report.downloaded",
+  // M7: retention, legal holds, purges, evidence views and type mismatches.
+  "retention.policy_changed",
+  "retention.run_requested",
+  "retention.run_completed",
+  "legal_hold.placed",
+  "legal_hold.released",
+  "evidence.purged",
+  "evidence.viewed",
+  "evidence.custody_viewed",
+  "evidence.type_mismatch",
 ] as const;

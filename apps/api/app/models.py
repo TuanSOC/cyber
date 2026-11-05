@@ -15,6 +15,7 @@ from app.modules.analysis.models import AnalysisJob, AnalysisJobIndex
 from app.modules.audit.models import AuditLog
 from app.modules.auth.models import AuthEvent, RefreshToken
 from app.modules.case_attack.models import CaseAttackMapping
+from app.modules.correlation.models import CorrelationJobState, CorrelationKey
 from app.modules.evidence.models import Evidence, EvidenceCustodyEvent, EvidenceHash
 from app.modules.investigations.models import (
     EvidenceSharePolicy,
@@ -23,6 +24,7 @@ from app.modules.investigations.models import (
 )
 from app.modules.ioc_collections.models import IocCollection, IocCollectionItem
 from app.modules.notes.models import AnalystNote, AnalystNoteVersion
+from app.modules.ops.models import JobOutcome
 from app.modules.organizations.models import Organization, OrganizationMember
 from app.modules.pcap_analysis.models import (
     AnalysisFinding,
@@ -38,6 +40,14 @@ from app.modules.reports.models import (
     ReportRender,
     ReportRenderIndex,
     ReportVersion,
+)
+from app.modules.retention.models import (
+    EvidencePurge,
+    LegalHold,
+    OrgRetentionPolicy,
+    RetentionPolicyIndex,
+    RetentionRun,
+    RetentionRunItem,
 )
 from app.modules.static_analysis.models import (
     MalwareCapability,
@@ -77,15 +87,20 @@ __all__ = [
     "AuthEvent",
     "Base",
     "CaseAttackMapping",
+    "CorrelationJobState",
+    "CorrelationKey",
     "Evidence",
     "EvidenceCustodyEvent",
     "EvidenceHash",
+    "EvidencePurge",
     "EvidenceSharePolicy",
     "Investigation",
     "InvestigationStatusEvent",
     "Ioc",
     "IocCollection",
     "IocCollectionItem",
+    "JobOutcome",
+    "LegalHold",
     "MalwareCapability",
     "MalwareExport",
     "MalwareImport",
@@ -97,6 +112,7 @@ __all__ = [
     "NetworkAlert",
     "NetworkFlow",
     "NetworkRecord",
+    "OrgRetentionPolicy",
     "Organization",
     "OrganizationMember",
     "RefreshToken",
@@ -105,6 +121,9 @@ __all__ = [
     "ReportRender",
     "ReportRenderIndex",
     "ReportVersion",
+    "RetentionPolicyIndex",
+    "RetentionRun",
+    "RetentionRunItem",
     "TiEnrichmentRun",
     "TiOrgSettings",
     "TiProviderConfig",

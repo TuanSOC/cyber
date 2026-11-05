@@ -1,7 +1,17 @@
 "use client";
 
 import type { Schemas } from "@cyberlab/contracts";
-import { Archive, Download, Microscope, ScanSearch, ShieldAlert, ShieldCheck, Upload } from "lucide-react";
+import {
+  Archive,
+  Download,
+  FlaskConical,
+  Microscope,
+  ScanSearch,
+  ShieldAlert,
+  ShieldCheck,
+  Trash2,
+  Upload,
+} from "lucide-react";
 
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -16,6 +26,9 @@ const ACTIONS: Record<Event["action"], { label: string; icon: typeof Upload; ton
   archived: { label: "Archived", icon: Archive },
   analysis_requested: { label: "Analysis requested", icon: ScanSearch },
   analyzed: { label: "Analyzed (worker read this version)", icon: Microscope },
+  // M7: retention deleted the bytes (hashes and custody stay); sent_to_sandbox is reserved.
+  purged: { label: "Bytes purged by the retention policy", icon: Trash2, tone: "text-muted-foreground" },
+  sent_to_sandbox: { label: "Sent to the sandbox", icon: FlaskConical },
 };
 
 export function CustodyTimeline({ events }: { events: Event[] }) {

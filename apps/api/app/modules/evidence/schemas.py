@@ -26,6 +26,13 @@ class EvidenceOut(BaseModel):
     # M6: the evidence share-policy flags (`evidence_share_policies`; filled by phase 2).
     ai_excluded: bool = False
     ti_excluded: bool = False
+    # M7: when retention purged the bytes (tombstone; filled by phase 3, download and verify
+    # then answer 410 `evidence_purged`), whether a legal hold covers the evidence's case or
+    # org (phase 3), and the declared type vs the detected type (phase 6, NULL before M7).
+    purged_at: datetime | None = None
+    legal_hold: bool = False
+    declared_type: str | None = None
+    type_mismatch: bool | None = None
 
 
 class EvidencePage(Page[EvidenceOut]):

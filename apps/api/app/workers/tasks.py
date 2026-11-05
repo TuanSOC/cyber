@@ -6,10 +6,11 @@ from collections.abc import Coroutine
 from typing import Any
 
 from celery.signals import worker_init
-from cyberlab_jobs import INGEST_EVENT, REAP, REPORT_RENDERED
+from cyberlab_jobs import CORRELATION_INDEX_PENDING, INGEST_EVENT, REAP, REPORT_RENDERED
 
 import app.models  # noqa: F401  (register every mapper before the first query)
 from app.core.config import get_settings
+from app.modules.correlation import indexer as correlation_indexer
 from app.modules.reports import render_ingest
 from app.workers import ingest, reaper
 from app.workers.celery_app import celery_app
@@ -64,3 +65,13 @@ def reap() -> None:
 @celery_app.task(name=REPORT_RENDERED)  # type: ignore[untyped-decorator]
 def report_rendered(message: dict[str, Any]) -> None:
     run(render_ingest.handle_rendered_message(message))
+
+
+# M7: the correlation indexer (beat, every 60 s). Bounded per tick (RT19): at most
+# CORRELATION_INDEX_BATCH_JOBS jobs and CORRELATION_INDEX_BUDGET_S seconds, because this
+# solo-pool worker also ingests results and runs the reaper. Phase 4 implements the indexer.
+@celery_app.task(name=CORRELATION_INDEX_PENDING)  # type: ignore[untyped-decorator]
+def correlation_index_pending(message: dict[str, Any] | None = None) -> None:
+    indexed = run(correlation_indexer.index_pending(get_settings().correlation_index_batch_jobs))
+    if indexed:
+        log.info("correlation: %d job(s) indexed", indexed)

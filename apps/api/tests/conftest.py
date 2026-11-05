@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.clients import get_redis
-from app.core.config import get_settings
+from app.core.config import RETENTION_SYSTEM_USER_EMAIL, RETENTION_SYSTEM_USER_ID, get_settings
 from app.core.db import get_engine
 from app.models import Base
 from tests.analysis_helpers import purge_test_queues
@@ -64,11 +64,22 @@ async def owner_engine() -> AsyncIterator[AsyncEngine]:
     await engine.dispose()
 
 
+# M7: the inactive system user seeded by migration 0014 (the custody actor of purges, RT12)
+# comes back after every truncation, as on a migrated database.
+_SYSTEM_USER = text(
+    "INSERT INTO users (id, email, password_hash, display_name, is_active) VALUES "
+    "(:id, :email, '!unusable:retention-system-user', 'Retention (system)', false)"
+)
+
+
 async def _reset(owner_engine: AsyncEngine) -> None:
     tables = ", ".join(Base.metadata.tables)
     async with owner_engine.begin() as conn:
         # TRUNCATE bypasses row-level append-only triggers: test database only.
         await conn.execute(text(f"TRUNCATE TABLE {tables} CASCADE"))
+        await conn.execute(
+            _SYSTEM_USER, {"id": RETENTION_SYSTEM_USER_ID, "email": RETENTION_SYSTEM_USER_EMAIL}
+        )
     await get_redis().flushdb()
 
 

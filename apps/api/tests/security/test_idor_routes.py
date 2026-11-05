@@ -31,9 +31,12 @@ from tests.security import (
     idor_cases_ai,
     idor_cases_attack,
     idor_cases_case,
+    idor_cases_correlation,
+    idor_cases_ops,
     idor_cases_reads,
     idor_cases_renders,
     idor_cases_reports,
+    idor_cases_retention,
 )
 from tests.security.idor_types import (
     PathOverrides,
@@ -50,9 +53,13 @@ CASE_MODULES = (idor_cases_reads, idor_cases_ai)
 # stubs whose cases land with their phase. They are skipped here and reported (never
 # silently passed); phase 9 asserts every set is empty.
 M6_CASE_MODULES = (idor_cases_case, idor_cases_reports, idor_cases_renders, idor_cases_attack)
-CASE_MODULES = (*CASE_MODULES, *M6_CASE_MODULES)
+# M7: the per-owner modules of phases 3, 4 and 5 (same `PENDING_ROUTES` rule; phase 11
+# asserts every set is empty).
+M7_CASE_MODULES = (idor_cases_retention, idor_cases_correlation, idor_cases_ops)
+PENDING_MODULES = (*M6_CASE_MODULES, *M7_CASE_MODULES)
+CASE_MODULES = (*CASE_MODULES, *PENDING_MODULES)
 PENDING_ROUTES: frozenset[tuple[str, str]] = frozenset().union(
-    *(module.PENDING_ROUTES for module in M6_CASE_MODULES)
+    *(module.PENDING_ROUTES for module in PENDING_MODULES)
 )
 
 # (method, path template) -> request kwargs that are valid for the resource owner.
@@ -224,11 +231,11 @@ def test_pending_routes_are_real_routes_without_cases() -> None:
     is reported so a pending route is never silently passed."""
     assert PENDING_ROUTES <= org_scoped_routes(), sorted(PENDING_ROUTES - org_scoped_routes())
     assert PENDING_ROUTES.isdisjoint(ROUTE_CASES), sorted(PENDING_ROUTES & set(ROUTE_CASES))
-    for module in M6_CASE_MODULES:
+    for module in PENDING_MODULES:
         assert module.PENDING_ROUTES.isdisjoint(module.ROUTE_CASES), module.__name__
     if PENDING_ROUTES:
         warnings.warn(
-            f"{len(PENDING_ROUTES)} M6 routes have no IDOR case yet (PENDING_ROUTES)",
+            f"{len(PENDING_ROUTES)} routes have no IDOR case yet (PENDING_ROUTES)",
             stacklevel=1,
         )
 

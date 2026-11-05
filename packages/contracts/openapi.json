@@ -4451,6 +4451,48 @@
         "title": "CaseIocPage",
         "type": "object"
       },
+      "CaseRefOut": {
+        "properties": {
+          "case_ref": {
+            "title": "Case Ref",
+            "type": "string"
+          },
+          "investigation_id": {
+            "format": "uuid",
+            "title": "Investigation Id",
+            "type": "string"
+          },
+          "jobs": {
+            "title": "Jobs",
+            "type": "integer"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "investigation_id",
+          "case_ref",
+          "title",
+          "jobs",
+          "last_seen"
+        ],
+        "title": "CaseRefOut",
+        "type": "object"
+      },
       "CaseSection": {
         "additionalProperties": false,
         "properties": {
@@ -4991,6 +5033,106 @@
         "title": "ContextStats",
         "type": "object"
       },
+      "CorrelationLookupOut": {
+        "description": "`GET /correlations?kind=&value=`: the server normalizes the value (M6\n`normalize_item`, RT8). `key` is null when the value does not normalize.",
+        "properties": {
+          "cases": {
+            "title": "Cases",
+            "type": "integer"
+          },
+          "common": {
+            "title": "Common",
+            "type": "boolean"
+          },
+          "first_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OccurrenceOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "jobs": {
+            "title": "Jobs",
+            "type": "integer"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "kind": {
+            "enum": [
+              "ipv4",
+              "ipv6",
+              "domain",
+              "url",
+              "email",
+              "md5",
+              "sha1",
+              "sha256",
+              "ja3",
+              "ja3s",
+              "cert_sha256"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "value_norm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Norm"
+          }
+        },
+        "required": [
+          "kind",
+          "value_norm",
+          "key",
+          "common",
+          "jobs",
+          "cases",
+          "first_seen",
+          "last_seen",
+          "items"
+        ],
+        "title": "CorrelationLookupOut",
+        "type": "object"
+      },
       "CustodyAction": {
         "enum": [
           "uploaded",
@@ -4999,7 +5141,9 @@
           "verified_mismatch",
           "archived",
           "analysis_requested",
-          "analyzed"
+          "analyzed",
+          "purged",
+          "sent_to_sandbox"
         ],
         "title": "CustodyAction",
         "type": "string"
@@ -5557,6 +5701,18 @@
         "title": "EnrichmentCreate",
         "type": "object"
       },
+      "ErrorClass": {
+        "enum": [
+          "parse",
+          "infra",
+          "policy",
+          "provider",
+          "input",
+          "other"
+        ],
+        "title": "ErrorClass",
+        "type": "string"
+      },
       "EvidenceItem": {
         "additionalProperties": false,
         "properties": {
@@ -5685,6 +5841,17 @@
             "title": "Ai Excluded",
             "type": "boolean"
           },
+          "declared_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declared Type"
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -5714,9 +5881,26 @@
             "title": "Investigation Id",
             "type": "string"
           },
+          "legal_hold": {
+            "default": false,
+            "title": "Legal Hold",
+            "type": "boolean"
+          },
           "original_filename": {
             "title": "Original Filename",
             "type": "string"
+          },
+          "purged_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purged At"
           },
           "size_bytes": {
             "title": "Size Bytes",
@@ -5729,6 +5913,17 @@
             "default": false,
             "title": "Ti Excluded",
             "type": "boolean"
+          },
+          "type_mismatch": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type Mismatch"
           },
           "uploaded_at": {
             "format": "date-time",
@@ -7134,6 +7329,11 @@
             "title": "Id",
             "type": "string"
           },
+          "legal_hold": {
+            "default": false,
+            "title": "Legal Hold",
+            "type": "boolean"
+          },
           "severity": {
             "$ref": "#/components/schemas/Severity"
           },
@@ -8194,6 +8394,43 @@
         "title": "IocsSection",
         "type": "object"
       },
+      "JobCorrelationsOut": {
+        "properties": {
+          "indexed": {
+            "title": "Indexed",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SeenInOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "total_keys": {
+            "title": "Total Keys",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "job_id",
+          "indexed",
+          "truncated",
+          "items",
+          "total_keys"
+        ],
+        "title": "JobCorrelationsOut",
+        "type": "object"
+      },
       "JobItem": {
         "additionalProperties": false,
         "properties": {
@@ -8312,6 +8549,136 @@
         "title": "JobsSection",
         "type": "object"
       },
+      "KindMetricsOut": {
+        "properties": {
+          "error_classes": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/ErrorClass"
+            },
+            "title": "Error Classes",
+            "type": "object"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "failure_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Ratio"
+          },
+          "kind": {
+            "enum": [
+              "pcap",
+              "static",
+              "ti",
+              "ai",
+              "report"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "parse_success_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Success Ratio"
+          },
+          "queue_p50_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue P50 Ms"
+          },
+          "queue_p95_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue P95 Ms"
+          },
+          "run_p50_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run P50 Ms"
+          },
+          "run_p95_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run P95 Ms"
+          },
+          "subkind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subkind"
+          },
+          "succeeded": {
+            "title": "Succeeded",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "subkind",
+          "total",
+          "succeeded",
+          "failed",
+          "failure_ratio",
+          "parse_success_ratio",
+          "queue_p50_ms",
+          "queue_p95_ms",
+          "run_p50_ms",
+          "run_p95_ms",
+          "error_classes"
+        ],
+        "title": "KindMetricsOut",
+        "type": "object"
+      },
       "KindStats": {
         "additionalProperties": false,
         "properties": {
@@ -8331,6 +8698,230 @@
           "total"
         ],
         "title": "KindStats",
+        "type": "object"
+      },
+      "LegalHoldCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "investigation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Investigation Id"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "pattern": "^[^\\x00]*$",
+            "title": "Reason",
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "org",
+              "investigation"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "reason"
+        ],
+        "title": "LegalHoldCreate",
+        "type": "object"
+      },
+      "LegalHoldOut": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "case_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Ref"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "investigation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Investigation Id"
+          },
+          "placed_at": {
+            "format": "date-time",
+            "title": "Placed At",
+            "type": "string"
+          },
+          "placed_by": {
+            "format": "uuid",
+            "title": "Placed By",
+            "type": "string"
+          },
+          "placed_by_name": {
+            "title": "Placed By Name",
+            "type": "string"
+          },
+          "protects_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protects Until"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "release_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Reason"
+          },
+          "released_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Released At"
+          },
+          "released_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Released By"
+          },
+          "s3_sync": {
+            "enum": [
+              "pending",
+              "synced"
+            ],
+            "title": "S3 Sync",
+            "type": "string"
+          },
+          "s3_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "S3 Synced At"
+          },
+          "scope": {
+            "enum": [
+              "org",
+              "investigation"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "scope",
+          "investigation_id",
+          "case_ref",
+          "reason",
+          "placed_by",
+          "placed_by_name",
+          "placed_at",
+          "released_by",
+          "released_at",
+          "release_reason",
+          "protects_until",
+          "active",
+          "s3_sync",
+          "s3_synced_at"
+        ],
+        "title": "LegalHoldOut",
+        "type": "object"
+      },
+      "LegalHoldPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LegalHoldOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "LegalHoldPage",
+        "type": "object"
+      },
+      "LegalHoldRelease": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "pattern": "^[^\\x00]*$",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "LegalHoldRelease",
         "type": "object"
       },
       "LibraryCount": {
@@ -9510,6 +10101,77 @@
         "title": "NotesSection",
         "type": "object"
       },
+      "OccurrenceOut": {
+        "properties": {
+          "analyzer": {
+            "$ref": "#/components/schemas/Analyzer"
+          },
+          "case_ref": {
+            "title": "Case Ref",
+            "type": "string"
+          },
+          "evidence_filename": {
+            "title": "Evidence Filename",
+            "type": "string"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "first_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen"
+          },
+          "investigation_id": {
+            "format": "uuid",
+            "title": "Investigation Id",
+            "type": "string"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "analyzer",
+          "investigation_id",
+          "case_ref",
+          "title",
+          "evidence_id",
+          "evidence_filename",
+          "first_seen",
+          "last_seen"
+        ],
+        "title": "OccurrenceOut",
+        "type": "object"
+      },
       "OrgCreate": {
         "properties": {
           "name": {
@@ -9524,6 +10186,55 @@
           "name"
         ],
         "title": "OrgCreate",
+        "type": "object"
+      },
+      "OrgOpsMetricsOut": {
+        "properties": {
+          "active": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "pcap",
+                "static",
+                "ti",
+                "ai",
+                "report"
+              ]
+            },
+            "title": "Active",
+            "type": "object"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/KindMetricsOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "window": {
+            "enum": [
+              "1h",
+              "24h",
+              "7d"
+            ],
+            "title": "Window",
+            "type": "string"
+          }
+        },
+        "required": [
+          "window",
+          "generated_at",
+          "items",
+          "active"
+        ],
+        "title": "OrgOpsMetricsOut",
         "type": "object"
       },
       "OrgUpdate": {
@@ -10046,6 +10757,102 @@
         "title": "RegisterIn",
         "type": "object"
       },
+      "RelatedCaseOut": {
+        "properties": {
+          "case_ref": {
+            "title": "Case Ref",
+            "type": "string"
+          },
+          "investigation_id": {
+            "format": "uuid",
+            "title": "Investigation Id",
+            "type": "string"
+          },
+          "kinds": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "ipv4",
+                "ipv6",
+                "domain",
+                "url",
+                "email",
+                "md5",
+                "sha1",
+                "sha256",
+                "ja3",
+                "ja3s",
+                "cert_sha256"
+              ]
+            },
+            "title": "Kinds",
+            "type": "object"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "shared_keys": {
+            "title": "Shared Keys",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/InvestigationStatus"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "investigation_id",
+          "case_ref",
+          "title",
+          "status",
+          "shared_keys",
+          "kinds",
+          "last_seen"
+        ],
+        "title": "RelatedCaseOut",
+        "type": "object"
+      },
+      "RelatedCasesOut": {
+        "properties": {
+          "common_keys_excluded": {
+            "title": "Common Keys Excluded",
+            "type": "integer"
+          },
+          "investigation_id": {
+            "format": "uuid",
+            "title": "Investigation Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RelatedCaseOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "investigation_id",
+          "items",
+          "common_keys_excluded"
+        ],
+        "title": "RelatedCasesOut",
+        "type": "object"
+      },
       "RenderCreate": {
         "additionalProperties": false,
         "properties": {
@@ -10191,7 +10998,8 @@
               "queued",
               "running",
               "succeeded",
-              "failed"
+              "failed",
+              "purged"
             ],
             "title": "Status",
             "type": "string"
@@ -11894,6 +12702,861 @@
         "title": "ResultStatus",
         "type": "string"
       },
+      "RetentionCandidateOut": {
+        "properties": {
+          "bytes": {
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "category": {
+            "enum": [
+              "ti_results",
+              "ai_runs",
+              "closed_case"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "investigation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Investigation Id"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "ref_id": {
+            "title": "Ref Id",
+            "type": "string"
+          },
+          "ref_table": {
+            "title": "Ref Table",
+            "type": "string"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "ref_table",
+          "ref_id",
+          "job_id",
+          "investigation_id",
+          "rows",
+          "bytes"
+        ],
+        "title": "RetentionCandidateOut",
+        "type": "object"
+      },
+      "RetentionCategoryCount": {
+        "properties": {
+          "bytes": {
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "candidates": {
+            "title": "Candidates",
+            "type": "integer"
+          },
+          "kept_cited": {
+            "title": "Kept Cited",
+            "type": "integer"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "integer"
+          },
+          "skipped_hold": {
+            "title": "Skipped Hold",
+            "type": "integer"
+          },
+          "skipped_locked": {
+            "title": "Skipped Locked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "candidates",
+          "rows",
+          "bytes",
+          "kept_cited",
+          "skipped_hold",
+          "skipped_locked"
+        ],
+        "title": "RetentionCategoryCount",
+        "type": "object"
+      },
+      "RetentionPolicyIn": {
+        "additionalProperties": false,
+        "description": "PUT replaces the policy. Every value is required (null = keep forever).",
+        "properties": {
+          "acknowledge_destruction": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledge Destruction"
+          },
+          "ai_runs_days": {
+            "anyOf": [
+              {
+                "maximum": 36500.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Runs Days"
+          },
+          "closed_case_days": {
+            "anyOf": [
+              {
+                "maximum": 36500.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Case Days"
+          },
+          "enforce": {
+            "title": "Enforce",
+            "type": "boolean"
+          },
+          "ti_results_days": {
+            "anyOf": [
+              {
+                "maximum": 36500.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ti Results Days"
+          }
+        },
+        "required": [
+          "ti_results_days",
+          "ai_runs_days",
+          "closed_case_days",
+          "enforce"
+        ],
+        "title": "RetentionPolicyIn",
+        "type": "object"
+      },
+      "RetentionPolicyOut": {
+        "description": "The effective values now, what is pending and when it takes effect.",
+        "properties": {
+          "ai_runs_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Runs Days"
+          },
+          "closed_case_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Case Days"
+          },
+          "delay_days": {
+            "title": "Delay Days",
+            "type": "integer"
+          },
+          "effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective At"
+          },
+          "enforce": {
+            "title": "Enforce",
+            "type": "boolean"
+          },
+          "enforce_effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enforce Effective At"
+          },
+          "floors": {
+            "$ref": "#/components/schemas/RetentionValues"
+          },
+          "pending_ai_runs_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Ai Runs Days"
+          },
+          "pending_closed_case_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Closed Case Days"
+          },
+          "pending_enforce": {
+            "title": "Pending Enforce",
+            "type": "boolean"
+          },
+          "pending_ti_results_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Ti Results Days"
+          },
+          "ti_results_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ti Results Days"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By"
+          }
+        },
+        "required": [
+          "ti_results_days",
+          "ai_runs_days",
+          "closed_case_days",
+          "pending_ti_results_days",
+          "pending_ai_runs_days",
+          "pending_closed_case_days",
+          "effective_at",
+          "enforce",
+          "pending_enforce",
+          "enforce_effective_at",
+          "delay_days",
+          "floors",
+          "updated_by",
+          "updated_at"
+        ],
+        "title": "RetentionPolicyOut",
+        "type": "object"
+      },
+      "RetentionPreviewIn": {
+        "additionalProperties": false,
+        "description": "Preview a policy read-only (the shared selector `retention/select.py`). Omitted\nvalues preview the effective policy's value.",
+        "properties": {
+          "ai_runs_days": {
+            "anyOf": [
+              {
+                "maximum": 36500.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Runs Days"
+          },
+          "closed_case_days": {
+            "anyOf": [
+              {
+                "maximum": 36500.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Case Days"
+          },
+          "ti_results_days": {
+            "anyOf": [
+              {
+                "maximum": 36500.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ti Results Days"
+          }
+        },
+        "title": "RetentionPreviewIn",
+        "type": "object"
+      },
+      "RetentionPreviewOut": {
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/RetentionCategoryCount"
+            },
+            "propertyNames": {
+              "enum": [
+                "ti_results",
+                "ai_runs",
+                "closed_case"
+              ]
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "holds_active": {
+            "title": "Holds Active",
+            "type": "integer"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/RetentionValues"
+          },
+          "sample": {
+            "items": {
+              "$ref": "#/components/schemas/RetentionCandidateOut"
+            },
+            "title": "Sample",
+            "type": "array"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "generated_at",
+          "policy",
+          "counts",
+          "sample",
+          "truncated",
+          "holds_active"
+        ],
+        "title": "RetentionPreviewOut",
+        "type": "object"
+      },
+      "RetentionRunCreate": {
+        "additionalProperties": false,
+        "description": "A manual run. Its mode comes from the effective policy in the DB (RT1), never from\nthe request: `dry_run: true` asks for a dry run even when `enforce` is effective.",
+        "properties": {
+          "dry_run": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dry Run"
+          }
+        },
+        "title": "RetentionRunCreate",
+        "type": "object"
+      },
+      "RetentionRunDetail": {
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/RetentionCategoryCount"
+            },
+            "propertyNames": {
+              "enum": [
+                "ti_results",
+                "ai_runs",
+                "closed_case"
+              ]
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RetentionRunItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "items_total": {
+            "title": "Items Total",
+            "type": "integer"
+          },
+          "mode": {
+            "enum": [
+              "dry_run",
+              "enforce"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RetentionValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requested_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested By"
+          },
+          "sample": {
+            "items": {
+              "$ref": "#/components/schemas/RetentionCandidateOut"
+            },
+            "title": "Sample",
+            "type": "array"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "partial",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trigger": {
+            "enum": [
+              "schedule",
+              "manual"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "mode",
+          "trigger",
+          "status",
+          "requested_by",
+          "policy",
+          "counts",
+          "error",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "sample",
+          "items",
+          "items_total"
+        ],
+        "title": "RetentionRunDetail",
+        "type": "object"
+      },
+      "RetentionRunItemOut": {
+        "description": "One purge decision (object keys and version ids stay internal).",
+        "properties": {
+          "bytes": {
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "category": {
+            "enum": [
+              "ti_results",
+              "ai_runs",
+              "closed_case"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "outcome": {
+            "enum": [
+              "purged",
+              "skipped_hold",
+              "skipped_locked",
+              "object_delete_failed",
+              "kept_cited"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "ref_id": {
+            "title": "Ref Id",
+            "type": "string"
+          },
+          "ref_table": {
+            "title": "Ref Table",
+            "type": "string"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "ref_table",
+          "ref_id",
+          "job_id",
+          "rows",
+          "bytes",
+          "outcome",
+          "created_at"
+        ],
+        "title": "RetentionRunItemOut",
+        "type": "object"
+      },
+      "RetentionRunOut": {
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/RetentionCategoryCount"
+            },
+            "propertyNames": {
+              "enum": [
+                "ti_results",
+                "ai_runs",
+                "closed_case"
+              ]
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "dry_run",
+              "enforce"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RetentionValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requested_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested By"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "partial",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trigger": {
+            "enum": [
+              "schedule",
+              "manual"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "mode",
+          "trigger",
+          "status",
+          "requested_by",
+          "policy",
+          "counts",
+          "error",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "RetentionRunOut",
+        "type": "object"
+      },
+      "RetentionRunPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RetentionRunOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "RetentionRunPage",
+        "type": "object"
+      },
+      "RetentionValues": {
+        "properties": {
+          "ai_runs_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Runs Days"
+          },
+          "closed_case_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Case Days"
+          },
+          "ti_results_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ti Results Days"
+          }
+        },
+        "required": [
+          "ti_results_days",
+          "ai_runs_days",
+          "closed_case_days"
+        ],
+        "title": "RetentionValues",
+        "type": "object"
+      },
       "RunDetailOut": {
         "properties": {
           "created_at": {
@@ -12611,6 +14274,244 @@
         "title": "SampleOut",
         "type": "object"
       },
+      "SearchGroup": {
+        "properties": {
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHit"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "type": {
+            "enum": [
+              "observable",
+              "case",
+              "evidence",
+              "finding",
+              "alert",
+              "note"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "hits",
+          "next_cursor"
+        ],
+        "title": "SearchGroup",
+        "type": "object"
+      },
+      "SearchHit": {
+        "properties": {
+          "case_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Ref"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "investigation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Investigation Id"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "match": {
+            "enum": [
+              "exact",
+              "fts",
+              "trigram"
+            ],
+            "title": "Match",
+            "type": "string"
+          },
+          "snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snippet"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "observable",
+              "case",
+              "evidence",
+              "finding",
+              "alert",
+              "note"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "title",
+          "snippet",
+          "match",
+          "investigation_id",
+          "case_ref",
+          "job_id",
+          "evidence_id",
+          "kind",
+          "href"
+        ],
+        "title": "SearchHit",
+        "type": "object"
+      },
+      "SearchIn": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          },
+          "q": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "pattern": "^[^\\x00]*$",
+            "title": "Q",
+            "type": "string"
+          },
+          "types": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "observable",
+                    "case",
+                    "evidence",
+                    "finding",
+                    "alert",
+                    "note"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 6,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Types"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "title": "SearchIn",
+        "type": "object"
+      },
+      "SearchOut": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/SearchGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "partial": {
+            "title": "Partial",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "groups",
+          "partial"
+        ],
+        "title": "SearchOut",
+        "type": "object"
+      },
       "SectionCount": {
         "properties": {
           "included": {
@@ -12702,6 +14603,92 @@
           "total"
         ],
         "title": "SectionPage",
+        "type": "object"
+      },
+      "SeenInOut": {
+        "description": "One key of a job and where else the org saw it (\"also seen in\").",
+        "properties": {
+          "common": {
+            "title": "Common",
+            "type": "boolean"
+          },
+          "first_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "ipv4",
+              "ipv6",
+              "domain",
+              "url",
+              "email",
+              "md5",
+              "sha1",
+              "sha256",
+              "ja3",
+              "ja3s",
+              "cert_sha256"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "other_cases": {
+            "title": "Other Cases",
+            "type": "integer"
+          },
+          "other_jobs": {
+            "title": "Other Jobs",
+            "type": "integer"
+          },
+          "top_cases": {
+            "items": {
+              "$ref": "#/components/schemas/CaseRefOut"
+            },
+            "title": "Top Cases",
+            "type": "array"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "value",
+          "key",
+          "other_jobs",
+          "other_cases",
+          "first_seen",
+          "last_seen",
+          "common",
+          "top_cases"
+        ],
+        "title": "SeenInOut",
         "type": "object"
       },
       "Severity": {
@@ -16167,6 +18154,60 @@
         ]
       }
     },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/correlations": {
+      "get": {
+        "description": "The job's keys that other jobs of the org share (\"also seen in\").",
+        "operationId": "job_correlations_api_v1_orgs__org_id__analyses__job_id__correlations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobCorrelationsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Correlations",
+        "tags": [
+          "correlation"
+        ]
+      }
+    },
     "/api/v1/orgs/{org_id}/analyses/{job_id}/enrichments": {
       "post": {
         "description": "Enrich a succeeded analysis job's IOC set (sample hashes first, then by count).",
@@ -17915,6 +19956,83 @@
         "summary": "Get Cited By",
         "tags": [
           "reports"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/correlations": {
+      "get": {
+        "description": "Where one observable was seen in the org (the server normalizes `value`).",
+        "operationId": "lookup_api_v1_orgs__org_id__correlations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "ipv4",
+                "ipv6",
+                "domain",
+                "url",
+                "email",
+                "md5",
+                "sha1",
+                "sha256",
+                "ja3",
+                "ja3s",
+                "cert_sha256"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value",
+            "required": true,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "title": "Value",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorrelationLookupOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Lookup",
+        "tags": [
+          "correlation"
         ]
       }
     },
@@ -19710,6 +21828,60 @@
         ]
       }
     },
+    "/api/v1/orgs/{org_id}/investigations/{investigation_id}/related": {
+      "get": {
+        "description": "Cases sharing at least one non-common key, ranked by shared keys.",
+        "operationId": "related_cases_api_v1_orgs__org_id__investigations__investigation_id__related_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "investigation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Investigation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelatedCasesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Related Cases",
+        "tags": [
+          "correlation"
+        ]
+      }
+    },
     "/api/v1/orgs/{org_id}/investigations/{investigation_id}/reports": {
       "get": {
         "operationId": "list_case_reports_api_v1_orgs__org_id__investigations__investigation_id__reports_get",
@@ -20573,6 +22745,216 @@
         ]
       }
     },
+    "/api/v1/orgs/{org_id}/legal-holds": {
+      "get": {
+        "operationId": "list_holds_api_v1_orgs__org_id__legal_holds_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "investigation_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Investigation Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "active_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Active Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalHoldPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Holds",
+        "tags": [
+          "retention"
+        ]
+      },
+      "post": {
+        "description": "Audited `legal_hold.placed`; answers `s3_sync: pending` (RT5).",
+        "operationId": "place_hold_api_v1_orgs__org_id__legal_holds_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegalHoldCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalHoldOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Place Hold",
+        "tags": [
+          "retention"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/legal-holds/{hold_id}/release": {
+      "post": {
+        "description": "Released once (`409`); keeps protecting until the delay passed (RT1). Audited\n`legal_hold.released`.",
+        "operationId": "release_hold_api_v1_orgs__org_id__legal_holds__hold_id__release_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "hold_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Hold Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegalHoldRelease"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalHoldOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Release Hold",
+        "tags": [
+          "retention"
+        ]
+      }
+    },
     "/api/v1/orgs/{org_id}/members": {
       "get": {
         "operationId": "list_members_api_v1_orgs__org_id__members_get",
@@ -20956,6 +23338,65 @@
         "summary": "Update Note",
         "tags": [
           "notes"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/ops/metrics": {
+      "get": {
+        "description": "The org's failure rate, latency and parse success per analyzer, TI / AI provider and\nreport format over the window.",
+        "operationId": "org_metrics_api_v1_orgs__org_id__ops_metrics_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "default": "24h",
+              "enum": [
+                "1h",
+                "24h",
+                "7d"
+              ],
+              "title": "Window",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgOpsMetricsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Org Metrics",
+        "tags": [
+          "ops"
         ]
       }
     },
@@ -21905,6 +24346,382 @@
         ]
       }
     },
+    "/api/v1/orgs/{org_id}/retention/policy": {
+      "get": {
+        "description": "The effective policy, pending changes and their effective times (no row: keep\neverything forever, enforce off).",
+        "operationId": "get_policy_api_v1_orgs__org_id__retention_policy_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionPolicyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Policy",
+        "tags": [
+          "retention"
+        ]
+      },
+      "put": {
+        "description": "`422 policy_floor`, `422 retention_acknowledgement_required`; writes\n`retention_policy_index` in the same transaction (RT3).",
+        "operationId": "put_policy_api_v1_orgs__org_id__retention_policy_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetentionPolicyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionPolicyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Policy",
+        "tags": [
+          "retention"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/retention/preview": {
+      "post": {
+        "description": "What a run would select now (counts, bytes, a bounded sample). Writes nothing.",
+        "operationId": "preview_api_v1_orgs__org_id__retention_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetentionPreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionPreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview",
+        "tags": [
+          "retention"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/retention/runs": {
+      "get": {
+        "operationId": "list_runs_api_v1_orgs__org_id__retention_runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionRunPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runs",
+        "tags": [
+          "retention"
+        ]
+      },
+      "post": {
+        "description": "Queue a manual run (`retention.run_org`); one run per org at a time (`409`).",
+        "operationId": "create_run_api_v1_orgs__org_id__retention_runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetentionRunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Run",
+        "tags": [
+          "retention"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/retention/runs/{retention_run_id}": {
+      "get": {
+        "operationId": "get_run_api_v1_orgs__org_id__retention_runs__retention_run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "retention_run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Retention Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionRunDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Run",
+        "tags": [
+          "retention"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/search": {
+      "post": {
+        "description": "`422 search_query_invalid` (stripped query outside 2..256 characters).",
+        "operationId": "search_api_v1_orgs__org_id__search_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
     "/api/v1/orgs/{org_id}/storage": {
       "get": {
         "operationId": "get_storage_api_v1_orgs__org_id__storage_get",
@@ -22512,6 +25329,73 @@
         "summary": "Report Signing Keys",
         "tags": [
           "reports"
+        ]
+      }
+    },
+    "/internal/metrics": {
+      "get": {
+        "description": "Platform job metrics (`job_outcomes` and the queue gauges): no tenant data.",
+        "operationId": "internal_metrics_internal_metrics_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-forwarded-for",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Forwarded-For"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/plain; version=0.0.4; charset=utf-8": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Internal Metrics",
+        "tags": [
+          "internal"
         ]
       }
     }

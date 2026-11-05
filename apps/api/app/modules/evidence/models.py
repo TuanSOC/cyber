@@ -38,6 +38,10 @@ class CustodyAction(enum.StrEnum):
     ARCHIVED = "archived"
     ANALYSIS_REQUESTED = "analysis_requested"
     ANALYZED = "analyzed"
+    # M7 (migration 0014, RT12): the retention worker purged the bytes (actor: the retention
+    # system user); `sent_to_sandbox` is reserved for dynamic analysis (not enabled).
+    PURGED = "purged"
+    SENT_TO_SANDBOX = "sent_to_sandbox"
 
 
 class Evidence(UUIDPk, Base):
@@ -72,6 +76,11 @@ class Evidence(UUIDPk, Base):
     description: Mapped[str] = mapped_column(Text, server_default="", default="")
     uploaded_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     uploaded_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    # M7 (0014; phase 6 fills them at INSERT): the extension family the filename declares and
+    # whether it disagrees with libmagic / the magic routing. Write-once (`evidence_immutable`);
+    # NULL on evidence uploaded before M7.
+    declared_type: Mapped[str | None] = mapped_column(String(32))
+    type_mismatch: Mapped[bool | None]
 
 
 class EvidenceHash(UUIDPk, Base):

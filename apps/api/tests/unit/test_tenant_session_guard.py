@@ -21,10 +21,20 @@ ALLOWED = {
     "workers/analyst.py": "org from the non-tenant ai_run_index; the message org must match",
     # M6 phase 4: the trusted `report.rendered` ingest (org from report_render_index).
     "modules/reports/render_ingest.py": "org from the non-tenant report_render_index + token",
+    # M7: the retention worker opens per-org tenant sessions only through tenant_session, with
+    # the org taken from the non-tenant retention_policy_index (RT3) or a message org that must
+    # have a policy row there; phase 3 implements it.
+    "workers/retention.py": "org from the non-tenant retention_policy_index (system lookup)",
+    # M7: the correlation indexer (phase 4): org from the non-tenant analysis_job_index.
+    "modules/correlation/indexer.py": "org from the non-tenant analysis_job_index",
 }
 # Allowlisted ahead of their implementation (M6 phase 1 stubs): exempt from the "still
 # needed" check until the owning phase lands. Phase 9 asserts this set is empty.
-PENDING_ALLOWED: frozenset[str] = frozenset()
+# M7 phase 1: the retention worker (phase 3) and the correlation indexer (phase 4); phase 11
+# asserts the set is empty again.
+PENDING_ALLOWED: frozenset[str] = frozenset(
+    {"workers/retention.py", "modules/correlation/indexer.py"}
+)
 
 
 def _org_argument_is_set(call: ast.Call) -> bool:

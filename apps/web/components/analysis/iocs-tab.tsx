@@ -16,6 +16,7 @@ import {
   usePageOffset,
 } from "@/components/analysis/result-parts";
 import { CITED_ROW, CitedRefBar, useScrollToCited } from "@/components/ai/cited-ref-bar";
+import { IocSeenIn } from "@/components/correlation/ioc-seen-in";
 import { EnrichButton } from "@/components/ti/enrich-button";
 import { ProviderChip } from "@/components/ti/provider-chip";
 import { ResultById } from "@/components/ti/result-panel";
@@ -100,6 +101,8 @@ export function IocsTab({
         <div className="flex flex-col gap-2">
           {(cited.ref || cited.invalid) && <CitedRefBar invalid={cited.invalid} onClear={onClearRef} />}
           {run && <RunProgress orgId={orgId} run={run} />}
+          {/* M7 slot: "also seen in" (phase 8). */}
+          <IocSeenIn orgId={orgId} jobId={jobId} />
           <p className="text-xs text-muted-foreground">
             Observables extracted from the {source}. Threat intel chips quote each provider&apos;s own answer with its
             date (hover a chip); they are attributed statements, not our assessment. Values are copied, never opened.

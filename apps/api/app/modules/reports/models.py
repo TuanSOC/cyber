@@ -41,7 +41,11 @@ TEMPLATES = ("incident_v1",)
 PROFILES = ("internal", "external")
 REPORT_STATUSES = ("draft", "discarded")
 RENDER_FORMATS = ("pdf", "html", "md")
-RENDER_STATUSES = ("queued", "running", "succeeded", "failed")
+# M7 (migration 0014, RT11): `purged` = the rendition's object version was deleted by
+# retention (`succeeded -> purged`, retention role only); the version can be re-rendered.
+RENDER_STATUSES = ("queued", "running", "succeeded", "failed", "purged")
+# The render index never takes `purged` (retention does not touch it).
+RENDER_INDEX_STATUSES = ("queued", "running", "succeeded", "failed")
 CITATION_SOURCES = ("ai", "selection", "note", "attack")
 DRAFT_MAX_BYTES = 1024 * 1024  # RT9: 8 sections x 20 000 non-ASCII characters fit
 MANIFEST_MAX_BYTES = 4 * 1024
@@ -204,14 +208,15 @@ class ReportRender(UUIDPk, Base):
             ["report_versions.id", "report_versions.organization_id"],
         ),
         UniqueConstraint("id", "organization_id"),
-        # Dedupe: one non-failed render per (version, format, renderer version).
+        # Dedupe: one live render per (version, format, renderer version); failed and (M7)
+        # purged rows free the slot, so a purged rendition can be re-rendered (RT11).
         Index(
             "ux_report_renders_version_id_format_renderer",
             "version_id",
             "format",
             text("coalesce(renderer_version, '')"),
             unique=True,
-            postgresql_where=text("status <> 'failed'"),
+            postgresql_where=text("status NOT IN ('failed', 'purged')"),
         ),
         Index(None, "organization_id", "created_at"),
         CheckConstraint(_in("format", RENDER_FORMATS), name="format"),
@@ -260,7 +265,7 @@ class ReportRenderIndex(Base):
             ondelete="CASCADE",
         ),
         Index(None, "status", "deadline_at"),
-        CheckConstraint(_in("status", RENDER_STATUSES), name="status"),
+        CheckConstraint(_in("status", RENDER_INDEX_STATUSES), name="status"),
         CheckConstraint("attempts >= 0", name="attempts_non_negative"),
     )
 

@@ -55,6 +55,15 @@ async def test_every_tenant_table_has_forced_rls(owner_engine: AsyncEngine) -> N
         "report_citations",
         "report_renders",
         "report_render_index",
+        # M7 (migration 0014)
+        "org_retention_policies",
+        "retention_policy_index",
+        "legal_holds",
+        "retention_runs",
+        "retention_run_items",
+        "evidence_purges",
+        "correlation_keys",
+        "correlation_job_state",
     }
     unprotected = [r.relname for r in rows if not (r.relrowsecurity and r.relforcerowsecurity)]
     assert unprotected == []
@@ -138,6 +147,42 @@ async def test_system_visible_report_render_index_holds_no_tenant_data(
         "dispatched_at",
         "deadline_at",
         "attempts",
+    }
+
+
+async def test_system_visible_retention_policy_index_holds_no_tenant_data(
+    owner_engine: AsyncEngine,
+) -> None:
+    """M7 (RT3): the retention sweep's org list is ids and a timestamp only, never the
+    policy values."""
+    query = text(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = 'public' AND table_name = 'retention_policy_index'"
+    )
+    async with owner_engine.connect() as conn:
+        columns = set((await conn.execute(query)).scalars())
+    assert columns == {"organization_id", "updated_at"}
+
+
+async def test_job_outcomes_is_a_system_table_without_tenant_data(
+    owner_engine: AsyncEngine,
+) -> None:
+    """M7 runtime metrics: no org id, user, value or free text; codes and durations only."""
+    query = text(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = 'public' AND table_name = 'job_outcomes'"
+    )
+    async with owner_engine.connect() as conn:
+        columns = set((await conn.execute(query)).scalars())
+    assert columns == {
+        "id",
+        "kind",
+        "subkind",
+        "status",
+        "error_code",
+        "queue_ms",
+        "run_ms",
+        "finished_at",
     }
 
 

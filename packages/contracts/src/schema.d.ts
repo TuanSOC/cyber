@@ -453,6 +453,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/correlations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Job Correlations
+         * @description The job's keys that other jobs of the org share ("also seen in").
+         */
+        get: operations["job_correlations_api_v1_orgs__org_id__analyses__job_id__correlations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/analyses/{job_id}/enrichments": {
         parameters: {
             query?: never;
@@ -750,6 +770,26 @@ export interface paths {
          * @description AI outputs (verified citations) and report versions that cite one row.
          */
         get: operations["get_cited_by_api_v1_orgs__org_id__cited_by_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/correlations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lookup
+         * @description Where one observable was seen in the org (the server normalizes `value`).
+         */
+        get: operations["lookup_api_v1_orgs__org_id__correlations_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1137,6 +1177,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/investigations/{investigation_id}/related": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Related Cases
+         * @description Cases sharing at least one non-common key, ranked by shared keys.
+         */
+        get: operations["related_cases_api_v1_orgs__org_id__investigations__investigation_id__related_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/investigations/{investigation_id}/reports": {
         parameters: {
             query?: never;
@@ -1305,6 +1365,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/legal-holds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Holds */
+        get: operations["list_holds_api_v1_orgs__org_id__legal_holds_get"];
+        put?: never;
+        /**
+         * Place Hold
+         * @description Audited `legal_hold.placed`; answers `s3_sync: pending` (RT5).
+         */
+        post: operations["place_hold_api_v1_orgs__org_id__legal_holds_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/legal-holds/{hold_id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release Hold
+         * @description Released once (`409`); keeps protecting until the delay passed (RT1). Audited
+         *     `legal_hold.released`.
+         */
+        post: operations["release_hold_api_v1_orgs__org_id__legal_holds__hold_id__release_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/members": {
         parameters: {
             query?: never;
@@ -1364,6 +1466,27 @@ export interface paths {
          * @description Soft delete (the versions stay); author or `org.update` only.
          */
         delete: operations["delete_note_api_v1_orgs__org_id__notes__note_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/ops/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Org Metrics
+         * @description The org's failure rate, latency and parse success per analyzer, TI / AI provider and
+         *     report format over the window.
+         */
+        get: operations["org_metrics_api_v1_orgs__org_id__ops_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1633,6 +1756,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/retention/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Policy
+         * @description The effective policy, pending changes and their effective times (no row: keep
+         *     everything forever, enforce off).
+         */
+        get: operations["get_policy_api_v1_orgs__org_id__retention_policy_get"];
+        /**
+         * Put Policy
+         * @description `422 policy_floor`, `422 retention_acknowledgement_required`; writes
+         *     `retention_policy_index` in the same transaction (RT3).
+         */
+        put: operations["put_policy_api_v1_orgs__org_id__retention_policy_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/retention/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview
+         * @description What a run would select now (counts, bytes, a bounded sample). Writes nothing.
+         */
+        post: operations["preview_api_v1_orgs__org_id__retention_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/retention/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Runs */
+        get: operations["list_runs_api_v1_orgs__org_id__retention_runs_get"];
+        put?: never;
+        /**
+         * Create Run
+         * @description Queue a manual run (`retention.run_org`); one run per org at a time (`409`).
+         */
+        post: operations["create_run_api_v1_orgs__org_id__retention_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/retention/runs/{retention_run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Run */
+        get: operations["get_run_api_v1_orgs__org_id__retention_runs__retention_run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Search
+         * @description `422 search_query_invalid` (stripped query outside 2..256 characters).
+         */
+        post: operations["search_api_v1_orgs__org_id__search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/storage": {
         parameters: {
             query?: never;
@@ -1774,6 +2001,26 @@ export interface paths {
         };
         /** Report Signing Keys */
         get: operations["report_signing_keys_api_v1_report_signing_keys_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Internal Metrics
+         * @description Platform job metrics (`job_outcomes` and the queue gauges): no tenant data.
+         */
+        get: operations["internal_metrics_internal_metrics_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3222,6 +3469,22 @@ export interface components {
             /** Total */
             total?: number | null;
         };
+        /** CaseRefOut */
+        CaseRefOut: {
+            /** Case Ref */
+            case_ref: string;
+            /**
+             * Investigation Id
+             * Format: uuid
+             */
+            investigation_id: string;
+            /** Jobs */
+            jobs: number;
+            /** Last Seen */
+            last_seen: string | null;
+            /** Title */
+            title: string;
+        };
         /** CaseSection */
         CaseSection: {
             /** Case Ref */
@@ -3474,10 +3737,38 @@ export interface components {
             };
         };
         /**
+         * CorrelationLookupOut
+         * @description `GET /correlations?kind=&value=`: the server normalizes the value (M6
+         *     `normalize_item`, RT8). `key` is null when the value does not normalize.
+         */
+        CorrelationLookupOut: {
+            /** Cases */
+            cases: number;
+            /** Common */
+            common: boolean;
+            /** First Seen */
+            first_seen: string | null;
+            /** Items */
+            items: components["schemas"]["OccurrenceOut"][];
+            /** Jobs */
+            jobs: number;
+            /** Key */
+            key: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ipv4" | "ipv6" | "domain" | "url" | "email" | "md5" | "sha1" | "sha256" | "ja3" | "ja3s" | "cert_sha256";
+            /** Last Seen */
+            last_seen: string | null;
+            /** Value Norm */
+            value_norm: string | null;
+        };
+        /**
          * CustodyAction
          * @enum {string}
          */
-        CustodyAction: "uploaded" | "downloaded" | "verified_ok" | "verified_mismatch" | "archived" | "analysis_requested" | "analyzed";
+        CustodyAction: "uploaded" | "downloaded" | "verified_ok" | "verified_mismatch" | "archived" | "analysis_requested" | "analyzed" | "purged" | "sent_to_sandbox";
         /** CustodyEventOut */
         CustodyEventOut: {
             action: components["schemas"]["CustodyAction"];
@@ -3746,6 +4037,11 @@ export interface components {
             /** Providers */
             providers?: components["schemas"]["ProviderName"][] | null;
         };
+        /**
+         * ErrorClass
+         * @enum {string}
+         */
+        ErrorClass: "parse" | "infra" | "policy" | "provider" | "input" | "other";
         /** EvidenceItem */
         EvidenceItem: {
             /** Cite No */
@@ -3797,6 +4093,8 @@ export interface components {
              * @default false
              */
             ai_excluded: boolean;
+            /** Declared Type */
+            declared_type?: string | null;
             /** Description */
             description: string;
             /** Detected Description */
@@ -3817,8 +4115,15 @@ export interface components {
              * Format: uuid
              */
             investigation_id: string;
+            /**
+             * Legal Hold
+             * @default false
+             */
+            legal_hold: boolean;
             /** Original Filename */
             original_filename: string;
+            /** Purged At */
+            purged_at?: string | null;
             /** Size Bytes */
             size_bytes: number;
             status: components["schemas"]["EvidenceStatus"];
@@ -3827,6 +4132,8 @@ export interface components {
              * @default false
              */
             ti_excluded: boolean;
+            /** Type Mismatch */
+            type_mismatch?: boolean | null;
             /**
              * Uploaded At
              * Format: date-time
@@ -4307,6 +4614,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Legal Hold
+             * @default false
+             */
+            legal_hold: boolean;
             severity: components["schemas"]["Severity"];
             share_policy: components["schemas"]["SharePolicyOut"];
             status: components["schemas"]["InvestigationStatus"];
@@ -4677,6 +4989,22 @@ export interface components {
              */
             total: number;
         };
+        /** JobCorrelationsOut */
+        JobCorrelationsOut: {
+            /** Indexed */
+            indexed: boolean;
+            /** Items */
+            items: components["schemas"]["SeenInOut"][];
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Total Keys */
+            total_keys: number;
+            /** Truncated */
+            truncated: boolean;
+        };
         /** JobItem */
         JobItem: {
             /** Analyzer */
@@ -4722,12 +5050,116 @@ export interface components {
              */
             total: number;
         };
+        /** KindMetricsOut */
+        KindMetricsOut: {
+            /** Error Classes */
+            error_classes: {
+                [key: string]: number;
+            };
+            /** Failed */
+            failed: number;
+            /** Failure Ratio */
+            failure_ratio: number | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "pcap" | "static" | "ti" | "ai" | "report";
+            /** Parse Success Ratio */
+            parse_success_ratio: number | null;
+            /** Queue P50 Ms */
+            queue_p50_ms: number | null;
+            /** Queue P95 Ms */
+            queue_p95_ms: number | null;
+            /** Run P50 Ms */
+            run_p50_ms: number | null;
+            /** Run P95 Ms */
+            run_p95_ms: number | null;
+            /** Subkind */
+            subkind: string | null;
+            /** Succeeded */
+            succeeded: number;
+            /** Total */
+            total: number;
+        };
         /** KindStats */
         KindStats: {
             /** Included */
             included: number;
             /** Total */
             total: number;
+        };
+        /** LegalHoldCreate */
+        LegalHoldCreate: {
+            /** Investigation Id */
+            investigation_id?: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "org" | "investigation";
+        };
+        /** LegalHoldOut */
+        LegalHoldOut: {
+            /** Active */
+            active: boolean;
+            /** Case Ref */
+            case_ref: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Investigation Id */
+            investigation_id: string | null;
+            /**
+             * Placed At
+             * Format: date-time
+             */
+            placed_at: string;
+            /**
+             * Placed By
+             * Format: uuid
+             */
+            placed_by: string;
+            /** Placed By Name */
+            placed_by_name: string;
+            /** Protects Until */
+            protects_until: string | null;
+            /** Reason */
+            reason: string;
+            /** Release Reason */
+            release_reason: string | null;
+            /** Released At */
+            released_at: string | null;
+            /** Released By */
+            released_by: string | null;
+            /**
+             * S3 Sync
+             * @enum {string}
+             */
+            s3_sync: "pending" | "synced";
+            /** S3 Synced At */
+            s3_synced_at: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "org" | "investigation";
+        };
+        /** LegalHoldPage */
+        LegalHoldPage: {
+            /** Items */
+            items: components["schemas"]["LegalHoldOut"][];
+            /** Total */
+            total: number;
+        };
+        /** LegalHoldRelease */
+        LegalHoldRelease: {
+            /** Reason */
+            reason: string;
         };
         /** LibraryCount */
         LibraryCount: {
@@ -5175,10 +5607,58 @@ export interface components {
              */
             total: number;
         };
+        /** OccurrenceOut */
+        OccurrenceOut: {
+            analyzer: components["schemas"]["Analyzer"];
+            /** Case Ref */
+            case_ref: string;
+            /** Evidence Filename */
+            evidence_filename: string;
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /** First Seen */
+            first_seen: string | null;
+            /**
+             * Investigation Id
+             * Format: uuid
+             */
+            investigation_id: string;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Last Seen */
+            last_seen: string | null;
+            /** Title */
+            title: string;
+        };
         /** OrgCreate */
         OrgCreate: {
             /** Name */
             name: string;
+        };
+        /** OrgOpsMetricsOut */
+        OrgOpsMetricsOut: {
+            /** Active */
+            active: {
+                [key: string]: number;
+            };
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Items */
+            items: components["schemas"]["KindMetricsOut"][];
+            /**
+             * Window
+             * @enum {string}
+             */
+            window: "1h" | "24h" | "7d";
         };
         /** OrgUpdate */
         OrgUpdate: {
@@ -5368,6 +5848,39 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** RelatedCaseOut */
+        RelatedCaseOut: {
+            /** Case Ref */
+            case_ref: string;
+            /**
+             * Investigation Id
+             * Format: uuid
+             */
+            investigation_id: string;
+            /** Kinds */
+            kinds: {
+                [key: string]: number;
+            };
+            /** Last Seen */
+            last_seen: string | null;
+            /** Shared Keys */
+            shared_keys: number;
+            status: components["schemas"]["InvestigationStatus"];
+            /** Title */
+            title: string;
+        };
+        /** RelatedCasesOut */
+        RelatedCasesOut: {
+            /** Common Keys Excluded */
+            common_keys_excluded: number;
+            /**
+             * Investigation Id
+             * Format: uuid
+             */
+            investigation_id: string;
+            /** Items */
+            items: components["schemas"]["RelatedCaseOut"][];
+        };
         /** RenderCreate */
         RenderCreate: {
             /**
@@ -5421,7 +5934,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "queued" | "running" | "succeeded" | "failed";
+            status: "queued" | "running" | "succeeded" | "failed" | "purged";
             /**
              * Version Id
              * Format: uuid
@@ -6212,6 +6725,271 @@ export interface components {
          * @enum {string}
          */
         ResultStatus: "ok" | "not_found" | "error" | "auth_failed";
+        /** RetentionCandidateOut */
+        RetentionCandidateOut: {
+            /** Bytes */
+            bytes: number;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "ti_results" | "ai_runs" | "closed_case";
+            /** Investigation Id */
+            investigation_id: string | null;
+            /** Job Id */
+            job_id: string | null;
+            /** Ref Id */
+            ref_id: string;
+            /** Ref Table */
+            ref_table: string;
+            /** Rows */
+            rows: number;
+        };
+        /** RetentionCategoryCount */
+        RetentionCategoryCount: {
+            /** Bytes */
+            bytes: number;
+            /** Candidates */
+            candidates: number;
+            /** Kept Cited */
+            kept_cited: number;
+            /** Rows */
+            rows: number;
+            /** Skipped Hold */
+            skipped_hold: number;
+            /** Skipped Locked */
+            skipped_locked: number;
+        };
+        /**
+         * RetentionPolicyIn
+         * @description PUT replaces the policy. Every value is required (null = keep forever).
+         */
+        RetentionPolicyIn: {
+            /** Acknowledge Destruction */
+            acknowledge_destruction?: boolean | null;
+            /** Ai Runs Days */
+            ai_runs_days: number | null;
+            /** Closed Case Days */
+            closed_case_days: number | null;
+            /** Enforce */
+            enforce: boolean;
+            /** Ti Results Days */
+            ti_results_days: number | null;
+        };
+        /**
+         * RetentionPolicyOut
+         * @description The effective values now, what is pending and when it takes effect.
+         */
+        RetentionPolicyOut: {
+            /** Ai Runs Days */
+            ai_runs_days: number | null;
+            /** Closed Case Days */
+            closed_case_days: number | null;
+            /** Delay Days */
+            delay_days: number;
+            /** Effective At */
+            effective_at: string | null;
+            /** Enforce */
+            enforce: boolean;
+            /** Enforce Effective At */
+            enforce_effective_at: string | null;
+            floors: components["schemas"]["RetentionValues"];
+            /** Pending Ai Runs Days */
+            pending_ai_runs_days: number | null;
+            /** Pending Closed Case Days */
+            pending_closed_case_days: number | null;
+            /** Pending Enforce */
+            pending_enforce: boolean;
+            /** Pending Ti Results Days */
+            pending_ti_results_days: number | null;
+            /** Ti Results Days */
+            ti_results_days: number | null;
+            /** Updated At */
+            updated_at: string | null;
+            /** Updated By */
+            updated_by: string | null;
+        };
+        /**
+         * RetentionPreviewIn
+         * @description Preview a policy read-only (the shared selector `retention/select.py`). Omitted
+         *     values preview the effective policy's value.
+         */
+        RetentionPreviewIn: {
+            /** Ai Runs Days */
+            ai_runs_days?: number | null;
+            /** Closed Case Days */
+            closed_case_days?: number | null;
+            /** Ti Results Days */
+            ti_results_days?: number | null;
+        };
+        /** RetentionPreviewOut */
+        RetentionPreviewOut: {
+            /** Counts */
+            counts: {
+                [key: string]: components["schemas"]["RetentionCategoryCount"];
+            };
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Holds Active */
+            holds_active: number;
+            policy: components["schemas"]["RetentionValues"];
+            /** Sample */
+            sample: components["schemas"]["RetentionCandidateOut"][];
+            /** Truncated */
+            truncated: boolean;
+        };
+        /**
+         * RetentionRunCreate
+         * @description A manual run. Its mode comes from the effective policy in the DB (RT1), never from
+         *     the request: `dry_run: true` asks for a dry run even when `enforce` is effective.
+         */
+        RetentionRunCreate: {
+            /** Dry Run */
+            dry_run?: boolean | null;
+        };
+        /** RetentionRunDetail */
+        RetentionRunDetail: {
+            /** Counts */
+            counts: {
+                [key: string]: components["schemas"]["RetentionCategoryCount"];
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error */
+            error: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Items */
+            items: components["schemas"]["RetentionRunItemOut"][];
+            /** Items Total */
+            items_total: number;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "dry_run" | "enforce";
+            policy: components["schemas"]["RetentionValues"] | null;
+            /** Requested By */
+            requested_by: string | null;
+            /** Sample */
+            sample: components["schemas"]["RetentionCandidateOut"][];
+            /** Started At */
+            started_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "completed" | "partial" | "failed";
+            /**
+             * Trigger
+             * @enum {string}
+             */
+            trigger: "schedule" | "manual";
+        };
+        /**
+         * RetentionRunItemOut
+         * @description One purge decision (object keys and version ids stay internal).
+         */
+        RetentionRunItemOut: {
+            /** Bytes */
+            bytes: number;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "ti_results" | "ai_runs" | "closed_case";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Job Id */
+            job_id: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "purged" | "skipped_hold" | "skipped_locked" | "object_delete_failed" | "kept_cited";
+            /** Ref Id */
+            ref_id: string;
+            /** Ref Table */
+            ref_table: string;
+            /** Rows */
+            rows: number;
+        };
+        /** RetentionRunOut */
+        RetentionRunOut: {
+            /** Counts */
+            counts: {
+                [key: string]: components["schemas"]["RetentionCategoryCount"];
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error */
+            error: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "dry_run" | "enforce";
+            policy: components["schemas"]["RetentionValues"] | null;
+            /** Requested By */
+            requested_by: string | null;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "completed" | "partial" | "failed";
+            /**
+             * Trigger
+             * @enum {string}
+             */
+            trigger: "schedule" | "manual";
+        };
+        /** RetentionRunPage */
+        RetentionRunPage: {
+            /** Items */
+            items: components["schemas"]["RetentionRunOut"][];
+            /** Total */
+            total: number;
+        };
+        /** RetentionValues */
+        RetentionValues: {
+            /** Ai Runs Days */
+            ai_runs_days: number | null;
+            /** Closed Case Days */
+            closed_case_days: number | null;
+            /** Ti Results Days */
+            ti_results_days: number | null;
+        };
         /** RunDetailOut */
         RunDetailOut: {
             /**
@@ -6512,6 +7290,65 @@ export interface components {
             /** Size */
             size: number;
         };
+        /** SearchGroup */
+        SearchGroup: {
+            /** Hits */
+            hits: components["schemas"]["SearchHit"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "observable" | "case" | "evidence" | "finding" | "alert" | "note";
+        };
+        /** SearchHit */
+        SearchHit: {
+            /** Case Ref */
+            case_ref: string | null;
+            /** Evidence Id */
+            evidence_id: string | null;
+            /** Href */
+            href: string;
+            /** Id */
+            id: string;
+            /** Investigation Id */
+            investigation_id: string | null;
+            /** Job Id */
+            job_id: string | null;
+            /** Kind */
+            kind: string | null;
+            /**
+             * Match
+             * @enum {string}
+             */
+            match: "exact" | "fts" | "trigram";
+            /** Snippet */
+            snippet: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "observable" | "case" | "evidence" | "finding" | "alert" | "note";
+        };
+        /** SearchIn */
+        SearchIn: {
+            /** Cursor */
+            cursor?: string | null;
+            /** Q */
+            q: string;
+            /** Types */
+            types?: ("observable" | "case" | "evidence" | "finding" | "alert" | "note")[] | null;
+        };
+        /** SearchOut */
+        SearchOut: {
+            /** Groups */
+            groups: components["schemas"]["SearchGroup"][];
+            /** Partial */
+            partial: boolean;
+        };
         /** SectionCount */
         SectionCount: {
             /** Included */
@@ -6550,6 +7387,33 @@ export interface components {
              * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
              */
             total: number;
+        };
+        /**
+         * SeenInOut
+         * @description One key of a job and where else the org saw it ("also seen in").
+         */
+        SeenInOut: {
+            /** Common */
+            common: boolean;
+            /** First Seen */
+            first_seen: string | null;
+            /** Key */
+            key: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ipv4" | "ipv6" | "domain" | "url" | "email" | "md5" | "sha1" | "sha256" | "ja3" | "ja3s" | "cert_sha256";
+            /** Last Seen */
+            last_seen: string | null;
+            /** Other Cases */
+            other_cases: number;
+            /** Other Jobs */
+            other_jobs: number;
+            /** Top Cases */
+            top_cases: components["schemas"]["CaseRefOut"][];
+            /** Value */
+            value: string;
         };
         /**
          * Severity
@@ -8075,6 +8939,38 @@ export interface operations {
             };
         };
     };
+    job_correlations_api_v1_orgs__org_id__analyses__job_id__correlations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobCorrelationsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     request_job_enrichment_api_v1_orgs__org_id__analyses__job_id__enrichments_post: {
         parameters: {
             query?: never;
@@ -8697,6 +9593,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CitedByOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lookup_api_v1_orgs__org_id__correlations_get: {
+        parameters: {
+            query: {
+                kind: "ipv4" | "ipv6" | "domain" | "url" | "email" | "md5" | "sha1" | "sha256" | "ja3" | "ja3s" | "cert_sha256";
+                value: string;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorrelationLookupOut"];
                 };
             };
             /** @description Validation Error */
@@ -9636,6 +10566,38 @@ export interface operations {
             };
         };
     };
+    related_cases_api_v1_orgs__org_id__investigations__investigation_id__related_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                investigation_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelatedCasesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_case_reports_api_v1_orgs__org_id__investigations__investigation_id__reports_get: {
         parameters: {
             query?: {
@@ -10024,6 +10986,113 @@ export interface operations {
             };
         };
     };
+    list_holds_api_v1_orgs__org_id__legal_holds_get: {
+        parameters: {
+            query?: {
+                investigation_id?: string | null;
+                active_only?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalHoldPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    place_hold_api_v1_orgs__org_id__legal_holds_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegalHoldCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalHoldOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    release_hold_api_v1_orgs__org_id__legal_holds__hold_id__release_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hold_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LegalHoldRelease"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalHoldOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_members_api_v1_orgs__org_id__members_get: {
         parameters: {
             query?: {
@@ -10245,6 +11314,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    org_metrics_api_v1_orgs__org_id__ops_metrics_get: {
+        parameters: {
+            query?: {
+                window?: "1h" | "24h" | "7d";
+            };
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgOpsMetricsOut"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -10769,6 +11871,243 @@ export interface operations {
             };
         };
     };
+    get_policy_api_v1_orgs__org_id__retention_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionPolicyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_policy_api_v1_orgs__org_id__retention_policy_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetentionPolicyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionPolicyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_v1_orgs__org_id__retention_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetentionPreviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_runs_api_v1_orgs__org_id__retention_runs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionRunPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_run_api_v1_orgs__org_id__retention_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetentionRunCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_api_v1_orgs__org_id__retention_runs__retention_run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                retention_run_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionRunDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_api_v1_orgs__org_id__search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_storage_api_v1_orgs__org_id__storage_get: {
         parameters: {
             query?: never;
@@ -11068,6 +12407,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SigningKeysOut"];
+                };
+            };
+        };
+    };
+    internal_metrics_internal_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-forwarded-for"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                    "text/plain; version=0.0.4; charset=utf-8": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

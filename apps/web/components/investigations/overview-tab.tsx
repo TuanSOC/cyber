@@ -1,6 +1,8 @@
 "use client";
 
+import { RelatedCasesCard } from "@/components/correlation/related-cases-card";
 import { CaseTlpCard } from "@/components/investigations/case-tlp-card";
+import { CaseHoldCard } from "@/components/legal-holds/case-hold-card";
 import { SharePolicyCard } from "@/components/investigations/share-policy-card";
 import { StatusHistory } from "@/components/investigations/status-history";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,8 +44,12 @@ export function OverviewTab({
             <StatusHistory orgId={orgId} investigationId={inv.id} />
           </CardContent>
         </Card>
+        {/* M7 slot: related cases (phase 8). */}
+        <RelatedCasesCard orgId={orgId} investigationId={inv.id} />
       </div>
       <div className="flex min-w-0 flex-col gap-6">
+        {/* M7 slot: the case's legal hold (phase 9). */}
+        <CaseHoldCard orgId={orgId} investigationId={inv.id} legalHold={inv.legal_hold} can={can} />
         <CaseTlpCard
           tlp={inv.tlp}
           canWrite={canWrite}

@@ -25,9 +25,37 @@ x-prod-report-signing: &prod-report-signing
   REPORT_SIGNING_ACTIVE_KID: ${REPORT_PROD_SIGNING_ACTIVE_KID:?run scripts/gen_report_signing_keys.py and set REPORT_PROD_SIGNING_ACTIVE_KID}
   REPORT_SIGNING_PUBLIC_KEYS: ${REPORT_PROD_SIGNING_PUBLIC_KEYS:?run scripts/gen_report_signing_keys.py and set REPORT_PROD_SIGNING_PUBLIC_KEYS}
 
+# Platform operations in prod (M7): the retention role, broker and purge passwords are
+# required (no change-me defaults), and the KMS key and metrics token come from .secrets/.
+x-prod-retention: &prod-retention
+  ENV: prod
+  DATABASE_URL: postgresql+asyncpg://cyberlab_retention:${POSTGRES_RETENTION_PASSWORD:?set POSTGRES_RETENTION_PASSWORD}@postgres:5432/cyberlab
+  BROKER_URL: redis://retention:${BROKER_RETENTION_PASSWORD:?set BROKER_RETENTION_PASSWORD}@redis-broker:6379/0
+  MINIO_PURGE_SECRET_KEY: ${MINIO_PURGE_SECRET_KEY:?set MINIO_PURGE_SECRET_KEY}
+
 services:
   minio:
     ports: !reset []
+
+  postgres:
+    environment:
+      POSTGRES_RETENTION_PASSWORD: ${POSTGRES_RETENTION_PASSWORD:?set POSTGRES_RETENTION_PASSWORD}
+
+  db-bootstrap:
+    environment:
+      POSTGRES_RETENTION_PASSWORD: ${POSTGRES_RETENTION_PASSWORD:?set POSTGRES_RETENTION_PASSWORD}
+
+  minio-init:
+    environment:
+      ENV: prod
+      MINIO_PURGE_SECRET_KEY: ${MINIO_PURGE_SECRET_KEY:?set MINIO_PURGE_SECRET_KEY}
+
+  # The retention worker in prod: prod image, ENV=prod, its own passwords required; still no
+  # JWT secret, app Redis, api MinIO user or key material.
+  retention-worker:
+    image: cyberlab/api:prod
+    environment: *prod-retention
+    volumes: !reset []
 
   migrate:
     image: cyberlab/api:prod
@@ -89,6 +117,7 @@ services:
     environment:
       BROKER_ANALYST_PASSWORD: ${BROKER_ANALYST_PASSWORD:?set BROKER_ANALYST_PASSWORD}
       BROKER_REPORT_PASSWORD: ${BROKER_REPORT_PASSWORD:?set BROKER_REPORT_PASSWORD}
+      BROKER_RETENTION_PASSWORD: ${BROKER_RETENTION_PASSWORD:?set BROKER_RETENTION_PASSWORD}
 
   # The report renderer in prod (M6): prod image, ENV=prod, its own broker password required;
   # still no DB, MinIO credentials or signing material.
@@ -156,6 +185,14 @@ secrets:
   # From scripts/gen_report_signing_keys.py (the api only; same rules).
   report_signing_private:
     file: ./.secrets/report_signing_private.json
+  # M7: `<name>:<base64 32 bytes>` (never the committed dev key; minio-init refuses its name).
+  # Back it up encrypted with the other secrets: without it MinIO cannot read its IAM, config
+  # or any SSE object (RT7).
+  minio_kms_key:
+    file: ./.secrets/minio_kms_key
+  # M7: the bearer token of /internal/metrics (the api only).
+  metrics_token:
+    file: ./.secrets/metrics_token
 
 volumes:
   caddydata:

@@ -9,6 +9,7 @@ import {
   type Filters,
   InvestigationFilters,
 } from "@/components/investigations/investigation-filters";
+import { LegalHoldBadge } from "@/components/investigations/legal-hold-badge";
 import { NewInvestigationDialog } from "@/components/investigations/new-investigation-dialog";
 import { PageHeader } from "@/components/page-header";
 import { PAGE_SIZE, Pager } from "@/components/pager";
@@ -101,6 +102,8 @@ export default function InvestigationsPage() {
                     <Link className="hover:underline" href={orgPath(orgId, `investigations/${inv.id}`)}>
                       {inv.title}
                     </Link>
+                    {/* M7 slot: legal-hold badge (phase 9). */}
+                    <LegalHoldBadge legalHold={inv.legal_hold} />
                   </TableCell>
                   <TableCell>
                     <SeverityBadge severity={inv.severity} />

@@ -26,6 +26,10 @@ export function EvidenceActions({
   onVerified: (result: Verify) => void;
 }) {
   const queryClient = useQueryClient();
+  // M7: purged bytes cannot be downloaded or re-hashed (the API answers 410 evidence_purged);
+  // the hashes and custody stay visible on the page.
+  const purged = Boolean(evidence.purged_at);
+  const purgedHint = purged ? "The bytes were purged by the retention policy" : undefined;
   const path = { org_id: orgId, evidence_id: evidence.id };
   const key = ["org", orgId, "evidence", evidence.id];
   const refreshCustody = () => queryClient.invalidateQueries({ queryKey: [...key, "custody"] });
@@ -72,11 +76,16 @@ export function EvidenceActions({
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={download}>
+      <Button variant="outline" size="sm" onClick={download} disabled={purged} title={purgedHint}>
         <Download className="size-4" aria-hidden /> Download
       </Button>
       {canWrite && (
-        <Button size="sm" disabled={verify.isPending} onClick={() => verify.mutate()}>
+        <Button
+          size="sm"
+          disabled={purged || verify.isPending}
+          title={purgedHint}
+          onClick={() => verify.mutate()}
+        >
           <ShieldCheck className="size-4" aria-hidden />
           {verify.isPending ? "Verifying…" : "Verify"}
         </Button>

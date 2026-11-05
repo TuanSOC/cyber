@@ -27,3 +27,6 @@ playwright-report/
 
 # Threat-intel seal private keys (scripts/gen_ti_seal_keys.py): never committed
 .secrets/
+
+# Platform backups (M7, pnpm backup): TLP:RED, every org's evidence and hashes
+backups/

@@ -10,6 +10,7 @@ import { useState } from "react";
 import { EvidenceAnalysesCard } from "@/components/analysis/evidence-analyses-card";
 import { CustodyTimeline } from "@/components/evidence/custody-timeline";
 import { EvidenceActions } from "@/components/evidence/evidence-actions";
+import { EvidenceIntegrityStrip } from "@/components/evidence/evidence-integrity-strip";
 import { HashValue } from "@/components/hash-value";
 import { EvidenceExclusionBadges, EvidenceSharePolicyCard } from "@/components/investigations/evidence-share-policy";
 import { NotFoundCard } from "@/components/not-found-card";
@@ -99,6 +100,8 @@ export default function EvidencePage() {
           </>
         }
       />
+      {/* M7 slot: purged bytes and declared vs detected type (phase 9). */}
+      <EvidenceIntegrityStrip evidence={e} />
       {verify && (
         <Alert variant={verify.result === "ok" ? "default" : "destructive"} className="mb-6">
           <AlertTitle>{VERIFY_TITLES[verify.result]}</AlertTitle>

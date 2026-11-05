@@ -19,6 +19,12 @@ AI_VERIFY = "ai.verify"
 # answer `report.rendered` goes to the trusted ingest worker (queue `ingest`).
 REPORT_RENDER = "report.render"
 REPORT_RENDERED = "report.rendered"
+# Platform operations (M7): the retention worker (queue `retention`) runs the daily sweep, one
+# org's run and the S3 legal-hold sync; the ingest worker indexes correlation keys (beat).
+RETENTION_SWEEP = "retention.sweep"
+RETENTION_RUN_ORG = "retention.run_org"
+RETENTION_SYNC_HOLDS = "retention.sync_holds"
+CORRELATION_INDEX_PENDING = "correlation.index_pending"
 
 
 @dataclass(frozen=True)
@@ -50,3 +56,7 @@ class Queues:
     @property
     def report(self) -> str:
         return f"{self.prefix}report"
+
+    @property
+    def retention(self) -> str:
+        return f"{self.prefix}retention"

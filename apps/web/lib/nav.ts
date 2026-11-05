@@ -8,11 +8,14 @@ import {
   LayoutDashboard,
   Network,
   Plug,
+  Search,
   Settings,
   ShieldAlert,
   Skull,
   type LucideIcon,
 } from "lucide-react";
+
+import type { Permission } from "@/lib/roles";
 
 export type NavItem = {
   key: string;
@@ -27,6 +30,13 @@ export type NavItem = {
 
 export const NAV: NavItem[] = [
   { key: "overview", label: "Overview", icon: LayoutDashboard, segment: "", summary: "Case activity at a glance." },
+  {
+    key: "search",
+    label: "Search",
+    icon: Search,
+    segment: "search",
+    summary: "Org-wide search of cases, evidence, findings, alerts, notes and observables.",
+  },
   {
     key: "investigations",
     label: "Investigations",
@@ -102,6 +112,29 @@ export const NAV: NavItem[] = [
   },
   { key: "settings", label: "Settings", icon: Settings, segment: "settings", summary: "Organization and members." },
 ];
+
+export type SettingsTab = {
+  key: string;
+  label: string;
+  /** Path segment under /o/[orgId]. */
+  segment: string;
+  /** Shown only to members holding it (the API enforces it either way). */
+  permission?: Permission;
+};
+
+/** The settings sub-navigation (M7 adds Retention and Operations). */
+export const SETTINGS_TABS: SettingsTab[] = [
+  { key: "organization", label: "Organization", segment: "settings" },
+  { key: "members", label: "Members", segment: "settings/members" },
+  { key: "integrations", label: "Integrations", segment: "settings/integrations" },
+  { key: "retention", label: "Retention", segment: "settings/retention", permission: "org.read" },
+  { key: "operations", label: "Operations", segment: "settings/operations", permission: "audit.read" },
+  { key: "audit", label: "Audit log", segment: "settings/audit", permission: "audit.read" },
+];
+
+export function settingsTabs(can: (permission: Permission) => boolean): SettingsTab[] {
+  return SETTINGS_TABS.filter((tab) => !tab.permission || can(tab.permission));
+}
 
 export function plannedModule(segment: string): NavItem | undefined {
   return NAV.find((item) => item.segment === segment && item.plannedFor);

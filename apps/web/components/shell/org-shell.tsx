@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect } from "react";
 
+import { SearchBox } from "@/components/search/search-box";
 import { AppSidebar } from "@/components/shell/app-sidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,8 @@ export function OrgShell({ children }: { children: React.ReactNode }) {
               {membership.organization_name}
             </span>
             <Badge variant="secondary">{ROLE_LABELS[membership.role]}</Badge>
+            {/* M7 slot: org search (phase 8). */}
+            <SearchBox orgId={orgId} />
           </header>
           <div className="min-w-0 flex-1 p-4 md:p-6 print:p-0">{children}</div>
         </SidebarInset>

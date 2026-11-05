@@ -11,6 +11,7 @@ from app.core.config import (
     DEV_AI_SEAL_PUBLIC_KEYS,
     DEV_REPORT_SIGNING_PUBLIC_KEYS,
     DEV_SEAL_PUBLIC_KEYS,
+    RETENTION_SYSTEM_USER_ID,
     Settings,
 )
 from app.modules.threat_intel.catalog import CATALOG
@@ -556,3 +557,130 @@ def test_report_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
         4,
     )
     assert settings.timeline_export_max_rows == 50_000
+
+
+# --- M7: the retention worker's least-privilege env (the settings matrix) --------------------
+
+RETENTION_DB = "postgresql+asyncpg://cyberlab_retention:s3cret@postgres/cyberlab"
+# Explicit None beats the api-test env for every role-gated setting.
+RETENTION: dict[str, Any] = {
+    "process_role": "retention",
+    "database_url": RETENTION_DB,
+    "broker_url": "redis://retention:x@redis-broker:6379/0",
+    "jwt_secret": None,
+    "redis_url": None,
+    "minio_endpoint": "minio:9000",
+    "minio_access_key": None,
+    "minio_secret_key": None,
+    "minio_purge_access_key": "cyberlab-purge",
+    "minio_purge_secret_key": "s3cret-purge",
+}
+PURGE = {"minio_purge_access_key": "cyberlab-purge", "minio_purge_secret_key": "s3cret-purge"}
+
+
+def _role_env(role: str) -> dict[str, Any]:
+    if role in ("enrich", "analyst"):
+        return {**ENRICH, "process_role": role}
+    return {**BASE, "process_role": role}
+
+
+def test_retention_role_runs_with_its_least_privilege_env() -> None:
+    settings = Settings(**RETENTION)
+    assert settings.process_role == "retention"
+    assert settings.minio_purge_access_key == "cyberlab-purge"
+    with pytest.raises(RuntimeError, match="not available to the retention process"):
+        settings.need("jwt_secret")
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("jwt_secret", "y" * 48),
+        ("redis_url", "redis://redis:6379/0"),
+        ("minio_access_key", "cyberlab-api"),
+        ("minio_secret_key", "s3cret-minio"),
+        ("ti_seal_private_keys_file", "/run/secrets/ti_seal_private"),
+        ("ai_seal_private_keys_file", "/run/secrets/ai_seal_private"),
+        ("ai_platform_key_file", "/run/secrets/ai_platform_key"),
+        ("report_signing_keys_file", "/run/secrets/report_signing_private"),
+        ("metrics_token_file", "/run/secrets/metrics_token"),
+    ],
+)
+def test_retention_role_refuses_every_other_secret(name: str, value: str) -> None:
+    with pytest.raises(ValidationError, match=f"must not receive: {name.upper()}"):
+        Settings(**{**RETENTION, name: value})
+
+
+def test_retention_role_needs_the_retention_db_role() -> None:
+    with pytest.raises(ValidationError, match="needs DATABASE_URL of the cyberlab_retention"):
+        Settings(**{**RETENTION, "database_url": BASE["database_url"]})
+
+
+@pytest.mark.parametrize(
+    "name", ["minio_endpoint", "minio_purge_access_key", "minio_purge_secret_key"]
+)
+def test_retention_role_needs_minio_and_the_purge_user(name: str) -> None:
+    with pytest.raises(ValidationError, match=f"missing settings: {name.upper()}"):
+        Settings(**{**RETENTION, name: None})
+
+
+@pytest.mark.parametrize("role", ["api", "ingest", "enrich", "analyst"])
+def test_other_roles_refuse_the_purge_user(role: str) -> None:
+    with pytest.raises(ValidationError, match="must not receive: MINIO_PURGE_ACCESS_KEY"):
+        Settings(**_role_env(role), **PURGE)
+
+
+@pytest.mark.parametrize("role", ["api", "ingest", "enrich", "analyst"])
+def test_other_roles_refuse_the_retention_db_role(role: str) -> None:
+    with pytest.raises(ValidationError, match="must not use the cyberlab_retention"):
+        Settings(**{**_role_env(role), "database_url": RETENTION_DB})
+
+
+@pytest.mark.parametrize("role", ["ingest", "enrich", "analyst"])
+def test_only_the_api_holds_the_metrics_token(role: str) -> None:
+    with pytest.raises(ValidationError, match="METRICS_TOKEN_FILE"):
+        Settings(**_role_env(role), metrics_token_file="/run/secrets/metrics_token")
+    assert Settings(**BASE, metrics_token_file="/run/secrets/metrics_token").metrics_token_file
+
+
+@pytest.mark.parametrize("role", ["api", "ingest", "enrich", "analyst", "retention"])
+def test_no_role_holds_the_minio_kms_key(role: str) -> None:
+    env = RETENTION if role == "retention" else _role_env(role)
+    with pytest.raises(ValidationError, match="MINIO_KMS_SECRET_KEY_FILE"):
+        Settings(**env, minio_kms_secret_key_file="/run/secrets/minio_kms_key")
+
+
+def test_blank_purge_and_token_settings_are_unset() -> None:
+    settings = Settings(**BASE, minio_purge_access_key=" ", metrics_token_file="")
+    assert settings.minio_purge_access_key is None and settings.metrics_token_file is None
+
+
+def test_prod_retention_refuses_placeholder_secrets() -> None:
+    with pytest.raises(ValidationError, match="minio_purge_secret_key"):
+        Settings(**{**RETENTION, "minio_purge_secret_key": "change-me-minio-purge"}, env="prod")
+    with pytest.raises(ValidationError, match="database_url"):
+        Settings(
+            **{
+                **RETENTION,
+                "database_url": "postgresql+asyncpg://cyberlab_retention:change-me-retention@p/c",
+            },
+            env="prod",
+        )
+    # The api-test env turns the TI / AI mocks on: a prod worker has them off.
+    prod = Settings(**RETENTION, env="prod", ti_mock_enabled=False, ai_mock_enabled=False)
+    assert prod.env == "prod"
+
+
+def test_m7_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("RATE_LIMIT_USER_PER_MIN", "RETENTION_POLICY_DELAY_DAYS"):
+        monkeypatch.delenv(name, raising=False)  # api-test raises the limit
+    settings = Settings(**BASE)
+    assert settings.retention_policy_delay_days == 7
+    assert (settings.retention_batch_rows, settings.retention_batch_objects) == (5_000, 200)
+    assert settings.retention_system_user_id == RETENTION_SYSTEM_USER_ID
+    assert (settings.correlation_common_key_jobs, settings.correlation_index_batch_jobs) == (50, 5)
+    assert settings.correlation_index_budget_s == 10
+    assert (settings.search_min_query_chars, settings.search_max_query_chars) == (2, 256)
+    assert (settings.search_hits_per_type, settings.search_statement_timeout_s) == (20, 3)
+    assert settings.rate_limit_user_per_min == 600
+    assert settings.metrics_token_file is None

@@ -112,6 +112,8 @@ class InvestigationOut(BaseModel):
     ai_excluded: bool
     ti_excluded: bool
     share_policy: SharePolicyOut
+    # M7: an active legal hold (case or org scope) covers this case (filled by phase 3).
+    legal_hold: bool = False
 
 
 class InvestigationPage(Page[InvestigationOut]):

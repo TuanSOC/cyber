@@ -17,16 +17,21 @@ from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
 from app.modules.case_attack.router import router as case_attack_router
 from app.modules.case_timeline.router import router as case_timeline_router
+from app.modules.correlation.router import router as correlation_router
 from app.modules.evidence.router import router as evidence_router
 from app.modules.investigations.router import router as investigations_router
 from app.modules.ioc_collections.router import router as ioc_collections_router
 from app.modules.notes.router import router as notes_router
+from app.modules.ops.internal import router as ops_internal_router
+from app.modules.ops.router import router as ops_router
 from app.modules.organizations.router import router as orgs_router
 from app.modules.pcap_analysis.router import router as pcap_analysis_router
 from app.modules.reports import signing as report_signing
 from app.modules.reports.router import router as reports_router
 from app.modules.reports.router_keys import router as report_keys_router
 from app.modules.reports.router_renders import router as report_renders_router
+from app.modules.retention.router import router as retention_router
+from app.modules.search.router import router as search_router
 from app.modules.static_analysis.router import router as static_analysis_router
 from app.modules.threat_intel.router import router as threat_intel_router
 
@@ -77,7 +82,14 @@ def create_app() -> FastAPI:
     v1.include_router(reports_router)
     v1.include_router(report_renders_router)
     v1.include_router(report_keys_router)
+    # M7: platform operations (retention, correlation, search, org metrics).
+    v1.include_router(retention_router)
+    v1.include_router(correlation_router)
+    v1.include_router(search_router)
+    v1.include_router(ops_router)
     app.include_router(v1)
+    # Outside /api: the gateway never forwards it (bearer METRICS_TOKEN, RT27).
+    app.include_router(ops_internal_router)
     return app
 
 

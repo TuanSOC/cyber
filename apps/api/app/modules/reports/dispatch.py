@@ -175,7 +175,8 @@ async def create_render_deduplicated(
             ReportRender.organization_id == org_id,
             ReportRender.version_id == version.id,
             ReportRender.format == fmt,
-            ReportRender.status != "failed",
+            # M7 (RT11): a purged rendition frees the slot like a failed one (index 0014).
+            ReportRender.status.not_in(("failed", "purged")),
         )
         .order_by(ReportRender.created_at.desc())
         .limit(1)

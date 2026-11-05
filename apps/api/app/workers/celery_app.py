@@ -5,7 +5,15 @@ Imported by the API only to enqueue (`send_task`); run as the ingest worker with
 """
 
 from celery import Celery
-from cyberlab_jobs import AI_RESUME, REAP, TI_RESUME, Queues
+from celery.schedules import crontab
+from cyberlab_jobs import (
+    AI_RESUME,
+    CORRELATION_INDEX_PENDING,
+    REAP,
+    RETENTION_SWEEP,
+    TI_RESUME,
+    Queues,
+)
 
 from app.core.config import get_settings
 
@@ -57,6 +65,21 @@ celery_app.conf.update(
             "schedule": 30.0,
             "kwargs": {"message": {}},
             "options": {"queue": queues.analyst, "expires": 25},
+        },
+        # M7: the correlation indexer on this (ingest) worker, bounded per tick (RT19).
+        "index-correlation-keys": {
+            "task": CORRELATION_INDEX_PENDING,
+            "schedule": 60.0,
+            "kwargs": {"message": {}},
+            "options": {"queue": queues.ingest, "expires": 55},
+        },
+        # M7: the daily retention sweep on the retention worker (dry-run unless the DB says
+        # enforce is effective, RT1). Expires before the next day's tick.
+        "retention-sweep": {
+            "task": RETENTION_SWEEP,
+            "schedule": crontab(hour="2", minute="30"),
+            "kwargs": {"message": {}},
+            "options": {"queue": queues.retention, "expires": 23 * 3600},
         },
     },
 )

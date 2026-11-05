@@ -41,7 +41,8 @@ ChangeNote = Annotated[
 ]
 Severity = Literal["info", "low", "medium", "high", "critical"]
 ReportStatus = Literal["draft", "discarded"]
-RenderStatus = Literal["queued", "running", "succeeded", "failed"]
+# M7: `purged` = the rendition was deleted by retention (re-render it from the signed snapshot).
+RenderStatus = Literal["queued", "running", "succeeded", "failed", "purged"]
 CitedKind = Literal[
     "finding",
     "alert",

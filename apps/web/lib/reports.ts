@@ -458,7 +458,7 @@ export function asSnapshot(value: unknown): ReportSnapshot | null {
 // Renders
 
 export function isFinalRender(status: RenderStatus): boolean {
-  return status === "succeeded" || status === "failed";
+  return status === "succeeded" || status === "failed" || status === "purged";
 }
 
 /** Poll every 3 s while a render is queued or running; stop once every render is final. */
@@ -481,6 +481,8 @@ export const RENDER_STATUS_LABELS: Record<RenderStatus, string> = {
   running: "Rendering",
   succeeded: "Ready",
   failed: "Failed",
+  // M7: removed by the retention policy; the signed version can be rendered again.
+  purged: "Purged",
 };
 
 const NARROW = "Finalize a narrower version (fewer rows or sections) or use Markdown.";

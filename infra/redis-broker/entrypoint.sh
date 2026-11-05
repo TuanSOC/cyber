@@ -6,7 +6,7 @@ set -eu
 
 : "${BROKER_API_PASSWORD:?}" "${BROKER_INGEST_PASSWORD:?}" "${BROKER_PCAP_PASSWORD:?}"
 : "${BROKER_STATIC_PASSWORD:?}" "${BROKER_ENRICH_PASSWORD:?}" "${BROKER_ANALYST_PASSWORD:?}"
-: "${BROKER_REPORT_PASSWORD:?}"
+: "${BROKER_REPORT_PASSWORD:?}" "${BROKER_RETENTION_PASSWORD:?}"
 
 # Commands no component needs and that would let one inspect or disrupt others' queues.
 DENY="-@dangerous -@admin -keys -scan -randomkey -sort -dump -object"
@@ -50,6 +50,17 @@ analyst_keys() {
   echo "$keys"
 }
 
+# The least-privilege retention worker (M7) is trusted but confined like enrich: only its
+# queue and unacked keys under retention* / test.retention* (the beat and the api publish to
+# it through their `~*` users). It cannot touch ingest*, trusted.* or any other queue.
+retention_keys() {
+  keys="resetkeys ~retention* ~test.retention*"
+  for q in retention test.retention; do
+    keys="$keys ~_kombu.binding.$q ~_kombu.binding_permanent.$q"
+  done
+  echo "$keys"
+}
+
 # The untrusted report renderer (M6) is analyzer-class: `analyzer_keys report` confines it to
 # report* / test.report* (queue, unacked keys, bindings), write-only to ingest. Only api and
 # ingest (`~*`) reach report*; no other user's patterns match it.
@@ -62,6 +73,7 @@ user static on >${BROKER_STATIC_PASSWORD} $(analyzer_keys static) resetchannels 
 user enrich on >${BROKER_ENRICH_PASSWORD} $(enrich_keys) resetchannels +@all ${DENY} ${READ_DENY}
 user analyst on >${BROKER_ANALYST_PASSWORD} $(analyst_keys) resetchannels +@all ${DENY} ${READ_DENY}
 user report on >${BROKER_REPORT_PASSWORD} $(analyzer_keys report) resetchannels +@all ${DENY} ${READ_DENY}
+user retention on >${BROKER_RETENTION_PASSWORD} $(retention_keys) resetchannels +@all ${DENY} ${READ_DENY}
 user healthcheck on nopass resetkeys +ping
 EOF
 chmod 600 /tmp/users.acl

@@ -40,6 +40,7 @@ GLOBAL_GETS = (
     "/api/v1/attack/techniques",
     "/api/v1/health",
     "/api/v1/report-signing-keys",  # M6: public keys only, unauthenticated
+    "/internal/metrics",  # M7: outside /api, bearer token (404 while unset), no tenant data
 )
 
 

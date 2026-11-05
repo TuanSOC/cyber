@@ -4,24 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
-import { orgPath } from "@/lib/nav";
+import { orgPath, settingsTabs } from "@/lib/nav";
 import { useOrg } from "@/lib/org-context";
 import { cn } from "@/lib/utils";
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const { orgId, can } = useOrg();
   const pathname = usePathname();
-  const tabs = [
-    { href: orgPath(orgId, "settings"), label: "Organization" },
-    { href: orgPath(orgId, "settings/members"), label: "Members" },
-    { href: orgPath(orgId, "settings/integrations"), label: "Integrations" },
-    ...(can("audit.read") ? [{ href: orgPath(orgId, "settings/audit"), label: "Audit log" }] : []),
-  ];
+  const tabs = settingsTabs(can).map((tab) => ({ href: orgPath(orgId, tab.segment), label: tab.label }));
 
   return (
     <>
       <PageHeader title="Settings" />
-      <nav className="mb-6 flex gap-1 border-b" aria-label="Settings sections">
+      <nav className="mb-6 flex gap-1 overflow-x-auto border-b" aria-label="Settings sections">
         {tabs.map((tab) => (
           <Link
             key={tab.href}

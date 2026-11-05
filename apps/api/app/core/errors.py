@@ -58,6 +58,46 @@ class Conflict(AppError):
     message = "Request conflicts with the current state"
 
 
+class Gone(AppError):
+    status_code = 410
+    code = "gone"
+    message = "The resource is no longer available"
+
+
+# --- M7 (frozen in phase 1; raised by phases 3, 4 and 6) ------------------------------------
+
+
+class EvidencePurged(Gone):
+    """Download and verify of evidence whose bytes were purged by retention (tombstoned):
+    the metadata, hashes and custody stay."""
+
+    code = "evidence_purged"
+    message = "The evidence bytes were purged by the retention policy; hashes and custody remain"
+
+
+class LegalHoldActive(Conflict):
+    code = "legal_hold_active"
+    message = "A legal hold covers this data"
+
+
+class PolicyFloor(AppError):
+    status_code = 422
+    code = "policy_floor"
+    message = "A retention value is below the minimum allowed"
+
+
+class RetentionAcknowledgementRequired(AppError):
+    status_code = 422
+    code = "retention_acknowledgement_required"
+    message = "Enforcing a retention policy needs acknowledge_destruction"
+
+
+class SearchQueryInvalid(AppError):
+    status_code = 422
+    code = "search_query_invalid"
+    message = "The search query is too short, too long or invalid"
+
+
 class TooManyRequests(AppError):
     status_code = 429
     code = "rate_limited"
@@ -73,6 +113,7 @@ _HTTP_CODES = {
     403: "forbidden",
     404: "not_found",
     405: "method_not_allowed",
+    410: "gone",
     413: "payload_too_large",
     415: "unsupported_media_type",
 }

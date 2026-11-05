@@ -1,5 +1,6 @@
 import base64
 import binascii
+import uuid
 from functools import lru_cache
 from typing import Literal, Self
 from urllib.parse import urlsplit
@@ -19,7 +20,7 @@ from app.modules.ai.contracts import AiProviderName
 from app.modules.threat_intel.catalog import CATALOG, ProviderLimits
 from app.modules.threat_intel.providers.base import ProviderName
 
-ProcessRole = Literal["api", "ingest", "enrich", "analyst"]
+ProcessRole = Literal["api", "ingest", "enrich", "analyst", "retention"]
 
 # Settings the internet-facing enrich worker must never hold (M4 RT2): a session-forging
 # JWT secret, object-store credentials, the app Redis (token denylist, rate limits).
@@ -49,6 +50,29 @@ REPORT_DEFAULT_MAX_RENDER_UNITS = (
 AI_DEFAULT_DAILY_TOKEN_BUDGET = 1_000_000
 AI_DEFAULT_RUN_TOKEN_CAP = 100_000
 AI_DEFAULT_INCIDENT_TOKEN_CAP = 600_000
+# Platform operations (M7). The least-privilege retention worker (DB role
+# `cyberlab_retention`, MinIO user `cyberlab-purge`) must never hold a session-forging secret,
+# the app Redis, the api's MinIO user, any seal / signing / platform key or the metrics token.
+RETENTION_ROLE = "cyberlab_retention"
+RETENTION_FORBIDDEN = (
+    "jwt_secret",
+    "redis_url",
+    "minio_access_key",
+    "minio_secret_key",
+    "ti_seal_private_keys_file",
+    "ai_seal_private_keys_file",
+    "ai_platform_key_file",
+    "report_signing_keys_file",
+    "metrics_token_file",
+)
+# Policy floors (days, constants of migration 0014's checks); the closed-case floor is also at
+# least EVIDENCE_LOCK_DAYS (configuration, so the API enforces it).
+RETENTION_FLOOR_DAYS = 30
+# The fixed, inactive system user seeded by 0014: the custody actor of purges (RT12).
+RETENTION_SYSTEM_USER_ID = uuid.UUID("00000000-0000-4000-8000-00000000a7e0")
+RETENTION_SYSTEM_USER_EMAIL = "retention@system.invalid"
+# The committed dev KMS key name (infra/minio/dev-kms-key): refused in prod by the env checks.
+DEV_KMS_KEY_NAME = "cyberlab-dev-kms"
 AnthropicEffort = Literal["low", "medium", "high", "xhigh", "max"]
 RequiredSetting = Literal[
     "jwt_secret", "minio_endpoint", "minio_access_key", "minio_secret_key", "redis_url"
@@ -259,6 +283,40 @@ class Settings(BaseSettings):
     report_signing_public_keys: dict[str, str] = {}
     report_signing_active_kid: str | None = None
 
+    # --- Platform operations (M7) ---
+    # Retention (phase 3). DATABASE_URL of the retention worker is the `cyberlab_retention`
+    # role's; every other role refuses that role (and the purge MinIO user).
+    retention_policy_delay_days: int = Field(default=7, ge=1, le=365)
+    retention_batch_rows: int = Field(default=5_000, ge=1, le=50_000)
+    retention_batch_objects: int = Field(default=200, ge=1, le=1_000)
+    retention_run_slice_s: int = Field(default=120, ge=5, le=3_600)
+    retention_sample_limit: int = Field(default=50, ge=0, le=500)
+    retention_job_outcomes_days: int = Field(default=90, ge=7, le=3_650)
+    retention_system_user_id: uuid.UUID = RETENTION_SYSTEM_USER_ID
+    minio_purge_access_key: str | None = None
+    minio_purge_secret_key: str | None = None
+    # Correlation (phase 4, RT19: the ingest worker is a solo pool shared with result ingest).
+    correlation_common_key_jobs: int = Field(default=50, ge=2, le=100_000)
+    correlation_max_keys_per_job: int = Field(default=20_000, ge=1, le=200_000)
+    correlation_index_budget_s: float = Field(default=10.0, gt=0, le=60)
+    correlation_index_batch_jobs: int = Field(default=5, ge=1, le=50)
+    # Org search (phase 4, RT13: POST body, never logged).
+    search_min_query_chars: int = Field(default=2, ge=1, le=16)
+    search_max_query_chars: int = Field(default=256, ge=16, le=1_024)
+    search_hits_per_type: int = Field(default=20, ge=1, le=100)
+    search_statement_timeout_s: int = Field(default=3, ge=1, le=30)
+    search_per_user_per_min: int = Field(default=30, ge=1)
+    # Runtime metrics (phase 5): a file holding the bearer token of GET /internal/metrics (the
+    # api only); unset or empty = the endpoint answers 404.
+    metrics_token_file: str | None = None
+    # Global per-user request limit in `current_user` (phase 6; RT14: no anonymous limiter).
+    rate_limit_user_per_min: int = Field(default=600, ge=1)
+    # Evidence view audit dedupe window (phase 6, `core/audit_dedupe.once_per`).
+    evidence_view_audit_dedupe_s: int = Field(default=900, ge=1, le=86_400)
+    # MinIO's KMS key file is a secret of the minio service only (RT7): no API process holds
+    # it (refused for every role); the backup scripts read only its fingerprint.
+    minio_kms_secret_key_file: str | None = None
+
     def need(self, name: RequiredSetting) -> str:
         """A setting every role but enrich and analyst requires (validated at startup)."""
         value: str | None = getattr(self, name)
@@ -300,6 +358,10 @@ class Settings(BaseSettings):
         "public_base_url",
         "report_signing_keys_file",
         "report_signing_active_kid",
+        "minio_purge_access_key",
+        "minio_purge_secret_key",
+        "metrics_token_file",
+        "minio_kms_secret_key_file",
         mode="before",
     )
     @classmethod
@@ -345,8 +407,44 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
+    def _ops_role_guards(self) -> Self:
+        """M7: the retention worker's least-privilege env, and the purge credentials and the
+        retention DB role confined to it. Runs before the M4-M6 role guards."""
+        role = self.process_role
+        if self.minio_kms_secret_key_file is not None:
+            raise ValueError("MINIO_KMS_SECRET_KEY_FILE is a secret of the minio service only")
+        db_user = urlsplit(self.database_url).username
+        if role == "retention":
+            present = [name.upper() for name in RETENTION_FORBIDDEN if getattr(self, name)]
+            if present:
+                raise ValueError(f"PROCESS_ROLE=retention must not receive: {', '.join(present)}")
+            if db_user != RETENTION_ROLE:
+                raise ValueError(
+                    f"PROCESS_ROLE=retention needs DATABASE_URL of the {RETENTION_ROLE} role"
+                )
+            needed = ("minio_endpoint", "minio_purge_access_key", "minio_purge_secret_key")
+            missing = [name.upper() for name in needed if getattr(self, name) is None]
+            if missing:
+                raise ValueError(f"missing settings: {', '.join(missing)}")
+            return self
+        if db_user == RETENTION_ROLE:
+            raise ValueError(f"PROCESS_ROLE={role} must not use the {RETENTION_ROLE} database role")
+        purge = [
+            name.upper()
+            for name in ("minio_purge_access_key", "minio_purge_secret_key")
+            if getattr(self, name) is not None
+        ]
+        if purge:
+            raise ValueError(f"PROCESS_ROLE={role} must not receive: {', '.join(purge)}")
+        if role != "api" and self.metrics_token_file is not None:
+            raise ValueError("METRICS_TOKEN_FILE is only accepted with PROCESS_ROLE=api")
+        return self
+
+    @model_validator(mode="after")
     def _role_guards(self) -> Self:
         role = self.process_role
+        if role == "retention":
+            return self  # `_ops_role_guards` (M7)
         # The report signing private key: the api role only (M6). Ingest, enrich, analyst
         # and the report renderer never hold it.
         if role != "api" and self.report_signing_keys_file is not None:
@@ -387,7 +485,13 @@ class Settings(BaseSettings):
         placeholders = [
             name
             # broker_url (M5 RT25): the dev compose default broker passwords are change-me.
-            for name in ("jwt_secret", "minio_secret_key", "database_url", "broker_url")
+            for name in (
+                "jwt_secret",
+                "minio_secret_key",
+                "database_url",
+                "broker_url",
+                "minio_purge_secret_key",
+            )
             if "change-me" in (getattr(self, name) or "")
         ]
         if placeholders:
