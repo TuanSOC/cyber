@@ -107,13 +107,25 @@ async def test_starting_work_takes_an_optional_reason() -> None:
     )
 
 
-@pytest.mark.parametrize("reason", ["", "x" * 501, "nul\u0000byte"])
+@pytest.mark.parametrize("reason", ["", "   ", "\n\t \n", "x" * 501, "nul\u0000byte"])
 async def test_invalid_reasons_are_refused(reason: str) -> None:
     reg = await register()
     case_id = await new_case(reg.client, reg.org_id)
     response = await patch(reg.client, reg.org_id, case_id, status="closed", status_reason=reason)
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "validation_error"
+
+
+async def test_a_reason_is_stored_stripped() -> None:
+    reg = await register()
+    case_id = await new_case(reg.client, reg.org_id)
+    await move(reg.client, reg.org_id, case_id, "in_progress")
+    response = await patch(
+        reg.client, reg.org_id, case_id, status="closed", status_reason="  Contained  \n"
+    )
+    assert response.status_code == 200, response.text
+    page = await events(reg.client, reg.org_id, case_id)
+    assert page["items"][0]["reason"] == "Contained"
 
 
 async def test_a_reason_alone_is_not_an_update() -> None:

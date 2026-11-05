@@ -19,9 +19,11 @@ from app.modules.investigations.models import InvestigationStatus, Severity
 # Free text may contain newlines/tabs, never NUL (Postgres text cannot store it).
 Description = Annotated[str, StringConstraints(max_length=10_000, pattern=r"^[^\x00]*$")]
 Title = Annotated[SafeName, Field(min_length=3, max_length=200)]
-# M6: the reason of a close / reopen / archive (plain text, no NUL).
+# M6: the reason of a close / reopen / archive (plain text, no NUL). Surrounding whitespace
+# is stripped first, so a whitespace-only reason is refused (422).
 StatusReason = Annotated[
-    str, StringConstraints(min_length=1, max_length=500, pattern=r"^[^\x00]*$")
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=500, pattern=r"^[^\x00]*$"),
 ]
 
 

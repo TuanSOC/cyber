@@ -1,12 +1,16 @@
 """`scripts/verify_report.py` (M6 phase 3): a snapshot plus its `.sig.json` verifies offline
-against the published keys (exit 0); a tampered snapshot, a wrong key, an unknown kid or a
-manifest that names another report fails (exit 1). A minimal PDF with the three embedded
-files goes through the fallback attachment reader (the real PDF path is phase 9's).
+against the pinned keys (exit 0); a tampered snapshot, a wrong key, an unknown kid, the
+committed dev key without `--allow-dev`, duplicate JSON keys or a manifest that names
+another report fails (exit 1). A minimal PDF with the three embedded files goes through the
+bounded attachment reader (the real PDF path is phase 9's); an incrementally updated PDF, a
+duplicate or unexpected attachment and a stream that inflates past the bound are refused,
+and a valid PDF result says the visible pages are not covered.
 
 The script lives in the repository's `scripts/`, which api-test mounts read-only at
 `/srv/scripts`; elsewhere the test looks for it next to the api tree (or at
 `VERIFY_REPORT_SCRIPT`) and is skipped (with the reason) when it is not there."""
 
+import base64
 import hashlib
 import importlib.util
 import json
@@ -45,8 +49,10 @@ def _module() -> ModuleType:
     return module
 
 
-def _signed(tmp_path: Path, **manifest_over: object) -> tuple[Path, Path, Path, dict[str, object]]:
-    keys = new_signing_keys("offline-1")
+def _signed(
+    tmp_path: Path, kid: str = "offline-1", **manifest_over: object
+) -> tuple[Path, Path, Path, dict[str, object]]:
+    keys = new_signing_keys(kid)
     snapshot = fake_snapshot()
     data = canonical_json(snapshot)
     fields: dict[str, object] = {
@@ -116,9 +122,9 @@ def test_a_manifest_for_another_version_fails(tmp_path: Path) -> None:
     assert result.returncode == 1 and "version" in result.stderr
 
 
-def _pdf(files: dict[str, bytes]) -> bytes:
+def _pdf(files: dict[str, bytes] | list[tuple[str, bytes]], tail: bytes = b"") -> bytes:
     objects: list[bytes] = [b"<< /Type /Catalog >>"]
-    for name, content in files.items():
+    for name, content in files.items() if isinstance(files, dict) else files:
         packed = zlib.compress(content)
         stream_no = len(objects) + 2
         objects.append(
@@ -136,7 +142,7 @@ def _pdf(files: dict[str, bytes]) -> bytes:
     for n, body in enumerate(objects, start=1):
         out.append(str(n).encode() + b" 0 obj\n" + body + b"\nendobj\n")
     out.append(b"trailer << /Root 1 0 R >>\n%%EOF\n")
-    return b"".join(out)
+    return b"".join(out) + tail
 
 
 def test_a_pdf_with_embedded_files_verifies(tmp_path: Path) -> None:
@@ -152,12 +158,96 @@ def test_a_pdf_with_embedded_files_verifies(tmp_path: Path) -> None:
             }
         )
     )
-    assert _run("--pdf", pdf, "--keys", keys).returncode == 0
+    valid = _run("--pdf", pdf, "--public-keys", keys)
+    assert valid.returncode == 0, valid.stderr
+    # The result says what the signature does not cover.
+    assert "not the PDF's visible pages" in valid.stdout
     files = _module()._minimal_attachments(pdf.read_bytes())
     assert files["snapshot.json"] == snapshot.read_bytes()
     pdf.write_bytes(_pdf({"snapshot.json": snapshot.read_bytes()}))
     missing = _run("--pdf", pdf, "--keys", keys)
     assert missing.returncode == 1 and "does not embed" in missing.stderr
+
+
+def _three(snapshot: Path, sig: Path, signed: dict[str, object]) -> list[tuple[str, bytes]]:
+    return [
+        ("snapshot.json", snapshot.read_bytes()),
+        ("manifest.json", json.dumps(signed["manifest"]).encode()),
+        ("manifest.sig.json", sig.read_bytes()),
+    ]
+
+
+def test_an_incrementally_updated_pdf_is_refused(tmp_path: Path) -> None:
+    """A signed rendition with a revision appended (a new page object, an xref section with
+    `/Prev` and a second `%%EOF`) is refused even though the attachments still verify."""
+    snapshot, sig, keys, signed = _signed(tmp_path)
+    original = _pdf(_three(snapshot, sig, signed))
+    update = (
+        b"99 0 obj\n<< /Type /Page /Contents (Harmless printer ok) >>\nendobj\n"
+        b"xref\n99 1\n0000000000 00000 n \n"
+        b"trailer << /Root 1 0 R /Prev 0 >>\nstartxref\n" + str(len(original)).encode() + b"\n"
+        b"%%EOF\n"
+    )
+    pdf = tmp_path / "updated.pdf"
+    pdf.write_bytes(original + update)
+    result = _run("--pdf", pdf, "--keys", keys)
+    assert result.returncode == 1 and "incremental" in result.stderr
+    # A redefinition of an existing object (the classic overlay) is refused on its own too.
+    module = _module()
+    with pytest.raises(module.Failed, match="twice"):
+        module._minimal_attachments(original + b"2 0 obj\n<< >>\nendobj\n")
+    with pytest.raises(module.Failed, match="Prev"):
+        module.check_single_revision(
+            b"%PDF-1.7\ntrailer << /Root 1 0 R /Prev 10 >>\nstartxref\n0\n%%EOF\n", {}
+        )
+
+
+def test_a_duplicate_or_unexpected_attachment_is_refused(tmp_path: Path) -> None:
+    snapshot, sig, keys, signed = _signed(tmp_path)
+    three = _three(snapshot, sig, signed)
+    other = snapshot.read_bytes().replace(b"Suspicious", b"Harmless!!")
+    pdf = tmp_path / "dup.pdf"
+    for files, message in (
+        ([*three, ("snapshot.json", other)], "more than once"),
+        ([("snapshot.json", other), *three], "more than once"),
+        ([*three, ("readme.txt", b"open me")], "unexpected file"),
+    ):
+        pdf.write_bytes(_pdf(files))
+        result = _run("--pdf", pdf, "--keys", keys)
+        assert result.returncode == 1 and message in result.stderr, result.stderr
+
+
+def test_a_stream_that_inflates_past_the_bound_is_refused(tmp_path: Path) -> None:
+    snapshot, sig, keys, signed = _signed(tmp_path)
+    module = _module()
+    bomb = b"\0" * (module.MAX_STREAM_BYTES + 1)
+    pdf = tmp_path / "bomb.pdf"
+    pdf.write_bytes(_pdf([*_three(snapshot, sig, signed)[1:], ("snapshot.json", bomb)]))
+    assert len(pdf.read_bytes()) < 64 * 1024  # small on disk, huge inflated
+    result = _run("--pdf", pdf, "--keys", keys)
+    assert result.returncode == 1 and "size bound" in result.stderr
+
+
+def test_duplicate_json_keys_are_refused(tmp_path: Path) -> None:
+    snapshot, sig, keys, _ = _signed(tmp_path)
+    raw = sig.read_text(encoding="utf-8")
+    sig.write_text(raw[:-1] + ', "kid": "someone-else"}', encoding="utf-8")
+    result = _run("--snapshot", snapshot, "--sig", sig, "--keys", keys)
+    assert result.returncode == 1 and "duplicate JSON key 'kid'" in result.stderr
+    keys.write_text('{"offline-1": "a", "offline-1": "b"}', encoding="utf-8")
+    result = _run("--snapshot", snapshot, "--sig", sig, "--keys", keys)
+    assert result.returncode == 1 and "duplicate JSON key" in result.stderr
+
+
+def test_the_committed_dev_key_needs_allow_dev(tmp_path: Path) -> None:
+    snapshot, sig, keys, _ = _signed(tmp_path, kid="dev-report-1")
+    refused = _run("--snapshot", snapshot, "--sig", sig, "--keys", keys)
+    assert refused.returncode == 1 and "development key" in refused.stderr
+    allowed = _run("--snapshot", snapshot, "--sig", sig, "--keys", keys, "--allow-dev")
+    assert allowed.returncode == 0, allowed.stderr
+    module = _module()
+    dev = base64.b64decode(next(iter(module.DEV_PUBLIC_KEYS)))
+    assert module.is_dev_key("prod-2026-1", dev) and not module.is_dev_key("prod-1", b"k" * 32)
 
 
 def test_the_canonical_form_matches_the_contract() -> None:

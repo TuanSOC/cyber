@@ -5,7 +5,10 @@
   `external` profile applies to reports only, RT8). The response says so
   (`X-Export-Redacted: false`), as the UI does.
 - Values are defanged by default; `defang=false` (the only clear-text form) needs
-  `evidence.write`.
+  `evidence.write`, and a refused attempt is audited `ioc_collection.export_refused`. A
+  defanged JSON export carries each TI answer without its raw provider `summary` (free
+  provider JSON that can repeat the value, related hosts or URLs in clear); the clear-text
+  export keeps it.
 - CSV cells go through `core.csv_safe` (formula-injection safe, RFC 4180 quoting).
 - Served as a streamed attachment (RFC 5987 filename, `nosniff`, `no-store`,
   `Content-Security-Policy: sandbox`) and audited `ioc_collection.exported` (format, count,
@@ -69,6 +72,22 @@ async def export_collection(
 ) -> Export:
     row = await service.get_row(ctx.session, ctx.org_id, collection_id)
     if not defang and Permission.EVIDENCE_WRITE not in ROLE_PERMISSIONS[ctx.role]:
+        audit.record(
+            ctx.session,
+            action="ioc_collection.export_refused",
+            org_id=ctx.org_id,
+            actor_id=ctx.user.id,
+            target_type="ioc_collection",
+            target_id=row.collection.id,
+            details={
+                "investigation_id": str(row.collection.investigation_id),
+                "format": fmt,
+                "defang": False,
+                "reason": "missing_permission",
+            },
+            request=request,
+        )
+        await ctx.session.commit()
         raise Forbidden("A clear-text (defang=false) export needs evidence.write")
     collection, case = row.collection, row.case
     tlp = TLP(case.tlp)
@@ -103,6 +122,12 @@ async def export_collection(
         chunks = write_csv([CSV_HEADER, *lines], header_comment=comment)
     elif fmt == "json":
         ti = await service.ti_summaries(ctx.session, ctx.org_id, [i.ioc_key for i, _ in rows])
+        if defang:
+            # Raw provider JSON is not defanged: a defanged export leaves it out.
+            ti = {
+                key: [answer.model_copy(update={"summary": None}) for answer in answers]
+                for key, answers in ti.items()
+            }
         body = IocExportJson(
             tlp=tlp,
             collection=service.collection_out(row),

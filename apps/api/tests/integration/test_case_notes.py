@@ -174,6 +174,28 @@ async def test_delete_keeps_the_history_and_shows_a_tombstone() -> None:
     assert logs["total"] == 1
 
 
+async def test_a_deleted_notes_bodies_are_for_org_admins_only() -> None:
+    """After a delete, `GET /notes/{id}` keeps the tombstone metadata for every reader but
+    returns the version bodies only to an `org.update` holder (the owner here)."""
+    reg = await register()  # owner (org.update)
+    case_id = await new_case(reg.client, reg.org_id)
+    author = await _member(reg, "analyst")
+    viewer = await _member(reg, "viewer")
+    note = (await create(author, reg.org_id, case_id, body="secret v1")).json()
+    await edit(author, reg.org_id, note["id"], expected_version=1, body="secret v2")
+    assert (await remove(author, reg.org_id, note["id"])).status_code == 204
+    for client in (author, viewer):
+        response = await client.get(f"{API}/{reg.org_id}/notes/{note['id']}")
+        assert response.status_code == 200
+        detail = response.json()
+        assert detail["versions"] == [] and "secret" not in response.text
+        tomb = detail["note"]
+        assert (tomb["deleted"], tomb["body"], tomb["version"]) == (True, None, 2)
+        assert tomb["deleted_at"] and tomb["deleted_by"]
+    admin = (await reg.client.get(f"{API}/{reg.org_id}/notes/{note['id']}")).json()
+    assert [v["body"] for v in admin["versions"]] == ["secret v2", "secret v1"]
+
+
 async def test_only_the_author_or_an_admin_changes_a_note() -> None:
     reg = await register()  # owner (org.update)
     case_id = await new_case(reg.client, reg.org_id)

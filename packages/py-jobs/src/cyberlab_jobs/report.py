@@ -182,6 +182,17 @@ RENDER_CONTENT_TYPES: dict[str, str] = {
     "html": "text/html; charset=utf-8",
     "md": "text/markdown; charset=utf-8",
 }
+# The constant first bytes of every HTML rendition (`incident_v1/report.html.j2`), CSP meta
+# included: the renderer's output check and the trusted ingest both require them exactly
+# (RT19), so an artifact without the CSP never reaches a reader.
+HTML_HEAD = (
+    b"<!DOCTYPE html>\n"
+    b'<html lang="en">\n'
+    b"<head>\n"
+    b'<meta charset="utf-8">\n'
+    b'<meta http-equiv="Content-Security-Policy" '
+    b"content=\"default-src 'none'; style-src 'unsafe-inline'\">\n"
+)
 RenderErrorCode = Literal[
     "not_implemented",
     "snapshot_mismatch",

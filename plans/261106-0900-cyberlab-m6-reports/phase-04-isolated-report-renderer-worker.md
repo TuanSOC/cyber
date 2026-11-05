@@ -144,15 +144,68 @@ This phase also owns the trusted side of the pipeline:
 9. **Render budget calibration (RT1):** render a generated worst-case snapshot at `REPORT_MAX_RENDER_UNITS` (citations, IOCs and timeline at their caps with 4 096-character fields) in `report-worker-test`. Record the peak RSS, CPU seconds, pages and bytes, and propose the budget value that keeps the peak under about 600 MiB and 60 s CPU. The parent sets it before the merge. Also record the image size, the p50/p95 render times for the golden snapshot, and fontconfig's socket needs.
 
 ## Success Criteria
-- [ ] The render subprocess cannot open inet, netlink or packet sockets or an io_uring, gets no broker URL, and is bounded in memory, CPU and time with typed failures. The worker uses prefork with one task per child, and `reset` runs before every render.
-- [ ] A snapshot at the calibrated render budget renders within the sandbox limits (RT1).
-- [ ] The hostile snapshot renders in PDF, HTML and Markdown with every payload as inert visible text. No fetch is attempted, and the fetcher guard refuses every URL (tested directly).
-- [ ] The PDF is PDF/A-3a, carries the snapshot, manifest and signature as attachments that match the inputs byte for byte, shows the TLP in the header and footer of every page, and renders byte-identically twice with the same image.
-- [ ] Ingest re-hashes every artifact and refuses mismatched, oversized or mis-typed outputs. Downloads are audited, re-hashed and served as attachments with CSP sandbox.
-- [ ] Dedupe, caps, the reaper and the deadline work. IDOR cases are complete and `PENDING_ROUTES` is empty.
+- [x] The render subprocess cannot open inet, netlink or packet sockets or an io_uring, gets no broker URL, and is bounded in memory, CPU and time with typed failures. The worker uses prefork with one task per child, and `reset` runs before every render. — `apps/workers/report/tests/test_sandbox.py::test_every_socket_family_but_unix_is_denied_with_eacces`, `test_io_uring_setup_is_denied_with_eacces`, `test_the_environment_holds_no_broker_url`, `test_the_broker_and_minio_cannot_be_resolved_or_reached`, `test_a_2_gb_allocation_is_oom`, `test_the_cpu_limit_is_a_timeout`, `test_an_infinite_loop_is_a_timeout`, `test_writing_past_the_artifact_cap_is_too_large`, `test_a_background_process_is_killed_by_reset_before_the_next_render`; `test_task.py::test_reset_kills_leftovers_before_a_render`, `test_render_failures_are_typed_and_carry_no_text`; `test_skeleton.py::test_celery_runs_prefork_one_task_per_child_with_limits` (319f04d).
+- [x] A snapshot at the calibrated render budget renders within the sandbox limits (RT1). — `test_render_budget.py::test_a_snapshot_at_the_budget_renders_within_the_sandbox` at 450 000 units: worst shape peaks at 594 MiB RSS of the 768 MiB `RLIMIT_AS` and at most 214 pages (cap 300). The opt-in calibration sweep is `test_calibrate` (`REPORT_CALIBRATE=1`) (319f04d).
+- [x] The hostile snapshot renders in PDF, HTML and Markdown with every payload as inert visible text. No fetch is attempted, and the fetcher guard refuses every URL (tested directly). — `test_render_html.py::test_hostile_payloads_are_inert_visible_text`, `test_only_known_tags_attributes_classes_and_links`; `test_render_md.py::test_the_hostile_document_has_no_links_images_or_html`, `test_entities_stay_inert`; `test_render_pdf.py::test_the_hostile_snapshot_renders_reproducibly`, `test_the_fetcher_refuses_every_url`, `test_every_resource_kind_goes_to_the_fetcher_and_fails_the_render`, `test_the_template_output_makes_no_fetch`, `test_a_64_mib_data_uri_is_refused_without_decoding`; `test_template_lint.py` (6) (319f04d).
+- [x] The PDF is PDF/A-3a, carries the snapshot, manifest and signature as attachments that match the inputs byte for byte, shows the TLP in the header and footer of every page, and renders byte-identically twice with the same image. — `test_render_pdf.py::test_the_pdf_is_pdf_a_3a` (a structural check with pypdf: the PDF/A identification and tags), `test_the_attachments_are_the_inputs_byte_for_byte`, `test_the_tlp_is_in_the_header_and_footer_of_every_page`, `test_every_tlp_label_reaches_the_margins`, `test_rendering_twice_gives_identical_bytes`; `test_task.py::test_the_embedded_inputs_are_the_signed_bytes` (319f04d). veraPDF was **not run** (a local, non-gating check, open in phase 9).
+- [x] Ingest re-hashes every artifact and refuses mismatched, oversized or mis-typed outputs. Downloads are audited, re-hashed and served as attachments with CSP sandbox. — `integration/test_report_render_ingest.py::test_mismatched_artifacts_fail_with_invalid_output`, `test_a_verified_artifact_succeeds_with_retention_and_audit`, `test_text_formats_succeed_when_utf8`, `test_a_wrong_token_changes_nothing`, `test_ingest_reads_the_org_from_the_index_only`; worker side `test_task.py::test_invalid_outputs_are_refused`, `test_too_many_reported_pages_are_refused`; `test_report_renders.py::test_a_download_is_an_audited_sandboxed_attachment`, `test_a_tampered_artifact_is_refused_and_audited` (319f04d).
+- [x] Dedupe, caps, the reaper and the deadline work. IDOR cases are complete and `PENDING_ROUTES` is empty. — `test_report_renders.py::test_the_same_format_is_deduplicated`, `test_the_per_org_cap_answers_render_busy`, `test_the_global_cap_answers_render_busy`, `test_a_lost_publish_leaves_the_render_queued_for_the_reaper`, `test_render_requests_are_rate_limited`; `test_report_render_reaper.py` (5: deadline `timeout`, redispatch with a valid token, `RENDER_MAX_ATTEMPTS = 3`); `security/idor_cases_renders.py` `PENDING_ROUTES = frozenset()` (319f04d). The heavy `test_end_to_end_pdf` runs in the gate (`REPORT_E2E=1`, pending gate).
 
 ## Risk Assessment
 - **Fontconfig or Pango need syscalls** that the seccomp variant blocks, or need a writable cache. Pre-build the font cache in the image (`fc-cache` at build time), point the cache dir at tmpfs, and record any syscall added to the allow-list.
 - **Reproducible output** may break on WeasyPrint upgrades or Debian font / Pango updates (font subsetting order, ids). Pin the version, record it in `RENDERER_VERSION`, claim determinism per image only, and keep the render-twice test in CI (RT17).
 - **PDF/A-3a validation** is not proven without veraPDF. It is a local check recorded by phase 9 and not a gate.
 - **Large reports:** WeasyPrint keeps the whole document in memory (upstream reports about 2.6–3 GB for 1 500 pages). The render budget, checked at finalize, keeps signed versions renderable (RT1). If calibration shows the budget is too small for real cases, the parent may raise `mem_limit` and `RLIMIT_AS` together (host RAM permitting) rather than the budget alone. On `oom`, the UI suggests narrowing the selection.
+
+## Implementation Notes (2026-11-06)
+- **Commit:** 319f04d (phases 2–8 together).
+- **Lane 4 in the main tree:**
+  - API tests ran through `scripts/lane-test.sh 4`.
+  - Renderer tests ran through `scripts/lane-test.sh 4 --service report-worker-test pytest -q tests/` (same slot lock).
+  - The worktrees were blocked by the permission system (phase-1 notes).
+- **Renderer** (`apps/workers/report/report_worker/`):
+  - Modules: `tasks.py`, `checks.py`, `sandbox.py`, `render.py`, `render_pdf.py`, `render_html.py`, `render_md.py`, `fetch.py`, `text.py`.
+  - Templates: 13 Jinja2 partials in `templates/incident_v1/`.
+  - Stylesheet: the constant `assets/report.css`.
+  - WeasyPrint 70.0, without Ghostscript (`test_the_image_has_no_ghostscript`).
+- **Sandbox:**
+  - `python -I -B -m report_worker.render` runs as uid **10004** (review L6; the plan said 10003).
+  - The seccomp filter is the `unix_only` allowlist (review L5): every socket family but `AF_UNIX` fails with `EACCES`, and so does io_uring.
+  - `Rlimits(as=768 MiB, cpu=90 s, fsize=32 MiB artifact cap, nofile=64, nproc=16)`.
+  - Wall timeout 100 s; Celery soft and hard limits 90 / 120 s.
+  - The environment has no broker URL.
+  - The font cache is prebuilt and read-only.
+- **Worker:**
+  - Celery prefork, `concurrency=1`, `max_tasks_per_child=1`, `prefetch=1`.
+  - `sandbox.prepare` resets before each render: it kills every uid-10004 leftover.
+  - The inputs are root-owned and read-only.
+  - The snapshot sha256 and the manifest are checked before rendering. An unreachable snapshot counts as a mismatch.
+  - Failures are typed codes only (`timeout`, `oom`, `too_large`, `fetch_blocked`, …) and carry no text.
+- **Fetcher and templates:**
+  - The deny-all `url_fetcher` refuses every URL, including `data:` URIs: a 64 MiB one is refused without decoding.
+  - Relative URLs are never resolved.
+  - The constant CSS was built with the deny-all fetcher.
+  - The sandboxed Jinja2 environment autoescapes, uses `StrictUndefined` and has no escape hatch (`test_template_lint.py`).
+  - Classes come only from fixed filters.
+  - Hrefs are anchors or platform links built from UUIDs.
+- **Formats:**
+  - **PDF/A-3a:** tagged, `Lang=en`, sRGB output intent. `snapshot.json`, `manifest.json` and `manifest.sig.json` are embedded byte for byte. The TLP label is in the header and footer of every page. Dates come only from `finalized_at`, which makes the output reproducible.
+  - **HTML:** inlines exactly the constant CSS plus a meta CSP.
+  - **Markdown:** escapes everything. Code fences are longer than any backtick run, and table cells cannot break their row.
+- **API side** (`reports/dispatch.py` +314, `render_ingest.py` +259, `router_renders.py` +227, `workers/reaper.py` +137):
+  - Dedupe uses the partial unique index per (version, format, renderer_version).
+  - Active-render caps of 2 per org and 4 globally answer `409 render_busy`; renders are limited to 20 per user per 10 min.
+  - The publish happens after the commit.
+  - Ingest reads the org from `report_render_index` only, re-hashes and checks size and type, then sets retention.
+  - The reaper fails renders past the deadline (600 s) with `timeout` and redispatches a lost publish at most 3 times. `test_tenant_session_guard.PENDING_ALLOWED` is now empty.
+- **Calibration (RT1):**
+  - Worst shapes at 450 000 units: peak 594 MiB RSS of 768 MiB (target ≤ 600), at most 214 pages, CPU under the 60 s target.
+  - Golden PDF p50 / p95: 3.9 s.
+  - `REPORT_DEFAULT_MAX_RENDER_UNITS` and `CALIBRATED_RENDER_UNITS` are both set to 450 000 (750 000 was the phase-1 estimate).
+- **Tests:**
+  - Renderer suite: 1857 passed in `report-worker-test`.
+  - API: `test_report_{renders,render_ingest,render_reaper}.py`.
+  - Phase 9 added `test_report_pipeline.py` and put `test_end_to_end_pdf` in the gate (`REPORT_E2E=1`); that run is pending gate.
+- **Not done:**
+  - veraPDF validation (local only, not run);
+  - CJK glyphs: `fonts-noto-core` has no CJK coverage; documented in REPORTS.md.

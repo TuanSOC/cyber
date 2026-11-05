@@ -8,14 +8,17 @@ from typing import Any
 from sqlalchemy import select, update
 
 from app.core.tenancy import tenant_session
+from app.modules.ai.contracts import AiRunStatus
 from app.modules.audit.models import AuditLog
 from app.modules.case_attack.labels import TACTIC_ORDER, tactic_shortnames
 from app.modules.investigations.models import Investigation
 from app.modules.organizations.models import MemberRole
 from app.modules.static_analysis.models import MalwareCapability
+from tests.ai_helpers import seed_ai_run
 from tests.case_helpers import seed_case, seed_evidence, seed_job_on, seed_mapping
 from tests.factories import Registered, add_member, csrf, login, make_user, register, unique_email
 from tests.integration.seed import Tenant
+from tests.security.idor_cases_reports import ai_run_on
 
 API = "/api/v1/orgs"
 
@@ -193,6 +196,34 @@ async def test_sources_are_rechecked_in_the_case_scope() -> None:
         reg, ok.json()["id"], sources=[{"kind": "capability", "ref_id": foreign_cap}]
     )
     assert _code(bad) == (422, "ref_out_of_scope")
+
+
+async def test_an_ai_run_source_must_be_a_completed_run() -> None:
+    """A queued or failed run of a case job is not a source; a completed one is."""
+    reg = await register()
+    t = await _case(reg)
+    _, job_id = await _capability(t)
+    job = uuid.UUID(job_id)
+    for status in (AiRunStatus.QUEUED, AiRunStatus.RUNNING):
+        pending = await seed_ai_run(t, job_id=job, status=status)
+        response = await _post(
+            reg,
+            t,
+            technique_id="T1055",
+            status="suspected",
+            sources=[{"kind": "ai_run", "ref_id": str(pending)}],
+        )
+        assert _code(response) == (422, "ref_out_of_scope"), status
+    completed = await ai_run_on(t, job, claims=[])
+    ok = await _post(
+        reg,
+        t,
+        technique_id="T1055",
+        status="suspected",
+        sources=[{"kind": "ai_run", "ref_id": str(completed)}],
+    )
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["sources"][0]["run_id"] == str(completed)
 
 
 async def test_status_changes_are_audited_from_to() -> None:

@@ -98,14 +98,58 @@ All paths are under `/api/v1/orgs/{org_id}`. Permissions follow `core/rbac.py`.
 7. `idor_cases_case.py`: cases for every route above, plus victim extenders (a note, a collection with an item, an evidence policy). Empty this module's `PENDING_ROUTES`. Run `test_idor_routes.py -k case` in lane 2.
 
 ## Success Criteria
-- [ ] Status changes need reasons where required, and each writes exactly one history row atomically. The history rows refuse UPDATE and DELETE.
-- [ ] A TLP downgrade without `org.update` or the acknowledgement is refused. Exclusions can be turned off only by `integrations.manage`. Everything is audited without free text.
-- [ ] A flag set through the API blocks the AI preview, the AI run and the TI enrichment for that case or evidence. The provider mocks see 0 calls.
-- [ ] Notes keep every version, and a delete keeps the history. Out-of-scope refs are refused, and stale edits get 409.
-- [ ] Collections normalize and deduplicate. Exports are formula-safe, defanged by default, TLP-marked (STIX marking-definition), audited, and served as attachments with CSP sandbox.
-- [ ] Every route is in `idor_cases_case.py`, its `PENDING_ROUTES` is empty, and the lane passes.
+- [x] Status changes need reasons where required, and each writes exactly one history row atomically. The history rows refuse UPDATE and DELETE. — `integration/test_case_status.py::test_close_archive_and_reopen_need_a_reason`, `test_invalid_reasons_are_refused`, `test_a_reason_alone_is_not_an_update`, `test_no_status_change_writes_no_history`, `test_invalid_transition_writes_nothing`, `test_history_rows_refuse_update_and_delete`, `test_history_rows_refuse_mutation_by_the_owner_too` (319f04d).
+- [x] A TLP downgrade without `org.update` or the acknowledgement is refused. Exclusions can be turned off only by `integrations.manage`. Everything is audited without free text. — `test_case_tlp.py::test_role_matrix_for_tlp`, `test_role_matrix_for_exclusion_flags`, `test_rejected_update_changes_nothing`, `test_audit_records_tlp_and_flags_without_free_text`; `test_case_status.py::test_audit_has_the_status_change_but_never_the_reason`; `test_case_policy_api.py::test_evidence_policy_role_rules_and_audit` (319f04d).
+- [x] A flag set through the API blocks the AI preview, the AI run and the TI enrichment for that case or evidence. The provider mocks see 0 calls. — `test_case_policy_api.py::test_ai_flag_set_through_the_api_blocks_preview_and_run`, `test_ti_flag_set_through_the_api_blocks_enrichment` (`sent.runs == []`: nothing dispatched), `test_turning_a_flag_off_through_the_api_unblocks` (319f04d).
+- [x] Notes keep every version, and a delete keeps the history. Out-of-scope refs are refused, and stale edits get 409. — `test_case_notes.py::test_edits_keep_every_version`, `test_delete_keeps_the_history_and_shows_a_tombstone`, `test_refs_out_of_scope_are_refused`, `test_stale_edit_is_409`, `test_concurrent_edits_on_one_version_one_wins`, `test_version_rows_refuse_update_in_the_db` (319f04d).
+- [x] Collections normalize and deduplicate. Exports are formula-safe, defanged by default, TLP-marked (STIX marking-definition), audited, and served as attachments with CSP sandbox. — `test_case_ioc_collections.py::test_values_are_normalized`, `test_duplicates_are_idempotent_and_removed_items_are_readded`, `test_job_iocs_of_the_case_only`; `test_case_ioc_exports.py::test_download_headers`, `test_csv_is_tlp_marked_defanged_and_formula_safe`, `test_clear_text_export_needs_evidence_write`, `test_stix_export`, `test_exports_are_audited`; `unit/test_stix_export.py::test_the_five_oasis_tlp_marking_ids`, `test_bundle_shape_marking_and_identity`, `test_hostile_values_cannot_break_out_of_the_literal`, `test_formula_cells_are_quoted` (319f04d).
+- [x] Every route is in `idor_cases_case.py`, its `PENDING_ROUTES` is empty, and the lane passes. — `security/idor_cases_case.py` `PENDING_ROUTES = frozenset()`; `test_m6_foundation.py::test_every_m6_route_is_in_the_schema_and_none_is_pending`; lane 2 green with ruff / format / mypy (319f04d).
 
 ## Risk Assessment
 - **STIX pattern injection** through IOC values. Escape `'` and `\` per the STIX 2.1 pattern grammar, test with hostile values, and never build a pattern for unknown types (those get skipped with a count).
 - **The TI normalizer refuses private IPs or internal names**, which an analyst may still want in a collection. Store them with `ti_eligible=false` (computed) rather than refusing them, and document it. Check this against the M4 normalizer before coding; it is a parent decision if the frozen schema needs a field.
 - **The case-wide IOC read on large cases** (50 jobs × 10 000 IOCs). Use cursor paging and a statement timeout. Measure p95 on the dataset and note it for phase 9.
+
+## Implementation Notes (2026-11-06)
+- **Commit:** 319f04d (phases 2–8 together). The worktrees were blocked by the permission system, so there was no lane branch to commit on its own (phase-1 notes).
+- **Lane 2 in the main tree:**
+  - `scripts/lane-test.sh 2 uv run pytest -q -p no:cacheprovider <own files>`, plus ruff, format and mypy;
+  - DB `cyberlab_b2_test`, under the 3-slot semaphore.
+- **Investigations** (`investigations/service.py` +187, `repository.py`):
+  - Close, archive and reopen need `status_reason` (1–500 characters, no NUL), else `422 status_reason_required`.
+  - The status-event row is inserted in the same transaction as the update.
+  - A reason without a status change is not an update.
+  - The audit records `status_from/to` and `has_reason`, never the reason text.
+  - A TLP downgrade needs `org.update` (`403 tlp_downgrade_forbidden`) and `acknowledge_tlp_downgrade` (`422 tlp_downgrade_not_acknowledged`).
+  - Turning a flag off needs `integrations.manage`.
+  - `GET …/status-events` is newest first, cursor-paged, with the actor's display name.
+- **Evidence share policy** (`evidence/share_policy.py`):
+  - `PUT` upserts `evidence_share_policies` and never touches the evidence row or its custody (`test_evidence_row_and_custody_are_untouched`).
+  - Audit `evidence.share_policy_updated`.
+  - Archived cases are read-only.
+- **Notes** (`notes/{service,refs,paging}.py`):
+  - A body or ref change inserts a version and bumps `current_version`; flag-only edits update in place.
+  - `expected_version` is compared under a row lock, so of two concurrent edits on one version, one wins and the other gets `409 stale_note`.
+  - Refs are re-checked in the org and case scope (`422 ref_out_of_scope`).
+  - Only the author or `org.update` may change a note.
+  - A delete sets `deleted_at/by` and the list shows a tombstone.
+- **IOC collections** (`ioc_collections/{service,normalize}.py`):
+  - Values go through the M4 TI normalizer.
+  - The pcap-only types (`ja3`, `ja3s`, `cert_sha256`, `registry_key`, `file_path`) keep the job type and use a sha256 `ioc_key` over the type and value.
+  - At most 500 items per call (`MAX_ITEMS_PER_CALL`).
+  - Each item answers `added`, `duplicate` or `invalid`, and a removed item is re-added as a new row (the 0012 partial unique index).
+  - Items carry the latest TI answer per provider, joined by `ioc_key`.
+- **Exports** (`export.py`, `stix.py`):
+  - **CSV:** `csv_safe.write_csv` with a `# TLP:… CASE-…` header comment (one quoted cell after review L1, look-alikes covered after L2).
+  - **STIX 2.1:**
+    - `'` and the backslash are escaped in the pattern literal;
+    - deterministic `uuid5` ids over (org, collection, `ioc_key`);
+    - the OASIS TLP 2.0 marking-definition is included;
+    - the org identity is set in `created_by_ref`;
+    - types without a STIX path are skipped and counted.
+  - Values are defanged by default, and `defang=false` needs `evidence.write`. Exports are never redacted (RT8).
+  - The response has an RFC 5987 filename, `nosniff`, `no-store` and `CSP: sandbox`.
+- **Case IOCs:** `case_iocs.case_iocs(...)` (frozen signature, `MAX_PAGE = 500`) reads the latest succeeded job per evidence and dedups by (type, value). The route and the phase-3 snapshot builder both call it (`test_entry_point_matches_the_route_and_is_tenant_scoped`).
+- **IDOR:** `idor_cases_case.py` has cases and victim extenders for a note, a collection with an item, and an evidence policy, and its `PENDING_ROUTES` is empty.
+- **Tests:** `test_case_{status,tlp,policy_api,notes,ioc_collections,ioc_exports,case_iocs}.py` and `unit/test_stix_export.py`.
+- **Full API suite** (phase-9 run): 4167 passed, plus 7 errors in `unit/test_signing.py` (the IDOR stand-in leak, fixed in e6e0665). The re-run after that fix is pending gate.

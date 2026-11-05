@@ -1,8 +1,8 @@
 """Output checks before upload (the trusted ingest re-checks magic and size and re-hashes).
 
 - PDF: starts with `%PDF-`, 1 … `MAX_ARTIFACT_BYTES`, 1 … `MAX_PAGES` pages (RT1);
-- HTML / Markdown: valid UTF-8 (strict), 1 … `MAX_ARTIFACT_BYTES`; HTML starts with the
-  doctype the template writes.
+- HTML / Markdown: valid UTF-8 (strict), 1 … `MAX_ARTIFACT_BYTES`; HTML starts with exactly
+  the template's constant head (`HTML_HEAD`: doctype, charset and the CSP meta, RT19).
 
 The artifact is read by root only through `cyberlab_worker.sandbox.open_output` (single
 name in out/, `O_NOFOLLOW`, regular file) and copied into the root-owned job dir, so a
@@ -16,12 +16,12 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from cyberlab_jobs.report import MAX_ARTIFACT_BYTES, MAX_PAGES
+from cyberlab_jobs.report import HTML_HEAD, MAX_ARTIFACT_BYTES, MAX_PAGES
 from cyberlab_worker import sandbox
 from cyberlab_worker.errors import JobFailed
 
 PDF_MAGIC = b"%PDF-"
-HTML_PREFIX = b"<!DOCTYPE html>"
+HEAD_BYTES = max(len(PDF_MAGIC), len(HTML_HEAD))
 CHUNK = 1024 * 1024
 OUTPUT_NAMES = {"pdf": "report.pdf", "html": "report.html", "md": "report.md"}
 META_NAME = "render.json"
@@ -51,8 +51,8 @@ def copy_checked(dirs: sandbox.JobDirs, fmt: str, dest: Path) -> Artifact:
             size += len(chunk)
             if size > MAX_ARTIFACT_BYTES:
                 raise JobFailed("too_large", "artifact over the cap")
-            if len(head) < 16:
-                head = (head + chunk)[:16]
+            if len(head) < HEAD_BYTES:
+                head = (head + chunk)[:HEAD_BYTES]
             if fmt != "pdf":
                 try:
                     decoder.decode(chunk)
@@ -70,7 +70,7 @@ def copy_checked(dirs: sandbox.JobDirs, fmt: str, dest: Path) -> Artifact:
             decoder.decode(b"", final=True)
         except UnicodeDecodeError as exc:
             raise JobFailed("invalid_output", "artifact is not UTF-8") from exc
-    if fmt == "html" and not head.startswith(HTML_PREFIX):
+    if fmt == "html" and not head.startswith(HTML_HEAD):
         raise JobFailed("invalid_output", "not the template's HTML")
     return Artifact(dest, digest.hexdigest(), size)
 
@@ -96,3 +96,5 @@ def check_bytes(fmt: str, data: bytes, pages: int | None) -> None:
         check_pages(fmt, pages)
     else:
         data.decode("utf-8")
+        if fmt == "html" and not data.startswith(HTML_HEAD):
+            raise JobFailed("invalid_output")

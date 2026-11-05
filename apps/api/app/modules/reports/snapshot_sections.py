@@ -154,6 +154,9 @@ class Build:
     registry: Registry = field(default_factory=Registry)
     names: dict[uuid.UUID, str] = field(default_factory=dict)
     counts: dict[str, dict[str, int]] = field(default_factory=dict)
+    # (pseudonym, original) of every reversed run map, in run order: the external profile
+    # seeds its report-level map with them (`redact.seed_run_maps`, RT2).
+    run_originals: list[tuple[str, str]] = field(default_factory=list)
 
     async def name_of(self, user_ids: Sequence[uuid.UUID | None]) -> None:
         missing = [u for u in user_ids if u is not None and u not in self.names]
@@ -818,6 +821,11 @@ def run_in_scope(run: AiRun, b: Build) -> bool:
     return run.job_id is not None and run.job_id in b.scope.jobs
 
 
+def _pseudonym_order(item: tuple[str, str]) -> tuple[str, int, str]:
+    prefix, _, number = item[0].rpartition("_")
+    return (prefix, int(number) if number.isdigit() else 0, item[0])
+
+
 async def _tree_map(b: Build, run: AiRun) -> dict[str, str]:
     """The run tree's own pseudonym map (the M5 rule): reversed in both profiles (RT2)."""
     tree = await ai_repo.tree_run_ids(b.session, b.org_id, run)
@@ -869,6 +877,7 @@ async def ai_runs(b: Build) -> dict[str, Any]:
             continue
         section = await _ai_section(b, run, rows, body)
         items.append(section)
+        b.run_originals.extend(sorted(mapping.items(), key=_pseudonym_order))
     if dropped:
         b.count("ai", dropped=dropped)
     return {"items": items, "total": len(items)}

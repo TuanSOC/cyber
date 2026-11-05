@@ -148,16 +148,67 @@ This phase never renders. Finalize calls the frozen `dispatch.create_render` / `
 8. `idor_cases_reports.py`: every route plus the victim extenders (a report with a version). Empty `PENDING_ROUTES`.
 
 ## Success Criteria
-- [ ] Finalize writes the version, citations, render rows and audit atomically. Versions are immutable in the DB and the bucket (object lock), and v2 never alters v1.
-- [ ] The snapshot round-trips to identical canonical bytes, its sha256 matches the stored object, and the signature verifies in the API and offline.
-- [ ] Every citation resolves to an in-scope row with a matching `fields_sha256`. AI sections contain only supported claims and labelled hypotheses, and never an unverified link.
-- [ ] `external` snapshots contain no seeded internal name (single-label ones included), custody IP, note text or deep link, and use one pseudonym map across all sections and runs. Distribution is required for RED and AMBER+STRICT.
-- [ ] Finalize never signs a version over the render budget, or below the current case TLP without the ack. It holds no transaction across the build, put and sign.
-- [ ] Integrity failures are visible and audited. `cited_by` returns both AI outputs and report versions.
-- [ ] IDOR cases are complete, `PENDING_ROUTES` is empty, and the lane passes.
+- [x] Finalize writes the version, citations, render rows and audit atomically. Versions are immutable in the DB and the bucket (object lock), and v2 never alters v1. — `integration/test_report_finalize.py::test_finalize_writes_v1_then_v2`, `test_versions_and_citations_are_append_only`, `test_a_refused_render_never_undoes_the_version`, `test_a_publish_failure_still_answers_201`; `test_report_storage.py::test_finalize_stores_the_exact_version_with_retention` (319f04d).
+- [x] The snapshot round-trips to identical canonical bytes, its sha256 matches the stored object, and the signature verifies in the API and offline. — `unit/test_report_canonical.py::test_stored_bytes_round_trip_identically`, `test_key_order_and_whitespace_do_not_change_the_bytes`; `test_report_signing.py::test_a_valid_version_verifies`; `unit/test_verify_report_script.py::test_a_signed_snapshot_verifies`, `test_a_tampered_snapshot_fails`, `test_a_pdf_with_embedded_files_verifies`, `test_the_canonical_form_matches_the_contract` (319f04d). The dev e2e viewer shows a valid signature (e6e0665). The real-renderer `test_report_pipeline.py` / `test_end_to_end_pdf` under `REPORT_E2E=1` are pending gate.
+- [x] Every citation resolves to an in-scope row with a matching `fields_sha256`. AI sections contain only supported claims and labelled hypotheses, and never an unverified link. — `test_report_citations.py::test_only_verified_ai_citations_and_matching_field_hashes`, `test_rows_of_another_case_or_org_are_never_resolved`, `test_numbering_is_stable_and_written_at_finalize`; `test_report_snapshot.py::test_ai_sections_hold_supported_claims_and_labelled_hypotheses`; `test_report_drafts.py::test_canary_leak_runs_are_not_selectable` (319f04d).
+- [x] `external` snapshots contain no seeded internal name (single-label ones included), custody IP, note text or deep link, and use one pseudonym map across all sections and runs. Distribution is required for RED and AMBER+STRICT. — `test_report_redaction.py::test_external_leaves_no_internal_value` (the timeline-note leak was found and fixed in e6e0665), `test_one_report_level_map_across_ai_runs`; `test_report_finalize.py::test_profile_rules` (`distribution_required` for external and RED; AMBER+STRICT shares the `STRICT_DISTRIBUTION` rule but has no test of its own).
+- [x] Finalize never signs a version over the render budget, or below the current case TLP without the ack. It holds no transaction across the build, put and sign. — `test_report_finalize.py::test_the_render_budget_and_the_size_limit_refuse_before_signing`, `test_a_case_tlp_raised_after_the_draft_needs_the_acknowledgement`, `test_a_case_tlp_raised_during_the_build_is_rechecked_at_write`, `test_an_edit_between_read_and_write_is_stale_and_leaves_an_orphan`. The three steps are in `reports/service.py` (the build in its own `snapshot_read` session, RT14) (319f04d).
+- [x] Integrity failures are visible and audited. `cited_by` returns both AI outputs and report versions. — `test_report_signing.py::test_a_tampered_object_is_shown_audited_and_refused`, `test_a_wrong_kid_is_invalid`; `test_report_storage.py::test_the_content_route_refuses_a_tampered_object`; `test_report_cited_by.py::test_cited_by_lists_ai_outputs_and_report_versions`, `test_unverified_citations_are_not_listed` (319f04d). The route only: the web "Cited by" panel is deferred (ROADMAP).
+- [x] IDOR cases are complete, `PENDING_ROUTES` is empty, and the lane passes. — `security/idor_cases_reports.py` `PENDING_ROUTES = frozenset()`; lane 3 green (319f04d). Its victim stand-ins leaked into later tests in the full run (7 errors in `unit/test_signing.py`), fixed in e6e0665. The full re-run is pending gate.
 
 ## Risk Assessment
 - **Building a large snapshot inside the request** holds a read transaction and memory: up to 8 MiB, against the 30 s statement timeout. The write transaction stays short (RT14). Measure p95 on the dataset. If it is too slow, move finalize into a trusted task (a parent decision; it would need a frozen-contract change).
 - **Pattern-based redaction** stays a residual even with the second pass: a name that appears in no structured field and matches no rule passes (RT8). The preview and the external-review ack put the final check on the analyst.
 - **Coupling to M5 read models** (`service_outputs`, the pseudonymizer). This phase imports them and never changes them. If their signatures prove insufficient, that is a parent change request.
 - **Orphan objects** when the DB transaction fails after the put. Accepted: they are reported by the reconcile script, never served.
+
+## Implementation Notes (2026-11-06)
+- **Commits:**
+  - 319f04d (phases 2–8 together; lane 3 in the main tree with `cyberlab_b3_test`).
+  - e6e0665: the phase-9 fixes to `redact.py` and `signing.py`.
+- **Modules:**
+  - `reports/service.py` (+1092), `snapshot_sections.py` (+968), `citations.py` (+636), `redact.py` (+350), `repository.py`, `storage.py`, `cited_by.py`;
+  - `scripts/verify_report.py` (+293).
+- **Finalize, three steps** (`service.finalize`), with no transaction across them:
+  1. Read the draft.
+  2. Build in a `snapshot_read` repeatable-read session, run `canonical_json`, check the budget and size, put the object with GOVERNANCE retention, and sign the manifest.
+  3. Write: re-check `revision`, `latest_version`, the archived state and the case TLP. Insert the version, the citations, the queued PDF render and the audit. Commit, then publish.
+- **Finalize outcomes:**
+  - A stale edit between the read and the write leaves an orphan snapshot, logged as "orphan report snapshot" and listed by `reconcile_orphans.py`.
+  - A publish failure still answers 201; the reaper redispatches the queued render (RT5).
+- **Refusals before signing:**
+  - `422 report_too_large_to_render`, with the per-section units, against `REPORT_MAX_RENDER_UNITS`: 450 000 after the phase-4 calibration (750 000 in phase 1).
+  - The 8 MiB size cap.
+  - `409 tlp_below_case` without the acknowledgement.
+  - `distribution_required` for RED, AMBER+STRICT and external.
+  - `external_review_required` (RT8).
+- **Rate limits** (per user, per 10 min): finalize 10, preview 30. Preview stores and audits nothing (`test_preview_stores_and_audits_nothing`).
+- **Snapshot:**
+  - Sections are capped with honest totals (`CAPS`).
+  - Evidence text is defanged once; analyst text is not defanged.
+  - A 20 000-character Vietnamese summary is kept whole.
+  - `[Cn]` numbers follow document order.
+  - The build is deterministic for the same draft (`test_build_is_deterministic_for_the_same_draft`).
+- **Citations:**
+  - Every cited row is re-queried in the case scope.
+  - Only verified AI citations are used.
+  - The row copies carry `fields_sha256`.
+  - Numbering is written at finalize.
+  - `cited_by` lists AI outputs and report versions.
+- **Redaction** (`redact.py`):
+  - One report-level pseudonym map across sections and AI runs.
+  - A field walk with an allow-list, then a second whole-token pass.
+  - `external` drops notes, custody `ip` / `user_agent`, deep links and `base_url`.
+  - **Phase-9 bug (e6e0665):** the timeline's `note` entries kept the note body as their title. `external` now drops them (and corrects `total`) and empties a cited note's fields.
+- **Signing:**
+  - `reports/signing.py` is the only importer of the key loader.
+  - The Ed25519 manifest uses `kid`.
+  - The prod startup check `check_startup_keys` came from review L3.
+  - `verify_report.py` verifies a snapshot plus its signature JSON, or a PDF with its embedded files, offline against the published keys.
+- **Phase-9 bug (e6e0665):** `idor_cases_reports.py`'s victim extender replaced `report_signing._private_keys` and `dispatch.*` without restoring them. In the full API run (4167 passed) this caused 7 errors in `unit/test_signing.py`. The fix:
+  - `test_idor_routes._no_publish` now registers the originals with monkeypatch;
+  - `reset_cache` tolerates a stand-in without `cache_clear`.
+- **Storage:**
+  - Snapshots go to `reports` / `reports-test` with per-object GOVERNANCE retention.
+  - The content and download routes re-hash the object before serving and refuse a mismatch with `409 integrity_failed` (audited).
+- **Deferred:** the web "Cited by" panel (the route exists; REPORTS.md, ROADMAP). The real-renderer pipeline run under `REPORT_E2E=1` is pending gate.

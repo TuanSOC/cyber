@@ -32,7 +32,7 @@ pytestmark = in_container
 
 CALIBRATED_RENDER_UNITS = 450_000
 # The plan's targets for a render at the budget, under the sandbox limits (768 MiB address
-# space, 90 s CPU): peak RSS about 600 MiB and 60 s CPU.
+# space, 75 s CPU): peak RSS about 600 MiB and 60 s CPU.
 MAX_RSS_MIB = 600
 MAX_CPU_S = 60
 

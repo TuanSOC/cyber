@@ -51,6 +51,8 @@ class BuiltSnapshot:
     # {section: {"included": n, "total": m}} plus build counters (dropped out-of-scope
     # citations, omitted AI claims, ...): ids and counts only.
     counts: dict[str, dict[str, int]] = field(default_factory=dict)
+    # (pseudonym, original) of the AI run maps reversed into the claims (never stored, RT29).
+    run_originals: tuple[tuple[str, str], ...] = ()
 
 
 # Sections whose items carry a single `_cite`, then those carrying `_cites`, in document order.
@@ -157,11 +159,18 @@ async def build_snapshot(
         if key is not None:
             selection.append(key)
 
-    # Notes are never cited in an external report (they are not in it, RT8).
+    # Notes are never cited in an external report (they are not in it, RT8): neither as a
+    # `note` citation nor as a `timeline` entry that resolves to an `analyst_notes` row.
     drop_kinds = frozenset({"note"}) if b.external else frozenset()
+    drop_tables = frozenset({"analyst_notes"}) if b.external else frozenset()
     requests = list(b.registry.requests.values())
     resolved = await cites.resolve(
-        session, scope, requests, with_paths=not b.external, drop_kinds=drop_kinds
+        session,
+        scope,
+        requests,
+        with_paths=not b.external,
+        drop_kinds=drop_kinds,
+        drop_tables=drop_tables,
     )
     numbers = _number(data, resolved, list(b.registry.requests))
     _apply_numbers(data, numbers)
@@ -209,4 +218,9 @@ async def build_snapshot(
         "omitted_flagged": sum(r.omitted_flagged for r in snapshot.ai.items),
     }
     counts["ai"].update(ai_omitted)
-    return BuiltSnapshot(snapshot=snapshot, citations=rows, counts=counts)
+    return BuiltSnapshot(
+        snapshot=snapshot,
+        citations=rows,
+        counts=counts,
+        run_originals=tuple(b.run_originals),
+    )

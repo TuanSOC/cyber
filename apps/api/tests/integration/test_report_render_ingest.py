@@ -9,7 +9,7 @@ import uuid
 from typing import Any
 
 import pytest
-from cyberlab_jobs.report import RENDER_CONTENT_TYPES, ReportRenderedV1
+from cyberlab_jobs.report import HTML_HEAD, RENDER_CONTENT_TYPES, ReportRenderedV1
 from minio.commonconfig import GOVERNANCE
 from sqlalchemy import select
 
@@ -95,7 +95,7 @@ async def test_a_verified_artifact_succeeds_with_retention_and_audit(
 
 @pytest.mark.parametrize(
     ("fmt", "data"),
-    [("html", b"<!DOCTYPE html><p>x</p>"), ("md", "**TLP\\:AMBER** ⏎".encode())],
+    [("html", HTML_HEAD + b"<p>x</p>"), ("md", "**TLP\\:AMBER** ⏎".encode())],
 )
 async def test_text_formats_succeed_when_utf8(fmt: str, data: bytes) -> None:
     s = await seed()
@@ -103,6 +103,40 @@ async def test_text_formats_succeed_when_utf8(fmt: str, data: bytes) -> None:
     version_id = upload(s, render_id, data, fmt)
     await render_ingest.handle_rendered(succeeded(render_id, token, data, version_id, pages=None))
     assert (await state(s, render_id))[0].status == "succeeded"
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"<!DOCTYPE html><p>no CSP</p>",
+        HTML_HEAD.replace(b"default-src 'none'", b"default-src *") + b"<p>x</p>",
+        b"<p>x</p>" + HTML_HEAD,
+    ],
+)
+async def test_html_without_the_exact_constant_head_is_invalid(data: bytes) -> None:
+    """The HTML rendition must start with the template's constant head, CSP meta included
+    (RT19): a doctype alone or a weakened CSP is `invalid_output`."""
+    s = await seed()
+    render_id, token = await queued(s, "html")
+    version_id = upload(s, render_id, data, "html")
+    await render_ingest.handle_rendered(succeeded(render_id, token, data, version_id, pages=None))
+    render, _ = await state(s, render_id)
+    assert (render.status, render.error_code) == ("failed", "invalid_output")
+
+
+async def test_an_answer_past_the_render_deadline_is_dropped(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The render token lives until the index deadline: a late answer (even with the right
+    token and a valid artifact) changes nothing; the reaper fails the render."""
+    s = await seed()
+    render_id, token = await seed_render(s.tenant, s.version.version_id, deadline_s=-1)
+    version_id = upload(s, render_id, PDF)
+    await render_ingest.handle_rendered(succeeded(render_id, token, PDF, version_id))
+    render, index_status = await state(s, render_id)
+    assert (render.status, index_status) == ("queued", "queued")
+    assert await audits(s.reg.org_id, "report.rendered") == []
+    assert "past the render deadline" in caplog.text
 
 
 async def test_a_running_render_succeeds_too() -> None:

@@ -9,18 +9,28 @@ builder (separate run trees number independently, RT2).
   section and every AI run:
   1. seeded first from structured fields: hostname-typed fields of the case's pcap results
      (DNS query, HTTP host, TLS SNI / certificate CN), the user paths in its static strings,
-     and the org members' names (custody actors, authors);
+     the org members' names (custody actors, authors), then every original value of the
+     included AI runs' own pseudonym maps (reversed by the builder, RT2: a single-label host
+     an analyzer put in a finding attribute reaches the claim text that way);
   2. every string field is walked except an explicit allow-list of enum, hash, UUID, count
      and timestamp fields (`EXEMPT`); planted pseudonym-shaped text is neutralized first;
   3. a whole-token second pass replaces every original value already in the map wherever
      it occurs (single-label hosts such as `FIN-SRV-01`, bare usernames in free text);
-  4. notes (their section, the timeline's `note` entries and a cited note's copied fields),
-     custody `ip` / `user_agent`, deep links and `base_url` are dropped, and actors and
-     authors become role labels.
+  4. notes (their section, the timeline's `note` entries and any citation of an
+     `analyst_notes` row, which the builder already refuses to resolve), custody `ip` /
+     `user_agent`, deep links and `base_url` are dropped, and actors and authors become role
+     labels;
+  5. `ioc_key` (an unsalted sha256 of type and value, so an internal value could be
+     recovered by brute force) becomes HMAC-SHA256 under a random per-build key that is never
+     stored: the IOC and TI sections still join on it inside the version, nothing outside it.
   The map is never stored (RT29). Pattern-based redaction stays a residual (RT8).
 """
 
+import hashlib
+import hmac
+import ipaddress
 import re
+import secrets
 import uuid
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any
@@ -204,6 +214,51 @@ async def seed(
                 p.text(value)
 
 
+def seed_run_maps(p: Pseudonymizer, originals: Iterable[tuple[str, str]]) -> None:
+    """Register every original value of the included AI runs' pseudonym maps, in its own
+    category: the run already decided it was internal (a single-label host from a finding
+    attribute, a bare username), so the report map must cover it too (RT2)."""
+    for pseudonym, original in originals:
+        clean = original.strip()
+        if not clean:
+            continue
+        prefix = pseudonym.rsplit("_", 1)[0]
+        if prefix == "INT_HOST":
+            p._name("host", clean.rstrip(".").lower(), clean)
+        elif prefix == "USER":
+            _seed_user(p, clean)
+        elif prefix == "INT_IP":
+            try:
+                address = ipaddress.ip_address(clean.strip("[]"))
+            except ValueError:
+                p.text(clean)
+                continue
+            if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+                address = address.ipv4_mapped
+            p._name("ip", str(address), clean)
+
+
+def _opaque_ioc_keys(data: dict[str, Any]) -> None:
+    """`ioc_key` -> HMAC-SHA256 under a key that lives only for this build (never stored):
+    consistent across the IOC and TI sections of the version, unlinkable outside it."""
+    key = secrets.token_bytes(32)
+    mapped: dict[str, str] = {}
+
+    def opaque(value: str) -> str:
+        found = mapped.get(value)
+        if found is None:
+            found = hmac.new(key, value.encode(), hashlib.sha256).hexdigest()
+            mapped[value] = found
+        return found
+
+    for name in ("iocs", "ti"):
+        for item in data[name]["items"]:
+            item["ioc_key"] = opaque(item["ioc_key"])
+    for item in data["citations"]["items"]:
+        if "ioc_key" in item["fields"]:
+            item["fields"]["ioc_key"] = opaque(item["fields"]["ioc_key"])
+
+
 class _Redactor:
     def __init__(self, p: Pseudonymizer) -> None:
         self.p = p
@@ -301,9 +356,14 @@ def _role(name: str, roles: Mapping[str, str]) -> str:
 
 
 async def redact(
-    session: AsyncSession, scope: CaseScope, snapshot: ReportSnapshot
+    session: AsyncSession,
+    scope: CaseScope,
+    snapshot: ReportSnapshot,
+    run_originals: Iterable[tuple[str, str]] = (),
 ) -> ReportSnapshot:
-    """The snapshot as signed for its profile (`snapshot.report.profile`)."""
+    """The snapshot as signed for its profile (`snapshot.report.profile`).
+    `run_originals`: the (pseudonym, original) pairs of the AI run maps the builder
+    reversed (`BuiltSnapshot.run_originals`)."""
     if snapshot.report.profile != "external":
         return snapshot
     cidrs, suffixes = await _org_settings(session, scope.org_id)
@@ -313,6 +373,7 @@ async def redact(
     for name, _, role in members:
         roles.setdefault(name.strip(), role)
     await seed(session, scope, p, [(n, e) for n, e, _ in members])
+    seed_run_maps(p, run_originals)
 
     data = snapshot.model_dump(mode="json")
     # Actors and authors become role labels (before the walk: they are not free text).
@@ -335,7 +396,7 @@ async def redact(
     timeline["items"] = kept
     for item in data["citations"]["items"]:
         item["path"] = None
-        if item["kind"] == "note":
+        if item["kind"] == "note" or item["ref_table"] == "analyst_notes":
             item["fields"] = {}
     labels = set(ROLE_LABELS.values()) | {FORMER_MEMBER}
 
@@ -354,6 +415,7 @@ async def redact(
         for src, dst in zip(data[name]["items"], final[name]["items"], strict=True):
             dst[key] = src[key]
     _fit(final)
+    _opaque_ioc_keys(final)
     for item in final["citations"]["items"]:
         item["fields_sha256"] = fields_sha256(item["fields"])
     return ReportSnapshot.model_validate(final)

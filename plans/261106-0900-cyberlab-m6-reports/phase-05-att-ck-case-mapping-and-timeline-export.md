@@ -56,12 +56,47 @@ The §10 ATT&CK mapping and timeline items at case level:
 5. `idor_cases_attack.py`: cases for the attack, mapping and export routes, plus a victim extender (a mapping). Empty `PENDING_ROUTES`.
 
 ## Success Criteria
-- [ ] Suggestions come only from evidence-backed sources (capa, findings, verified AI) in the case scope. Nothing is confirmed without an analyst request.
-- [ ] Unknown, revoked or deprecated technique ids are refused, and the matrix groups confirmed and suspected techniques by v20 tactic.
-- [ ] The timeline includes status and opted-in notes without breaking existing cursors or tests.
-- [ ] Exports are TLP-headed, formula-safe, capped, audited and served as attachments with CSP sandbox.
-- [ ] IDOR cases are complete, `PENDING_ROUTES` is empty, and the lane passes.
+- [x] Suggestions come only from evidence-backed sources (capa, findings, verified AI) in the case scope. Nothing is confirmed without an analyst request. — `integration/test_case_attack_suggestions.py::test_suggestions_come_only_from_evidence_backed_sources_of_the_case` (revoked T1002 and unknown T9999 dropped, unverified AI excluded), `test_only_the_latest_static_job_per_evidence_counts`, `test_duplicates_merge_and_rejected_mappings_stay_visible`, `test_cross_org_case_is_404`. Suggestions are a read-only `GET`, and a mapping exists only after `POST …/attack` (319f04d).
+- [x] Unknown, revoked or deprecated technique ids are refused, and the matrix groups confirmed and suspected techniques by v20 tactic. — `test_case_attack.py::test_technique_must_be_live_in_the_v20_index`, `test_matrix_groups_confirmed_and_suspected_by_v20_tactic`, `test_tactic_order_covers_the_index`, `test_sources_are_rechecked_in_the_case_scope`, `test_status_changes_are_audited_from_to` (319f04d).
+- [x] The timeline includes status and opted-in notes without breaking existing cursors or tests. — `test_timeline_kinds.py::test_status_and_note_entries_are_case_events_in_order`, `test_kinds_filter`, `test_cursor_paging_is_stable_across_the_new_kinds`, `test_count_and_page_agree_for_case_events`, `test_ai_context_never_selects_notes_or_status_reasons` (319f04d). The M5 timeline and AI suites stay green in the phase-9 full run (4167 passed; the only errors are the 7 in `unit/test_signing.py`).
+- [x] Exports are TLP-headed, formula-safe, capped, audited and served as attachments with CSP sandbox. — `test_timeline_export.py::test_csv_is_tlp_headed_formula_safe_and_sandboxed`, `test_json_export_and_tlp_and_audit`, `test_the_row_cap_adds_a_marker`, `test_from_to_filters_and_bad_ranges` (319f04d).
+- [x] IDOR cases are complete, `PENDING_ROUTES` is empty, and the lane passes. — `security/idor_cases_attack.py` `PENDING_ROUTES = frozenset()`; `test_timeline_export.py::test_cross_org_is_404_and_viewers_may_export`; lane 5 green (319f04d).
 
 ## Risk Assessment
 - **Timeline query cost** grows with two more sources. Both are small tables with `(investigation_id, …)` indexes from 0012; re-measure the timeline p95 recorded in M5.
 - **AI suggestions read as authority.** The UI labels them "suggested by: capa / finding / AI (verified citation)". The analyst must confirm, and rejected suggestions stay visible as rejected.
+
+## Implementation Notes (2026-11-06)
+- **Commit:** 319f04d (phases 2–8 together).
+- **Lane 5 in the main tree:** `scripts/lane-test.sh 5`, DB `cyberlab_b5_test`; the worktrees were blocked by the permission system (phase-1 notes).
+- **Modules:**
+  - `case_attack/service.py` (+250), `sources.py` (+203), `suggest.py` (+176), `labels.py` (+91);
+  - `case_timeline/service.py` (+158);
+  - `investigations/timeline.py` (+431).
+- **Mappings:**
+  - The technique must match `^T\d{4}(\.\d{3})?$` and be live in the v20 index (`422 invalid_technique`); a duplicate gets `409 mapping_exists`.
+  - Statuses are `confirmed`, `suspected` and `rejected`.
+  - The rationale is at most 2 000 characters; sources are at most 32 and 16 KiB, re-checked in the case scope (`422 ref_out_of_scope`).
+  - Status changes are audited from / to.
+  - Archived cases are read-only.
+- **Matrix:** only `confirmed` and `suspected` (`MATRIX_STATUSES`), in v20 tactic order. The MITRE URL is returned as text.
+- **Suggestions** (`suggest.py`):
+  - capa ATT&CK ids from the latest static job per evidence;
+  - finding ids (`attack` / `attack_ids`) from the latest pcap and static jobs;
+  - AI `attack_techniques` only from completed runs with verified citations.
+  - They are bounded by `MAX_ROWS = 5 000` and `MAX_AI_RUNS = 200`, deduplicated by technique and marked `already_mapped`.
+  - Rejected mappings stay visible.
+- **Timeline kinds:**
+  - `status` comes from `investigation_status_events`; `note` from notes with `include_in_reports` that are not deleted, at their first version's time (RT32).
+  - Both carry `evidence_id = job_id = None`, and their text is cut to `CASE_TEXT_MAX = 280` characters.
+  - The sort key (`ts`, kind, `ref_id`) and the cursor format are unchanged.
+  - `kinds` is implemented in `page()` and `count()`.
+- **Integration fix (319f04d):** `ai/context/select.case_timeline_items` passes `kinds=case_timeline.EVIDENCE_KINDS`, so analyst notes and status reasons never reach a provider. Its `total` counts only the evidence kinds (`test_ai_context_never_selects_notes_or_status_reasons`).
+- **Export:**
+  - `GET …/timeline/export?format=csv|json&kinds&from&to`.
+  - **CSV:** a `# TLP:<label> CASE-xxxxx exported <ts>` header through `csv_safe.write_csv`, including the review L1/L2 hardening.
+  - At most `TIMELINE_EXPORT_MAX_ROWS = 50 000` rows, with a truncation marker row.
+  - An attachment with `nosniff`, `no-store` and `CSP: sandbox`; audited; viewers may export.
+- **IDOR:** `idor_cases_attack.py` covers the attack, mapping and export routes, with a mapping victim extender, and its `PENDING_ROUTES` is empty.
+- **Tests:** `test_case_attack.py` (8), `test_case_attack_suggestions.py` (4), `test_timeline_kinds.py` (6), `test_timeline_export.py` (5).
+- **Open:** the full API re-run after the e6e0665 signing fix (pending gate).

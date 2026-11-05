@@ -6,14 +6,17 @@ built from data (a `class="…{{ … }}…"` may only use the fixed `sev_class` 
 filters). Template comments are ignored.
 
 Python: no `Markup` / `markupsafe` / `escape`-bypass names, no `autoescape=False`, and the
-environment is the sandboxed, autoescaping, StrictUndefined one.
+environment is the sandboxed, autoescaping, StrictUndefined one. The grep is not the only
+line: the environment itself has no `safe` / `urlize` / `xmlattr` filter and refuses the
+`{% autoescape %}` statement, so a template that slips past the grep still fails.
 """
 
 import ast
 import re
 from pathlib import Path
 
-from jinja2 import StrictUndefined
+import pytest
+from jinja2 import StrictUndefined, TemplateError
 from jinja2.sandbox import SandboxedEnvironment
 
 from report_worker import render_html
@@ -108,7 +111,32 @@ def test_the_environment_is_sandboxed_autoescaping_and_strict() -> None:
     assert isinstance(env, SandboxedEnvironment)
     assert env.autoescape is True
     assert env.undefined is StrictUndefined
-    assert "safe" in env.filters  # Jinja's built-in still exists: the lint above bans it
+    for name in ("safe", "urlize", "xmlattr"):
+        assert name not in env.filters
+    assert not env.extensions
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "{{ x|safe }}",
+        "{{ x | safe }}",
+        "{% if x %}{{ x|safe }}{% endif %}",  # deferred to render time inside a conditional
+        "{% filter safe %}{{ x }}{% endfilter %}",
+        "{{ x|urlize }}",
+        "{{ {'href': x}|xmlattr }}",
+        "{% autoescape false %}{{ x }}{% endautoescape %}",
+        "{% autoescape true %}{{ x }}{% endautoescape %}",
+        "{%- autoescape false -%}{{ x }}{%- endautoescape -%}",
+    ],
+)
+def test_templates_that_turn_escaping_off_fail(source: str) -> None:
+    with pytest.raises(TemplateError):
+        render_html.ENV.from_string(source).render(x="<script>")
+
+
+def test_plain_output_is_still_escaped() -> None:
+    assert render_html.ENV.from_string("{{ x }}").render(x="<b>") == "&lt;b&gt;"
 
 
 def test_the_css_is_constant_and_references_nothing() -> None:

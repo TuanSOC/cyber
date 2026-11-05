@@ -86,13 +86,62 @@ It builds against the phase-1 frozen contracts with mocked fetch.
 6. Finalize flow and version navigation. Run `pnpm --filter web lint typecheck test` on the owned files.
 
 ## Success Criteria
-- [ ] An analyst builds a draft, previews it, finalizes it and lands on the version viewer. Stale drafts never overwrite silently.
-- [ ] The viewer renders every snapshot section as text, with TLP banners and integrity status. Citation chips open the appendix and the internal deep links.
-- [ ] The hostile snapshot renders inert: no data-derived elements, attributes or external links.
-- [ ] Renders can be requested, their status is shown, and downloads use the server filename.
-- [ ] Reports is a live navigation entry. Lint, typecheck and tests are green on the owned files.
+- [x] An analyst builds a draft, previews it, finalizes it and lands on the version viewer. Stale drafts never overwrite silently. — the dev e2e `reports.spec.ts` covers report → draft + citations → finalize → viewer with a valid signature (e6e0665); `report-builder.test.tsx` "a conflict shows the banner with Reload, never a silent overwrite", "summarizes the version and allows finalize when nothing blocks"; `lib/reports.test.ts` "stops on 409 stale_draft and never overwrites: no further request until reset", "markConflict (a stale finalize) stops autosave" (319f04d). The prod e2e is pending gate.
+- [x] The viewer renders every snapshot section as text, with TLP banners and integrity status. Citation chips open the appendix and the internal deep links. — `report-view.test.tsx` "renders every section in snapshot order with a matching heading hierarchy", "shows TLP banners at the top (sticky) and the bottom with the FIRST definition", "an integrity failure is visible as text and as an alert", "citations are buttons that open the appendix, which links to the live record by id"; `lib/report-format.test.ts` "builds job, evidence and note links from UUID ids", "never uses the snapshot path as the href" (319f04d).
+- [x] The hostile snapshot renders inert: no data-derived elements, attributes or external links. — `report-view.test.tsx` "produces no element from data", "produces no attribute from data and no external link", "makes bidi and zero-width characters visible and keeps long values whole", "Markdown in text stays literal", "external snapshots carry no record links"; the fixtures are byte-identical copies of the API ones ("are byte-identical copies of the API fixtures") (319f04d).
+- [x] Renders can be requested, their status is shown, and downloads use the server filename. — `report-builder.test.tsx` "render rows show typed failures with a hint, and downloads only when ready"; `lib/reports.test.ts` "polls only while a render is active", "latest render per format and typed failure text"; `lib/report-format.test.ts` "download filenames come from the server, sanitized, with a known extension"; the e2e checks that the PDF download's SHA-256 matches (e6e0665).
+- [x] Reports is a live navigation entry. Lint, typecheck and tests are green on the owned files. — `lib/nav.ts` drops `plannedFor: "Milestone 6"` from the `reports` entry; the web lane (lint, typecheck, vitest on the owned files) was green (319f04d); web 446 passed at the phase-9 run.
 
 ## Risk Assessment
 - **Viewer and renderer diverge** (different text rules or section order). The shared `vis` rule fixture and the snapshot-ordered sections keep them aligned, and phase 9 compares the viewer text to the extracted PDF text on the golden snapshot.
 - **Large snapshots in the browser** (8 MiB JSON). Virtualize long tables (findings, IOCs, timeline, appendix) and lazy-render sections below the fold.
 - **The builder grows large.** Split it into one component per selection group.
+
+## Implementation Notes (2026-11-06)
+- **Commit:** 319f04d (phases 2–8 together).
+- **Web lane on the host:** lint, typecheck and vitest on the owned files, against the phase-1 contracts and mocked fetch. It shared the main tree with phase 6 because the worktrees were blocked by the permission system.
+- **Pages:**
+  - `app/(app)/o/[orgId]/reports/page.tsx` (the list, `?investigation=` filter, "New report" with a case picker);
+  - `reports/[reportId]/page.tsx` (the builder);
+  - `reports/[reportId]/v/[version]/page.tsx` (the viewer);
+  - the case panel `components/reports/case-reports-panel.tsx`, the case page's Reports tab.
+- **API layer:** `lib/reports.ts` (+811), `lib/use-reports.ts` (+306), `lib/report-format.ts` (+205).
+- **Builder:**
+  - Components: `report-builder.tsx` (+454) with one component per selection group (`selection-groups.tsx`, `selection-pickers.tsx`, `builder-fields.tsx`).
+  - Analyst sections are plain `<textarea>`s with code-point counters.
+  - Distribution is required for RED, AMBER+STRICT and external.
+  - The `external` explanation (RT8) is shown.
+  - The TLP downgrade is disabled without `org.update`.
+  - AI runs: completed only, never refused or canary-leak, at most 10.
+  - Cited rows are deduplicated and capped at 200.
+- **Autosave:**
+  - Debounced, carrying `revision`.
+  - Edits made during an in-flight save go out with the new revision.
+  - On `409 stale_draft` it stops: a conflict banner with Reload, and no further request until a reset.
+  - "Add to report" (`appendCitedRow`) retries once from a fresh read on `stale_draft`, then gives up.
+- **Preview and finalize:**
+  - **Preview** (`preview-panel.tsx`) runs on demand only. It shows the watermark, size against 8 MiB, units against the budget, and per-section hints for `422 report_too_large_to_render` (RT1).
+  - **Finalize** (`finalize-dialog.tsx`):
+    - a summary and an optional change note (≤ 500);
+    - the external-review checkbox (RT8);
+    - for `409 tlp_below_case`, the acknowledgement for admins or an explanation for analysts (RT7);
+    - it then navigates to the viewer. Finalize queues the PDF only (RT5).
+- **Viewer** (`report-view.tsx`, `report-sections.tsx` +576, `report-parts.tsx`, `tlp-banner.tsx`, `integrity-strip.tsx`, `version-viewer.tsx`, `version-list.tsx`):
+  - The snapshot comes from `GET …/versions/{v}/content`.
+  - Sticky TLP banners at the top and bottom.
+  - The document-control table.
+  - The integrity strip: `snapshot_ok`, `signature_valid`, kid, the full sha256.
+  - Sections in snapshot order.
+  - `[Cn]` buttons open the appendix, whose "open current record" links are built only from UUIDs (none for `external`).
+- **Text:** every value is a text node (`report-text.tsx`). The `vis` rule reads the materialized `lib/vis-rules.json`, including the review L7 extras. There is no `dangerouslySetInnerHTML`, `<img>` or data-derived `href`.
+- **Renders** (`report-renders.tsx`):
+  - a Render button per format, with typed failures and hints;
+  - polling stops on final states;
+  - downloads use the sanitized server filename;
+  - "Quick print (not the signed PDF)" uses `window.print()`.
+- **Tests:** `report-builder.test.tsx` (15), `report-view.test.tsx` (14), `lib/reports.test.ts` (19), `lib/report-format.test.ts` (8, including "follows the materialized range table at every boundary"). Fixtures: `components/reports/fixtures/{golden,hostile}_snapshot.json`.
+- **Not done:**
+  - Long tables (findings, IOCs, timeline, appendix) are neither virtualized nor lazy-rendered (a Risk Assessment mitigation).
+  - The viewer-vs-PDF text comparison on the golden snapshot (planned for phase 9) was not written.
+  - The web "Cited by" panel is deferred (ROADMAP).
+  - The prod e2e is pending gate.

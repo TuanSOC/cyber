@@ -192,15 +192,15 @@ After this phase the stack runs as before:
    - run `tests/unit/test_signing.py` once in lanes 2–5, and `test_skeleton.py` in `report-worker-test`, as smoke tests.
 
 ## Success Criteria
-- [ ] Migration 0012 is applied and tested: RLS, FORCE, policies, composite FKs, append-only for the owner too, every guard trigger, column grants, no DELETE, upgrade and downgrade.
-- [ ] The snapshot contract produces byte-identical canonical JSON across key orders and Python runs. The caps reject oversize input, and the worst case stays ≤ 8 MiB.
-- [ ] With the policy on, AI preview, run creation and TI enrichment answer `409 policy_blocked`. The worker re-checks fail an in-flight run with 0 provider calls. Existing cases behave as in M5.
-- [ ] Only the api role holds the signing key. Prod refuses dev kids and keys. The import guard passes.
-- [ ] The report-worker runs on `analysis` only, with only `BROKER_URL`, as root dropping to uid 10003, on the prefork pool. The broker ACL confines `report`. The worker kit's new `Rlimits` and the netlink / io_uring deny are tested, and the analyzers' suites are unchanged.
-- [ ] `reports` and `reports-test` exist with object lock and no default retention. `api-test` uses `reports-test`, and the MinIO policy has no delete on either.
-- [ ] The M5 prompt-pin test is unchanged (`policy_excluded` is not rendered). The timeline answers with nullable `evidence_id` and accepts `kinds`, and the M5 timeline and AI tests stay green.
-- [ ] Every new route exists as a 501 stub with frozen schemas. The contracts are generated and committed, and the IDOR enumerator lists every route. Unfilled routes are reported as pending (`PENDING_ROUTES`), never silently passed.
-- [ ] `pnpm verify` is green.
+- [x] Migration 0012 is applied and tested: RLS, FORCE, policies, composite FKs, append-only for the owner too, every guard trigger, column grants, no DELETE, upgrade and downgrade. — `integration/test_m6_schema.py::test_tenant_tables_are_isolated`, `test_render_index_is_system_visible_but_tenant_scoped`, `test_children_cannot_point_at_another_orgs_rows`, `test_rows_cannot_be_written_into_another_org`, `test_app_role_cannot_mutate_append_only_tables`, `test_trigger_blocks_owner_mutations_too`, `test_no_delete_grant`, `test_column_grants_refuse_identity_updates`, `test_note_guard`, `test_report_guard`, `test_render_transitions`, `test_collection_item_guard_and_partial_uniqueness`, `test_existing_cases_get_the_defaults`; `test_rls_coverage.py`; `test_migrations.py::test_downgrade_0006_then_fresh_upgrade_head` (ad5b65e). Review L4 (0013 same-org FKs): `test_job_iocs_and_ai_citations_are_same_org_fks`, `test_items_and_citations_cannot_name_another_orgs_ioc_or_ai_citation` (319f04d).
+- [x] The snapshot contract produces byte-identical canonical JSON across key orders and Python runs. The caps reject oversize input, and the worst case stays ≤ 8 MiB. — `unit/test_report_contract.py::test_fixtures_round_trip_to_identical_canonical_bytes`, `test_canonical_bytes_are_stable_across_key_order`, `test_floats_are_refused_in_canonical_json`, `test_caps_reject_oversize_sections`, `test_ai_runs_and_citations_are_capped`, `test_a_worst_case_snapshot_near_the_size_cap_stays_canonical`, `test_render_units_pin_on_the_golden_snapshot` (4768 units) (ad5b65e).
+- [x] With the policy on, AI preview, run creation and TI enrichment answer `409 policy_blocked`. The worker re-checks fail an in-flight run with 0 provider calls. Existing cases behave as in M5. — `integration/test_share_policy.py::test_ai_preview_and_run_are_refused`, `test_job_enrichment_is_refused`, `test_analyst_worker_fails_a_blocked_run_without_a_call`, `test_enrich_worker_abandons_a_blocked_run_without_a_call`, `test_existing_cases_allow_everything`, `test_analyst_worker_runs_when_nothing_is_set`; `unit/test_share_policy.py::test_policy_blocked_answers_409_with_the_reason` (ad5b65e). Review M1 (case-wide runs re-check the frozen scope's evidence): `test_analyst_worker_rechecks_the_frozen_scope_of_a_case_run`, `test_an_exclusion_outside_the_frozen_scope_does_not_block` (319f04d).
+- [x] Only the api role holds the signing key. Prod refuses dev kids and keys. The import guard passes. — `unit/test_config.py::test_only_the_api_role_may_hold_the_signing_key_file`, `test_prod_refuses_dev_signing_kids`, `test_prod_refuses_the_committed_dev_signing_public_key`, `test_prod_api_needs_an_active_signing_kid_and_the_key_file`; `unit/test_report_import_guard.py` (6 tests); prod compose config: signing material on `api` only (ad5b65e). Review L3 startup check: `unit/test_signing.py::test_startup_check_*`, `test_the_real_dev_private_key_is_refused` (319f04d). The gate probe of the prod key route is pending gate.
+- [x] The report-worker runs on `analysis` only, with only `BROKER_URL`, as root dropping to uid 10003, on the prefork pool. The broker ACL confines `report`. The worker kit's new `Rlimits` and the netlink / io_uring deny are tested, and the analyzers' suites are unchanged. — `apps/workers/report/tests/test_isolation.py` (7: `test_environment_holds_only_the_broker_url`, `test_no_default_route`, `test_only_the_broker_and_minio_are_reachable`, `test_broker_acl_confines_the_renderer`), `test_skeleton.py::test_celery_runs_prefork_one_task_per_child_with_limits`; `integration/test_report_acl.py::test_report_user_is_confined`, `test_other_workers_cannot_touch_report`; kit `test_rlimits_are_applied`, `test_default_rlimits_are_unchanged`, `test_extended_deny_refuses_netlink_packet_and_io_uring_with_eacces`, `test_default_filter_is_unchanged_for_the_analyzers`; pcap 48 / static 252 unchanged (ad5b65e). **Deviation (review L6):** the render subprocess drops to uid **10004**, not 10003 (`test_tool_uid_comes_from_the_image_env`, 319f04d).
+- [x] `reports` and `reports-test` exist with object lock and no default retention. `api-test` uses `reports-test`, and the MinIO policy has no delete on either. — `integration/test_m6_foundation.py::test_reports_test_bucket_is_locked_and_the_api_user_cannot_delete`; `unit/test_config.py::test_report_defaults`; `infra/minio/init.sh` (`mc mb --with-lock` for both, no default retention), `api-policy.template.json` without `DeleteObject*` (ad5b65e). Only `reports-test` is probed by a test; `reports` is created by the same line.
+- [x] The M5 prompt-pin test is unchanged (`policy_excluded` is not rendered). The timeline answers with nullable `evidence_id` and accepts `kinds`, and the M5 timeline and AI tests stay green. — `test_share_policy.py::test_policy_count_is_stored_but_not_rendered`; `test_m6_foundation.py::test_timeline_accepts_kinds_and_case_events_have_no_evidence`; API suite 3718 passed / 44 skipped with the M5 suites unchanged (ad5b65e).
+- [x] Every new route exists as a 501 stub with frozen schemas. The contracts are generated and committed, and the IDOR enumerator lists every route. Unfilled routes are reported as pending (`PENDING_ROUTES`), never silently passed. — 40 routes (17 + 14 + 4 + 5) as 501 stubs; `packages/contracts/{openapi.json,src/schema.d.ts}` committed in ad5b65e; `security/test_idor_routes.py::test_pending_routes_are_real_routes_without_cases`, `test_every_org_scoped_route_has_an_idor_case`; `test_m6_foundation.py::test_m6_routes_check_membership_first_and_validate_bodies`. All four `PENDING_ROUTES` are now empty (`test_every_m6_route_is_in_the_schema_and_none_is_pending`, 319f04d).
+- [ ] `pnpm verify` is green. — **pending gate.** Its parts passed in ad5b65e (API 3718 passed, kit 40, pcap 48, static 252, report 29, web typecheck + eslint + 322 vitest, dev e2e 8 passed), but no combined `pnpm verify` run is recorded; the final `pnpm verify:prod` covers it.
 
 ## Risk Assessment
 - **Editing M4 / M5 files** right after their gates: `ai/service_runs`, `ai/context/builder`, `ai/contracts`, `workers/analyst` (70 KB), `threat_intel/service_runs`, `workers/enrich` (47 KB), the timeline and the worker kit. The changes are additive call sites and defaulted parameters only. The full M4 and M5 suites and the pcap and static isolation suites must stay green before the phase is committed (RT3, RT10, RT20).
@@ -262,3 +262,45 @@ Written at the end of phase A (code) and verified in phase B (containers: dev st
 **Phase B test fixes (tests only):** `test_m6_schema` cross-org FK test (the foreign evidence already had a share-policy row and the foreign version a live `pdf` render, so the PK / unique index fired before the FK); `test_share_policy` AI refusal test uses `incident_builder([job])` (the default fake builder invents job ids, which the `job_digest` children's FK rejects); `test_ti_key_leak.GLOBAL_GETS` + `/api/v1/report-signing-keys`; `test_config.test_report_defaults` clears the api-test `REPORTS_BUCKET`; `lib/ai.test.ts` fixture + `policy_excluded`.
 
 **Not done in phase 1:** a `check-report-env.mjs` gate script (the prod env fixture is updated by hand), the web `AI_ERROR_TEXT` entry for `policy_blocked` (phase 6).
+
+## Implementation Notes (2026-11-06)
+- **Commits:**
+  - eab0576: phase A code (121 files, +10 868), marked WIP: untested, Docker steps pending.
+  - ad5b65e: phase B in containers. It added `uv.lock`, the generated contracts and the test and schema fixes listed under "Frozen interfaces (as built)".
+  - 319f04d: the review and integration fixes below.
+- **As built:** the exact signatures, deviations and phase-B fixes are under "Frozen interfaces (as built)". The main deviations:
+  - `schema_version`, not `schema`;
+  - `ReportProfile`;
+  - `acknowledge_tlp_downgrade: bool | None`;
+  - the contract tests live in `apps/api/tests/unit`;
+  - the seccomp options are `run_tool` kwargs;
+  - `ReportRenderedV1.object_version_id`.
+- **Pre-flight:** alembic head was `0011`, so the migration is `0012`. Resolved versions: `weasyprint 70.0`, `fonttools 4.68.0`, `jinja2 3.1.6`, `pydyf 0.13.0`. OSV listed no advisories for them.
+- **Verified in ad5b65e:**
+  - API 3718 passed, 44 skipped;
+  - worker kit 40, pcap 48, static 252, report-worker 29;
+  - web 322;
+  - dev e2e 8 passed;
+  - prod compose config: the report-worker has only `BROKER_URL` + `ENV` and is on `analysis` only.
+- **Lane setup (step 9):** the permission system blocked creating the `m6/b2`…`m6/b7` worktrees, so group B ran in the main tree (plan.md fallback, step 6):
+  - ownership stayed file-disjoint;
+  - API lanes 2–5 used `scripts/lane-test.sh <lane>` (own `cyberlab_b{n}_test` DB, Redis / broker db n, `LANE_SLOTS=3`);
+  - the renderer ran in lane 4 with `--service report-worker-test`;
+  - the web lanes (6, 7) ran on the host;
+  - there were no lane branches, so phases 2–8 landed as one commit (319f04d) instead of one per phase.
+- **Phase-1 review: 1 Medium and 7 Low, all fixed in 319f04d:**
+  - **M1:** a case-wide AI run re-checked only the case flags, not the per-evidence exclusions. `analyst._policy_blocked(scope)` now loads the policy for the frozen scope's `job_ids` / `evidence_ids` and blocks on any excluded evidence.
+  - **L1:** a CSV header comment containing separators is one quoted cell (`test_header_comment_with_separators_is_one_quoted_cell`, `test_header_comment_is_a_single_first_line`).
+  - **L2:** `csv_safe` also prefixes the look-alike formula leads (small and full-width `= + - @`, the minus sign).
+  - **L3:** the prod api checks the signing keys at startup with `reports/signing.check_startup_keys`. It refuses a missing or unreadable file, an active kid that is not in the file, a mismatched public half and the committed dev key.
+  - **L4:** migration `0013_m6_same_org_fks` adds `uq_iocs_id_organization_id` and `uq_ai_citations_id_organization_id`, and makes `ioc_collection_items.ioc_id` and `report_citations.ai_citation_id` composite same-org FKs.
+  - **L5:** `seccomp.deny_network(unix_only=True)` is an allowlist: every socket family except `AF_UNIX` fails with `EACCES` (`test_unix_only_filter_denies_every_other_socket_family`).
+  - **L6:** the renderer has its own tool uid 10004, so it does not share the static worker's `RLIMIT_NPROC` count under 10003.
+  - **L7:** `ai/text.vis_category` adds variation selectors, Hangul fillers, U+034F and U+2028 / U+2029. Both copies of `vis_rules.json` were regenerated (`test_vis_marks_variation_selectors_fillers_and_separators`, `test_the_vis_extras_leave_ai_sanitize_unchanged`).
+- **Integration changes to phase-1 code:**
+  - `REPORT_DEFAULT_MAX_RENDER_UNITS` went from 750 000 to **450 000** (the phase-4 calibration).
+  - The AI case timeline selects only `case_timeline.EVIDENCE_KINDS`: notes and status reasons never enter AI context (`test_timeline_kinds.py::test_ai_context_never_selects_notes_or_status_reasons`).
+- **Not done here:**
+  - the `check-report-env.mjs` gate script: replaced by phase 9's `scripts/check-report-worker-env.mjs` (e6e0665);
+  - the web `AI_ERROR_TEXT.policy_blocked`: done in phase 6 (`lib/ai.ts`).
+- **Open:** `pnpm verify` / `pnpm verify:prod` on the final tree (pending gate).

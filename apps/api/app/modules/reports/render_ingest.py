@@ -4,15 +4,18 @@ implemented by phase 4).
 Nothing in the renderer's answer is trusted beyond what it proves:
 
 1. The render's org comes from `report_render_index` (system session), never from the
-   message. The per-render token must hash to the stored `token_sha256`, and the render must
-   still be `queued` or `running`; anything else is logged (ids only) and dropped. A final
-   render never changes again (the transition trigger enforces it too).
+   message. The per-render token must hash to the stored `token_sha256`, the render must
+   still be `queued` or `running` and its index `deadline_at` (the token's lifetime) must not
+   have passed; anything else is logged (ids only) and dropped (the reaper fails a render
+   past its deadline). A final render never changes again (the transition trigger enforces
+   it too).
 2. `succeeded`: the uploaded object is read back from MinIO at the key re-derived here and
    at the version id the renderer reported, outside any transaction. Its size must be
    1 … REPORT_MAX_ARTIFACT_BYTES and equal the message's `bytes`; its sha256 is computed here
-   and must equal the message's `sha256`; the magic must match the format (`%PDF-`, strict
-   UTF-8 for HTML / Markdown). Ingest never parses the artifact (RT27). On any mismatch the
-   render fails with `invalid_output`. Otherwise the per-object GOVERNANCE retention
+   and must equal the message's `sha256`; the magic must match the format (`%PDF-`; strict
+   UTF-8 for HTML / Markdown, and HTML starts with exactly the template's constant head
+   `HTML_HEAD`, CSP meta included, RT19). Ingest never parses the artifact (RT27). On any
+   mismatch the render fails with `invalid_output`. Otherwise the per-object GOVERNANCE retention
    (EVIDENCE_LOCK_DAYS; 0 disables it) is set on that exact version (RT6) and the render
    becomes `succeeded` (through `running`, the trigger's only path) with the sha256, size,
    pages, renderer version and object version.
@@ -32,7 +35,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import anyio
-from cyberlab_jobs.report import ReportRenderedV1
+from cyberlab_jobs.report import HTML_HEAD, ReportRenderedV1
 from minio.error import S3Error
 from pydantic import ValidationError
 from sqlalchemy import select, update
@@ -52,6 +55,7 @@ log = logging.getLogger(__name__)
 OPEN = ("queued", "running")
 CHUNK = 256 * 1024
 PDF_MAGIC = b"%PDF-"
+HEAD_BYTES = max(len(PDF_MAGIC), len(HTML_HEAD))
 _MISSING = {"NoSuchKey", "NoSuchVersion", "InvalidArgument", "BadRequest"}
 
 
@@ -96,6 +100,12 @@ async def _locked(
     if render.status not in OPEN:
         log.warning("report.rendered %s: render already %s", msg.render_id, render.status)
         return None
+    deadline = await session.scalar(
+        select(ReportRenderIndex.deadline_at).where(ReportRenderIndex.render_id == render.id)
+    )
+    if deadline is None or deadline <= datetime.now(UTC):
+        log.warning("report.rendered %s: past the render deadline", msg.render_id)
+        return None
     version = await session.get(ReportVersion, render.version_id)
     if version is None:  # pragma: no cover - composite FK
         return None
@@ -124,8 +134,8 @@ def _check_sync(
             size += len(chunk)
             if size > max_bytes:
                 raise _Invalid("size")
-            if len(head) < len(PDF_MAGIC):
-                head = (head + chunk)[: len(PDF_MAGIC)]
+            if len(head) < HEAD_BYTES:
+                head = (head + chunk)[:HEAD_BYTES]
             if fmt != "pdf":
                 decoder.decode(chunk)
             digest.update(chunk)
@@ -136,8 +146,10 @@ def _check_sync(
     finally:
         response.close()
         response.release_conn()
-    if fmt == "pdf" and head != PDF_MAGIC:
+    if fmt == "pdf" and not head.startswith(PDF_MAGIC):
         raise _Invalid("magic")
+    if fmt == "html" and not head.startswith(HTML_HEAD):
+        raise _Invalid("head")
     return size, digest.hexdigest()
 
 

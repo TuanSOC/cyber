@@ -12,8 +12,11 @@
   out/ dir (worker-kit defaults), `FONTCONFIG_FILE` and `MALLOC_ARENA_MAX=2` (glibc arenas
   stay under `RLIMIT_AS`). Never the broker URL;
 - cwd: the job's root-owned, read-only input dir;
-- `Rlimits(as=768 MiB, cpu=90 s, fsize=artifact cap, nofile=64, nproc=16)`, wall timeout
-  100 s (the process group is killed);
+- `Rlimits(as=768 MiB, cpu=75 s, fsize=artifact cap, nofile=64, nproc=16)`, wall timeout
+  80 s (the process group is killed). Both sit below Celery's 90 s soft limit
+  (`config.TASK_SOFT_TIME_LIMIT_S`) with 10 s left for the download, the output check and
+  the upload, so a slow render is answered `timeout` by the sandbox itself, never cut by
+  the soft limit mid-render;
 - seccomp: an allowlist (review L5): `socket()` / `socketpair()` of every family but
   `AF_UNIX` and the io_uring syscalls fail with `EACCES`. `AF_UNIX` stays allowed:
   fontconfig and Pango open no socket of any family during a render
@@ -39,12 +42,15 @@ from report_worker.render import EXIT_CODES, META_NAME
 MiB = 1024 * 1024
 RENDER_RLIMITS = sandbox.Rlimits(
     as_bytes=768 * MiB,
-    cpu_s=90,
+    cpu_s=75,
     fsize_bytes=MAX_ARTIFACT_BYTES,
     nofile=64,
     nproc=16,
 )
-WALL_TIMEOUT_S = 100.0
+WALL_TIMEOUT_S = 80.0
+# What the task needs besides the render subprocess (download, checks, upload): the wall
+# timeout plus this margin stays within the Celery soft limit (`tests/test_sandbox.py`).
+TASK_MARGIN_S = 10.0
 RENDER_ENV = {
     "FONTCONFIG_FILE": "/app/assets/fonts.conf",
     "MALLOC_ARENA_MAX": "2",

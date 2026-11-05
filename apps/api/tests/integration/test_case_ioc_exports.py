@@ -5,16 +5,21 @@ import csv
 import io
 import json
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 from cyberlab_jobs.report import STIX_TLP_MARKINGS, TLP
 from httpx import AsyncClient, Response
 
+from app.core.tenancy import tenant_session
+from app.modules.threat_intel.models import TiResult
 from tests.factories import Registered, register
+from tests.integration.seed import Tenant
 from tests.integration.test_case_ioc_collections import collection_with
 from tests.integration.test_case_policy_api import _member
 from tests.integration.test_case_status import API, patch
+from tests.ti_helpers import seed_run
 
 ENTRIES = (
     {"type": "domain", "value": "evil.com"},
@@ -111,6 +116,59 @@ async def test_clear_text_export_needs_evidence_write() -> None:
     assert body["defanged"] is False
     values = {i["value"] for i in body["items"]}
     assert {"evil.com", "10.0.0.5", "https://evil.com/x.php"} <= values
+
+
+async def test_a_refused_clear_text_export_is_audited() -> None:
+    reg = await register()
+    _, collection_id = await _seeded(reg)
+    viewer = await _member(reg, "viewer")
+    refused = await export(viewer, reg.org_id, collection_id, format="csv", defang="false")
+    assert refused.status_code == 403
+    logs = (
+        await reg.client.get(
+            f"{API}/{reg.org_id}/audit-logs", params={"action": "ioc_collection.export_refused"}
+        )
+    ).json()
+    assert logs["total"] == 1
+    [entry] = logs["items"]
+    assert entry["target_id"] == collection_id
+    assert entry["details"]["format"] == "csv" and entry["details"]["defang"] is False
+    assert "evil" not in json.dumps(logs)
+
+
+async def test_a_defanged_json_export_leaves_raw_ti_summaries_out() -> None:
+    """TI summaries are raw provider JSON (never defanged): the defanged export carries the
+    attributed answer without it; the clear-text export keeps it."""
+    reg = await register()
+    case_id, collection_id = await _seeded(reg)
+    clear = await export(reg.client, reg.org_id, collection_id, format="json", defang="false")
+    key = {i["ioc_type"]: i for i in clear.json()["items"]}["domain"]["ioc_key"]
+    t = Tenant(reg.org_id, reg.user_id, uuid.UUID(case_id))
+    run_id = await seed_run(t)
+    async with tenant_session(reg.org_id, reg.user_id) as s:
+        s.add(
+            TiResult(
+                organization_id=reg.org_id,
+                run_id=run_id,
+                provider="mock",
+                ioc_type="domain",
+                value_norm="evil.com",
+                ioc_key=key,
+                status="ok",
+                found=True,
+                summary={"related": ["https://evil.com/c2", "10.0.0.5"], "label": "evil.com"},
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            )
+        )
+    defanged = await export(reg.client, reg.org_id, collection_id, format="json")
+    assert defanged.status_code == 200
+    [answer] = {i["ioc_type"]: i for i in defanged.json()["items"]}["domain"]["ti"]
+    assert answer["provider"] == "mock" and answer["found"] is True
+    assert answer["summary"] is None
+    assert "evil.com" not in defanged.text and "https://" not in defanged.text
+    clear = await export(reg.client, reg.org_id, collection_id, format="json", defang="false")
+    [answer] = {i["ioc_type"]: i for i in clear.json()["items"]}["domain"]["ti"]
+    assert answer["summary"]["label"] == "evil.com"
 
 
 async def test_json_export() -> None:

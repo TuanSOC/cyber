@@ -18,6 +18,7 @@ import pytest
 from cyberlab_worker import sandbox
 from cyberlab_worker.errors import JobFailed
 
+from report_worker import config
 from report_worker import sandbox as render_sandbox
 from tests.conftest import WORK, in_container, load_snapshot, stage
 
@@ -180,7 +181,7 @@ report({name: resource.getrlimit(getattr(resource, name))[0] for name in
     )
     assert result == {
         "RLIMIT_AS": 768 * 1024 * 1024,
-        "RLIMIT_CPU": 90,
+        "RLIMIT_CPU": 75,
         "RLIMIT_FSIZE": 32 * 1024 * 1024,
         "RLIMIT_NOFILE": 64,
         "RLIMIT_NPROC": 16,
@@ -294,3 +295,13 @@ def test_the_font_cache_is_prebuilt_and_read_only() -> None:
     cache = Path("/var/cache/fontconfig")
     assert any(cache.iterdir())
     assert all(p.stat().st_uid == 0 and not p.stat().st_mode & 0o022 for p in cache.iterdir())
+
+
+def test_the_sandbox_times_out_before_the_celery_soft_limit() -> None:
+    """The render subprocess is answered `timeout` by its own limits: the wall timeout (and
+    the CPU limit below it) plus the task's margin fit inside Celery's soft limit."""
+    soft = config.TASK_SOFT_TIME_LIMIT_S
+    assert render_sandbox.WALL_TIMEOUT_S + render_sandbox.TASK_MARGIN_S <= soft
+    assert render_sandbox.RENDER_RLIMITS.cpu_s is not None
+    assert render_sandbox.RENDER_RLIMITS.cpu_s <= render_sandbox.WALL_TIMEOUT_S
+    assert soft < config.TASK_TIME_LIMIT_S

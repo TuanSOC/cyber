@@ -6,7 +6,9 @@
 - Every edit names the version it was based on (`expected_version`): a stale edit is
   `409 stale_note`. The note row is locked for the edit, so concurrent edits serialize.
 - Only the author (the note's creator) or an `org.update` holder edits or deletes. A delete
-  sets `deleted_at/by`; the versions stay, so the history remains readable.
+  sets `deleted_at/by`; the versions stay in the database, but a deleted note's bodies (its
+  history included) are readable only by an `org.update` holder: every other reader gets
+  the tombstone metadata only.
 - Refs are re-checked in the org and case scope on every write (`refs.check_refs`).
 - Notes of an archived case are read-only (`409 investigation_archived`).
 - Audit details carry ids, versions and counts, never the body.
@@ -217,6 +219,9 @@ async def create_note(
 
 async def get_note(ctx: OrgContext, note_id: uuid.UUID) -> NoteDetail:
     row = await _one(ctx.session, ctx.org_id, note_id)
+    if row.note.deleted_at is not None and Permission.ORG_UPDATE not in ROLE_PERMISSIONS[ctx.role]:
+        # A deleted note's history is for org admins only; the tombstone stays visible.
+        return NoteDetail(note=_out(row), versions=[])
     v = AnalystNoteVersion
     versions = await ctx.session.execute(
         select(v, User.display_name)

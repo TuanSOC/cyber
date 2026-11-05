@@ -582,9 +582,11 @@ async def resolve(
     *,
     with_paths: bool = True,
     drop_kinds: frozenset[str] = frozenset(),
+    drop_tables: frozenset[str] = frozenset(),
 ) -> dict[CiteKey, Resolved]:
     """Every request whose row exists in the org **and** the case scope; the rest is left
-    out (the caller counts it as dropped)."""
+    out (the caller counts it as dropped). A request never resolves to a table of
+    `drop_tables` (the external profile drops `analyst_notes`, RT8)."""
     pending = [r for r in requests if r.kind not in drop_kinds]
     out: dict[CiteKey, Resolved] = {}
 
@@ -602,7 +604,7 @@ async def resolve(
             path=_path(scope, request.kind, table, request.ref_id, found) if with_paths else None,
         )
 
-    flows = [r for r in pending if r.kind == "flow"]
+    flows = [r for r in pending if r.kind == "flow" and "network_flows" not in drop_tables]
     if flows:
         found_flows = await _flows(
             session, scope, [(r.job_id, r.ref_id) for r in flows if r.job_id is not None]
@@ -614,7 +616,11 @@ async def resolve(
 
     others = [r for r in pending if r.kind != "flow"]
     # Try each request's candidate tables in order, one batched query per table and round.
-    remaining = [(r, list(_candidates(r))) for r in others]
+    remaining = [
+        (r, tables)
+        for r in others
+        if (tables := [t for t in _candidates(r) if t not in drop_tables])
+    ]
     while remaining:
         by_table: dict[str, list[CiteRequest]] = {}
         for request, tables in remaining:

@@ -20,6 +20,7 @@ from typing import Any
 
 import pytest
 from cyberlab_jobs.report import (
+    HTML_HEAD,
     TLP,
     Manifest,
     Profile,
@@ -167,7 +168,7 @@ out.write_bytes({data!r})
     ("fmt", "data", "content_type"),
     [
         ("pdf", b"%PDF-1.7 fake", "application/pdf"),
-        ("html", b"<!DOCTYPE html><p>x</p>", "text/html"),
+        ("html", HTML_HEAD + b"<p>x</p>", "text/html"),
         ("md", "TLP\\:AMBER ⏎".encode(), "text/markdown"),
     ],
 )
@@ -344,7 +345,10 @@ def test_render_failures_are_typed_and_carry_no_text(
         ("pdf", WRITE.format(data=b"<html>not a pdf", pages=1)),
         ("pdf", WRITE.format(data=b"%PDF-1.7", pages=None)),
         ("pdf", WRITE.format(data=b"%PDF-1.7", pages=0)),
-        ("html", WRITE.format(data=b"<!DOCTYPE html>\xff\xfe", pages=None)),
+        ("html", WRITE.format(data=HTML_HEAD + b"\xff\xfe", pages=None)),
+        # The doctype alone is not the template's head: the CSP meta must be there (RT19).
+        ("html", WRITE.format(data=b"<!DOCTYPE html><p>no csp</p>", pages=None)),
+        ("html", WRITE.format(data=HTML_HEAD.replace(b"'none'", b"*") + b"<p>x</p>", pages=None)),
         ("md", WRITE.format(data=b"", pages=None)),
         ("md", "import sys; open(sys.argv[3], 'w').write('x')"),  # no render.json
         (

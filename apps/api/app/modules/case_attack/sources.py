@@ -2,8 +2,8 @@
 
 A source names the evidence behind a mapping: a capa capability row, a finding row, or a
 completed AI run. On write every ref is re-checked in the org and the case (the row's job
-must belong to evidence of the case; an AI run must be the case's own run or a run of one
-of its jobs), else `422 ref_out_of_scope`. On read each stored ref is resolved again; a ref
+must belong to evidence of the case; an AI run must be a `completed` run, the case's own or
+one of its jobs'), else `422 ref_out_of_scope`. On read each stored ref is resolved again; a ref
 that no longer resolves keeps its ids but loses its path.
 """
 
@@ -16,6 +16,7 @@ from sqlalchemy import Select, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
+from app.modules.ai.contracts import AiRunStatus
 from app.modules.ai.models import AiRun
 from app.modules.analysis.models import AnalysisJob, Analyzer
 from app.modules.case_attack.schemas import AttackSourceRef, SourceDescriptor
@@ -114,6 +115,7 @@ async def resolve(
             select(AiRun.id, AiRun.job_id).where(
                 AiRun.organization_id == org_id,
                 AiRun.id.in_(wanted["ai_run"]),
+                AiRun.status == AiRunStatus.COMPLETED.value,
                 or_(*in_case),
             )
         )

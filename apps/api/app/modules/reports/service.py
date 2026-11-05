@@ -18,7 +18,8 @@ never served. A dispatch failure still answers 201 (the reaper recovers the rend
 
 **Version reads** re-hash the stored object and verify the signature with the public key of
 the version's kid; a mismatch is shown (`snapshot_ok` / `signature_valid` false), never
-hidden, and audited as `report.integrity_failed`.
+hidden, and audited as `report.integrity_failed`. The content and snapshot routes serve
+the bytes only when both hold (`409 integrity_failed` otherwise).
 """
 
 import json
@@ -578,7 +579,7 @@ async def _build_redacted(
         dumped["report"]["change_note"] = change_note
         snapshot = ReportSnapshot.model_validate(dumped)
     scope = await CaseScope.load(session, ctx.org_id, case)
-    redacted = await redact.redact(session, scope, snapshot)
+    redacted = await redact.redact(session, scope, snapshot, built.run_originals)
     return built, redacted
 
 
@@ -1014,21 +1015,26 @@ async def get_version(ctx: OrgContext, report_id: uuid.UUID, version: int) -> Re
 
 
 async def _verified_bytes(ctx: OrgContext, v: ReportVersion, permission: Permission) -> bytes:
-    """The stored bytes, refused (`409 integrity_failed`, audited) unless they hash to the
-    recorded sha256 and re-serialize to the same canonical bytes."""
+    """The stored bytes, refused (`409 integrity_failed`, audited) unless the version's
+    manifest signature verifies, the bytes hash to the sha256 (and size) the signed manifest
+    names and they re-serialize to the same canonical bytes."""
     try:
         data = await report_storage.read_snapshot(v.object_key, v.object_version_id)
     except report_storage.SnapshotMissing:
         data = b""
-    ok = len(data) == v.snapshot_bytes and report_storage.sha256(data) == v.snapshot_sha256
-    if ok:
+    digest = report_storage.sha256(data)
+    signed = v.manifest or {}
+    size_ok = len(data) == v.snapshot_bytes == signed.get("snapshot_bytes")
+    snapshot = size_ok and digest == v.snapshot_sha256 == signed.get("snapshot_sha256")
+    if snapshot:
         try:
-            ok = canonical_json(parse_snapshot(data)) == data
+            snapshot = canonical_json(parse_snapshot(data)) == data
         except ValidationError:
-            ok = False
-    if not ok:
+            snapshot = False
+    signature = signature_valid(v)
+    if not (snapshot and signature):
         await _audit_integrity(
-            ctx, v, snapshot=False, signature=signature_valid(v), permission=permission
+            ctx, v, snapshot=snapshot, signature=signature, permission=permission
         )
         raise IntegrityFailed()
     return data

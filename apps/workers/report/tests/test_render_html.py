@@ -7,7 +7,7 @@ import re
 from html.parser import HTMLParser
 
 import pytest
-from cyberlab_jobs.report import ReportSnapshot, canonical_json
+from cyberlab_jobs.report import HTML_HEAD, ReportSnapshot, canonical_json
 
 from report_worker import render_html, text
 
@@ -148,6 +148,9 @@ def test_the_golden_snapshot_renders_every_section(golden: ReportSnapshot) -> No
 def test_the_document_structure(golden: ReportSnapshot) -> None:
     html = render(golden)
     assert html.startswith('<!DOCTYPE html>\n<html lang="en">')
+    # The constant head (CSP meta included) the output check and the ingest require.
+    for mode in ("pdf", "html"):
+        assert render(golden, mode).encode().startswith(HTML_HEAD)
     tags = parse(html).tags
     names = [t for t, _ in tags]
     assert names.count("h1") == 1 and "h2" in names and "h3" in names

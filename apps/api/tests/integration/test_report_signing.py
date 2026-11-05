@@ -169,6 +169,37 @@ async def test_a_wrong_kid_is_invalid(keys: SigningKeys) -> None:
     assert await _audited(t, "report.integrity_failed") == 2
 
 
+async def test_content_is_refused_when_the_signature_does_not_verify(keys: SigningKeys) -> None:
+    """Intact bytes whose manifest signature does not verify (another key under the active
+    kid) are never served: content and snapshot download answer 409 and are audited."""
+    reg, t = await owner_case()
+    report_id = await seed_report(t)
+    impostor = SigningKeys(keys.kid, new_signing_keys(keys.kid).private)
+    await seed_version(t, report_id, impostor)
+    base = f"{API}/{reg.org_id}/reports/{report_id}/versions/1"
+    detail = (await reg.client.get(base)).json()
+    assert (detail["snapshot_ok"], detail["signature_valid"]) == (True, False)
+    for route in ("content", "snapshot"):
+        refused = await reg.client.get(f"{base}/{route}")
+        assert refused.status_code == 409, route
+        assert refused.json()["error"]["code"] == "integrity_failed"
+    async with tenant_session(t.org_id, None) as s:
+        rows = list(
+            await s.scalars(
+                select(AuditLog).where(
+                    AuditLog.organization_id == t.org_id,
+                    AuditLog.action == "report.integrity_failed",
+                )
+            )
+        )
+    assert len(rows) == 3  # the detail read and both refusals
+    assert all(r.details["signature_valid"] is False for r in rows)
+    # A valid version of the same report is still served.
+    await seed_version(t, report_id, keys)
+    ok = await reg.client.get(f"{API}/{reg.org_id}/reports/{report_id}/versions/2/content")
+    assert ok.status_code == 200, ok.text
+
+
 async def test_unknown_versions_and_reports_are_404(keys: SigningKeys) -> None:
     reg, t = await owner_case()
     report_id = await seed_report(t)

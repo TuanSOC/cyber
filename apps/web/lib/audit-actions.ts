@@ -23,6 +23,7 @@ export const AUDIT_ACTIONS = [
   "ioc_collection.items_added",
   "ioc_collection.item_removed",
   "ioc_collection.exported",
+  "ioc_collection.export_refused",
   "case_attack.mapped",
   "case_attack.updated",
   "report.created",

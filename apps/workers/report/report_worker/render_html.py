@@ -1,9 +1,11 @@
 """Snapshot -> HTML (`incident_v1`), for the PDF and for the HTML artifact.
 
 - `jinja2.sandbox.SandboxedEnvironment(autoescape=True, undefined=StrictUndefined)`: every
-  value from the snapshot is escaped text. The templates never use `|safe`, `Markup` or
-  `{% autoescape false %}` (`tests/test_template_lint.py` greps the templates and this
-  package); class names come only from the fixed `sev_class` / `tlp_class` filters.
+  value from the snapshot is escaped text. The escape hatches do not exist in it: the
+  `safe`, `urlize` and `xmlattr` filters are removed (a template using one fails to compile,
+  or to render inside a conditional) and the `{% autoescape %}` statement is a syntax error
+  (`_Parser`); `tests/test_template_lint.py` also greps the templates and this package.
+  Class names come only from the fixed `sev_class` / `tlp_class` filters.
 - The only text rule is `vis` (RT24): bidi, zero-width, control and tag characters become
   `⟨U+XXXX⟩`. Defanging already happened in the snapshot builder.
 - Links: in-document anchors built from integers (`#c12`, section ids), and in the appendix
@@ -21,7 +23,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 from cyberlab_jobs.report import AiClaim, AiSection, ReportSnapshot
-from jinja2 import FileSystemLoader, StrictUndefined
+from jinja2 import FileSystemLoader, StrictUndefined, TemplateSyntaxError, nodes
+from jinja2.parser import Parser
 from jinja2.sandbox import SandboxedEnvironment
 
 from report_worker import text
@@ -118,8 +121,28 @@ def _num(value: int) -> str:
     return f"{int(value):,}".replace(",", " ")
 
 
+# Built-in filters that produce markup Jinja does not escape again (RT19): gone.
+REMOVED_FILTERS = ("safe", "urlize", "xmlattr")
+
+
+class _Parser(Parser):
+    """Jinja's parser without the `{% autoescape %}` statement (a syntax error)."""
+
+    def parse_autoescape(self) -> nodes.Scope:
+        raise TemplateSyntaxError(
+            "the autoescape statement is disabled", self.stream.current.lineno, self.name
+        )
+
+
+class ReportEnvironment(SandboxedEnvironment):
+    """The sandboxed, autoescaping environment whose templates cannot turn escaping off."""
+
+    def _parse(self, source: str, name: str | None, filename: str | None) -> nodes.Template:
+        return _Parser(self, source, name, filename).parse()
+
+
 def _environment() -> SandboxedEnvironment:
-    env = SandboxedEnvironment(
+    env = ReportEnvironment(
         loader=FileSystemLoader(str(TEMPLATES_DIR)),
         autoescape=True,
         undefined=StrictUndefined,
@@ -139,6 +162,8 @@ def _environment() -> SandboxedEnvironment:
         sev_class=text.sev_class,
         short_sha=text.short_sha,
     )
+    for name in REMOVED_FILTERS:
+        env.filters.pop(name, None)
     return env
 
 

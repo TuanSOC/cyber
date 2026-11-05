@@ -94,10 +94,49 @@ Document M6 as built after the group-B merge: the new `docs/REPORTS.md`, plus th
 5. Cross-link the docs and check every referenced test name exists (grep).
 
 ## Success Criteria
-- [ ] REPORTS.md documents the model, the snapshot, citations, signing with the verify runbook, the renderer isolation, TLP and the share policy, and case management, all matching the code.
-- [ ] THREAT_MODEL has the M6 section with tests cited per threat, and the old TLP and AI residual rows point to their controls.
-- [ ] DEPLOYMENT covers the bucket, worker, keys and broker password. ROADMAP marks M6 and lists its deferrals.
-- [ ] Every test name cited in the docs exists.
+- [x] REPORTS.md documents the model, the snapshot, citations, signing with the verify runbook, the renderer isolation, TLP and the share policy, and case management, all matching the code. — `docs/REPORTS.md` (319f04d, +246) has the sections Case management (notes, IOC collections, status, ATT&CK, timeline), TLP 2.0, Share policy, Reports (draft and versions, finalize, snapshot, citations, AI content, redaction profiles), Signing (key rotation, offline verification with a `verify_report.py` example), Renderer (why WeasyPrint, isolation, formats, render budget and caps, accessibility), Metrics and Limitations. It was reconciled with the phase-9 fixes in e6e0665. The independent reviewer pass over the docs is still open (phase 9).
+- [x] THREAT_MODEL has the M6 section with tests cited per threat, and the old TLP and AI residual rows point to their controls. — `docs/THREAT_MODEL.md` "M6: reports and case management": 16 threats with a "Tested by" column and a residual table. The M4 TI / TLP row and the M5 "do not send to AI" row now say "**closed in M6:**" with the controls (319f04d, e6e0665).
+- [x] DEPLOYMENT covers the bucket, worker, keys and broker password. ROADMAP marks M6 and lists its deferrals. — `docs/DEPLOYMENT.md` "Reports (M6)": buckets, report-worker, signing keys with the review-L3 startup check, published public keys, `PUBLIC_BASE_URL`, backups; the env table rows `BROKER_REPORT_PASSWORD`, `REPORTS_BUCKET` / `REPORTS_TEST_BUCKET`; the M6 upgrade steps. `docs/ROADMAP.md` has the M6 ✅ row with its deferrals (DOCX, the "Cited by" panel, …), and analyst notes / IOC collections are gone from "Later" (319f04d).
+- [x] Every test name cited in the docs exists. — checked 2026-11-06 by grep: every distinct `test_*` name in `docs/REPORTS.md`, the THREAT_MODEL M6 section and the M6 part of `docs/TESTING.md` (258 names) resolves to a test function or test file under `apps/` or `packages/`. The only non-match, `test_version`, is a substring of `latest_version`.
 
 ## Risk Assessment
 - **Docs written before the gate** can drift. Phase 9 reconciles the wording and the numbers.
+
+## Implementation Notes (2026-11-06)
+- **Commits:**
+  - 319f04d: the docs as group C, after the group-B code was in the main tree. Phases 2–8 landed as one commit.
+  - e6e0665: the phase-9 reconciliation of ARCHITECTURE, DATABASE, DEPLOYMENT, REPORTS, ROADMAP, TESTING and THREAT_MODEL (+27 / −23).
+- **Files (319f04d):**
+  - `docs/REPORTS.md` (new, +246);
+  - ARCHITECTURE (+56), DATABASE (+65), API (+51), DEPLOYMENT (+44), TESTING (+45), THREAT_MODEL (+45);
+  - PRD (+14), ROADMAP (+10), AI_ANALYST (+10), THREAT_INTEL (+6), MALWARE_ANALYSIS (+2);
+  - `README.md` (+21).
+  - `docs/TESTING.md` (+45) is not in the owned list; it gained the M6 suites and the metric table in the same commit.
+- **Written from the merged code**, including the review and integration fixes:
+  - DATABASE documents `0013_m6_same_org_fks` (review L4);
+  - DEPLOYMENT has the prod `check_startup_keys` (review L3);
+  - REPORTS has the 450 000-unit budget and the uid-10004 / `AF_UNIX`-only sandbox (review L5 / L6);
+  - REPORTS, AI_ANALYST, ARCHITECTURE and THREAT_MODEL state that analyst notes and status reasons never enter AI context.
+- **Metrics recorded** in REPORTS.md and TESTING.md:
+  - 450 000 units: worst 594 MiB RSS of 768 MiB, ≤ 214 pages (cap 300);
+  - golden PDF p50 / p95 3.9 s;
+  - deterministic PDF (`test_rendering_twice_gives_identical_bytes`);
+  - hostile escapes 0;
+  - veraPDF "local check only, not gating".
+- **THREAT_MODEL:**
+  - 16 threat rows with "Tested by", beyond the planned 12 (also fabricated citations, case-management text reaching a provider, history tampering, broker pivot);
+  - the residuals (compromised renderer, API-held key RT26, pattern-based pseudonymization, in-flight calls, viewer downloads RT31, no PAdES / timestamps, veraPDF not in CI, no retention);
+  - the M4 / M5 rows marked "closed in M6".
+- **DEPLOYMENT:**
+  - the object lock, no default retention and per-object GOVERNANCE retention, with no `DeleteObject*`;
+  - the report-worker limits (1 GiB, 1 CPU, `pids_limit` 128, tmpfs `/tmp` 16 MiB and `/work` 96 MiB);
+  - one render per replica (`REPORT_ACTIVE_RENDERS_GLOBAL` 4);
+  - key generation and rotation (`gen_report_signing_keys.py --add`), and the published-keys table with `dev-report-1`;
+  - backups of the bucket and the rows together, and `reconcile_orphans.py`.
+- **Limitations documented:** DOCX deferred (RT12); no PAdES, RFC 3161 or KMS; no CJK glyphs in the PDF (`fonts-noto-core`).
+- **Test-name check (step 5):** run again on 2026-11-06 over REPORTS.md, the THREAT_MODEL M6 section and the M6 part of TESTING.md. All 258 distinct names resolve.
+- **Open (phase 9):**
+  - the §14 metric run and `plans/reports/report-metric-*.md` (not written);
+  - the veraPDF result (not run);
+  - the reviewer pass;
+  - the final numbers from `pnpm verify:prod` (pending gate).
