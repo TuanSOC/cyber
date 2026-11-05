@@ -6,12 +6,15 @@ light checks of the generator itself live in `tests/unit/test_inject.py`.
 """
 
 import os
+import re
 import shutil
 import subprocess
+import unicodedata
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote_to_bytes
 
 import pytest
 from cyberlab_worker import sandbox
@@ -42,19 +45,35 @@ def analyzed(dirs: sandbox.JobDirs, twin: Path, monkeypatch: pytest.MonkeyPatch)
     return parse(result)
 
 
-def _escaped(text: str) -> str:
-    """Zeek's escaping of bytes it does not log raw (\\xNN per byte)."""
+# A byte escape as the engines write it: Zeek `\xNN`, OpenSSL's RFC 2253 subject `\NN`.
+_BYTE_ESCAPE = re.compile(rb"\\x?([0-9A-Fa-f]{2})")
+
+
+def _canonical(text: str) -> str:
+    """The instruction text a reader of the field gets, whatever the engine did to the bytes.
+
+    The point is that the payload's words reach what the AI context builder reads, not byte
+    identity: the engines escape non-ASCII bytes (Zeek, OpenSSL), lowercase DNS names and
+    percent-decode URIs (Zeek), and replace bytes they will not render with U+FFFD (TShark).
+    So, on both sides: undo the byte and percent escapes (the planted URI is percent-encoded,
+    the DNS label dots sit where `inject.qname` put them on both sides), read Unicode tag
+    characters as the ASCII they encode (P4's hidden text, so not just its visible "ok"),
+    drop the remaining format characters (P5's bidi controls) and U+FFFD, and case-fold.
+    """
+    raw = unquote_to_bytes(_BYTE_ESCAPE.sub(lambda m: bytes([int(m[1], 16)]), text.encode()))
     out = []
-    for ch in text:
-        if 0x20 <= ord(ch) < 0x7F:
+    for ch in raw.decode(errors="replace"):
+        if 0xE0020 <= ord(ch) <= 0xE007E:
+            out.append(chr(ord(ch) - 0xE0000))
+        elif ch != "�" and unicodedata.category(ch) != "Cf":
             out.append(ch)
-        else:
-            out.extend(f"\\x{b:02x}" for b in ch.encode())
-    return "".join(out)
+    return "".join(out).casefold()
 
 
 def _survives(values: list[str], planted: str) -> bool:
-    return any(planted in v or _escaped(planted) in v for v in values)
+    wanted = _canonical(planted)
+    assert len(wanted) >= 16, (planted, wanted)  # the instruction text itself, never just "ok"
+    return any(wanted in _canonical(v) for v in values)
 
 
 def _plants() -> Iterator[tuple[str, str, str]]:
@@ -77,7 +96,7 @@ def test_payloads_survive_into_the_zeek_records(analyzed: dict[str, Any]) -> Non
     missing = [
         (pid, carrier) for carrier, pid, value in _plants() if not _survives(fields[carrier], value)
     ]
-    assert missing == [], fields
+    assert missing == [], {carrier: [ascii(v) for v in fields[carrier]] for _, carrier in missing}
 
 
 def test_payloads_survive_into_tshark_fields(twin: Path) -> None:
@@ -98,6 +117,4 @@ def test_payloads_survive_into_tshark_fields(twin: Path) -> None:
     for carrier, pid, value in _plants():
         index = list(columns).index(carrier)
         values = [row[index] for row in rows if len(row) > index and row[index]]
-        # TShark renders some non-ASCII code points its own way: the ASCII part must survive.
-        core = "".join(ch for ch in value if ord(ch) < 0x7F)
-        assert _survives(values, value) or any(core in v for v in values), (pid, carrier, values)
+        assert _survives(values, value), (pid, carrier, [ascii(v) for v in values])
