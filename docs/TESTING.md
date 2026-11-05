@@ -29,6 +29,7 @@ Test isolation: the API suite uses `cyberlab_test`, Redis db 1 and the `evidence
 - API (M3 additions): `test_analysis_static.py` (auto-run rules, profiles, per-analyzer caps, `sample_too_large`), `test_static_results.py` (hostile `static.v1` streams → `invalid_result` with zero rows, read API, foreign / pcap jobs → 404, report headers, caps and audit); the new routes are also covered by the auto-enumerated `test_idor_routes.py`, `unit/test_static_stream.py`, `test_storage_quota.py` (declared and undeclared length, concurrent uploads, archived evidence, column grants, owned-org limit).
 - Static pipeline end to end: `apps/api/tests/integration/test_analysis_static_pipeline.py` uploads a plain file (`av`) and a PE (`full`) through the real broker and the real `static-worker-test` container, ingests the result, checks the sample hashes against the evidence and downloads the report. It runs in `pnpm test:api`.
 - API (M4 additions): the threat-intel suites, the enrich worker pipeline through `ti-mock` and the network tests; see [M4 threat intelligence suites](#m4-threat-intelligence-suites).
+- API (M5 additions): the AI analyst suites, the evaluation harness and the analyst network tests; see [M5 AI analyst suites](#m5-ai-analyst-suites).
 - Web: unit tests (redirect safety, CSP builder, pcap and static result helpers, TI wording and helpers), typecheck, lint, production build.
 - E2E: Playwright specs, run against dev (`pnpm e2e`) and the prod-like stack over TLS (`pnpm e2e --prod`, part of `verify:prod`), with no console errors:
   - `smoke.spec.ts`: register → create case → upload (hash checked against a locally computed SHA-256) → verify → custody chain → sign out;
@@ -65,7 +66,9 @@ E2E runs against the real stack, not the test database. Each run:
 | Data retention / expiry policy | ⏳ later (only the 30-day governance lock exists) | — |
 | Backup / restore | ⏳ later | — |
 | Parser vulnerabilities | ⏳ M2+ (no parsers yet; evidence is never parsed in M1) | — |
-| Prompt injection | ⏳ M5 (AI analyst) | — |
+| Prompt injection | ✅ M5: spotlighting, verifier, scope re-checks, text-only output; HostileProvider and P1–P8 adversarial twins (integrity attacks detected, not prevented) | `test_ai_prompt.py`, `test_ai_verify.py`, `test_ai_postprocess*.py`, `ai_eval/test_ai_eval_invariants.py` |
+| AI evidence citation accuracy (§14) | ✅ offline (FakeProvider 1.000, HostileProvider 0 violations); ⏳ live: none recorded | [M5 metric](#m5-metric-ai-evidence-citation-accuracy) |
+| AI provider keys sealed, write-only, never exposed | ✅ M5 (own seal domain, analyst-only private key) | `test_ai_seal.py`, `test_ai_import_guard.py`, `test_ai_api_providers.py::test_sentinel_key_never_leaks` |
 | Sandbox escape assumptions | ⏳ dynamic analysis milestone | — |
 | Controlled PCAP dataset (normal web, DNS, TLS, beacon, DNS anomalies, port scans, suspicious HTTP) | ✅ synthetic, generated at test time with ground-truth labels | `apps/workers/pcap/dataset/` |
 | Detection precision/recall, parsing success, latency | ✅ (synthetic) | `tests/evaluation/test_detection_quality.py` |
@@ -169,3 +172,47 @@ After changing TI code, recreate the workers (`docker compose --profile test up 
 - Counts are identical from run to run (a retry that would cross a slice's end waits for the next slice instead of becoming an error); only slice counts and time to answer move with task timing. Full report: `plans/reports/ti-metric-261105.md`.
 
 Live runs (`CYBERLAB_LIVE_TI=1`): none recorded.
+
+## M5 AI analyst suites
+
+All run in `pnpm test:api` unless noted. No test reaches a real provider: adapters replay handcrafted fixtures through `httpx2.MockTransport` / `httpx.MockTransport` (`tests/fixtures/ai/`), the worker tests use `ai-mock` and the in-process doubles (`tests/ai_doubles.py`), and the evaluation uses Fake / Hostile / Replay providers.
+
+| Area | Tests |
+|---|---|
+| Contracts | `unit/test_ai_contracts.py`: provider schemas closed and inlined (Anthropic drops bounds, Gemini keeps array bounds), worst-case body fits 64 KiB, `coerce_caps`, label grammar, sanitize / defang / canonical forms, catalog and cost, availability (mock never in prod), run request shapes, metrics size, `context_sha256` covers only what is sent, FakeProvider determinism |
+| Sealing and import guard | `unit/test_ai_seal.py` (own domain, AI ↔ TI ciphertexts never cross, wrong org / provider / kid / version, M4 key rules, no plaintext in reprs, startup check); `unit/test_ai_import_guard.py` (unseal, adapters, `ai.http` and SDKs only in the analyst worker; `sealbox_open` only in the two wrappers; no role holds both) |
+| Settings | `unit/test_config.py`: analyst role refuses JWT / MinIO / app Redis / TI key; AI private and platform key files only for `analyst`; prod refuses mock, platform key, base-URL overrides, `dev-` kids and the dev public key; role-scoped kid guards; the rendered prod env of every role |
+| Context | `unit/test_ai_context_fields.py` (allowlists, attribute grammar, no credential or hostile key, no query values or referrer, budget fill, stats never carry names), `unit/test_ai_context_pseudonymize.py` (internal vs public addresses, org CIDRs / suffixes, PTR names, usernames in paths, planted pseudonyms, transform order, truncation), `unit/test_ai_context_reduce.py`, `integration/test_ai_context_builder.py` (determinism, caps, priority, targets first, other orgs' rows never appear, incident children with shared pseudonyms) |
+| Prompt, verifier, post-processing | `unit/test_ai_prompt.py` (pinned templates, spotlighting, outside-block allowlist, delimiter / canary collisions, repair hint), `unit/test_ai_verify.py` (every citation reason, anchor rule, claim rules, ATT&CK, timeline times, canary variants, flags, plain defanged body), `unit/test_ai_postprocess.py`, `unit/test_ai_postprocess_properties.py` (Hypothesis: display-safe, idempotent), `integration/test_ai_verify_db.py` (rows re-queried inside org and scope) |
+| Providers and HTTP | `unit/test_ai_provider_anthropic.py`, `test_ai_provider_gemini.py`, `test_ai_provider_mock.py` (every fixture → its typed outcome, request shape on the wire, idle and total timeouts, allowlist), `unit/test_ai_http.py`, `unit/test_ai_registry.py`; `unit/test_ai_provider_live.py` (opt-in, below) |
+| Schema | `integration/test_ai_schema.py`: isolation, run index visibility, cross-org writes and children, append-only (also for the owner), no DELETE grants, run transitions and identity, key-version trigger, column grants, constraints, indexes |
+| Worker | `integration/test_analyst_worker.py` (happy path, lease and redelivery, deadlines, call cap, every typed outcome, timeouts charged, no session during a slow call, repair, canary leak, budgets and the day-key seed, platform key ceiling, limiter fail-closed, re-seal, incident map-reduce, digest reuse, resume, verify, no secrets in logs), `test_ai_lifecycle.py`, `test_ai_budget.py`, `test_ai_ratelimit.py`, `test_ai_mock_server.py` |
+| API | `integration/test_ai_api_runs.py`, `test_ai_api_outputs.py`, `test_ai_api_settings.py`, `test_ai_api_providers.py`, `test_ai_api_rbac.py` (role matrix); every `/ai/*` route in `security/test_idor_routes.py` via `security/idor_cases_ai.py`; the timeline route via `idor_cases_reads.py` |
+| Broker ACL and network | `integration/test_analyst_acl.py` (`analyst` confined, analyzers and `enrich` cannot touch it, `api` / `ingest` can publish); `container/test_analyst_network.py`, run inside `analyst-worker-test` (Postgres and the broker reachable, backend services not, not on `analysis`, `ai-mock` through `egress`, no API secrets or TI keys in its env) |
+| Evaluation | `tests/ai_eval/`: cases and golden files, harness, scoring, providers, replay, snapshot, invariant floors and live (below) |
+
+Phase 11 adds the end-to-end pipeline through the real `analyst-worker-test`, the sentinel key-leak crawl, the egress additions, `scripts/check-analyst-env.mjs` and `apps/web/e2e/ai-analyst.spec.ts` (dev: the flow on `mock`; prod: `mock` refused and the analyst-worker running with `ENV=prod`).
+
+Run the analyst worker's network test by hand:
+
+```bash
+docker compose --profile test run --rm --no-deps -e PYTHONDONTWRITEBYTECODE=1 analyst-worker-test \
+  python -m pytest --noconftest -q -p no:cacheprovider tests/container/test_analyst_network.py
+```
+
+**Live provider smoke tests** (never in the gate; they cost tokens): `tests/unit/test_ai_provider_live.py` from a container with egress, with a key file. `scripts/check_ai_models.py` lists the catalog ids through the Models APIs. Neither has been run with a key.
+
+After changing AI code, recreate the workers (`docker compose --profile test up -d --force-recreate --no-deps analyst-worker analyst-worker-test`); Celery does not hot-reload.
+
+## M5 metric: AI evidence citation accuracy
+
+`scripts/ai_eval.py` prints the tables (it runs `tests/ai_eval` in api-test); details in [AI_ANALYST.md](AI_ANALYST.md#evaluation). 26 clean cases and 25 injected twins (payloads P1–P8), snapshots of the synthetic PCAP dataset and static samples.
+
+| Provider | Runs | Result |
+|---|---|---|
+| FakeProvider (every clean case and task) | 31 | citation accuracy **1.000**, golden recall at the golden floor |
+| HostileProvider (every case × 20 scripts) | 1220 | **0** floor violations; invalid ATT&CK 488 proposed, **0** shown |
+| Replay | 0 | no cassettes committed |
+| Live | — | **none recorded** (`AI_EVAL_LIVE=1`, needs a local key) |
+
+CI floors are exact invariants (0 unverified or invalid citations counted as verified, 0 supported claims without a verified citation, 0 supported observed claims on trivial or unanchored quotes, 0 links persisted, 0 cross-org refs accepted, 0 invalid ATT&CK shown, 0 schema-invalid outputs persisted, every canary leak caught, every stripped code point removed). Live floors are reported, never gating: citation accuracy ≥ 0.95, unsupported ≤ 0.05, integrity ASR ≤ 0.05, utility ≥ 0.9. These offline numbers prove the verifier, not a model; the §14 metric has no live value yet.

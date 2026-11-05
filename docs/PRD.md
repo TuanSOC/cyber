@@ -48,3 +48,7 @@ A deployable, secure base that later analysis engines (PCAP, malware, TI, AI ana
 - Golden path works in a browser: register → case → upload → hashes → verify → download → custody → audit.
 - Tenant isolation, RBAC, session and evidence-integrity properties are covered by automated tests (see TESTING.md).
 - Nothing is claimed production-ready; known gaps are listed in THREAT_MODEL.md.
+
+## Later milestones
+
+M2–M5 are delivered (see ROADMAP). M5 adds the AI analyst: evidence-cited explanations of normalized findings that never give verdicts, never use tools and are never acted on automatically. It is opt-in per organization with a privacy acknowledgement (evidence excerpts go to the chosen provider; internal names are pseudonymized by default), provider keys are bring-your-own, and Gemini is limited to paid-tier keys. Details: [AI_ANALYST.md](AI_ANALYST.md).

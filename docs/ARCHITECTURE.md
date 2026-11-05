@@ -22,7 +22,7 @@ flowchart LR
 ```
 
 - **One origin.** The gateway serves both the app and `/api`, so session cookies are first-party and `SameSite=Strict`.
-- **Networks.** `web` cannot reach `api` directly; only the gateway (and data services) share the api's network. uvicorn trusts `X-Forwarded-For` from its peers, which is safe only because of this isolation. Since M4 `backend` is `internal` (no egress); only the enrich-worker has a route out ([Networks (M4)](#networks-m4)).
+- **Networks.** `web` cannot reach `api` directly; only the gateway (and data services) share the api's network. uvicorn trusts `X-Forwarded-For` from its peers, which is safe only because of this isolation. Since M4 `backend` is `internal` (no egress); only the enrich-worker and (M5) the analyst-worker have a route out ([Networks](#networks-m4-m5)).
 - **Gateway duties.** 1 MiB body cap everywhere except the evidence upload route; early 413 on oversize `Content-Length` (JSON error envelope); security headers; TLS + HSTS in prod.
 - **CSP (M3).** The upstreams own it. The web app sets a per-request nonce policy on HTML (`apps/web/proxy.ts`, `lib/csp.ts`): `script-src 'self' 'nonce-…' 'strict-dynamic'`, no `'unsafe-inline'` for scripts; styles keep `'unsafe-inline'` (Radix/sonner inline styles). The root layout awaits `connection()`, so every page renders dynamically with a fresh nonce. API downloads send `CSP: sandbox`. Caddy's `csp_fallback` (`infra/caddy/common.caddy`) adds `default-src 'none'` only to responses that carry no CSP.
 
@@ -46,8 +46,14 @@ apps/api/app/
                      runs, cache, limiter, SSRF checks, provider adapters + HTTP client (enrich worker only),
                      integrations / runs / results API
     attack/          (M4) offline ATT&CK index and label route
+    ai/              (M5) contracts, catalog, output schema, labels, text, sealing (seal.py: API;
+                     unseal.py: analyst worker only), context/ (builder, selectors, field
+                     allowlists, pseudonymization, reduce), prompt + prompts/, verify,
+                     postprocess, budget, ratelimit, lifecycle, providers/ + http (analyst
+                     worker only), runs / providers / settings API
   workers/     celery app, ingest + reaper tasks (trusted side of the analysis pipeline);
-               enrich_app / enrich_tasks / enrich (M4: the internet-facing enrich worker)
+               enrich_app / enrich_tasks / enrich (M4: the internet-facing enrich worker);
+               analyst_app / analyst_tasks / analyst (M5: the internet-facing AI analyst worker)
   scripts/     dump_openapi (contracts), reconcile_orphans (report-only)
 ```
 
@@ -196,16 +202,56 @@ flowchart LR
 - **Import guard.** Adapters, the registry, the HTTP client and `unseal` may only be imported from `app/workers/enrich*.py` (AST test).
 - **Lifecycle shared with ingest.** `threat_intel/lifecycle.py` finalizes runs for the worker and for the ingest reaper's fallback (runs 10 min past their deadline with no live lease).
 
-### Networks (M4)
+### Networks (M4, M5)
 
 | Network | Internal | Members | Why |
 |---|---|---|---|
 | `frontend` | no | web, gateway, e2e | browser-facing |
 | `backend` | **yes** since M4 | postgres, redis, redis-broker, minio, minio-init, migrate, api, ingest-worker, ingest-beat, gateway, api-test | no service here has a route out; the API cannot reach the internet even if compromised |
-| `enrich` | yes | postgres, redis-broker, enrich-worker(-test) | the enrich worker's way to its data, and nothing else (no app Redis, MinIO, API or gateway) |
-| `egress` | no | enrich-worker(-test), ti-mock | the only route out |
+| `enrich` | yes | postgres, redis-broker, enrich-worker(-test), analyst-worker(-test) | the trusted internet-facing workers' way to their data, and nothing else (no app Redis, MinIO, API or gateway) |
+| `egress` | no | enrich-worker(-test), analyst-worker(-test), ti-mock, ai-mock | the only route out |
 | `analysis` | yes | pcap-worker(-test), static-worker(-test), redis-broker, minio | unchanged |
 
 Runtime egress per service and the operational consequences (no MinIO console port, `UV_NO_SYNC`): [DEPLOYMENT.md](DEPLOYMENT.md#networks-and-egress-m4).
 
 - **Web:** org settings → Integrations (`/o/{org}/settings/integrations`: provider cards, write-only keys, terms acknowledgement, limits, excluded suffixes), Threat Intel (`/o/{org}/intel`: manual lookup with a normalization report, recent runs) and the IOC history (`/o/{org}/intel/ioc`). IOC tabs of pcap and static jobs get an "Enrich IOCs" button and attributed chips (`GET …/iocs?include=enrichment`); ATT&CK ids on capabilities and findings show names and tactics with the MITRE notice.
+
+## AI analyst (M5)
+
+Evidence-cited LLM explanations of normalized findings. Details: [AI_ANALYST.md](AI_ANALYST.md).
+
+```mermaid
+flowchart LR
+  B[Browser] --> G[gateway]
+  G --> A[API<br/>builds + freezes context,<br/>seals keys]
+  A -->|send_task ai.run / ai.verify| RB[(redis-broker)]
+  IB[ingest-beat] -->|ai.resume every 30 s| RB
+  RB -->|queue analyst| AW[analyst-worker<br/>TRUSTED, internet-facing,<br/>no tools for the model]
+  A --> P[(PostgreSQL)]
+  AW --> P
+  AW -->|limiter + budget keys analyst.ai:*| RB
+  AW -->|https, path allowlist| L((Anthropic / Gemini))
+  subgraph backend [backend: internal]
+    A
+    IB
+    R[(Redis)]
+    M[(MinIO)]
+  end
+  subgraph enrich [enrich: internal]
+    P
+    RB
+  end
+  subgraph egress [egress: route out]
+    AW
+    AM[ai-mock<br/>test / e2e]
+  end
+```
+
+- **The API never calls a provider.** In the requester's RLS session it selects rows deterministically, sanitizes, pseudonymizes internal names, defangs, assigns short labels and hashes the context (`ai/context/`), then writes the run, its index, the frozen input, the label map and the audit row in one transaction and publishes `ai.run` after the commit. It holds only the AI sealing **public** key.
+- **analyst-worker** (api image, uid 10001, read-only rootfs, tmpfs `/tmp`, `cap_drop: ALL`, no-new-privileges): `celery -A app.workers.analyst_app worker -Q analyst --pool solo --without-gossip --without-mingle --without-heartbeat`, remote control and task events off, `task_acks_late`, prefetch 1. **One message = at most one provider call** (≤ 3 per run), behind a DB lease; no DB session is open during the call. Two replicas in prod. It never shares the enrich-worker.
+- **Least-privilege env** (`x-analyst-env`, never `*api-env` or `*enrich-env`): `PROCESS_ROLE=analyst`, the app DB role, its own broker user and the `AI_*` settings. `Settings` refuses a JWT secret, MinIO credentials, an app Redis URL and the TI private key file in that role, and refuses the AI private and platform key files in every other role. The AI private keys come from the compose secret `ai_seal_private`.
+- **Own Celery app and broker user.** `analyst` may touch only `analyst*` / `test.analyst*` keys (queue, unacked bookkeeping, limiter and budget keys), never `enrich*`, `ingest*` or `trusted.*`. The `api` and `ingest` users publish to it; `pcap`, `static` and `enrich` cannot.
+- **Import guard** (`tests/unit/test_ai_import_guard.py`): `ai.unseal`, the provider adapters, the registry, `ai.http` and the vendor SDKs (`anthropic`, `google.genai`, `httpx2`) only from `app/workers/analyst*.py` and the adapter modules; `core.sealbox_open` only from the TI and AI unseal wrappers, so no process role can open both domains.
+- **Lifecycle shared with ingest.** `ai/lifecycle.py` changes run statuses for the worker and for the ingest reaper's fallback (`reap_ai_runs`: runs 10 min past their deadline with no live lease).
+- **New server reads** (also used by M6): `GET /orgs/{org}/analyses?investigation_id=&latest_per_evidence=`, the merged case timeline `GET /orgs/{org}/investigations/{inv}/timeline`, and `ref=` filters on the pcap and static result lists, so citation chips deep-link to exactly the cited row.
+- **Web** (phases 8–9; wording finalized in phase 11): an AI Analyst tab on pcap and malware job pages, a per-row "Explain" drawer on findings and alerts, an incident card on the investigation page, the AI runs list at `/o/{org}/ai-analyst`, and AI provider and privacy cards on the Integrations page. Run views show the context preview, truncation and pseudonymization banners, model, prompt version, tokens and cost, typed statuses, neutral confidence badges, an "AI-generated, verify before acting" banner and citation chips; model text is rendered as plain text only.

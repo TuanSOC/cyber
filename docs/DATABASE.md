@@ -1,6 +1,6 @@
 # Database
 
-PostgreSQL 17. Schema owned by Alembic (`apps/api/alembic/versions`): `0001` is M1, `0002`–`0005` M2 (analysis jobs, pcap results), `0006`–`0008` M3 (static analyzer, malware results, storage quota), `0009`–`0010` M4 (threat intelligence).
+PostgreSQL 17. Schema owned by Alembic (`apps/api/alembic/versions`): `0001` is M1, `0002`–`0005` M2 (analysis jobs, pcap results), `0006`–`0008` M3 (static analyzer, malware results, storage quota), `0009`–`0010` M4 (threat intelligence), `0011` M5 (AI analyst).
 
 ## Roles
 
@@ -8,7 +8,7 @@ PostgreSQL 17. Schema owned by Alembic (`apps/api/alembic/versions`): `0001` is 
 |---|---|---|
 | `postgres` | init script only | superuser |
 | `cyberlab_owner` | `migrate` service, test setup/cleanup | owns `cyberlab` / `cyberlab_test` and every table |
-| `cyberlab_app` | the API process | `NOSUPERUSER NOBYPASSRLS`, explicit per-table grants, `idle_in_transaction_session_timeout=60s`, `statement_timeout=30s` |
+| `cyberlab_app` | the API process and the trusted workers (ingest, enrich, analyst) | `NOSUPERUSER NOBYPASSRLS`, explicit per-table grants, `idle_in_transaction_session_timeout=60s`, `statement_timeout=30s` |
 
 The API never receives owner credentials (`Settings` has no field for them; compose passes `MIGRATION_DATABASE_URL` only to `migrate` and `api-test`).
 
@@ -47,6 +47,16 @@ erDiagram
   ti_enrichment_runs ||--o{ ti_run_items : "planned pairs"
   ti_enrichment_runs ||--o{ ti_results : "provider answers"
   ti_results ||--o{ ti_run_items : "answer or cache hit"
+  organizations ||--o{ ai_provider_configs : "sealed AI keys"
+  organizations ||--o| ai_org_settings : "AI settings"
+  analysis_jobs ||--o{ ai_runs : "job scope"
+  investigations ||--o{ ai_runs : "investigation scope"
+  ai_runs ||--o{ ai_runs : "incident children / supersedes"
+  ai_runs ||--|| ai_run_index : "system lookup"
+  ai_runs ||--o{ ai_run_inputs : "frozen context (base, reduce)"
+  ai_runs ||--o{ ai_context_refs : "label map"
+  ai_runs ||--o| ai_outputs : "verified output"
+  ai_outputs ||--o{ ai_citations : "checked citations"
 ```
 
 (`malware_exports` and `malware_resources` hang off `analysis_jobs` the same way.)
@@ -83,6 +93,14 @@ erDiagram
 | `ti_enrichment_runs` | tenant | `scope` manual / job, `job_id` (composite FK to `analysis_jobs`), `requested_by`, `providers`, `status` (queued / running / waiting / completed / partial / failed), `summary` jsonb (≤ 16 KiB, counts only), `deadline_at`, `started_at`, `finished_at` |
 | `ti_run_index` | system lookup | run → org, `status`, `resume_at`, `deadline_at`, `dispatched_at`, `lease_until`, `lease_owner` for the enrich worker, `ti.resume` and the reaper; same RLS pattern as `analysis_job_index`; index (status, resume_at) |
 | `ti_run_items` | tenant | the frozen plan of a run: PK (run_id, provider, ioc_key), `seq`, `ioc_type`, `value_norm`, `state` pending / done / cached / abandoned, `result_id` (this run's answer or the cached one), `reason` rate_limited / quota_exhausted / deadline / auth_failed |
+| `ai_provider_configs` | tenant | one row per (org, provider); provider `anthropic` / `gemini` / `mock`; `enabled`, `model` (pattern `^[a-z0-9][a-z0-9._-]{0,63}$`, allowlist in the app); sealed key `key_kid`, `key_version`, `key_epk` (32 bytes), `key_nonce` (12 bytes), `key_ct`, `key_last4` (all or none); `verify_status` unverified/valid/invalid/error, `verified_at`, `last_error_code`; `limits` jsonb object; `terms_ack_at/by`, `paid_tier_ack_at/by`. Checks: `enabled` needs `terms_ack_at`, and for `gemini` `paid_tier_ack_at` (RT5). A sealed key or the dev platform key is required by the app, not the DB |
+| `ai_org_settings` | tenant | PK `organization_id`: `ai_enabled` (default false; true needs `privacy_ack_at`), `privacy_ack_at/by`, `default_provider`, `pseudonymize_internal` (true), `internal_cidrs` / `internal_suffixes` (jsonb arrays ≤ 50), `include_strings` (false), `include_ti` (true), `include_case_text` (false), `daily_token_budget` (1 000 000), `run_token_cap` (100 000), `incident_token_cap` (600 000), all > 0 |
+| `ai_runs` | tenant | `task` (8 values incl. `job_digest`), `scope` job / investigation with `job_id` iff job and `investigation_id` iff investigation (composite FKs), `target_kind` finding / alert iff `target_id`, `parent_run_id` iff `job_digest` (composite self FK), `supersedes_run_id`, `provider`, `model`, `served_model`, `prompt_version`, `output_schema`, `status` (queued / running / waiting / completed / partial / failed / refused), `error_code`, `context_sha256` (64 hex), `context_stats` ≤ 16 KiB, `usage` ≤ 2 KiB, `metrics` ≤ 4 KiB, `cost_micros` ≥ 0, `price_version`, `requested_by`, `deadline_at`, `created_at`, `started_at`, `finished_at`; indexes (org, created_at), (org, context_sha256), (job_id, created_at), (investigation_id, created_at), (parent_run_id) |
+| `ai_run_index` | system lookup | run → org, `status`, `resume_at`, `deadline_at`, `dispatched_at`, `lease_until`, `lease_owner`, `attempts` (529 backoff), `calls` (provider calls made, RT2); same RLS pattern as `ti_run_index`; index (status, resume_at) |
+| `ai_run_inputs` | tenant, append-only | PK (run_id, stage `base` / `reduce`): `context` jsonb ≤ 512 KiB (the redacted payload exactly as sent), `context_sha256`, `pseudonym_map` jsonb object ≤ 64 KiB (never sent, never selected by the worker) |
+| `ai_context_refs` | tenant, append-only | PK (run_id, label): `stage`, `label` (`^(J[0-9]{1,3}:)?[A-Z][0-9]{1,4}$`), `kind` (16 values), `ref_table`, `ref_id` (uuid text or a Zeek `flow_ref`), `job_id` (composite FK), `fields_sha256`; index (org, kind, ref_id) for M6 "which outputs cite this row" |
+| `ai_outputs` | tenant, append-only | `run_id` unique: `body` jsonb ≤ 64 KiB (validated, sanitized `AnalysisOutput`; raw model text is never stored), `verification` ≤ 32 KiB (claim verdicts, citation counts, dropped refs, invalid ATT&CK, truncation, digest reuse), `flags` jsonb array |
+| `ai_citations` | tenant, append-only | `output_id`, `run_id`, `claim_path`, `section`, `claim_id`, `claim_status` supported / unsupported / hypothesis, `label`, `kind`, `ref_id`, `job_id`, `status` verified / unverified / invalid, `reason`, `field`, `quote` ≤ 256, `stale`; indexes on `output_id` and (org, kind, ref_id) |
 | `ti_results` | tenant | append-only provider answers (history = cache): `provider`, `ioc_type`, `value_norm`, `ioc_key` (sha256 of type ‖ 0 ‖ value), `status` ok / not_found / error / auth_failed, `found` (only with ok), `detections`, `score` + `score_scale`, `tags`, `families`, `attack_ids`, `first_seen`, `last_seen`, `summary` (strict per-provider model, ≤ 16 KiB, never the raw body), `permalink` (`https://` only), `error_code`, `latency_ms`, `fetched_at`, `expires_at` (NULL for errors); unique (run_id, provider, ioc_key); index (org, ioc_key, provider, fetched_at DESC) |
 
 All ids are UUIDs (client-generated `uuid4`, server default `gen_random_uuid()`); timestamps are `timestamptz`.
@@ -104,6 +122,11 @@ Threat intel (migrations 0009/0010; details in [THREAT_INTEL.md](THREAT_INTEL.md
 - A cache hit is the newest unexpired `ok` / `not_found` row of the same org (DB clock).
 - `ti_results` is never purged yet (no retention policy).
 
+AI analyst (migration 0011; details in [AI_ANALYST.md](AI_ANALYST.md)):
+- The API writes a run, its index row, its base input, its refs and the audit row in one transaction (incident children with them); the analyst-worker writes the output, the citations and the run's usage / cost / metrics in one transaction.
+- `ai_runs.context_stats` never carries field names, titles or filenames (RT4); `ai_run_inputs.context` is exactly what was sent.
+- Nothing in `ai_*` is ever purged yet (no retention policy, RT28).
+
 ## Tenant isolation (RLS)
 
 Every tenant table has `ENABLE` **and** `FORCE ROW LEVEL SECURITY` (`test_rls_coverage.py` fails if a table with `organization_id` lacks either).
@@ -117,8 +140,8 @@ app_user_id() = NULLIF(current_setting('app.user_id', true), '')::uuid
 
 | Table | Command | Policy |
 |---|---|---|
-| investigations, evidence, evidence_hashes, evidence_custody_events, audit_logs, analysis_jobs, pcap result tables, `malware_*`, `ti_*` except `ti_run_index` | ALL | `organization_id = app_org_id()` (USING + CHECK) |
-| analysis_job_index, ti_run_index | ALL | `app_org_id() IS NULL OR organization_id = app_org_id()`: trusted workers' system sessions see every row, tenant sessions only their org's |
+| investigations, evidence, evidence_hashes, evidence_custody_events, audit_logs, analysis_jobs, pcap result tables, `malware_*`, `ti_*` except `ti_run_index`, `ai_*` except `ai_run_index` | ALL | `organization_id = app_org_id()` (USING + CHECK) |
+| analysis_job_index, ti_run_index, ai_run_index | ALL | `app_org_id() IS NULL OR organization_id = app_org_id()`: trusted workers' system sessions see every row, tenant sessions only their org's |
 | organization_members | SELECT | `organization_id = app_org_id() OR user_id = app_user_id()` |
 | organization_members | INSERT / UPDATE / DELETE | `organization_id = app_org_id()` |
 | organizations | SELECT | `id = app_org_id() OR id IN (memberships of app_user_id())` |
@@ -158,14 +181,21 @@ Rules:
 | `ti_run_items` | SELECT, INSERT; UPDATE on `state, result_id, reason` |
 | `ti_run_index` | SELECT, INSERT; UPDATE on `status, resume_at, deadline_at, dispatched_at, lease_until, lease_owner` |
 | `ti_results` | SELECT, INSERT |
+| `ai_provider_configs` | SELECT, INSERT; UPDATE on `enabled, model, key_kid, key_version, key_epk, key_nonce, key_ct, key_last4, verify_status, verified_at, last_error_code, limits, terms_ack_at, terms_ack_by, paid_tier_ack_at, paid_tier_ack_by, updated_at` (the sealed columns also for the analyst's lazy re-seal); **no DELETE** |
+| `ai_org_settings` | SELECT, INSERT; UPDATE on `ai_enabled, privacy_ack_at, privacy_ack_by, default_provider, pseudonymize_internal, internal_cidrs, internal_suffixes, include_strings, include_ti, include_case_text, daily_token_budget, run_token_cap, incident_token_cap, updated_by, updated_at` |
+| `ai_runs` | SELECT, INSERT; UPDATE on `status, error_code, served_model, usage, cost_micros, price_version, metrics, started_at, finished_at` |
+| `ai_run_index` | SELECT, INSERT; UPDATE on `status, resume_at, deadline_at, dispatched_at, lease_until, lease_owner, attempts, calls` |
+| `ai_run_inputs`, `ai_context_refs`, `ai_outputs`, `ai_citations` | SELECT, INSERT |
 
-The enrich worker uses the same `cyberlab_app` role as the API (no dedicated role yet; accepted residual, see THREAT_MODEL).
+The enrich and analyst workers use the same `cyberlab_app` role as the API (no dedicated role yet; accepted residual, see THREAT_MODEL). The app role can never UPDATE `organization_id`, `provider`, `task` or `created_at` of an `ai_*` row.
 
 ## Triggers
 
-- `forbid_mutation()` — `BEFORE UPDATE OR DELETE` on the four append-only tables and on `ti_results` (M4).
+- `forbid_mutation()` — `BEFORE UPDATE OR DELETE` on the four append-only tables, on `ti_results` (M4) and on `ai_run_inputs`, `ai_context_refs`, `ai_outputs`, `ai_citations` (M5); it fires for the owner too.
 - `ti_run_transition()` — `BEFORE UPDATE` on `ti_enrichment_runs`: only `queued → running / partial / failed`, `running → waiting / completed / partial / failed`, `waiting → running / partial / failed`; final states never change; identity columns (`id`, org, `scope`, `job_id`, `requested_by`, `providers`, `created_at`) are immutable.
 - `ti_key_version_guard()` — `BEFORE UPDATE` on `ti_provider_configs`: `key_version` never decreases; new sealed columns need a higher `key_version`, except a re-seal of the same key (same version and last4) under another kid. Clearing a key keeps the version, so an old ciphertext can never be put back (RT18).
+- `ai_run_transition()` — `BEFORE UPDATE` on `ai_runs`: only `queued → running / failed`, `running → waiting / completed / partial / failed / refused`, `waiting → running / failed`; final states (`completed`, `partial`, `failed`, `refused`) never change; identity columns (id, org, task, scope, job, investigation, target, parent, provider, model, prompt and schema versions, `context_sha256`, `context_stats`, requester, `supersedes_run_id`, `deadline_at`, `created_at`) are immutable, even for the owner.
+- `ai_key_version_guard()` — `BEFORE UPDATE` on `ai_provider_configs`: the same rules as `ti_key_version_guard()` (RT18).
 - `evidence_immutable()` — `BEFORE UPDATE` on `evidence`; every column except `status` and `description` is immutable (incl. `id`, detected type, storage location/version, uploader, timestamps).
 
 **Trust boundary:** grants + triggers stop the app role (and accidental owner `UPDATE`/`DELETE`). The table owner can still `TRUNCATE` or drop triggers; it is a trusted admin identity and its credentials never reach the API. Test cleanup relies on owner `TRUNCATE` against `cyberlab_test` only (the harness refuses any database not ending in `_test`).
@@ -192,6 +222,12 @@ M4 migrations:
 |---|---|
 | `0009` threat intel | the six `ti_*` tables with checks (provider list, statuses, `permalink LIKE 'https://%'`, summary ≤ 16 KiB, 64-char `ioc_key`, `found` only with `ok`, sealed-column shapes), composite tenant FKs, RLS ENABLE + FORCE with `tenant_isolation` (and `run_index_scope` on `ti_run_index`), per-column UPDATE grants, the run-transition, key-version and append-only triggers |
 | `0010` TI hardening | revokes the app's DELETE on `ti_provider_configs` (deleting a row reset the `key_version` floor); `ti_run_index.run_id` now references `(id, organization_id)` of the run, so an index row cannot name another org |
+
+M5 migration:
+
+| Revision | Changes |
+|---|---|
+| `0011` AI analyst | the eight `ai_*` tables with checks (provider and task lists, statuses, scope / target / parent shapes, model pattern, label grammar, hash shapes, jsonb size caps, sealed-column shapes, enable-needs-acknowledgement), composite tenant FKs (incl. the run self-references), RLS ENABLE + FORCE with `tenant_isolation` (and `run_index_scope` on `ai_run_index`), table grants without DELETE plus per-column UPDATE grants, the run-transition, key-version and append-only triggers. Later schema changes go into `0012` |
 
 asyncpg executes one statement per call, so raw SQL in migrations is issued statement by statement. `citext` is created by migration `0001` (trusted extension, created by the database owner); `gen_random_uuid()` is built in.
 

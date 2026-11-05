@@ -50,12 +50,13 @@ Base path `/api/v1`, served through the gateway. Interactive docs (dev only): `/
 | GET / POST | `/orgs/{org_id}/investigations?q&status&severity&sort` | `investigation.read` / `investigation.write` |
 | GET / PATCH | `/orgs/{org_id}/investigations/{investigation_id}` | `investigation.read` / `investigation.write` |
 | GET | `/orgs/{org_id}/investigations/{investigation_id}/evidence` | `evidence.read` |
+| GET | `/orgs/{org_id}/investigations/{investigation_id}/timeline?cursor&limit` (merged case timeline, M5) | `evidence.read` |
 | POST | `/orgs/{org_id}/investigations/{investigation_id}/evidence?filename&description` | `evidence.write` |
 | GET | `/orgs/{org_id}/evidence/{evidence_id}` · `/download` · `/custody` | `evidence.read` |
 | POST | `/orgs/{org_id}/evidence/{evidence_id}/verify` · `/archive` | `evidence.write` |
 | POST | `/orgs/{org_id}/evidence/{evidence_id}/analyses` `{"analyzer":"pcap"}` or `{"analyzer":"static","profile":"full"\|"av"}` | `evidence.write` (20 manual runs / 10 min) |
 | GET | `/orgs/{org_id}/evidence/{evidence_id}/analyses` | `evidence.read` |
-| GET | `/orgs/{org_id}/analyses?status&analyzer&profile` · `/orgs/{org_id}/analyses/{job_id}` (incl. `profile`, `summary`) | `evidence.read` |
+| GET | `/orgs/{org_id}/analyses?status&analyzer&profile&investigation_id&latest_per_evidence` · `/orgs/{org_id}/analyses/{job_id}` (incl. `profile`, `summary`) | `evidence.read` |
 | GET | `/orgs/{org_id}/analyses/{job_id}/findings?severity&type` | `evidence.read` |
 | GET | `/orgs/{org_id}/analyses/{job_id}/flows?ip&port&proto&sort=bytes\|ts` | `evidence.read` |
 | GET | `/orgs/{org_id}/analyses/{job_id}/records?kind=dns\|http\|tls&q` | `evidence.read` |
@@ -63,6 +64,7 @@ Base path `/api/v1`, served through the gateway. Interactive docs (dev only): `/
 | GET | static jobs: `/orgs/{org_id}/analyses/{job_id}/sample` · `/sections` · `/imports?library&q` · `/exports?q` · `/resources` | `evidence.read` |
 | GET | static jobs: `/orgs/{org_id}/analyses/{job_id}/strings?encoding&q` · `/signatures?engine=clamav\|yara` · `/capabilities?namespace&attack` | `evidence.read` |
 | GET | `/orgs/{org_id}/analyses/{job_id}/report` (static jobs) | `evidence.read` (audited) |
+| GET | `?ref=<row id>` on `/findings`, `/records`, `/alerts`, `/iocs`, `/timeline`, `/imports`, `/strings`, `/signatures`, `/capabilities`; `?ref=<flow_ref>` on `/flows` (M5: deep links to one cited row) | `evidence.read` |
 | GET | `/orgs/{org_id}/analyses/{job_id}/iocs?include=enrichment` (latest answer per provider on each IOC, M4) | `evidence.read` |
 | GET | `/orgs/{org_id}/integrations` (provider catalog + this org's status; never a key) · `/orgs/{org_id}/ti/settings` | `org.read` |
 | PUT | `/orgs/{org_id}/integrations/{provider}` `{api_key?, enabled?, acknowledge_terms?, base_url?, limits?}` · `/orgs/{org_id}/ti/settings` `{excluded_suffixes}` | `integrations.manage` |
@@ -72,8 +74,15 @@ Base path `/api/v1`, served through the gateway. Interactive docs (dev only): `/
 | GET | `/orgs/{org_id}/ti/runs?job_id&status` · `/orgs/{org_id}/ti/runs/{run_id}?provider&state` (items with their results, `from_cache`) | `evidence.read` |
 | GET | `/orgs/{org_id}/ti/results?value&type&provider` (history of one indicator, newest first) · `/orgs/{org_id}/ti/results/{result_id}` | `evidence.read` |
 | GET | `/attack/techniques?ids=T1055,T1059.001` (labels + MITRE notice, ≤ 100 ids) | signed in |
+| GET | `/orgs/{org_id}/ai/providers` (AI catalog + this org's status; never a key) · `/orgs/{org_id}/ai/settings` · `/orgs/{org_id}/ai/usage` | `org.read` |
+| PUT | `/orgs/{org_id}/ai/providers/{provider}` `{api_key?, enabled?, acknowledge_terms?, acknowledge_paid_tier?, model?}` · `/orgs/{org_id}/ai/settings` (partial) | `integrations.manage` |
+| DELETE | `/orgs/{org_id}/ai/providers/{provider}/key` → 204 | `integrations.manage` |
+| POST | `/orgs/{org_id}/ai/providers/{provider}/verify` → 202 (10 per provider / 10 min) | `integrations.manage` |
+| POST | `/orgs/{org_id}/ai/runs` `{task, job_id \| investigation_id, target_id?, provider?, model?, regenerate?}` → 202 new run, 200 deduplicated | `evidence.write` (10 / 10 min per user) |
+| POST | `/orgs/{org_id}/ai/context-preview` (same body; nothing persisted) | `evidence.write` (30 / 10 min per user) |
+| GET | `/orgs/{org_id}/ai/runs?job_id&investigation_id&task&status&target_id` · `/orgs/{org_id}/ai/runs/{run_id}?pseudonyms=reverse\|keep` · `/orgs/{org_id}/ai/runs/{run_id}/context?reveal` | `evidence.read` |
 
-Roles: **viewer** = all `*.read`; **analyst** = viewer + `investigation.write`, `evidence.write`; **admin** = analyst + `org.update`, `members.manage`, `audit.read`, `integrations.manage` (M4); **owner** = admin + owner-role management.
+Roles: **viewer** = all `*.read`; **analyst** = viewer + `investigation.write`, `evidence.write`; **admin** = analyst + `org.update`, `members.manage`, `audit.read`, `integrations.manage` (M4; also AI providers and settings, M5); **owner** = admin + owner-role management. So viewers read AI runs and settings, analysts request runs, and only admins and owners store AI keys or turn AI on.
 
 ## Evidence upload
 
@@ -142,3 +151,26 @@ Details: [THREAT_INTEL.md](THREAT_INTEL.md).
 | 422 | `provider_unavailable` (TI disabled, or `mock` in prod), `terms_not_acknowledged`, `api_key_required`, `invalid_api_key`, `key_required_for_url_change` (a MISP URL change needs the key again), `misp_url_required`, `misp_url_invalid` (fixed reason, URL never echoed), `base_url_not_supported`, `limit_above_ceiling`, `too_many_values` (> `TI_MAX_LOOKUP_VALUES`, 20), `no_values`, `unknown_provider`, `invalid_attack_ids` |
 | 429 | `rate_limited` (run requests, verify checks) |
 | 503 | `seal_key_unavailable` (no usable active public key), `broker_unavailable` (verify could not be queued, `Retry-After: 5`) |
+
+## AI analyst (M5)
+
+Details: [AI_ANALYST.md](AI_ANALYST.md). The API builds and freezes the context and publishes the run; only the analyst-worker calls a provider.
+
+- **Providers.** `provider` is `anthropic`, `gemini` or `mock` (dev/test only). The read model has the catalog (`models` with prices and `verified`, `default_model`, `price_version`, `tos_note`, `privacy_note`), `available` / `unavailable_reason` (`ai_disabled_platform`, `prod_mock`, `gemini_billing_required`), `platform_key` (the dev overlay covers it), `requires_paid_tier_ack`, and this org's `configured`, `key_last4`, `enabled`, `model`, `verify_status`, `verified_at`, `last_error_code`, `terms_ack_at`, `paid_tier_ack_at`. Keys are write-only (8–256 printable ASCII). The first configuration needs `api_key` unless the platform key covers the provider; the first `enabled: true` needs `acknowledge_terms: true`, and for Gemini `acknowledge_paid_tier: true` (per key: a new Gemini key clears it, so an enabled Gemini config needs it again in the same request). A new key queues `ai.verify` after the commit (`verify_queued` in the answer); the save stands either way.
+- **Settings.** `ai_enabled`, `default_provider`, `pseudonymize_internal`, `internal_cidrs` / `internal_suffixes` (≤ 50 each, validated), `include_strings`, `include_ti`, `include_case_text`, `daily_token_budget`, `run_token_cap`, `incident_token_cap`; the answer adds `ceilings`, `privacy_notice`, `privacy_ack_at/by` and `platform_ai_enabled`. Turning AI on, and later turning strings or case text on, pseudonymization off, or removing internal CIDRs / suffixes, needs `acknowledge_privacy: true`.
+- **Runs.** `task` is `explain_finding` / `explain_alert` (job + `target_id`), `summarize_pcap`, `explain_static` (job), `ioc_correlation`, `attack_mapping` (job or investigation) or `incident_summary` (investigation; queues one `job_digest` child per job). `provider` / `model` default to the org's default provider and the provider's configured or catalog model. The answer is `{run, deduplicated}`; poll `GET …/ai/runs/{run_id}` until the status is final (`completed`, `partial`, `failed` with `error_code`, `refused` with `refusal_category`; `waiting` carries `resume_at`). The list shows top-level runs; incident digests are `child_runs` of their parent.
+- **Run detail.** `output` (when `completed` / `partial`) has every claim with `status` (`supported` / `unsupported` / `hypothesis`) and `reason`, every citation with `status`, `reason`, `stale` and, for verified ones only, a `link` `{route, job_id, tab, ref}` (never a URL); timeline entries carry the time of their first verified cited row. Display text has pseudonyms reversed unless `pseudonyms=keep`. A canary-leak output is never returned (`output_withheld: true`). `context_stats`, `metrics`, `flags`, `usage`, `cost_micros` (an estimate, `cost_estimated`), `price_version`, `served_model` and `prompt_version` are always there.
+- **Context.** `GET …/runs/{run_id}/context` returns the frozen stage(s) exactly as sent (`base`, and `reduce` for an incident parent); `reveal=true` adds the pseudonym map (audited). `POST …/ai/context-preview` returns the items, stats, data `categories` and inclusions a run would send.
+- **Audit:** `ai.enabled` / `ai.disabled`, `ai.settings_updated`, `integration.ai_terms_acknowledged`, `integration.ai_key_set`, `integration.ai_key_replaced`, `integration.ai_key_removed`, `integration.ai_updated`, `ai.provider_verified` / `ai.provider_verify_failed` (worker, no actor), `ai.run_requested` (no content), `ai.run_deadline` (reaper). Key values never appear (last4, kid and version only).
+
+| Status | Code |
+|---|---|
+| 404 | `not_found` (also an unknown or foreign job, investigation or run) |
+| 409 | `ai_disabled` (platform or org), `no_provider_enabled` (not enabled, terms or paid-tier attestation missing, or no key), `job_not_ready` (job not succeeded), `budget_exhausted` (today's usage already reaches the org budget), `ai_busy` (12 active runs per org / 40 overall, incident children included), `provider_not_configured` (no key to verify or remove) |
+| 422 | `provider_unavailable` (AI off, `mock` in prod, Gemini without `GEMINI_BILLING_ENABLED`), `model_not_allowed`, `terms_not_acknowledged`, `paid_tier_not_acknowledged`, `api_key_required`, `invalid_api_key`, `privacy_not_acknowledged`, `budget_above_ceiling`, `target_not_found` (the finding or alert is not part of the job), `task_not_applicable` (wrong analyzer for the task), `context_empty` (nothing to analyze), `validation_error` (request shape: exactly one of `job_id` / `investigation_id`, `target_id` only for the explain tasks, `job_digest` not requestable) |
+| 429 | `rate_limited` (run requests, previews, verify checks) |
+| 503 | `seal_key_unavailable`, `broker_unavailable` (verify could not be queued, `Retry-After: 5`) |
+
+Run `error_code` values (`deadline`, `ai_disabled`, `provider_disabled`, `provider_unavailable`, `auth_failed`, `spend_limit`, `overloaded`, `max_tokens`, `invalid_output`, `context_too_large`, `budget_exhausted`, `provider_error`, `canary_leak`, `no_digest`, `refused`) are listed with their causes in [AI_ANALYST.md](AI_ANALYST.md#run-lifecycle).
+
+**Investigation reads (M5).** `GET …/analyses?investigation_id=` lists only that case's jobs (404 for an unknown or foreign case); `latest_per_evidence=true` keeps the newest job per evidence and kind of run. `GET …/investigations/{id}/timeline` merges custody events, job lifecycle, the latest pcap job's timeline and alerts per evidence, and static findings at analysis time (`ts_source: analysis_time`), sorted by (ts, kind, ref_id), cursor-paged.
