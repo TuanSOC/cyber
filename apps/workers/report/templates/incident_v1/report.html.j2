@@ -1,0 +1,34 @@
+{#- incident_v1: the whole document. Every value from the snapshot is autoescaped text
+    passed through `vis`; class names come only from the fixed filters (sev_class,
+    tlp_class); the only links are in-document anchors built from integers and, in the
+    appendix, the platform path behind PUBLIC_BASE_URL. No |safe, no Markup, no URLs to
+    resources. -#}
+{%- import "incident_v1/_macros.html.j2" as m -%}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+<meta name="dcterms.created" content="{{ finalized_w3c }}">
+<meta name="dcterms.modified" content="{{ finalized_w3c }}">
+<meta name="generator" content="CyberLab report renderer">
+<title>{{ s.case.case_ref }} v{{ s.report.version }} {{ s.report.title|vis }}</title>
+{% if inline_css %}<style id="report-css"></style>{% endif %}
+</head>
+<body>
+<main class="{{ s.report.tlp|tlp_class }}">
+{% include "incident_v1/_cover.html.j2" %}
+{% include "incident_v1/_toc.html.j2" %}
+{% include "incident_v1/_analyst.html.j2" %}
+{% include "incident_v1/_case.html.j2" %}
+{% include "incident_v1/_evidence.html.j2" %}
+{% include "incident_v1/_findings.html.j2" %}
+{% include "incident_v1/_iocs.html.j2" %}
+{% include "incident_v1/_attack.html.j2" %}
+{% include "incident_v1/_timeline.html.j2" %}
+{% include "incident_v1/_notes.html.j2" %}
+{% include "incident_v1/_ai.html.j2" %}
+{% include "incident_v1/_appendix.html.j2" %}
+</main>
+</body>
+</html>

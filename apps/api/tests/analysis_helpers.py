@@ -6,7 +6,7 @@ import uuid
 from typing import Any
 
 from httpx import AsyncClient
-from kombu import Connection
+from kombu.connection import Connection
 from sqlalchemy import select
 
 from app.core.config import get_settings
@@ -76,8 +76,13 @@ def broker_queue(name: str) -> str:
     return f"{prefix}{name}"
 
 
+def _connection() -> Connection:
+    """kombu ships no type hints: the one untyped call of these helpers."""
+    return Connection(get_settings().broker_url)  # type: ignore[no-untyped-call]
+
+
 def purge_test_queues() -> None:
-    with Connection(get_settings().broker_url) as conn:
+    with _connection() as conn:
         for name in ("pcap", "static", "ingest", "enrich"):
             conn.default_channel.client.delete(broker_queue(name))
         # Declare the ingest binding (as the trusted side does in production): the analyzer
@@ -89,7 +94,7 @@ def drain_ingest(timeout_s: float = 2.0) -> list[dict[str, Any]]:
     """Messages the analyzer sent to the (test) ingest queue, in order."""
     out: list[dict[str, Any]] = []
     deadline = time.monotonic() + timeout_s
-    with Connection(get_settings().broker_url) as conn:
+    with _connection() as conn:
         queue = conn.SimpleQueue(broker_queue("ingest"))
         try:
             while time.monotonic() < deadline:

@@ -1,6 +1,7 @@
-"""The phase-1 report renderer skeleton: Celery settings (prefork, one task per child, time
-limits, no remote control), the `report.render` answer (`failed / not_implemented`), invalid
-messages dropped, and the image facts (no Ghostscript, only the bundled fonts)."""
+"""The report renderer's process model and message handling: Celery settings (prefork, one
+task per child, time limits, no remote control), an expired render answered `timeout`
+without any work, invalid messages dropped, the answer on the ingest queue, and the image
+facts (no Ghostscript, only the bundled fonts). The render flow itself: `test_task.py`."""
 
 import base64
 import json
@@ -20,6 +21,7 @@ from cyberlab_jobs.report import (
     ReportSnapshot,
     manifest_bytes,
 )
+from cyberlab_worker import sandbox
 
 from report_worker import app as worker_app
 from report_worker import config, tasks
@@ -72,14 +74,29 @@ def test_celery_runs_prefork_one_task_per_child_with_limits() -> None:
     assert REPORT_RENDER in worker_app.celery_app.tasks
 
 
-def test_a_render_is_answered_not_implemented() -> None:
+_EXPIRED = {"deadline": (datetime.now(UTC) - timedelta(seconds=1)).isoformat()}
+
+
+def test_an_expired_render_is_answered_timeout_without_work(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def no_work(*_: Any, **__: Any) -> None:
+        raise AssertionError("an expired render must not touch /work")
+
+    monkeypatch.setattr(sandbox, "prepare", no_work)
     sent: list[ReportRenderedV1] = []
-    message = _message()
+    message = _message(**_EXPIRED)
     result = tasks.handle_render(message, sent.append)
     assert result is not None and sent == [result]
-    assert (result.status, result.error_code) == ("failed", "not_implemented")
+    assert (result.status, result.error_code) == ("failed", "timeout")
     assert str(result.render_id) == message["render_id"] and result.token == message["token"]
     assert result.renderer_version == config.RENDERER_VERSION
+
+
+def test_the_renderer_version_names_weasyprint_and_the_template() -> None:
+    assert config.RENDERER_VERSION.startswith("report-worker/")
+    assert "+weasyprint-70." in config.RENDERER_VERSION
+    assert config.RENDERER_VERSION.endswith("+template-incident_v1.1")
 
 
 @pytest.mark.parametrize(
@@ -108,7 +125,7 @@ def test_the_answer_goes_to_the_ingest_queue(monkeypatch: pytest.MonkeyPatch) ->
         calls.append((name, kwargs, queue))
 
     monkeypatch.setattr(worker_app.celery_app, "send_task", send_task)
-    result = tasks.handle_render(_message(), tasks.send_rendered)
+    result = tasks.handle_render(_message(**_EXPIRED), tasks.send_rendered)
     assert result is not None
     [(name, kwargs, queue)] = calls
     assert name == REPORT_RENDERED and queue is worker_app.INGEST_QUEUE

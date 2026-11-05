@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.core.pagination import PageParamsDep
 from app.core.rbac import OrgContext, Permission, require
-from app.core.stubs import not_implemented
 from app.core.validation import SearchTerm
 from app.modules.investigations import service
 from app.modules.investigations import timeline as case_timeline
@@ -89,5 +88,5 @@ async def list_status_events(
     cursor: Annotated[str | None, Query(max_length=512)] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> StatusEventPage:
-    """Status history of the case, newest first (M6 phase 2; 501 until then)."""
-    raise not_implemented()
+    """Status history of the case, newest first, with the actor's display name (M6)."""
+    return await service.list_status_events(ctx, investigation_id, cursor=cursor, limit=limit)

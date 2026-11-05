@@ -1,0 +1,7 @@
+{#- The analyst's plain-text sections, carried whole (RT9): never Markdown or HTML. -#}
+{% for section in analyst %}
+<section id="{{ section.anchor }}">
+<h2>{{ section.title }}</h2>
+<div class="prose">{{ m.t(section.text) }}</div>
+</section>
+{% endfor %}

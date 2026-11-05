@@ -191,7 +191,7 @@ x-static-worker: &static-worker
 # Untrusted report renderer (M6): renders a signed snapshot (attacker-controlled text from
 # captures, samples, TI, AI output and analysts) to PDF/A-3a, HTML and Markdown. The static
 # worker's isolation: root process with the analyzers' capabilities (it drops the render
-# subprocess to uid 10003, RT3), `analysis` only (broker + MinIO presigned URLs, no egress),
+# subprocess to its own uid 10004, RT3), `analysis` only (broker + MinIO presigned URLs, no egress),
 # env BROKER_URL only (no DB, JWT, MinIO credentials, signing key or app Redis). The render
 # work dir is a root-owned tmpfs (`/work`, noexec, RT4).
 x-report-worker: &report-worker
@@ -584,6 +584,9 @@ services:
       - upload_tmp_test:${UPLOAD_TMP_DIR}
       # The ai-mock server's own unit tests import it in-process.
       - ./infra/ai-mock:/srv/ai-mock:ro
+      # The repository scripts (tests/unit/test_verify_report_script.py runs
+      # scripts/verify_report.py); read-only.
+      - ./scripts:/srv/scripts:ro
       # What ai-mock received (outbound-privacy and call-count assertions); read-only.
       - ai_mock_state:/srv/ai-mock-state:ro
     networks: [backend]

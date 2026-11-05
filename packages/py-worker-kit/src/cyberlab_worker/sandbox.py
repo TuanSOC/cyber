@@ -35,8 +35,20 @@ log = logging.getLogger(__name__)
 _LIBC = ctypes.CDLL(None, use_errno=True)
 PR_SET_DUMPABLE = 4
 
-TOOL_UID = 10003
-TOOL_GID = 10003
+
+def _tool_id(name: str) -> int:
+    """The tool uid / gid: 10003 (the analyzers) unless the image sets `CYBERLAB_TOOL_UID` /
+    `CYBERLAB_TOOL_GID` (the report renderer uses 10004, M6 review L6: RLIMIT_NPROC counts
+    every process of a uid on the host, so the renderer must not share the static worker's
+    uid). Set by the Dockerfile, read once at import, never by a tool."""
+    value = int(os.environ.get(name, "10003"))
+    if not 10000 <= value <= 65533:
+        raise ValueError(f"{name} must be an unprivileged id (10000..65533)")
+    return value
+
+
+TOOL_UID = _tool_id("CYBERLAB_TOOL_UID")
+TOOL_GID = _tool_id("CYBERLAB_TOOL_GID")
 TOOL_PATH = "/usr/local/zeek/bin:/usr/local/bin:/usr/bin:/bin"
 MAX_OUTPUT_FILE = 2 * 1024**3
 DEFAULT_NOFILE = 1024
@@ -115,6 +127,7 @@ def _child_setup(
     limits: Rlimits | None = None,
     deny_extra_domains: Sequence[int] = (),
     deny_io_uring: bool = False,
+    unix_sockets_only: bool = False,
 ) -> None:
     """Runs in the child after it dropped to the tool uid: limits, OOM priority, seccomp."""
     limits = limits or Rlimits()
@@ -136,7 +149,11 @@ def _child_setup(
     _LIBC.prctl(PR_SET_DUMPABLE, 1, 0, 0, 0)
     with open("/proc/self/oom_score_adj", "w") as f:
         f.write("1000")
-    seccomp.deny_network(extra_domains=deny_extra_domains, deny_io_uring=deny_io_uring)
+    seccomp.deny_network(
+        extra_domains=deny_extra_domains,
+        deny_io_uring=deny_io_uring,
+        unix_only=unix_sockets_only,
+    )
 
 
 def run_tool(
@@ -151,6 +168,7 @@ def run_tool(
     rlimits: Rlimits | None = None,
     deny_extra_domains: Sequence[int] = (),
     deny_io_uring: bool = False,
+    unix_sockets_only: bool = False,
 ) -> None:
     """Run one tool as the tool uid in out/. Raises ToolTimeout / ToolFailed.
 
@@ -159,7 +177,9 @@ def run_tool(
 
     M6 (RT3): `rlimits` overrides the per-run limits (pass either it or `memory_bytes` for
     the address space, not both); `deny_extra_domains` / `deny_io_uring` extend the seccomp
-    filter (`seccomp.deny_network`). The defaults keep the analyzers' behaviour unchanged.
+    filter (`seccomp.deny_network`); `unix_sockets_only` makes it an allowlist (every socket
+    family but AF_UNIX denied, review L5). The defaults keep the analyzers' behaviour
+    unchanged.
     """
     if rlimits is not None and rlimits.as_bytes is not None and memory_bytes is not None:
         raise ValueError("pass the address-space limit once: rlimits.as_bytes or memory_bytes")
@@ -196,7 +216,7 @@ def run_tool(
             start_new_session=True,
             close_fds=True,
             preexec_fn=lambda: _child_setup(  # no locks taken
-                cpu, memory_bytes, rlimits, extra_domains, deny_io_uring
+                cpu, memory_bytes, rlimits, extra_domains, deny_io_uring, unix_sockets_only
             ),
         )
         try:

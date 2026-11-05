@@ -170,6 +170,10 @@ class ReportCitation(UUIDPk, Base):
             ["job_id", "organization_id"],
             ["analysis_jobs.id", "analysis_jobs.organization_id"],
         ),
+        ForeignKeyConstraint(
+            ["ai_citation_id", "organization_id"],
+            ["ai_citations.id", "ai_citations.organization_id"],
+        ),
         UniqueConstraint("version_id", "cite_no"),
         Index(None, "organization_id", "kind", "ref_id"),
         CheckConstraint("cite_no > 0", name="cite_no_positive"),
@@ -189,7 +193,7 @@ class ReportCitation(UUIDPk, Base):
     job_id: Mapped[uuid.UUID | None]
     fields_sha256: Mapped[str] = mapped_column(String(64))
     source: Mapped[str] = mapped_column(String(16))
-    ai_citation_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("ai_citations.id"))
+    ai_citation_id: Mapped[uuid.UUID | None]
 
 
 class ReportRender(UUIDPk, Base):

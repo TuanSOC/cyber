@@ -3,15 +3,21 @@
 The only module allowed to import `app.core.signing.load_signing_keys`
 (`tests/unit/test_report_import_guard.py`): it loads the api's private keys once from
 REPORT_SIGNING_KEYS_FILE and signs canonical manifests with the active kid. Verification
-uses the public keys from the settings.
+uses the public keys from the settings. `check_startup_keys()` runs when the prod api starts:
+the active private key must match its published public key and no key may be the committed
+dev pair.
 """
 
+from collections.abc import Mapping
 from functools import lru_cache
+from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from cyberlab_jobs.report import Manifest, manifest_bytes
+from pydantic import ValidationError
 
 from app.core import signing as core
-from app.core.config import get_settings
+from app.core.config import DEV_REPORT_SIGNING_PUBLIC_KEYS, get_settings
 from app.core.signing import SigningError, load_signing_keys
 
 
@@ -41,7 +47,45 @@ def sign_manifest(manifest_bytes: bytes) -> tuple[str, str]:
 
 
 def verify_manifest(manifest_bytes: bytes, signature_b64: str, kid: str) -> bool:
-    return core.verify(manifest_bytes, signature_b64, kid, public_keys())
+    try:
+        keys = public_keys()
+    except SigningError:
+        return False
+    return core.verify(manifest_bytes, signature_b64, kid, keys)
+
+
+def verify_stored(manifest: Mapping[str, Any], signature_b64: str, kid: str) -> bool:
+    """A stored manifest (`report_versions.manifest`) and its detached signature: the
+    manifest must validate, name the same kid, and its canonical bytes must verify with the
+    public key of that kid. Never raises."""
+    try:
+        parsed = Manifest.model_validate(dict(manifest))
+    except ValidationError:
+        return False
+    if parsed.kid != kid:
+        return False
+    return verify_manifest(manifest_bytes(parsed), signature_b64, kid)
+
+
+def check_startup_keys() -> None:
+    """Prod api startup (M6 review L3): load the private keys now (a missing or unreadable
+    file fails the start, not the first finalize), require the active kid's public half to
+    equal its published key (REPORT_SIGNING_PUBLIC_KEYS), and refuse the committed dev
+    pair: a private key whose public half is a dev public key is the dev private key.
+    Raises `SigningError` with a fixed code; other envs and roles are not checked."""
+    settings = get_settings()
+    if settings.env != "prod" or settings.process_role != "api":
+        return
+    keys = _private_keys()
+    kid = active_kid()
+    private = keys.get(kid)
+    if private is None:
+        raise SigningError("active_kid_not_in_key_file")
+    published = public_keys().get(kid)
+    if published is None or core.public_key_b64(published) != core.public_key_b64(private):
+        raise SigningError("active_key_mismatch")
+    if any(core.public_key_b64(key) in DEV_REPORT_SIGNING_PUBLIC_KEYS for key in keys.values()):
+        raise SigningError("dev_signing_key")
 
 
 def reset_cache() -> None:

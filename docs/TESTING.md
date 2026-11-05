@@ -30,6 +30,7 @@ Test isolation: the API suite uses `cyberlab_test`, Redis db 1 and the `evidence
 - Static pipeline end to end: `apps/api/tests/integration/test_analysis_static_pipeline.py` uploads a plain file (`av`) and a PE (`full`) through the real broker and the real `static-worker-test` container, ingests the result, checks the sample hashes against the evidence and downloads the report. It runs in `pnpm test:api`.
 - API (M4 additions): the threat-intel suites, the enrich worker pipeline through `ti-mock` and the network tests; see [M4 threat intelligence suites](#m4-threat-intelligence-suites).
 - API (M5 additions): the AI analyst suites, the evaluation harness and the analyst network tests; see [M5 AI analyst suites](#m5-ai-analyst-suites).
+- API and report-worker (M6 additions): case management, share policy, reports, signing, renders and the renderer's sandbox; see [M6 reports and case management suites](#m6-reports-and-case-management-suites).
 - Web: unit tests (redirect safety, CSP builder, pcap and static result helpers, TI wording and helpers), typecheck, lint, production build.
 - E2E: Playwright specs, run against dev (`pnpm e2e`) and the prod-like stack over TLS (`pnpm e2e --prod`, part of `verify:prod`), with no console errors:
   - `smoke.spec.ts`: register → create case → upload (hash checked against a locally computed SHA-256) → verify → custody chain → sign out;
@@ -81,6 +82,12 @@ E2E runs against the real stack, not the test database. Each run:
 | IOC enrichment: cache, rate limits, history, source attribution | ✅ M4 (fixtures and `ti-mock`; no live provider) | `test_ti_cache.py`, `test_ti_ratelimit.py`, `test_enrich_worker.py`, `test_ti_pipeline.py`, `ti-wording.test.ts` |
 | SSRF (org-supplied MISP URL) | ✅ M4 | `test_ti_ssrf.py`, `test_ti_ssrf_resolve.py`, `test_ti_misp_worker.py` |
 | IOC enrichment success metric | ⏳ M4 phase 7 (placeholder below) | `apps/api/tests/ti/test_enrichment_metric.py` |
+| Professional reports with evidence citations (§1, §9) | ✅ M6: signed snapshot, `[Cn]` citations re-queried in scope with field hashes, offline verification | `test_report_citations.py`, `test_report_finalize.py`, `test_verify_report_script.py` |
+| Case management: notes, IOC collections, status, ATT&CK, timeline (§10) | ✅ M6 | `test_case_notes.py`, `test_case_ioc_collections.py`, `test_case_status.py`, `test_case_attack.py`, `test_timeline_export.py` |
+| Preserve analysis history (§10) | ✅ M6: append-only note versions, status events, report versions and citations (also for the owner) | `test_case_notes.py::test_version_rows_refuse_update_in_the_db`, `test_case_status.py::test_history_rows_refuse_mutation_by_the_owner_too`, `test_report_finalize.py::test_versions_and_citations_are_append_only` |
+| Renderer isolation (untrusted text) | ✅ M6: seccomp, rlimits, deny-all fetcher, no egress | report-worker `test_sandbox.py`, `test_isolation.py`, `test_render_pdf.py` |
+| "Do not send to AI / TI" and TLP | ✅ M6: API refusals and worker re-checks without provider calls | `test_share_policy.py`, `test_case_policy_api.py` |
+| CSV / Markdown / HTML injection in exports and reports | ✅ M6 | `test_csv_safe.py`, `test_render_md.py`, `test_render_html.py`, `test_template_lint.py` |
 
 ## M2 metrics (synthetic dataset, local test rules)
 
@@ -223,3 +230,41 @@ After changing AI code, recreate the workers (`docker compose --profile test up 
 Recorded 2026-11-05 (`python scripts/ai_eval.py`, offline) over the cases regenerated that day from the real pipelines (`scripts/ai_eval_snapshot.py`: pcap-worker-test and static-worker-test on the synthetic dataset and samples, normalized rows only; `provenance.source = pipeline`). Tokens, cost and latency (p50 / p95) and the per-payload ASR (P1–P8) are only meaningful for a model and have no value until a live or replayed run exists. The HostileProvider "ASR" counts the attacks its scripts attempt, not attacks that got through: the floor violations column (0) is the gate.
 
 CI floors are exact invariants (0 unverified or invalid citations counted as verified, 0 supported claims without a verified citation, 0 supported observed claims on trivial or unanchored quotes, 0 links persisted, 0 cross-org refs accepted, 0 invalid ATT&CK shown, 0 schema-invalid outputs persisted, every canary leak caught, every stripped code point removed). Live floors are reported, never gating: citation accuracy ≥ 0.95, unsupported ≤ 0.05, integrity ASR ≤ 0.05, utility ≥ 0.9. These offline numbers prove the verifier, not a model; the §14 metric has no live value yet.
+
+## M6 reports and case management suites
+
+The API suites run in `pnpm test:api` (api-test, the `reports-test` bucket with its lifecycle rule, the dev signing public key and a per-test key pair from `tests/report_helpers.py: use_signing_keys`). The renderer suites run **inside the report-worker image** (`report-worker-test`, test profile): `scripts/lane-test.sh <lane> --service report-worker-test pytest -q tests/` takes a lane slot from the same lock as api-test (about 1 GB). Shared fixtures: `apps/workers/report/tests/fixtures/{golden,hostile}_snapshot.json` (the hostile one carries `</style>`, `<img src=http://…>`, `url(file:///etc/passwd)`, U+202E, zero-width characters, 64 KiB strings, CSV formula cells and Markdown control sequences).
+
+| Area | Tests |
+|---|---|
+| Contract | `unit/test_report_contract.py` (fixtures round-trip to identical canonical bytes, canonical form, UTC `Z`, floats refused, `BoundedText` truncation and `AnalystText` refusal, caps and totals, every cited number resolves, render units pinned on the golden snapshot, TLP constants, the OASIS STIX markings, manifest bytes, render messages), `unit/test_report_canonical.py`, `unit/test_vis_rules.py` (the committed table is the generated one) |
+| Signing and verification | `unit/test_signing.py` (round trip, wrong kid / flipped byte, bad key files, no key material in errors or reprs, the dev pair), `unit/test_report_import_guard.py` (only `reports/signing.py` loads private keys), `unit/test_verify_report_script.py` (snapshot and PDF verify, tamper, wrong key or kid, manifest of another version, canonical form equals the contract), `integration/test_report_signing.py` |
+| Share policy | `unit/test_share_policy.py` (TLP:RED implies both, reason order, 409 shape); `integration/test_share_policy.py` (resolution through jobs and evidence, other orgs never resolved, AI preview and run refused, the case builder skips excluded evidence with a stored, unrendered count, job enrichment refused, the analyst and enrich workers fail a blocked run without a provider call, manual lookups not checked); `integration/test_case_policy_api.py` (flags through the API, evidence share policy with its role rules, audit and untouched evidence row) |
+| Case management | `integration/test_case_status.py`, `test_case_tlp.py`, `test_case_notes.py`, `test_case_ioc_collections.py`, `test_case_case_iocs.py`, `test_case_ioc_exports.py`, `test_case_attack.py`, `test_case_attack_suggestions.py`, `test_timeline_kinds.py`, `test_timeline_export.py`; `unit/test_csv_safe.py`, `unit/test_stix_export.py` |
+| Reports (API) | `integration/test_report_drafts.py` (revision, TLP rule, archived case, discard, selections in scope, canary-leak runs not selectable, draft limits, viewer read-only), `test_report_snapshot.py` (sections, caps, trusted hashes, defang once, a 20 000-character Vietnamese summary kept whole, AI sections, numbering, preview stores nothing, deterministic build), `test_report_citations.py`, `test_report_cited_by.py`, `test_report_redaction.py` (no internal value survives `external`, one report-level map across AI runs), `test_report_finalize.py` (v1 then v2, append-only, publish failure, refused render, stale edit leaves an orphan, case TLP raised after the draft or during the build, profile rules, render budget and size limit before signing, rate limit), `test_report_storage.py` (exact version with retention, tampered object refused, content needs `evidence.read`) |
+| Renders (API) | `integration/test_report_renders.py` (queue, index, audit, dispatch, presigned scope, dedupe, per-org and global caps, lost publish, permissions, rate limit, audited sandboxed download, tampered artifact refused, `test_end_to_end_pdf` through the real `report-worker-test`), `test_report_render_ingest.py` (token, org from the index, re-hash, typed failures, final renders immutable), `test_report_render_reaper.py`; `integration/test_report_acl.py` (broker user `report` confined) |
+| Renderer (worker image) | `tests/test_sandbox.py` (every socket family but `AF_UNIX` and io_uring denied with `EACCES`, broker and MinIO unreachable from the subprocess, isolated Python, rlimits, OOM / CPU / size limits, kill-by-uid, prebuilt read-only font cache), `tests/test_isolation.py` (only `BROKER_URL`, no app services, TI or AI hosts, no egress or default route, broker ACL), `tests/test_render_pdf.py` (PDF/A-3a, attachments byte for byte, TLP on every page, identical bytes twice, page cap before writing, every fetch refused, no Ghostscript, dates from `finalized_at`), `tests/test_render_html.py`, `tests/test_render_md.py`, `tests/test_template_lint.py`, `tests/test_task.py` (the whole task with typed failures, cleanup, root-owned inputs, the embedded inputs are the signed bytes), `tests/test_skeleton.py`, `tests/test_render_budget.py` (a snapshot at the budget renders inside the sandbox; `REPORT_CALIBRATE=1` for the calibration sweep) |
+| Security | every M6 route in `security/test_idor_routes.py` via `idor_cases_case.py`, `idor_cases_reports.py`, `idor_cases_renders.py`, `idor_cases_attack.py`; every M6 table in `integration/test_rls_coverage.py`; append-only tables in `test_append_only.py` |
+| Web | `lib/reports.test.ts`, `lib/report-format.test.ts`, `lib/case.test.ts`, `lib/notes.test.ts`, `lib/ioc-collections.test.ts`, `lib/case-attack.test.ts`, `lib/tlp.test.ts`,`components/reports/report-builder.test.tsx`, `components/reports/report-view.test.tsx`, `components/notes/notes.test.tsx`, `components/ioc-collections/ioc-parts.test.tsx`, `components/investigations/case-overview.test.tsx`, `components/timeline/timeline.test.tsx`, `components/ai/policy-blocked.test.tsx` |
+
+Run the renderer suite by hand (inside the image; `ruff` and `mypy` are in its dev dependencies):
+
+```bash
+docker compose --profile test run --rm --no-deps report-worker-test pytest -q -p no:cacheprovider tests/
+```
+
+`scripts/verify.mjs` and `pnpm test:workers` do not run the renderer suite yet: phase 9 adds it, with the M6 e2e (case → notes → collection → ATT&CK → report → finalize → PDF download → viewer with a valid signature) and the prod checks of the report-worker (`ENV=prod`, prod image, no signing key).
+
+After changing renderer code, recreate the workers (`docker compose --profile test up -d --force-recreate --no-deps report-worker report-worker-test`); Celery does not hot-reload.
+
+## M6 metric: report quality
+
+Recorded during the build in the report-worker image; phase 9 records the gate run (citation resolution accuracy, render success rate, latency per format, deterministic-render rate, hostile-fixture escapes and the local veraPDF result) in `plans/reports/report-metric-YYMMDD.md` and here.
+
+| Metric | Value |
+|---|---|
+| Render budget calibration (`REPORT_MAX_RENDER_UNITS` 450 000) | worst shape at the budget: 594 MiB peak RSS of the 768 MiB `RLIMIT_AS`, ≤ 214 pages |
+| PDF render latency (golden snapshot) | p50 / p95 3.9 s |
+| Deterministic renders (same image) | byte-identical PDF (`test_render_pdf.py::test_rendering_twice_gives_identical_bytes`, `::test_the_hostile_snapshot_renders_reproducibly`) |
+| Hostile-fixture escapes | 0 (`test_render_html.py::test_hostile_payloads_are_inert_visible_text`, `test_render_md.py::test_the_hostile_document_has_no_links_images_or_html`) |
+| veraPDF PDF/A-3a | local check only, not gating |

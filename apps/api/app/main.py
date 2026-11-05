@@ -23,6 +23,7 @@ from app.modules.ioc_collections.router import router as ioc_collections_router
 from app.modules.notes.router import router as notes_router
 from app.modules.organizations.router import router as orgs_router
 from app.modules.pcap_analysis.router import router as pcap_analysis_router
+from app.modules.reports import signing as report_signing
 from app.modules.reports.router import router as reports_router
 from app.modules.reports.router_keys import router as report_keys_router
 from app.modules.reports.router_renders import router as report_renders_router
@@ -34,6 +35,8 @@ from app.modules.threat_intel.router import router as threat_intel_router
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # Temp spool files left behind by a crash (normal paths always delete theirs).
     sweep_stale_spools(get_settings().upload_tmp_dir)
+    # Prod: the report signing key pair is usable and not the committed dev pair (M6).
+    report_signing.check_startup_keys()
     yield
     await get_redis().aclose()
     await get_engine().dispose()

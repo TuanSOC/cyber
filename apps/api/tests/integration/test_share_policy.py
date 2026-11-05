@@ -24,7 +24,7 @@ from sqlalchemy import select
 from app.core.tenancy import tenant_session
 from app.modules.ai import prompt
 from app.modules.ai.context import builder
-from app.modules.ai.contracts import AiErrorCode
+from app.modules.ai.contracts import AiErrorCode, AiRunStatus
 from app.modules.analysis.models import AnalysisJob
 from app.modules.evidence.models import Evidence
 from app.modules.investigations import policy
@@ -40,10 +40,11 @@ from tests.ai_api_helpers import (
     use_fake_builder,
 )
 from tests.ai_doubles import make_context
+from tests.ai_helpers import seed_job
 from tests.case_helpers import seed_evidence, seed_job_on, set_case_policy, set_evidence_policy
 from tests.factories import Registered, csrf, register
 from tests.integration.seed import Tenant, seed_tenant
-from tests.integration.test_analyst_worker import Scripted, _status, _tenant
+from tests.integration.test_analyst_worker import Scripted, _seed_incident, _status, _tenant
 from tests.integration.test_analyst_worker import broker as broker  # noqa: F401 - fixture
 from tests.integration.test_enrich_worker import World, _world
 from tests.ti_api_helpers import capture_sends, enrich_job, succeeded_job
@@ -243,6 +244,43 @@ async def test_analyst_worker_runs_when_nothing_is_set(broker: Redis) -> None:  
     assert provider.calls == 1
 
 
+async def _job_evidence(t: Tenant, job_id: uuid.UUID) -> uuid.UUID:
+    async with tenant_session(t.org_id, t.owner_id) as s:
+        evidence_id = await s.scalar(
+            select(AnalysisJob.evidence_id).where(AnalysisJob.id == job_id)
+        )
+    assert evidence_id is not None
+    return evidence_id
+
+
+async def test_analyst_worker_rechecks_the_frozen_scope_of_a_case_run(
+    broker: Redis,  # noqa: F811
+) -> None:
+    """A case-wide run re-checks the evidence of its frozen scope, not only the case flags:
+    an evidence exclusion added after the request blocks the reduce call (M6 review M1)."""
+    env, _ = await _tenant(broker, Scripted())
+    jobs = [await seed_job(env.t), await seed_job(env.t)]
+    parent, children = await _seed_incident(env.t, jobs)
+    for child in children:
+        assert await env.run(child) is AiRunStatus.COMPLETED
+    calls = env.provider.calls
+    await set_evidence_policy(env.t, await _job_evidence(env.t, jobs[1]), ai_excluded=True)
+    await env.run(parent)
+    assert await _status(env.t, parent) == ("failed", AiErrorCode.POLICY_BLOCKED.value, "failed")
+    assert env.provider.calls == calls
+
+
+async def test_an_exclusion_outside_the_frozen_scope_does_not_block(
+    broker: Redis,  # noqa: F811
+) -> None:
+    env, _ = await _tenant(broker, Scripted())
+    jobs = [await seed_job(env.t)]
+    parent, (child,) = await _seed_incident(env.t, jobs)
+    assert await env.run(child) is AiRunStatus.COMPLETED
+    await set_evidence_policy(env.t, await seed_evidence(env.t), ai_excluded=True)
+    assert await env.run(parent) is AiRunStatus.COMPLETED
+
+
 # --- the enrich worker re-check -------------------------------------------------------------
 
 
@@ -330,15 +368,3 @@ async def test_case_is_shown_with_its_share_policy() -> None:
     body = response.json()
     assert (body["tlp"], body["ai_excluded"], body["ti_excluded"]) == ("red", False, False)
     assert body["share_policy"] == {"ai_blocked": True, "ti_blocked": True, "reasons": ["tlp_red"]}
-
-
-async def test_m6_update_fields_answer_501_until_phase_2() -> None:
-    reg = await register(org_name="Policy Patch Org")
-    case_id = await _new_case(reg)
-    response = await reg.client.patch(
-        f"/api/v1/orgs/{reg.org_id}/investigations/{case_id}",
-        json={"tlp": "red"},
-        headers=csrf(reg.client),
-    )
-    assert response.status_code == 501, response.text
-    assert response.json()["error"]["code"] == "not_implemented"

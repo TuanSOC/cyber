@@ -294,11 +294,12 @@ async def test_archive_and_archived_case_rules() -> None:
     assert (await reg.client.get(f"{url}/download")).status_code == 200  # still readable
 
     for step in ("closed", "archived"):
-        await reg.client.patch(
+        changed = await reg.client.patch(
             f"/api/v1/orgs/{reg.org_id}/investigations/{case_id}",
-            json={"status": step},
+            json={"status": step, "status_reason": "Status change for the test"},
             headers=csrf(reg.client),
         )
+        assert changed.status_code == 200, changed.text
     blocked = await _upload(reg.client, reg.org_id, case_id, b"late")
     assert (blocked.status_code, blocked.json()["error"]["code"]) == (409, "investigation_archived")
 
@@ -408,11 +409,12 @@ async def test_cannot_archive_evidence_in_archived_case() -> None:
     case_id = await _new_case(reg)
     evidence = (await _upload(reg.client, reg.org_id, case_id, b"abc")).json()
     for step in ("closed", "archived"):
-        await reg.client.patch(
+        changed = await reg.client.patch(
             f"/api/v1/orgs/{reg.org_id}/investigations/{case_id}",
-            json={"status": step},
+            json={"status": step, "status_reason": "Status change for the test"},
             headers=csrf(reg.client),
         )
+        assert changed.status_code == 200, changed.text
     response = await reg.client.post(
         f"/api/v1/orgs/{reg.org_id}/evidence/{evidence['id']}/archive", headers=csrf(reg.client)
     )

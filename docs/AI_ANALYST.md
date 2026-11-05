@@ -170,6 +170,16 @@ These are defenses against the model *following* injected text. Structural contr
 - **Provider retention.** Anthropic API: standard retention and abuse logging apply, no training on API data by default, zero data retention only by the org's own agreement with Anthropic. Covered Models with 30-day retention (Fable / Mythos) are not in the catalog. Gemini: paid tier only (see the gate). Batch and Files APIs are not used.
 - **Retention in CyberLab:** none. Frozen contexts, pseudonym maps, outputs and citations are kept forever (as are investigations, which are archived, never deleted). There is no TLP or "do not send to AI" flag on evidence.
 
+### Share policy (M6)
+
+Cases carry a TLP label and an `ai_excluded` flag, and each evidence item may have its own `ai_excluded` flag; TLP:RED implies the exclusion ([REPORTS.md](REPORTS.md#share-policy-do-not-send-to-ai--ti)).
+
+- `POST /ai/runs` and `POST /ai/context-preview` for an excluded job or case answer `409 policy_blocked` with `reason` (`tlp_red`, `case_ai_excluded`, `evidence_ai_excluded`); the UI shows the reason instead of the Explain / Summarize actions.
+- An incident summary (investigation scope) skips excluded evidence. The count is stored in `context_stats.policy_excluded` and is **not rendered into the prompt**, so the pinned prompt digests and `prompt_version` are unchanged.
+- The analyst-worker re-checks the policy before **every** provider request, `count_tokens` included: a flag set (or a TLP raised to RED) after the request fails the run `failed / policy_blocked` without a call. A call already in flight completes.
+- Notes and status reasons (case-management text) never enter a context; the timeline kinds the builder selects are the evidence-derived ones only.
+- **Reports embed verified outputs only:** an M6 report takes selected completed runs of the case, shows only supported claims and labelled hypotheses with their flags, reverses each run's pseudonyms with its own map, and cites only verified citations ([REPORTS.md](REPORTS.md#ai-content)). "Which outputs and report versions cite this row" is `GET /orgs/{org}/cited-by`.
+
 ## Output contract
 
 `ai/output_schema.py`, schema `ai.v1` (`OUTPUT_SCHEMA_VERSION`), stored per run as `output_schema` together with `prompt_version`, `model` and `served_model`.

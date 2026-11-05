@@ -1,5 +1,5 @@
-"""Analyst note routes (M6). Frozen in phase 1 as `501 not_implemented` stubs with their
-final paths, permissions and models; phase 2 fills the bodies."""
+"""Analyst note routes (M6): paths, permissions and models frozen in phase 1; bodies in
+`notes/service.py`."""
 
 import uuid
 from typing import Annotated
@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.core.rbac import OrgContext, Permission, require
-from app.core.stubs import not_implemented
+from app.modules.notes import service
 from app.modules.notes.schemas import NoteCreate, NoteDetail, NoteOut, NotePage, NoteUpdate
 
 router = APIRouter(prefix="/orgs/{org_id}", tags=["notes"])
@@ -27,7 +27,14 @@ async def list_notes(
 ) -> NotePage:
     """The current version of each note; deleted notes only with `include_deleted`
     (tombstones without body)."""
-    raise not_implemented()
+    return await service.list_notes(
+        ctx,
+        investigation_id,
+        include_deleted=include_deleted,
+        pinned=pinned,
+        cursor=cursor,
+        limit=limit,
+    )
 
 
 @router.post(
@@ -40,13 +47,13 @@ async def create_note(
 ) -> NoteOut:
     """Refs are re-checked in the org and case scope (`422 ref_out_of_scope`); audited
     `note.created` (ids and ref count, never the body)."""
-    raise not_implemented()
+    return await service.create_note(ctx, investigation_id, body, request)
 
 
 @router.get("/notes/{note_id}", response_model=NoteDetail)
 async def get_note(note_id: uuid.UUID, ctx: InvRead) -> NoteDetail:
     """The current version and the full version history."""
-    raise not_implemented()
+    return await service.get_note(ctx, note_id)
 
 
 @router.put("/notes/{note_id}", response_model=NoteOut)
@@ -54,10 +61,10 @@ async def update_note(
     note_id: uuid.UUID, body: NoteUpdate, ctx: InvWrite, request: Request
 ) -> NoteOut:
     """Author or `org.update` only; `409 stale_note` on a wrong `expected_version`."""
-    raise not_implemented()
+    return await service.update_note(ctx, note_id, body, request)
 
 
 @router.delete("/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_note(note_id: uuid.UUID, ctx: InvWrite, request: Request) -> None:
     """Soft delete (the versions stay); author or `org.update` only."""
-    raise not_implemented()
+    await service.delete_note(ctx, note_id, request)

@@ -26,6 +26,8 @@ dev = [
     "redis>=5.2",
     # Tests only: per-page text extraction of rendered PDFs (phase 4).
     "pypdf>=5.0",
+    # Tests only: the Markdown escaper is checked against CommonMark + GFM with linkify.
+    "markdown-it-py[linkify]>=3.0",
 ]
 
 [tool.uv.sources]
@@ -53,5 +55,5 @@ python_version = "3.12"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["celery.*", "kombu.*", "weasyprint.*", "pypdf.*"]
+module = ["celery.*", "kombu.*", "weasyprint.*", "pypdf.*", "markdown_it.*"]
 ignore_missing_imports = true

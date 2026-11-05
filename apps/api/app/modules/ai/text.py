@@ -70,6 +70,31 @@ def _category(cp: int) -> str | None:
     return None
 
 
+# Invisible or blank-looking characters that are not `Cf` and stay in sanitized AI text,
+# but the report "make visible" table (`vis_category`, M6 review L7) marks them: combining
+# grapheme joiner, Hangul fillers, line / paragraph separators, variation selectors
+# (including the supplement).
+VIS_EXTRA_RANGES: tuple[tuple[int, int], ...] = (
+    (0x034F, 0x034F),
+    (0x115F, 0x1160),
+    (0x2028, 0x2029),
+    (0x3164, 0x3164),
+    (0xFE00, 0xFE0F),
+    (0xFFA0, 0xFFA0),
+    (0xE0100, 0xE01EF),
+)
+
+
+def vis_category(cp: int) -> str | None:
+    """The category of `cp` in the materialized vis table (`scripts/gen_vis_rules.py`):
+    `_category`, plus `invisible` for `VIS_EXTRA_RANGES`. Display only: `sanitize` keeps
+    using `_category`, so M5 context text is unchanged."""
+    category = _category(cp)
+    if category is None and any(start <= cp <= end for start, end in VIS_EXTRA_RANGES):
+        return "invisible"
+    return category
+
+
 def sanitize(text: str) -> tuple[str, StripCounts]:
     counts = StripCounts()
     kept: list[str] = []

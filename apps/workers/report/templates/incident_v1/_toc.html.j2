@@ -1,0 +1,9 @@
+{#- Contents: one entry per section that is present (computed by render_html.context). -#}
+<nav class="toc" id="contents" aria-labelledby="contents-title">
+<h2 id="contents-title">Contents</h2>
+<ol>
+{% for entry in toc %}
+<li><a href="#{{ entry.anchor }}">{{ entry.title }}</a></li>
+{% endfor %}
+</ol>
+</nav>

@@ -1,0 +1,36 @@
+{#- Cover: TLP banner with the FIRST definition (RT23), identification, document control. -#}
+<section class="cover" id="cover">
+<div class="tlp-banner {{ s.report.tlp|tlp_class }}">
+<div class="tlp-label">{{ s.report.tlp|tlp_label }}</div>
+<div class="tlp-definition">{{ s.report.tlp|tlp_definition }}</div>
+</div>
+<p class="caseref">{{ s.case.case_ref }}</p>
+<h1>{{ m.t(s.report.title) }}</h1>
+<table class="meta">
+<tbody>
+<tr><th scope="row">Case</th><td>{{ s.case.case_ref }}: {{ m.t(s.case.title) }}</td></tr>
+<tr><th scope="row">Report version</th><td>{{ s.report.version }}</td></tr>
+<tr><th scope="row">Finalized</th><td>{{ s.report.finalized_at|ts }}</td></tr>
+<tr><th scope="row">Snapshot sha256</th><td class="code">{{ sha256 }}</td></tr>
+<tr><th scope="row">Reference</th><td class="docref">{{ footer }}</td></tr>
+<tr><th scope="row">Profile</th><td>{{ s.report.profile.value }}</td></tr>
+<tr><th scope="row">Distribution</th><td>{{ m.o(s.report.distribution) }}</td></tr>
+<tr><th scope="row">Prepared by</th><td>{{ m.t(s.report.generated_by) }}</td></tr>
+<tr><th scope="row">Template</th><td>{{ s.report.template }}</td></tr>
+</tbody>
+</table>
+{% if s.report.change_note %}
+<h2 id="change-note">Change note</h2>
+<p class="prose">{{ m.t(s.report.change_note) }}</p>
+{% endif %}
+<h2 id="document-control">Document control</h2>
+<table>
+<thead><tr><th scope="col" class="w12">Version</th><th scope="col" class="w26">Finalized</th><th scope="col" class="w22">sha256</th><th scope="col">Change note</th></tr></thead>
+<tbody>
+{% for d in s.report.document_control %}
+<tr><td>v{{ d.version }}</td><td>{{ d.finalized_at|ts }}</td><td class="code">{{ d.snapshot_sha256_short }}…</td><td>{{ m.o(d.change_note) }}</td></tr>
+{% endfor %}
+<tr><td>v{{ s.report.version }} (this)</td><td>{{ s.report.finalized_at|ts }}</td><td class="code">{{ sha256|short_sha }}…</td><td>{{ m.o(s.report.change_note) }}</td></tr>
+</tbody>
+</table>
+</section>

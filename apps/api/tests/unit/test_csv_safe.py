@@ -25,6 +25,17 @@ from app.core.csv_safe import CHUNK_ROWS, csv_safe, write_csv
         "－1",
         "＠x",
         "\n=1",
+        # Look-alikes of the formula leads (review L2): small + - = @ and the minus sign.
+        "\ufe62SUM(A1)",
+        "\ufe63 1",
+        "\ufe66 1+1",
+        "\ufe6bx",
+        "\u22121",
+        # Any leading whitespace (`str.isspace`), not only a fixed list.
+        "\u2003=1",
+        "\u2028=1",
+        "\u0085+1",
+        "\x1f=1",
     ],
 )
 def test_formula_cells_are_prefixed(cell: str) -> None:
@@ -54,6 +65,19 @@ def test_rfc4180_quoting_and_crlf() -> None:
     assert raw.endswith(b"\r\n")
     assert b'"a,b","say ""hi""","line\nbreak"\r\n' in raw
     assert _parse(chunks) == [["a,b", 'say "hi"', "line\nbreak"], ["'=1", "ok", ""]]
+
+
+def test_header_comment_with_separators_is_one_quoted_cell() -> None:
+    """User text in the comment (a collection name) cannot add columns or rows (review L1)."""
+    comment = '# TLP:AMBER CASE-00012 IOC collection "a,b"\r\nx,=1 exported'
+    chunks = list(write_csv([["x", "y"]], header_comment=comment))
+    rows = _parse(chunks)
+    assert rows == [['# TLP:AMBER CASE-00012 IOC collection "a,b" x,=1 exported'], ["x", "y"]]
+    assert b"".join(chunks).count(b"\r\n") == 2
+
+
+def test_header_comment_is_formula_safe() -> None:
+    assert _parse(list(write_csv([], header_comment="=cmd")))[0] == ["'=cmd"]
 
 
 def test_header_comment_is_a_single_first_line() -> None:

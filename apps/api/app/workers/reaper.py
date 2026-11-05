@@ -1,13 +1,14 @@
 """Fail jobs whose deadline passed: never started (queue TTL) or ran too long.
 
-Also the threat-intel fallback reaper (`reap_ti_runs`, M4 RT9) and the AI analyst one
-(`reap_ai_runs`, M5).
+Also the threat-intel fallback reaper (`reap_ti_runs`, M4 RT9), the AI analyst one
+(`reap_ai_runs`, M5) and the report renders (`reap_report_renders`, M6).
 """
 
 import logging
+import uuid
 from datetime import timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 
 from app.core.tenancy import tenant_session
 from app.modules.ai import lifecycle as ai_lifecycle
@@ -18,6 +19,9 @@ from app.modules.analysis import lifecycle
 from app.modules.analysis import repository as repo
 from app.modules.analysis.models import ACTIVE, AnalysisJobIndex, AnalysisStatus
 from app.modules.audit import service as audit
+from app.modules.reports import dispatch as render_dispatch
+from app.modules.reports.dispatch import ACTIVE as RENDER_ACTIVE
+from app.modules.reports.models import ReportRender, ReportRenderIndex, ReportVersion
 from app.modules.threat_intel.lifecycle import finalize_run
 from app.modules.threat_intel.models import RUN_ACTIVE, TiRunIndex
 
@@ -175,8 +179,127 @@ async def reap_ai_runs() -> int:
     return reaped
 
 
+# --- Report renders (M6 phase 4) -----------------------------------------------------------
+# A render whose `report.render` publish was lost (broker down, API restart between commit
+# and publish) is re-dispatched once it is older than RENDER_REDISPATCH_AFTER, at most
+# RENDER_MAX_ATTEMPTS times; a render past its deadline fails with `timeout`. The renderer
+# then can no longer change it (ingest refuses final renders).
+RENDER_REDISPATCH_AFTER = timedelta(seconds=60)
+RENDER_MAX_ATTEMPTS = 3
+
+
+async def _fail_render(org_id: uuid.UUID, render_id: uuid.UUID) -> bool:
+    async with tenant_session(org_id, None) as session:
+        render = await session.scalar(
+            select(ReportRender)
+            .where(ReportRender.id == render_id, ReportRender.organization_id == org_id)
+            .with_for_update()
+        )
+        index = await session.get(ReportRenderIndex, render_id, with_for_update=True)
+        # Re-check under the lock: ingest may have finished it meanwhile.
+        if (
+            render is None
+            or index is None
+            or render.status not in RENDER_ACTIVE
+            or index.deadline_at >= lifecycle.now()
+        ):
+            return False
+        version = await session.get(ReportVersion, render.version_id)
+        render.status = "failed"
+        render.error_code = "timeout"
+        render.finished_at = lifecycle.now()
+        index.status = "failed"
+        audit.record(
+            session,
+            action="report.render_failed",
+            org_id=org_id,
+            actor_id=None,
+            target_type="report_render",
+            target_id=render_id,
+            details={
+                "report_id": str(version.report_id) if version else None,
+                "version": version.version if version else None,
+                "format": render.format,
+                "error_code": "timeout",
+                "by": "reaper",
+            },
+        )
+    return True
+
+
+async def _redispatch(org_id: uuid.UUID, render_id: uuid.UUID) -> bool | None:
+    """True: sent; False: the publish failed; None: nothing to do (yet)."""
+    async with tenant_session(org_id, None) as session:
+        render = await session.scalar(
+            select(ReportRender).where(
+                ReportRender.id == render_id, ReportRender.organization_id == org_id
+            )
+        )
+        index = await session.get(ReportRenderIndex, render_id)
+        if (
+            render is None
+            or index is None
+            or render.status != "queued"
+            or index.dispatched_at is not None
+            or render.created_at > lifecycle.now() - RENDER_REDISPATCH_AFTER
+        ):
+            return None
+        version = await session.get(ReportVersion, render.version_id)
+        if version is None:  # pragma: no cover - composite FK
+            return None
+        item = render_dispatch.input_for(render, version, index.deadline_at)
+    return await render_dispatch.publish(item)
+
+
 async def reap_report_renders() -> int:
-    """M6 (frozen entry point; implemented by phase 4): re-dispatch `queued` renders that
-    were never dispatched and fail renders past their deadline with `timeout`. Returns how
-    many it handled; 0 until phase 4."""
-    return 0
+    """Re-dispatch `queued` renders that were never dispatched and fail renders past their
+    deadline with `timeout`. Returns how many it handled."""
+    async with tenant_session(None, None) as session:
+        expired = (
+            await session.execute(
+                select(ReportRenderIndex.render_id, ReportRenderIndex.organization_id)
+                .where(
+                    ReportRenderIndex.status.in_(RENDER_ACTIVE),
+                    ReportRenderIndex.deadline_at < lifecycle.now(),
+                )
+                .order_by(ReportRenderIndex.deadline_at)
+                .limit(BATCH)
+            )
+        ).all()
+        undispatched = (
+            await session.execute(
+                select(ReportRenderIndex.render_id, ReportRenderIndex.organization_id)
+                .where(
+                    ReportRenderIndex.status == "queued",
+                    ReportRenderIndex.dispatched_at.is_(None),
+                    ReportRenderIndex.attempts < RENDER_MAX_ATTEMPTS,
+                    ReportRenderIndex.deadline_at >= lifecycle.now(),
+                )
+                .order_by(ReportRenderIndex.deadline_at)
+                .limit(BATCH)
+            )
+        ).all()
+
+    handled = 0
+    # Org taken from the index row (system data), not from any request or message.
+    for render_id, org_id in expired:
+        handled += await _fail_render(org_id, render_id)
+    for render_id, org_id in undispatched:
+        sent = await _redispatch(org_id, render_id)
+        if sent:
+            handled += 1
+        elif sent is False:
+            # Count the attempt even when the publish failed, so a broken render cannot be
+            # retried forever; `publish` counts the successful ones.
+            async with tenant_session(None, None) as session:
+                await session.execute(
+                    update(ReportRenderIndex)
+                    .where(
+                        ReportRenderIndex.render_id == render_id,
+                        ReportRenderIndex.dispatched_at.is_(None),
+                    )
+                    .values(attempts=ReportRenderIndex.attempts + 1)
+                )
+    if handled:
+        log.info("reaped %d report renders", handled)
+    return handled

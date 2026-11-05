@@ -78,6 +78,7 @@ class IocCollectionItem(UUIDPk, Base):
             ["job_id", "organization_id"],
             ["analysis_jobs.id", "analysis_jobs.organization_id"],
         ),
+        ForeignKeyConstraint(["ioc_id", "organization_id"], ["iocs.id", "iocs.organization_id"]),
         Index(
             "ux_ioc_collection_items_collection_id_ioc_key",
             "collection_id",
@@ -107,7 +108,7 @@ class IocCollectionItem(UUIDPk, Base):
     ioc_key: Mapped[str] = mapped_column(String(64))
     source: Mapped[str] = mapped_column(String(16))
     job_id: Mapped[uuid.UUID | None]
-    ioc_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("iocs.id"))
+    ioc_id: Mapped[uuid.UUID | None]
     note: Mapped[str | None] = mapped_column(Text)
     added_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     added_at: Mapped[datetime] = mapped_column(server_default=func.now())

@@ -137,6 +137,7 @@ export const AI_ERROR_TEXT: Record<string, string> = {
   no_digest: "No per-job digest finished, so no incident summary could be written.",
   not_implemented: "This analysis is not available yet.",
   refused: "The provider declined this request. No retry is made.",
+  policy_blocked: "The case or evidence share policy changed to \"do not send to AI\" before the provider call. Nothing was sent.",
 };
 
 export function aiErrorText(code: string | null | undefined): string {
@@ -156,6 +157,7 @@ const REQUEST_ERROR_TEXT: Record<string, string> = {
   target_not_found: "The finding or alert is not part of this analysis.",
   task_not_applicable: "This task does not apply to this analysis.",
   context_empty: "There is no evidence to analyze.",
+  policy_blocked: "The case or evidence share policy does not allow sending this to AI. Nothing was sent.",
 };
 
 export function aiRequestErrorText(code: string | undefined, fallback: string): string {

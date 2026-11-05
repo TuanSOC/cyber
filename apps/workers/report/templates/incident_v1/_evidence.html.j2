@@ -1,0 +1,54 @@
+{#- Evidence (trusted hashes), chain of custody and analysis jobs with tool versions. -#}
+{% if present.evidence %}
+<section id="evidence">
+<h2>Evidence</h2>
+{{ m.shown(s.evidence) }}
+<table>
+<thead><tr><th scope="col" class="w26">File</th><th scope="col" class="w10">Size</th><th scope="col" class="w40">Hashes</th><th scope="col">Uploaded</th></tr></thead>
+<tbody>
+{% for e in s.evidence.items %}
+<tr>
+<td>{{ m.t(e.filename) }}{{ m.maybe_cite(e.cite_no) }}<br><span class="muted">{{ m.t(e.mime) }}</span>{% if e.description %}<br>{{ m.t(e.description) }}{% endif %}</td>
+<td>{{ e.size_bytes|num }} B</td>
+<td class="code">sha256 {{ e.sha256 }}{% if e.sha1 %}<br>sha1 {{ e.sha1 }}{% endif %}{% if e.md5 %}<br>md5 {{ e.md5 }}{% endif %}<br>verification: {{ e.verification }}{% if e.last_verified_at %} ({{ e.last_verified_at|ts }}){% endif %}</td>
+<td>{{ e.uploaded_at|ts }}<br>{{ m.t(e.uploaded_by) }}<br><span class="muted">{{ e.status }}</span></td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</section>
+{% endif %}
+{% if present.custody %}
+<section id="custody">
+<h2>Chain of custody</h2>
+{{ m.shown(s.custody) }}
+<table>
+<thead><tr><th scope="col" class="w22">When</th><th scope="col" class="w16">Action</th><th scope="col" class="w18">Actor</th><th scope="col" class="w22">Evidence</th><th scope="col">Client</th></tr></thead>
+<tbody>
+{% for c in s.custody.items %}
+<tr><td>{{ c.occurred_at|ts }}</td><td>{{ c.action }}</td><td>{{ m.t(c.actor) }}</td><td class="code">{{ c.evidence_id }}</td><td>{{ m.o(c.ip) }}{% if c.user_agent %}<br><span class="muted">{{ m.t(c.user_agent) }}</span>{% endif %}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</section>
+{% endif %}
+{% if present.jobs %}
+<section id="jobs">
+<h2>Analysis jobs</h2>
+{{ m.shown(s.jobs) }}
+<table>
+<thead><tr><th scope="col" class="w26">Job</th><th scope="col" class="w14">Analyzer</th><th scope="col" class="w12">Status</th><th scope="col" class="w20">Finished</th><th scope="col">Tool versions</th></tr></thead>
+<tbody>
+{% for j in s.jobs.items %}
+<tr>
+<td class="code">{{ j.job_id }}{{ m.maybe_cite(j.cite_no) }}</td>
+<td>{{ j.analyzer }}{% if j.profile %} ({{ j.profile }}){% endif %}</td>
+<td>{{ j.status }}</td>
+<td>{{ j.finished_at|ts }}</td>
+<td class="code">{% for name, value in j.tool_versions|dictsort %}{{ name }} {{ m.t(value) }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</section>
+{% endif %}

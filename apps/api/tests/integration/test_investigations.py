@@ -23,6 +23,10 @@ async def _create(client: AsyncClient, org_id: uuid.UUID, **body: Any) -> dict[s
     return response.json()  # type: ignore[no-any-return]
 
 
+# Closing, reopening and archiving need a reason since M6 (test_case_status covers the rule).
+REASON = "Status change for the test"
+
+
 async def _patch(client: AsyncClient, org_id: uuid.UUID, inv_id: str, **body: Any) -> Any:
     return await client.patch(_url(org_id, f"/{inv_id}"), json=body, headers=csrf(client))
 
@@ -106,8 +110,11 @@ async def test_status_transitions(path: list[str], expected: int) -> None:
     inv = await _create(reg.client, reg.org_id)
     *steps, last = path
     for step in steps:
-        assert (await _patch(reg.client, reg.org_id, inv["id"], status=step)).status_code == 200
-    response = await _patch(reg.client, reg.org_id, inv["id"], status=last)
+        response = await _patch(
+            reg.client, reg.org_id, inv["id"], status=step, status_reason=REASON
+        )
+        assert response.status_code == 200, response.text
+    response = await _patch(reg.client, reg.org_id, inv["id"], status=last, status_reason=REASON)
     assert response.status_code == expected
     if expected == 409:
         assert response.json()["error"]["code"] == "invalid_transition"
@@ -117,7 +124,10 @@ async def test_archived_is_read_only() -> None:
     reg = await register()
     inv = await _create(reg.client, reg.org_id)
     for step in ("closed", "archived"):
-        assert (await _patch(reg.client, reg.org_id, inv["id"], status=step)).status_code == 200
+        response = await _patch(
+            reg.client, reg.org_id, inv["id"], status=step, status_reason=REASON
+        )
+        assert response.status_code == 200, response.text
     archived = (await reg.client.get(_url(reg.org_id, f"/{inv['id']}"))).json()
     assert archived["allowed_transitions"] == []
     response = await _patch(reg.client, reg.org_id, inv["id"], title="New title")

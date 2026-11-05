@@ -428,6 +428,8 @@ class AiCitation(UUIDPk, Base):
         CheckConstraint("quote IS NULL OR char_length(quote) <= 256", name="quote_length"),
         Index(None, "output_id"),
         Index(None, "organization_id", "kind", "ref_id"),
+        # Parent of the same-org composite FK of `report_citations` (0013, M6 review L4).
+        UniqueConstraint("id", "organization_id"),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))

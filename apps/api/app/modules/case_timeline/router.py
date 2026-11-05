@@ -1,5 +1,5 @@
-"""Case timeline export (M6). Frozen in phase 1 as a `501 not_implemented` stub with its
-final path, permission and parameters; phase 5 fills the body."""
+"""Case timeline export (M6). Path, permission and parameters frozen in phase 1; the body
+is phase 5's (`service.py`)."""
 
 import uuid
 from datetime import datetime
@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
 from app.core.rbac import OrgContext, Permission, require
-from app.core.stubs import not_implemented
+from app.modules.case_timeline import service
 from app.modules.case_timeline.schemas import TimelineExportFormat
 from app.modules.investigations.timeline import TimelineKind
 
@@ -34,4 +34,6 @@ async def export_timeline(
 ) -> StreamingResponse:
     """A streamed, TLP-headed, formula-safe attachment of at most TIMELINE_EXPORT_MAX_ROWS
     entries (nosniff, no-store, CSP sandbox); audited `investigation.timeline_exported`."""
-    raise not_implemented()
+    return await service.export(
+        ctx, investigation_id, request, fmt=format, kinds=kinds, since=from_, until=to
+    )

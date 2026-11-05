@@ -1,5 +1,5 @@
 """M6 phase 1 plumbing: `tenant_session(snapshot_read=True)` (RT14), the unauthenticated
-public signing keys route (RT22), the frozen 501 stubs, the timeline's `kinds` parameter
+public signing keys route (RT22), the landed M6 routes, the timeline's `kinds` parameter
 (RT10), the report-worker ACL user and the `report.rendered` ingest stub."""
 
 import base64
@@ -111,7 +111,7 @@ async def test_signing_keys_route_is_rate_limited(monkeypatch: pytest.MonkeyPatc
     assert codes == [200, 200, 429]
 
 
-# --- frozen stubs ---------------------------------------------------------------------------
+# --- M6 routes ---------------------------------------------------------------------------
 
 
 def _org_routes() -> set[tuple[str, str]]:
@@ -124,26 +124,24 @@ def _org_routes() -> set[tuple[str, str]]:
     }
 
 
-def test_every_m6_route_is_in_the_schema() -> None:
-    """The 40 frozen M6 org routes (the IDOR modules' PENDING_ROUTES until their phase)."""
-    frozen = frozenset().union(
-        idor_cases_case.PENDING_ROUTES,
-        idor_cases_reports.PENDING_ROUTES,
-        idor_cases_renders.PENDING_ROUTES,
-        idor_cases_attack.PENDING_ROUTES,
-    )
-    assert len(frozen) == 40
-    assert frozen <= _org_routes(), sorted(frozen - _org_routes())
+M6_MODULES = (idor_cases_case, idor_cases_reports, idor_cases_renders, idor_cases_attack)
 
 
-async def test_stubs_check_membership_first_then_answer_501() -> None:
+def test_every_m6_route_is_in_the_schema_and_none_is_pending() -> None:
+    """The 40 routes frozen in phase 1 all landed: every IDOR module's `PENDING_ROUTES` is
+    empty (phase 9) and each module's cases cover live routes only."""
+    assert all(not module.PENDING_ROUTES for module in M6_MODULES)
+    routes = frozenset().union(*(module.ROUTE_CASES for module in M6_MODULES))
+    assert len(routes) >= 40
+    assert routes <= _org_routes(), sorted(routes - _org_routes())
+
+
+async def test_m6_routes_check_membership_first_and_validate_bodies() -> None:
     owner = await register(org_name="Stub Org")
     outsider = await register(org_name="Outsider Org")
     url = f"/api/v1/orgs/{owner.org_id}/reports"
     assert (await outsider.client.get(url)).status_code == 404
-    response = await owner.client.get(url)
-    assert response.status_code == 501
-    assert response.json()["error"]["code"] == "not_implemented"
+    assert (await owner.client.get(url)).status_code == 200
     created = await owner.client.post(
         f"/api/v1/orgs/{owner.org_id}/investigations",
         json={"title": "Stub case", "severity": "low"},
@@ -155,13 +153,13 @@ async def test_stubs_check_membership_first_then_answer_501() -> None:
         json={"body": "hello"},
         headers=csrf(owner.client),
     )
-    assert notes.status_code == 501
+    assert notes.status_code == 201, notes.text
     bad = await owner.client.post(
         f"/api/v1/orgs/{owner.org_id}/investigations/{case_id}/notes",
         json={"body": "x" * 20_001},
         headers=csrf(owner.client),
     )
-    assert bad.status_code == 422  # the frozen schema validates before the stub
+    assert bad.status_code == 422
 
 
 async def test_timeline_accepts_kinds_and_case_events_have_no_evidence() -> None:

@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { ContextSummary } from "@/components/ai/context-summary";
+import { PolicyBlocked } from "@/components/ai/policy-blocked";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,9 +17,13 @@ import {
 } from "@/components/ui/dialog";
 import { type AiRunCreate, aiRequestErrorText, contextJson, taskLabel } from "@/lib/ai";
 import { ApiError, errorMessage } from "@/lib/api";
+import { isPolicyBlocked, policyBlockedReason, shareReasonText } from "@/lib/case";
 import { useContextPreview } from "@/lib/use-ai";
 
 export function aiErrorMessage(error: unknown): string {
+  // A policy_blocked answer names the specific reason (TLP:RED, case or evidence exclusion).
+  const reason = policyBlockedReason(error);
+  if (reason) return `${shareReasonText(reason)} Nothing was sent to the AI provider.`;
   return aiRequestErrorText(error instanceof ApiError ? error.code : undefined, errorMessage(error));
 }
 
@@ -76,6 +81,15 @@ export function ContextPreviewDialog({
           </p>
         )}
         {preview.isError && (
+          <PolicyBlocked
+            orgId={orgId}
+            error={preview.error}
+            investigationId={request.investigation_id}
+            jobId={request.job_id}
+            what="This AI analysis"
+          />
+        )}
+        {preview.isError && !isPolicyBlocked(preview.error) && (
           <p className="text-sm text-destructive" role="alert">
             {aiErrorMessage(preview.error)}
           </p>

@@ -22,7 +22,7 @@ flowchart LR
 ```
 
 - **One origin.** The gateway serves both the app and `/api`, so session cookies are first-party and `SameSite=Strict`.
-- **Networks.** `web` cannot reach `api` directly; only the gateway (and data services) share the api's network. uvicorn trusts `X-Forwarded-For` from its peers, which is safe only because of this isolation. Since M4 `backend` is `internal` (no egress); only the enrich-worker and (M5) the analyst-worker have a route out ([Networks](#networks-m4-m5)).
+- **Networks.** `web` cannot reach `api` directly; only the gateway (and data services) share the api's network. uvicorn trusts `X-Forwarded-For` from its peers, which is safe only because of this isolation. Since M4 `backend` is `internal` (no egress); only the enrich-worker and (M5) the analyst-worker have a route out ([Networks](#networks-m4-m5-m6)).
 - **Gateway duties.** 1 MiB body cap everywhere except the evidence upload route; early 413 on oversize `Content-Length` (JSON error envelope); security headers; TLS + HSTS in prod.
 - **CSP (M3).** The upstreams own it. The web app sets a per-request nonce policy on HTML (`apps/web/proxy.ts`, `lib/csp.ts`): `script-src 'self' 'nonce-…' 'strict-dynamic'`, no `'unsafe-inline'` for scripts; styles keep `'unsafe-inline'` (Radix/sonner inline styles). The root layout awaits `connection()`, so every page renders dynamically with a fresh nonce. API downloads send `CSP: sandbox`. Caddy's `csp_fallback` (`infra/caddy/common.caddy`) adds `default-src 'none'` only to responses that carry no CSP.
 
@@ -36,8 +36,10 @@ apps/api/app/
     auth/            register, login, sessions (refresh rotation, logout), events (auth_events)
     users/           identity (models + repository only; `/auth/me` serves the profile)
     organizations/   orgs (service.py), memberships (members.py), storage quota (storage.py)
-    investigations/  cases, case numbers, status lifecycle
-    evidence/        uploads.py, locking.py, transfer.py (download/verify), service.py (custody, archive)
+    investigations/  cases, case numbers, status lifecycle (M6: reasons + history, TLP), merged
+                     timeline, policy.py (the TLP / share-policy resolver, M6)
+    evidence/        uploads.py, locking.py, transfer.py (download/verify), service.py (custody, archive),
+                     share_policy.py (M6: per-evidence "do not send to AI / TI" flags)
     audit/           audit writer + read API
     analysis/        analysis jobs: request (manual / auto on upload), dispatch per analyzer, lifecycle
     pcap_analysis/   pcap.v1 validation, ingest into tenant tables, read API (also findings / IOCs of every analyzer)
@@ -51,7 +53,16 @@ apps/api/app/
                      allowlists, pseudonymization, reduce), prompt + prompts/, verify,
                      postprocess, budget, ratelimit, lifecycle, providers/ + http (analyst
                      worker only), runs / providers / settings API
-  workers/     celery app, ingest + reaper tasks (trusted side of the analysis pipeline);
+    notes/           (M6) analyst notes with append-only versions, typed refs re-checked in scope
+    ioc_collections/ (M6) case IOC collections, normalization (M4 normalizer), case-wide IOCs,
+                     CSV / JSON / STIX 2.1 exports
+    case_attack/     (M6) analyst ATT&CK mappings, suggestions (capa, findings, verified AI), matrix
+    case_timeline/   (M6) timeline export (CSV / JSON, formula-safe, TLP-headed)
+    reports/         (M6) drafts, snapshot builder + sections, citations, cited-by, redaction,
+                     signing wrapper (the only importer of the private-key loader), storage,
+                     render dispatch, render ingest, public signing keys
+  workers/     celery app, ingest + reaper tasks (trusted side of the analysis pipeline; M6:
+               `report.rendered` ingest and the render reaper);
                enrich_app / enrich_tasks / enrich (M4: the internet-facing enrich worker);
                analyst_app / analyst_tasks / analyst (M5: the internet-facing AI analyst worker)
   scripts/     dump_openapi (contracts), reconcile_orphans (report-only)
@@ -202,7 +213,7 @@ flowchart LR
 - **Import guard.** Adapters, the registry, the HTTP client and `unseal` may only be imported from `app/workers/enrich*.py` (AST test).
 - **Lifecycle shared with ingest.** `threat_intel/lifecycle.py` finalizes runs for the worker and for the ingest reaper's fallback (runs 10 min past their deadline with no live lease).
 
-### Networks (M4, M5)
+### Networks (M4, M5, M6)
 
 | Network | Internal | Members | Why |
 |---|---|---|---|
@@ -210,9 +221,9 @@ flowchart LR
 | `backend` | **yes** since M4 | postgres, redis, redis-broker, minio, minio-init, migrate, api, ingest-worker, ingest-beat, gateway, api-test | no service here has a route out; the API cannot reach the internet even if compromised |
 | `enrich` | yes | postgres, redis-broker, enrich-worker(-test), analyst-worker(-test) | the trusted internet-facing workers' way to their data, and nothing else (no app Redis, MinIO, API or gateway) |
 | `egress` | no | enrich-worker(-test), analyst-worker(-test), ti-mock, ai-mock | the only route out |
-| `analysis` | yes | pcap-worker(-test), static-worker(-test), redis-broker, minio | unchanged |
+| `analysis` | yes | pcap-worker(-test), static-worker(-test), report-worker(-test) (M6), redis-broker, minio | the untrusted parsers and the renderer: the broker and presigned MinIO URLs only |
 
-Runtime egress per service and the operational consequences (no MinIO console port, `UV_NO_SYNC`): [DEPLOYMENT.md](DEPLOYMENT.md#networks-and-egress-m4).
+Runtime egress per service and the operational consequences (no MinIO console port, `UV_NO_SYNC`): [DEPLOYMENT.md](DEPLOYMENT.md#networks-and-egress-m4-m5-m6).
 
 - **Web:** org settings → Integrations (`/o/{org}/settings/integrations`: provider cards, write-only keys, terms acknowledgement, limits, excluded suffixes), Threat Intel (`/o/{org}/intel`: manual lookup with a normalization report, recent runs) and the IOC history (`/o/{org}/intel/ioc`). IOC tabs of pcap and static jobs get an "Enrich IOCs" button and attributed chips (`GET …/iocs?include=enrichment`); ATT&CK ids on capabilities and findings show names and tactics with the MITRE notice.
 
@@ -255,3 +266,34 @@ flowchart LR
 - **Lifecycle shared with ingest.** `ai/lifecycle.py` changes run statuses for the worker and for the ingest reaper's fallback (`reap_ai_runs`: runs 10 min past their deadline with no live lease).
 - **New server reads** (also used by M6): `GET /orgs/{org}/analyses?investigation_id=&latest_per_evidence=`, the merged case timeline `GET /orgs/{org}/investigations/{inv}/timeline`, and `ref=` filters on the pcap and static result lists, so citation chips deep-link to exactly the cited row.
 - **Web** (phases 8–9; wording finalized in phase 11): an AI Analyst tab on pcap and malware job pages, a per-row "Explain" drawer on findings and alerts, an incident card on the investigation page, the AI runs list at `/o/{org}/ai-analyst`, and AI provider and privacy cards on the Integrations page. Run views show the context preview, truncation and pseudonymization banners, model, prompt version, tokens and cost, typed statuses, neutral confidence badges, an "AI-generated, verify before acting" banner and citation chips; model text is rendered as plain text only.
+
+## Reports and case management (M6)
+
+Signed, evidence-cited investigation reports, rendered by an isolated worker, plus notes, IOC collections, status history, TLP and the share policy. Details: [REPORTS.md](REPORTS.md).
+
+```mermaid
+flowchart LR
+  B[Browser] --> G[gateway]
+  G --> A[API<br/>snapshot builder, redaction,<br/>Ed25519 signing]
+  A -->|put snapshot, retention| M[(MinIO<br/>reports bucket, object lock)]
+  A -->|send_task report.render| RB[(redis-broker)]
+  RB -->|queue report| RW[report-worker<br/>UNTRUSTED, WeasyPrint,<br/>sandboxed render subprocess]
+  RW -->|presigned GET snapshot / POST artifact| M
+  RW -->|report.rendered| RB
+  RB -->|queue ingest| IW[ingest-worker<br/>trusted: token, re-hash, retention]
+  IW --> P[(PostgreSQL)]
+  IW --> M
+  A --> P
+  subgraph analysis [analysis network: internal, no egress]
+    RW
+  end
+```
+
+- **Case management** lives in the API only (`notes`, `ioc_collections`, `case_attack`, `case_timeline`, and `investigations` for TLP, status reasons and the status history). Every write is audited in its transaction; exports are streamed attachments.
+- **Share policy:** `investigations/policy.py: load_policy` resolves TLP:RED and the case and evidence flags. It is called at the service choke points of the M4 and M5 modules (AI run and preview, the case context builder, job-scope enrichment) and again by the analyst-worker before every provider request and the enrich-worker before each slice.
+- **Finalize** (the API, in the requester's session; RT14): (1) one `REPEATABLE READ READ ONLY` transaction builds the snapshot, redacts it and checks the size and the render budget; (2) outside any transaction the API signs the manifest and puts the snapshot into the object-locked `reports` bucket with a per-object retention; (3) one short write transaction re-checks the revision and the TLP rule, writes the version, citations, the PDF render and the audit row, then publishes `report.render`.
+- **report-worker** (`apps/workers/report`, own image; analyzer-class): `analysis` network only, env `BROKER_URL` only (broker user `report`), root Celery process with the analyzers' capabilities, prefork with one task per child. It downloads the snapshot through a presigned GET, checks its sha256, and runs WeasyPrint in a uid-10004 subprocess (its own tool uid, not the static worker's 10003) with seccomp (AF_UNIX sockets only, no io_uring), rlimits, an empty environment and a deny-all URL fetcher. It uploads one artifact through a presigned POST and answers `report.rendered`.
+- **Trusted ingest:** `reports/render_ingest.py` takes the org from `report_render_index`, checks the per-render token, re-hashes the stored object (never parses it), sets its retention and marks the render `succeeded`. `workers/reaper.py: reap_report_renders` fails renders past their deadline and re-dispatches lost publishes.
+- **Reads:** the viewer gets the verified snapshot JSON (`GET …/versions/{v}/content`) and renders it as React text; renderer HTML is never shown in the app. Downloads are streamed by the API from the exact object version, re-hashed, audited, as sandboxed attachments.
+- **Signing keys:** the private key file is a compose secret of the api role only; public keys are published unauthenticated at `GET /api/v1/report-signing-keys` for offline verification (`scripts/verify_report.py`).
+- **Web:** the case workspace (`/o/{org}/investigations/{id}`) gains Notes, IOCs (case IOCs and collections), ATT&CK, Timeline (kinds filter, export) and Reports tabs, the TLP badge and card, the share-policy card, the status control with reasons and history; evidence pages get the evidence share policy. Reports: the org list (`/o/{org}/reports`), the builder (`/o/{org}/reports/{id}`: sections, selections, preview with the render budget, finalize dialog with the acknowledgements and change note) and the version viewer (`/o/{org}/reports/{id}/v/{n}`: TLP banners, integrity strip, renders and downloads).

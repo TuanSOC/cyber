@@ -1,0 +1,339 @@
+/* CyberLab report stylesheet (M6, incident_v1): trusted and constant.
+
+   Read once at import and passed to WeasyPrint as CSS(string=...) with the deny-all fetcher,
+   and inlined verbatim into the HTML artifact. No resource references of any kind (RT16):
+   fonts are family names resolved by fontconfig (the bundled Noto set). Severity and TLP
+   map to the fixed classes below; nothing from the data ever becomes a class or a style.
+
+   The TLP label and the document reference reach the page margin boxes through
+   `string-set` on cover elements; each TLP has a named page for its margin colours. */
+
+@page {
+  size: A4;
+  margin: 24mm 16mm 22mm 16mm;
+  @top-left {
+    content: string(caseref);
+    font-family: "Noto Sans", sans-serif;
+    font-size: 8pt;
+    color: #444444;
+  }
+  @top-right {
+    content: string(tlp);
+    font-family: "Noto Sans", sans-serif;
+    font-size: 12pt;
+    font-weight: bold;
+    background: #000000;
+    color: #ffffff;
+    padding: 1mm 3mm;
+  }
+  @bottom-left {
+    content: string(docref);
+    font-family: "Noto Sans Mono", monospace;
+    font-size: 7.5pt;
+    color: #444444;
+  }
+  @bottom-center {
+    content: "Page " counter(page) " of " counter(pages);
+    font-family: "Noto Sans", sans-serif;
+    font-size: 8pt;
+    color: #444444;
+  }
+  @bottom-right {
+    content: string(tlp);
+    font-family: "Noto Sans", sans-serif;
+    font-size: 12pt;
+    font-weight: bold;
+    background: #000000;
+    color: #ffffff;
+    padding: 1mm 3mm;
+  }
+}
+
+@page tlp-green {
+  @top-right { color: #33ff00; }
+  @bottom-right { color: #33ff00; }
+}
+@page tlp-amber {
+  @top-right { color: #ffc000; }
+  @bottom-right { color: #ffc000; }
+}
+@page tlp-amber-strict {
+  @top-right { color: #ffc000; }
+  @bottom-right { color: #ffc000; }
+}
+@page tlp-red {
+  @top-right { color: #ff2b2b; }
+  @bottom-right { color: #ff2b2b; }
+}
+
+main.tlp-clear { page: tlp-clear; }
+main.tlp-green { page: tlp-green; }
+main.tlp-amber { page: tlp-amber; }
+main.tlp-amber-strict { page: tlp-amber-strict; }
+main.tlp-red { page: tlp-red; }
+
+html {
+  font-family: "Noto Sans", sans-serif;
+  font-size: 9.5pt;
+  line-height: 1.35;
+  color: #111111;
+  background: #ffffff;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  display: block;
+  max-width: 190mm;
+  margin: 0 auto;
+}
+
+h1 {
+  font-size: 20pt;
+  margin: 6mm 0 4mm 0;
+  overflow-wrap: anywhere;
+}
+
+h2 {
+  font-size: 14pt;
+  margin: 8mm 0 3mm 0;
+  padding-bottom: 1mm;
+  border-bottom: 0.6pt solid #888888;
+  break-after: avoid;
+}
+
+h3 {
+  font-size: 11pt;
+  margin: 5mm 0 2mm 0;
+  break-after: avoid;
+  overflow-wrap: anywhere;
+}
+
+p {
+  margin: 0 0 2mm 0;
+}
+
+code,
+.code {
+  font-family: "Noto Sans Mono", monospace;
+  font-size: 8pt;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.prose {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.muted {
+  color: #555555;
+}
+
+.shown {
+  color: #555555;
+  font-style: italic;
+}
+
+/* --- cover ------------------------------------------------------------------------------ */
+
+.cover {
+  break-after: page;
+}
+
+.tlp-banner {
+  background: #000000;
+  color: #ffffff;
+  padding: 3mm 4mm;
+  margin: 0 0 6mm 0;
+}
+
+.tlp-banner .tlp-label {
+  font-size: 16pt;
+  font-weight: bold;
+  string-set: tlp content();
+}
+
+.tlp-banner .tlp-definition {
+  font-size: 9pt;
+  margin-top: 1mm;
+}
+
+.tlp-banner.tlp-clear .tlp-label { color: #ffffff; }
+.tlp-banner.tlp-green .tlp-label { color: #33ff00; }
+.tlp-banner.tlp-amber .tlp-label { color: #ffc000; }
+.tlp-banner.tlp-amber-strict .tlp-label { color: #ffc000; }
+.tlp-banner.tlp-red .tlp-label { color: #ff2b2b; }
+
+.caseref {
+  string-set: caseref content();
+}
+
+.docref {
+  font-family: "Noto Sans Mono", monospace;
+  string-set: docref content();
+}
+
+/* --- tables ----------------------------------------------------------------------------- */
+
+table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  margin: 0 0 4mm 0;
+  font-size: 8pt;
+}
+
+th,
+td {
+  border: 0.4pt solid #bbbbbb;
+  padding: 1mm 1.5mm;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+th {
+  background: #eeeeee;
+  font-weight: bold;
+}
+
+thead {
+  display: table-header-group;
+}
+
+tr {
+  break-inside: avoid;
+}
+
+table.meta th {
+  width: 32%;
+}
+
+/* Column widths (fixed table layout). */
+.w6 { width: 6%; }
+.w8 { width: 8%; }
+.w10 { width: 10%; }
+.w12 { width: 12%; }
+.w14 { width: 14%; }
+.w16 { width: 16%; }
+.w18 { width: 18%; }
+.w20 { width: 20%; }
+.w22 { width: 22%; }
+.w26 { width: 26%; }
+.w30 { width: 30%; }
+.w40 { width: 40%; }
+
+td.ioc,
+td.code {
+  font-family: "Noto Sans Mono", monospace;
+  font-size: 7.5pt;
+  word-break: break-all;
+}
+
+/* --- severity (fixed classes) ------------------------------------------------------------ */
+
+.sev {
+  font-weight: bold;
+}
+.sev-critical { color: #8b0000; }
+.sev-high { color: #c0392b; }
+.sev-medium { color: #b26a00; }
+.sev-low { color: #2e6da4; }
+.sev-info { color: #555555; }
+.sev-unknown { color: #555555; }
+
+/* --- contents ---------------------------------------------------------------------------- */
+
+nav.toc {
+  break-after: page;
+}
+
+nav.toc ol {
+  padding-left: 6mm;
+}
+
+nav.toc a {
+  color: #111111;
+  text-decoration: none;
+}
+
+nav.toc a::after {
+  content: leader(".") target-counter(attr(href), page);
+}
+
+/* --- citations, AI and notes -------------------------------------------------------------- */
+
+sup.cite {
+  font-size: 6.5pt;
+  line-height: 0;
+}
+
+sup.cite a {
+  color: #1f4e79;
+  text-decoration: none;
+}
+
+.ai-box {
+  border: 1pt solid #b26a00;
+  background: #fff8e6;
+  padding: 2mm 3mm;
+  margin: 0 0 3mm 0;
+}
+
+.ai-box .ai-warning {
+  font-weight: bold;
+}
+
+.claim {
+  margin: 0 0 2mm 0;
+  overflow-wrap: anywhere;
+}
+
+.flag {
+  font-family: "Noto Sans Mono", monospace;
+  font-size: 7pt;
+  border: 0.5pt solid #b26a00;
+  padding: 0 1mm;
+  color: #7a4a00;
+}
+
+.note {
+  border-left: 1.5pt solid #888888;
+  padding: 0 0 0 3mm;
+  margin: 0 0 4mm 0;
+}
+
+/* The appendix uses blocks, not tables: WeasyPrint's block layout stays linear in the
+   number of citations (RT1). */
+.citation {
+  margin: 0 0 3mm 0;
+  padding: 0 0 2mm 0;
+  border-bottom: 0.4pt solid #dddddd;
+  font-size: 8pt;
+}
+
+.citation .cite-head {
+  font-weight: bold;
+}
+
+.citation .field {
+  margin: 0 0 0 4mm;
+  overflow-wrap: anywhere;
+}
+
+.citation .field .name {
+  font-weight: bold;
+}
+
+.citation .field .value {
+  font-family: "Noto Sans Mono", monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.citation a {
+  color: #1f4e79;
+}

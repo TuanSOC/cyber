@@ -50,7 +50,7 @@ Base path `/api/v1`, served through the gateway. Interactive docs (dev only): `/
 | GET / POST | `/orgs/{org_id}/investigations?q&status&severity&sort` | `investigation.read` / `investigation.write` |
 | GET / PATCH | `/orgs/{org_id}/investigations/{investigation_id}` | `investigation.read` / `investigation.write` |
 | GET | `/orgs/{org_id}/investigations/{investigation_id}/evidence` | `evidence.read` |
-| GET | `/orgs/{org_id}/investigations/{investigation_id}/timeline?cursor&limit` (merged case timeline, M5) | `evidence.read` |
+| GET | `/orgs/{org_id}/investigations/{investigation_id}/timeline?cursor&limit&kinds` (merged case timeline, M5; M6 adds the `note` and `status` kinds, without `evidence_id`) | `evidence.read` |
 | POST | `/orgs/{org_id}/investigations/{investigation_id}/evidence?filename&description` | `evidence.write` |
 | GET | `/orgs/{org_id}/evidence/{evidence_id}` · `/download` · `/custody` | `evidence.read` |
 | POST | `/orgs/{org_id}/evidence/{evidence_id}/verify` · `/archive` | `evidence.write` |
@@ -83,8 +83,34 @@ Base path `/api/v1`, served through the gateway. Interactive docs (dev only): `/
 | GET | `/orgs/{org_id}/ai/runs?job_id&investigation_id&task&status&target_id` · `/orgs/{org_id}/ai/runs/{run_id}?pseudonyms=keep` · `/orgs/{org_id}/ai/runs/{run_id}/context` | `evidence.read` |
 | GET | `/orgs/{org_id}/ai/runs/{run_id}?pseudonyms=reverse` (original internal values; the default for these roles) | `evidence.write` (viewers: 403; their default is `keep`) |
 | GET | `/orgs/{org_id}/ai/runs/{run_id}/context?reveal=true` (adds the pseudonym map; audited `ai.context_revealed`) | `evidence.write` (viewers: 403) |
+| GET | `/report-signing-keys` (public Ed25519 keys `{keys: [{kid, alg, public_key, active}]}`, M6) | **public** (60 / min per IP, `Cache-Control: public, max-age=300`) |
+| PATCH | `/orgs/{org_id}/investigations/{investigation_id}` with `tlp`, `ai_excluded`, `ti_excluded`, `status_reason`, `acknowledge_tlp_downgrade` (M6) | `investigation.write`; lowering the TLP also `org.update`; turning a flag off also `integrations.manage` |
+| GET | `/orgs/{org_id}/investigations/{investigation_id}/status-events?cursor&limit` (newest first, M6) | `investigation.read` |
+| GET | `/orgs/{org_id}/investigations/{investigation_id}/timeline/export?format=csv\|json&kinds&from&to` | `evidence.read` (audited) |
+| GET / PUT | `/orgs/{org_id}/evidence/{evidence_id}/share-policy` `{ai_excluded, ti_excluded}` | `evidence.read` / `evidence.write`; turning a flag off also `integrations.manage` |
+| GET / POST | `/orgs/{org_id}/investigations/{investigation_id}/notes?include_deleted&pinned&cursor&limit` | `investigation.read` / `investigation.write` |
+| GET / PUT / DELETE | `/orgs/{org_id}/notes/{note_id}` (detail with every version; `PUT {expected_version, body?, refs?, pinned?, include_in_reports?}`; delete → 204) | `investigation.read` / `investigation.write` (edit and delete: the author or `org.update`) |
+| GET / POST | `/orgs/{org_id}/investigations/{investigation_id}/ioc-collections` | `investigation.read` / `investigation.write` |
+| GET / PATCH | `/orgs/{org_id}/ioc-collections/{collection_id}` (name, description, archived) | `investigation.read` / `investigation.write` |
+| GET / POST | `/orgs/{org_id}/ioc-collections/{collection_id}/items?type&q&include_removed&cursor` (add ≤ 500 per call) | `investigation.read` / `investigation.write` |
+| DELETE | `/orgs/{org_id}/ioc-collections/{collection_id}/items/{item_id}` (soft remove) → 204 | `investigation.write` |
+| GET | `/orgs/{org_id}/ioc-collections/{collection_id}/export?format=csv\|json\|stix21&defang=true` | `evidence.read`; `defang=false` needs `evidence.write` (audited) |
+| GET | `/orgs/{org_id}/investigations/{investigation_id}/iocs?type&q&cursor&limit` (case-wide, deduplicated by `ioc_key`) | `evidence.read` |
+| GET / POST | `/orgs/{org_id}/investigations/{investigation_id}/attack` (mappings + tactic matrix / create) · `GET …/attack/suggestions` | `investigation.read` / `investigation.write` |
+| PATCH | `/orgs/{org_id}/attack-mappings/{mapping_id}` (status, rationale, sources) | `investigation.write` |
+| GET | `/orgs/{org_id}/reports?investigation_id&status&cursor` · `/orgs/{org_id}/investigations/{investigation_id}/reports` | `investigation.read` |
+| POST | `/orgs/{org_id}/investigations/{investigation_id}/reports` `{title, tlp?, profile?, acknowledge_tlp_downgrade?}` → 201 | `investigation.write` |
+| GET / PATCH | `/orgs/{org_id}/reports/{report_id}` (PATCH `{revision, title?, tlp?, profile?, distribution?, draft?, acknowledge_tlp_downgrade?}`) | `investigation.read` / `investigation.write` |
+| POST | `/orgs/{org_id}/reports/{report_id}/discard` · `/preview` (30 / 10 min) · `/finalize` `{revision, change_note?, acknowledge_tlp_downgrade?, acknowledge_external_review?}` → 201 (10 / 10 min) | `investigation.write` |
+| GET | `/orgs/{org_id}/reports/{report_id}/versions` · `/versions/{version}` (manifest, `signature_valid`, `snapshot_ok`, counts, renders) · `/versions/{version}/signature` (`.sig.json` attachment) | `investigation.read` |
+| GET | `/orgs/{org_id}/reports/{report_id}/versions/{version}/content` (the verified snapshot JSON for the viewer, `no-store`, not audited per view) | `evidence.read` |
+| GET | `/orgs/{org_id}/reports/{report_id}/versions/{version}/snapshot` (canonical JSON attachment, audited `report.snapshot_downloaded`) | `evidence.read` |
+| POST | `/orgs/{org_id}/reports/{report_id}/versions/{version}/renders` `{format: pdf\|html\|md}` → 202 queued, 200 deduplicated (20 / 10 min) | `investigation.write` |
+| GET | `/orgs/{org_id}/reports/{report_id}/versions/{version}/renders` · `/orgs/{org_id}/report-renders/{render_id}` | `investigation.read` |
+| GET | `/orgs/{org_id}/report-renders/{render_id}/download` (streamed, re-hashed, audited `report.downloaded`) | `evidence.read` |
+| GET | `/orgs/{org_id}/cited-by?kind&ref_id&job_id` (AI outputs and report versions citing one row) | `evidence.read` |
 
-Roles: **viewer** = all `*.read`; **analyst** = viewer + `investigation.write`, `evidence.write`; **admin** = analyst + `org.update`, `members.manage`, `audit.read`, `integrations.manage` (M4; also AI providers and settings, M5); **owner** = admin + owner-role management. So viewers read AI runs (pseudonyms kept), pseudonymized contexts and settings, analysts request runs, see outputs with original names and reveal pseudonym maps, and only admins and owners store AI keys or turn AI on.
+Roles: **viewer** = all `*.read`; **analyst** = viewer + `investigation.write`, `evidence.write`; **admin** = analyst + `org.update`, `members.manage`, `audit.read`, `integrations.manage` (M4; also AI providers and settings, M5); **owner** = admin + owner-role management. So viewers read AI runs (pseudonyms kept), pseudonymized contexts and settings, analysts request runs, see outputs with original names and reveal pseudonym maps, and only admins and owners store AI keys or turn AI on. In M6, viewers read notes, collections, mappings and report versions and download reports and exports (defanged only); analysts write notes, collections, mappings and report drafts, finalize and request renders, and turn share-policy exclusions on; only admins and owners lower a TLP below the case or turn an exclusion off. RBAC stays org-wide: there is no per-case access control.
 
 ## Evidence upload
 
@@ -177,3 +203,22 @@ Details: [AI_ANALYST.md](AI_ANALYST.md). The API builds and freezes the context 
 Run `error_code` values (`deadline`, `ai_disabled`, `provider_disabled`, `provider_unavailable`, `auth_failed`, `spend_limit`, `overloaded`, `max_tokens`, `invalid_output`, `context_too_large`, `budget_exhausted`, `provider_error`, `canary_leak`, `no_digest`, `refused`) are listed with their causes in [AI_ANALYST.md](AI_ANALYST.md#run-lifecycle).
 
 **Investigation reads (M5).** `GET …/analyses?investigation_id=` lists only that case's jobs (404 for an unknown or foreign case); `latest_per_evidence=true` keeps the newest job per evidence and kind of run. `GET …/investigations/{id}/timeline` merges custody events, job lifecycle, the latest pcap job's timeline and alerts per evidence, and static findings at analysis time (`ts_source: analysis_time`), sorted by (ts, kind, ref_id), cursor-paged.
+
+## Reports and case management (M6)
+
+Details: [REPORTS.md](REPORTS.md). Cursor-paged lists (`next_cursor`) replace limit/offset on the M6 routes; a bad cursor is `400 invalid_cursor`.
+
+- **Downloads and exports** (report renders, snapshots, signatures, IOC collection and timeline exports) are attachments with an RFC 5987 file name, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store` and `Content-Security-Policy: sandbox` (HTML renders: `sandbox; default-src 'none'; style-src 'unsafe-inline'`). Report downloads are streamed by the API from the exact stored object version and re-hashed while streaming; the file name carries the case, version and TLP (`CASE-00012_v2_TLP-AMBER.pdf`). No presigned URL is ever returned to a client. IOC exports add `X-Export-Count`, `X-Export-Skipped`, `X-Export-Defanged` and `X-Export-Redacted: false` (exports are never redacted).
+- **Share policy refusals** on the M4 / M5 routes: `POST /ai/runs`, `POST /ai/context-preview` and `POST …/analyses/{job_id}/enrichments` answer `409 policy_blocked` with `reason` (`tlp_red`, `case_ai_excluded`, `case_ti_excluded`, `evidence_ai_excluded`, `evidence_ti_excluded`). The case and evidence reads carry the effective `share_policy` (`ai_blocked`, `ti_blocked`, reasons). A policy changed after a request is caught by the workers without a provider call: an AI run fails `failed / policy_blocked`, a TI run ends with its pending items abandoned as `policy_blocked`. `POST /ti/lookups` is not checked (no case scope).
+- **Render error codes** on `report_renders.error_code`: `snapshot_mismatch`, `fetch_blocked`, `timeout`, `oom`, `too_large`, `too_many_pages`, `invalid_output`, `renderer_error` ([REPORTS.md](REPORTS.md#isolation)).
+- **Audit:** `investigation.updated` (status, TLP and flags; never the status reason), `evidence.share_policy_updated`, `investigation.timeline_exported`, `note.created` / `note.edited` / `note.deleted`, `ioc_collection.created` / `.updated` / `.items_added` / `.item_removed` / `.exported`, `case_attack.mapped` / `.updated`, `report.created`, `report.updated`, `report.discarded`, `report.finalized`, `report.tlp_downgraded`, `report.snapshot_downloaded`, `report.render_requested`, `report.rendered` / `report.render_failed` (ingest, no actor), `report.downloaded`, `report.integrity_failed`. Details carry ids, counts, formats and TLP, never note bodies or reasons.
+
+| Status | Code |
+|---|---|
+| 400 | `invalid_cursor` |
+| 403 | `forbidden` (also turning a share-policy flag off without `integrations.manage`, editing another author's note without `org.update`, `defang=false` without `evidence.write`), `tlp_downgrade_forbidden` (a case or report TLP below the case without `org.update`) |
+| 404 | `not_found` (also another org's or case's note, collection, mapping, report, version or render) |
+| 409 | `investigation_archived`, `invalid_transition`, `stale_note`, `note_deleted`, `collection_exists`, `collection_archived`, `mapping_exists`, `stale_draft` (with the current `revision`), `report_discarded`, `report_has_versions`, `tlp_below_case` (a report TLP below the case without `acknowledge_tlp_downgrade`, also at finalize, RT7), `render_busy` (2 active renders per org / 4 per renderer replica), `render_not_ready`, `integrity_failed` (stored snapshot or rendition differs from its recorded hash), `policy_blocked` |
+| 422 | `validation_error` (also a draft over 1 MiB, an analyst section over 20 000 characters), `status_reason_required`, `tlp_downgrade_not_acknowledged` (case TLP), `ref_out_of_scope` (note refs, mapping sources), `too_many_items` (10 000 active items per collection), `invalid_technique` (unknown, revoked or deprecated), `selection_out_of_scope`, `distribution_required` (TLP:RED, AMBER+STRICT or `external`), `external_review_required`, `report_too_large` (snapshot > 8 MiB), `report_too_large_to_render` (render units > `REPORT_MAX_RENDER_UNITS`; with `render_units`, `section_units`, `section_counts`), `invalid_range` (timeline export) |
+| 429 | `rate_limited` (preview, finalize, renders, the public signing keys) |
+| 503 | `signing_unavailable` (no usable signing key at finalize) |

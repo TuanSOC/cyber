@@ -1,0 +1,332 @@
+{
+  "ai": {
+    "items": [
+      {
+        "claims": [
+          {
+            "cite_nos": [
+              2,
+              3
+            ],
+            "claim_id": "O1",
+            "confidence": null,
+            "flags": [],
+            "section": "observed",
+            "status": "supported",
+            "text": "The host contacted evil[.]example every 60 seconds."
+          },
+          {
+            "cite_nos": [],
+            "claim_id": "H1",
+            "confidence": "low",
+            "flags": [
+              "verdict_language"
+            ],
+            "section": "hypotheses",
+            "status": "hypothesis",
+            "text": "This may be a commodity loader."
+          }
+        ],
+        "context_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "disclaimer": "AI-generated interpretation: observations to verify, not verdicts.",
+        "finished_at": "2026-11-05T11:00:00.000000Z",
+        "model": "mock-1",
+        "omitted_flagged": 0,
+        "omitted_unsupported": 1,
+        "overall_confidence": "medium",
+        "prompt_version": "p1",
+        "provider": "mock",
+        "run_id": "77777777-7777-4777-8777-777777777777",
+        "task": "summarize_pcap"
+      }
+    ],
+    "total": 1
+  },
+  "alerts": {
+    "items": [
+      {
+        "alert_id": "99999999-9999-4999-8999-999999999992",
+        "cite_no": null,
+        "count": 12,
+        "dst": "203.0.113.7",
+        "job_id": "55555555-5555-4555-8555-555555555555",
+        "proto": "tcp",
+        "severity": "high",
+        "signature": "ET MALWARE Generic beacon",
+        "signature_id": 2000001,
+        "src": "10.0.0.5",
+        "ts": "2026-11-04T07:10:00.000000Z"
+      }
+    ],
+    "total": 1
+  },
+  "attack": {
+    "items": [
+      {
+        "cite_nos": [
+          2
+        ],
+        "name": "Web Protocols",
+        "rationale": "The beacon uses HTTPS on port 443.",
+        "revoked": false,
+        "status": "confirmed",
+        "tactics": [
+          "command-and-control"
+        ],
+        "technique_id": "T1071.001"
+      }
+    ],
+    "total": 1
+  },
+  "case": {
+    "case_ref": "CASE-00012",
+    "created_at": "2026-11-04T08:00:00.000000Z",
+    "description": "Periodic HTTPS to a rare domain from one workstation.",
+    "investigation_id": "33333333-3333-4333-8333-333333333333",
+    "severity": "high",
+    "status": "in_progress",
+    "status_history": [
+      {
+        "actor": "Alice Analyst",
+        "from_status": "open",
+        "occurred_at": "2026-11-04T09:00:00.000000Z",
+        "reason": null,
+        "to_status": "in_progress"
+      }
+    ],
+    "status_history_total": 1,
+    "title": "Suspicious beaconing",
+    "tlp": "amber"
+  },
+  "citations": {
+    "dropped_out_of_scope": 0,
+    "items": [
+      {
+        "cite_no": 1,
+        "fields": {
+          "filename": "capture.pcap",
+          "sha256": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f"
+        },
+        "fields_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "job_id": null,
+        "kind": "evidence",
+        "path": "/o/11111111-1111-4111-8111-111111111111/evidence/44444444-4444-4444-8444-444444444444",
+        "ref_id": "44444444-4444-4444-8444-444444444444",
+        "ref_table": "evidence",
+        "source": "selection"
+      },
+      {
+        "cite_no": 2,
+        "fields": {
+          "severity": "high",
+          "title": "Periodic beacon to evil[.]example"
+        },
+        "fields_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "job_id": "55555555-5555-4555-8555-555555555555",
+        "kind": "finding",
+        "path": "/o/11111111-1111-4111-8111-111111111111/pcap/55555555-5555-4555-8555-555555555555?tab=findings&ref=99999999-9999-4999-8999-999999999991",
+        "ref_id": "99999999-9999-4999-8999-999999999991",
+        "ref_table": "analysis_findings",
+        "source": "ai"
+      },
+      {
+        "cite_no": 3,
+        "fields": {
+          "title": "First beacon"
+        },
+        "fields_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "job_id": "55555555-5555-4555-8555-555555555555",
+        "kind": "timeline",
+        "path": "/o/11111111-1111-4111-8111-111111111111/pcap/55555555-5555-4555-8555-555555555555?tab=timeline&ref=99999999-9999-4999-8999-999999999993",
+        "ref_id": "99999999-9999-4999-8999-999999999993",
+        "ref_table": "analysis_timeline",
+        "source": "ai"
+      }
+    ],
+    "total": 3
+  },
+  "custody": {
+    "items": [
+      {
+        "action": "uploaded",
+        "actor": "Alice Analyst",
+        "evidence_id": "44444444-4444-4444-8444-444444444444",
+        "ip": "10.0.0.5",
+        "occurred_at": "2026-11-04T08:05:00.000000Z",
+        "user_agent": "Mozilla/5.0"
+      }
+    ],
+    "total": 1
+  },
+  "evidence": {
+    "items": [
+      {
+        "cite_no": 1,
+        "description": "",
+        "evidence_id": "44444444-4444-4444-8444-444444444444",
+        "filename": "capture.pcap",
+        "last_verified_at": "2026-11-05T08:00:00.000000Z",
+        "md5": "22222222222222222222222222222222",
+        "mime": "application/vnd.tcpdump.pcap",
+        "sha1": "1111111111111111111111111111111111111111",
+        "sha256": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "size_bytes": 1048576,
+        "status": "active",
+        "uploaded_at": "2026-11-04T08:05:00.000000Z",
+        "uploaded_by": "Alice Analyst",
+        "verification": "ok"
+      }
+    ],
+    "total": 1
+  },
+  "findings": {
+    "items": [
+      {
+        "attack_ids": [
+          "T1071.001"
+        ],
+        "category": "beaconing",
+        "cite_no": 2,
+        "description": "60 s interval, low jitter, 120 connections.",
+        "finding_id": "99999999-9999-4999-8999-999999999991",
+        "job_id": "55555555-5555-4555-8555-555555555555",
+        "score": "0.92",
+        "severity": "high",
+        "title": "Periodic beacon to evil[.]example"
+      }
+    ],
+    "total": 1
+  },
+  "iocs": {
+    "items": [
+      {
+        "cite_no": null,
+        "collections": [
+          "Blocklist"
+        ],
+        "count_jobs": 1,
+        "first_seen": "2026-11-04T07:00:00.000000Z",
+        "ioc_key": "abababababababababababababababababababababababababababababababab",
+        "ioc_type": "domain",
+        "job_ids": [
+          "55555555-5555-4555-8555-555555555555"
+        ],
+        "last_seen": "2026-11-04T08:59:00.000000Z",
+        "value": "evil[.]example"
+      }
+    ],
+    "total": 1
+  },
+  "jobs": {
+    "items": [
+      {
+        "analyzer": "pcap",
+        "cite_no": null,
+        "created_at": "2026-11-04T08:06:00.000000Z",
+        "evidence_id": "44444444-4444-4444-8444-444444444444",
+        "finished_at": "2026-11-04T08:09:00.000000Z",
+        "job_id": "55555555-5555-4555-8555-555555555555",
+        "profile": null,
+        "status": "succeeded",
+        "tool_versions": {
+          "suricata": "7.0.8",
+          "zeek": "7.0.5"
+        }
+      }
+    ],
+    "total": 1
+  },
+  "notes": {
+    "items": [
+      {
+        "author": "Alice Analyst",
+        "body": "The interval matches the known loader.",
+        "cite_nos": [
+          2
+        ],
+        "created_at": "2026-11-04T10:00:00.000000Z",
+        "note_id": "88888888-8888-4888-8888-888888888888",
+        "updated_at": "2026-11-04T10:00:00.000000Z",
+        "version": 1
+      }
+    ],
+    "total": 1
+  },
+  "report": {
+    "base_url": "https://cyberlab.example.org",
+    "change_note": "Added the static analysis of the dropper.",
+    "distribution": "SOC team and IT management",
+    "document_control": [
+      {
+        "change_note": "Initial report.",
+        "finalized_at": "2026-11-05T17:30:00.000000Z",
+        "snapshot_sha256_short": "0123456789ab",
+        "version": 1
+      }
+    ],
+    "finalized_at": "2026-11-06T09:00:00.000000Z",
+    "generated_by": "Alice Analyst",
+    "profile": "internal",
+    "report_id": "22222222-2222-4222-8222-222222222222",
+    "template": "incident_v1",
+    "title": "Beaconing from FIN workstation",
+    "tlp": "amber",
+    "version": 2
+  },
+  "schema_version": "cyberlab.report.v1",
+  "sections": {
+    "actions_taken": "Host isolated.",
+    "executive_summary": "A workstation beaconed to evil[.]example every 60 seconds.",
+    "impact": "No data exfiltration observed.",
+    "lessons_learned": "Attachment filtering missed the sample.",
+    "methodology": "PCAP analysis (Zeek, Suricata) and static analysis (capa, YARA).",
+    "recommendations": "Block the domain; reimage the host.",
+    "root_cause": "A user ran an attachment.",
+    "scope": "One capture (2 hours) and one executable."
+  },
+  "ti": {
+    "items": [
+      {
+        "cite_no": null,
+        "fetched_at": "2026-11-05T10:00:00.000000Z",
+        "found": true,
+        "ioc_key": "abababababababababababababababababababababababababababababababab",
+        "provider": "mock",
+        "score": "87",
+        "score_scale": "0-100",
+        "status": "ok",
+        "summary": "Reported by 3 sources (attributed to the provider)."
+      }
+    ],
+    "total": 1
+  },
+  "timeline": {
+    "items": [
+      {
+        "cite_no": 3,
+        "evidence_id": "44444444-4444-4444-8444-444444444444",
+        "job_id": "55555555-5555-4555-8555-555555555555",
+        "kind": "capture_event",
+        "ref_id": "99999999-9999-4999-8999-999999999993",
+        "ref_kind": "timeline",
+        "severity": "high",
+        "title": "First beacon",
+        "ts": "2026-11-04T07:00:00.000000Z",
+        "ts_source": "capture"
+      },
+      {
+        "cite_no": null,
+        "evidence_id": null,
+        "job_id": null,
+        "kind": "status",
+        "ref_id": "00000000-0000-0000-0000-00000000004d",
+        "ref_kind": "status",
+        "severity": null,
+        "title": "open -> in_progress",
+        "ts": "2026-11-04T09:00:00.000000Z",
+        "ts_source": "recorded"
+      }
+    ],
+    "total": 2
+  }
+}

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.pagination import PageParams
 from app.modules.evidence.models import Evidence, EvidenceCustodyEvent, EvidenceHash
-from app.modules.investigations.models import Investigation
+from app.modules.investigations.models import EvidenceSharePolicy, Investigation
 from app.modules.users.models import User
 
 
@@ -15,6 +15,9 @@ class EvidenceRow:
     evidence: Evidence
     uploaded_by_name: str
     hashes: dict[str, str]
+    # M6: the evidence's share-policy flags (no `evidence_share_policies` row = both off).
+    ai_excluded: bool = False
+    ti_excluded: bool = False
 
 
 async def get_investigation(
@@ -44,6 +47,20 @@ async def _hashes(
     return out
 
 
+async def _flags(
+    session: AsyncSession, org_id: uuid.UUID, evidence_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, tuple[bool, bool]]:
+    if not evidence_ids:
+        return {}
+    p = EvidenceSharePolicy
+    rows = await session.execute(
+        select(p.evidence_id, p.ai_excluded, p.ti_excluded).where(
+            p.organization_id == org_id, p.evidence_id.in_(evidence_ids)
+        )
+    )
+    return {evidence_id: (ai, ti) for evidence_id, ai, ti in rows.all()}
+
+
 async def list_for_investigation(
     session: AsyncSession, org_id: uuid.UUID, investigation_id: uuid.UUID, page: PageParams
 ) -> tuple[list[EvidenceRow], int]:
@@ -58,8 +75,12 @@ async def list_for_investigation(
         .offset(page.offset)
     )
     rows = (await session.execute(stmt)).all()
-    hashes = await _hashes(session, [e.id for e, _ in rows])
-    return [EvidenceRow(e, name, hashes[e.id]) for e, name in rows], total
+    ids = [e.id for e, _ in rows]
+    hashes = await _hashes(session, ids)
+    flags = await _flags(session, org_id, ids)
+    return [
+        EvidenceRow(e, name, hashes[e.id], *flags.get(e.id, (False, False))) for e, name in rows
+    ], total
 
 
 async def get_row(
@@ -76,7 +97,34 @@ async def get_row(
     if row is None:
         return None
     evidence, name = row
-    return EvidenceRow(evidence, name, (await _hashes(session, [evidence.id]))[evidence.id])
+    hashes = (await _hashes(session, [evidence.id]))[evidence.id]
+    flags = (await _flags(session, org_id, [evidence.id])).get(evidence.id, (False, False))
+    return EvidenceRow(evidence, name, hashes, *flags)
+
+
+async def lock_evidence_for_policy(
+    session: AsyncSession, org_id: uuid.UUID, evidence_id: uuid.UUID
+) -> Evidence | None:
+    """FOR NO KEY UPDATE on the evidence row (never updated here): serializes share-policy
+    writes of one evidence without blocking inserts that reference it (KEY SHARE)."""
+    stmt = (
+        select(Evidence)
+        .where(Evidence.id == evidence_id, Evidence.organization_id == org_id)
+        .with_for_update(key_share=True)
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def get_share_policy(
+    session: AsyncSession, org_id: uuid.UUID, evidence_id: uuid.UUID, *, fresh: bool = False
+) -> EvidenceSharePolicy | None:
+    stmt = select(EvidenceSharePolicy).where(
+        EvidenceSharePolicy.organization_id == org_id,
+        EvidenceSharePolicy.evidence_id == evidence_id,
+    )
+    if fresh:
+        stmt = stmt.execution_options(populate_existing=True)
+    return await session.scalar(stmt)
 
 
 async def list_custody(

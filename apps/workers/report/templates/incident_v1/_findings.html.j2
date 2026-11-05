@@ -1,0 +1,41 @@
+{#- Findings and alerts selected for the report. -#}
+{% if present.findings %}
+<section id="findings">
+<h2>Findings</h2>
+{{ m.shown(s.findings) }}
+<table>
+<thead><tr><th scope="col" class="w12">Severity</th><th scope="col">Finding</th><th scope="col" class="w14">Category</th><th scope="col" class="w14">ATT&amp;CK</th><th scope="col" class="w8">Score</th></tr></thead>
+<tbody>
+{% for f in s.findings.items %}
+<tr>
+<td>{{ m.sev(f.severity) }}</td>
+<td><strong>{{ m.t(f.title) }}</strong>{{ m.maybe_cite(f.cite_no) }}{% if f.description %}<br>{{ m.t(f.description) }}{% endif %}</td>
+<td>{{ m.o(f.category) }}</td>
+<td>{{ f.attack_ids|join(", ") or "—" }}</td>
+<td>{{ m.o(f.score) }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</section>
+{% endif %}
+{% if present.alerts %}
+<section id="alerts">
+<h2>Alerts</h2>
+{{ m.shown(s.alerts) }}
+<table>
+<thead><tr><th scope="col" class="w12">Severity</th><th scope="col">Signature</th><th scope="col" class="w18">When</th><th scope="col" class="w26">Source / destination</th><th scope="col" class="w8">Count</th></tr></thead>
+<tbody>
+{% for a in s.alerts.items %}
+<tr>
+<td>{{ m.sev(a.severity) }}</td>
+<td>{{ m.t(a.signature) }}{{ m.maybe_cite(a.cite_no) }}{% if a.signature_id is not none %}<br><span class="muted">sid {{ a.signature_id }}</span>{% endif %}</td>
+<td>{{ a.ts|ts }}</td>
+<td class="code">{{ m.o(a.src) }} → {{ m.o(a.dst) }}{% if a.proto %}<br>{{ a.proto }}{% endif %}</td>
+<td>{{ a.count|num }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</section>
+{% endif %}

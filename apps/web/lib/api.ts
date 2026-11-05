@@ -3,18 +3,47 @@ import createClient from "openapi-fetch";
 
 import { readCsrfToken } from "@/lib/csrf";
 
-export type ApiErrorBody = { error: { code: string; message: string; details?: unknown } };
+export type ApiErrorBody = {
+  error: { code: string; message: string; details?: unknown; [field: string]: unknown };
+};
+
+const NO_EXTRA: Readonly<Record<string, unknown>> = Object.freeze({});
 
 export class ApiError extends Error {
+  /**
+   * The other fields of the error body (`reason` of a `409 policy_blocked`, `section_units` of
+   * a report error...), without `code`, `message` and `details`. Data only, never rendered raw.
+   */
+  readonly extra: Readonly<Record<string, unknown>>;
+
   constructor(
     readonly status: number,
     readonly code: string,
     message: string,
     readonly details?: unknown,
     readonly retryAfterSeconds?: number,
+    extra?: Readonly<Record<string, unknown>>,
   ) {
     super(message);
+    this.extra = extra ?? NO_EXTRA;
   }
+
+  /** A string field of the error body (e.g. `reason`), at most `maxLength` characters; else null. */
+  extraString(field: string, maxLength = 64): string | null {
+    const value = Object.hasOwn(this.extra, field) ? this.extra[field] : undefined;
+    return typeof value === "string" && value.length > 0 && value.length <= maxLength ? value : null;
+  }
+}
+
+/** The fields of an error body's `error` object other than code / message / details. */
+export function errorBodyExtra(body: unknown): Readonly<Record<string, unknown>> {
+  const error = (body as { error?: unknown } | null | undefined)?.error;
+  if (!error || typeof error !== "object" || Array.isArray(error)) return NO_EXTRA;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(error)) {
+    if (key !== "code" && key !== "message" && key !== "details") out[key] = value;
+  }
+  return Object.keys(out).length ? out : NO_EXTRA;
 }
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -125,6 +154,7 @@ export function unwrap<T>(result: { data?: T; error?: unknown; response: Respons
     body?.error?.message ?? `Request failed (${result.response.status})`,
     body?.error?.details,
     Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+    errorBodyExtra(body),
   );
 }
 

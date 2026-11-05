@@ -89,6 +89,7 @@ from app.modules.ai.contracts import (
     ProviderResult,
     ProviderUsage,
     RunMetrics,
+    RunScope,
     ValidationFailed,
     VerifiedOutput,
     VerifyOutcome,
@@ -1006,25 +1007,33 @@ class _Work:
                 return counted
         return fallback
 
-    async def _policy_blocked(self) -> bool:
+    async def _policy_blocked(self, scope: RunScope) -> bool:
         """M6 (RT20): the case / evidence share policy as it is now (one short transaction).
-        A job-scope run (a `job_digest` child too) checks its job's evidence and case, an
-        investigation-scope run its case. A flag set after the request fails the run
-        `policy_blocked` without a provider call; a call already in flight completes (the
-        documented residual)."""
+        A job-scope run (a `job_digest` child too) checks its job's evidence and case. An
+        investigation-scope run checks its case **and** the run's frozen scope: the jobs and
+        evidence whose rows are in the context, so an evidence exclusion added after the
+        request blocks it too. A flag set after the request fails the run `policy_blocked`
+        without a provider call; a call already in flight completes (the documented
+        residual)."""
         st = self.st
         async with tenant_session(self.org_id, None) as s:
             if st.job_id is not None:
                 found = await share_policy.load_policy(s, self.org_id, job_ids=(st.job_id,))
             elif st.investigation_id is not None:
                 found = await share_policy.load_policy(
-                    s, self.org_id, investigation_id=st.investigation_id
+                    s,
+                    self.org_id,
+                    investigation_id=st.investigation_id,
+                    job_ids=scope.job_ids,
+                    evidence_ids=scope.evidence_ids,
                 )
             else:
                 return False
-        if found.ai_blocked:
-            log.info("ai run %s: blocked by the share policy (%s)", self.run_id, found.ai_reason)
-        return found.ai_blocked
+        blocked = found.ai_blocked or not found.excluded_evidence_ids.isdisjoint(scope.evidence_ids)
+        if blocked:
+            reason = found.ai_reason or share_policy.EVIDENCE_AI_EXCLUDED
+            log.info("ai run %s: blocked by the share policy (%s)", self.run_id, reason)
+        return blocked
 
     async def _refund_call(self) -> int | None:
         """Undo `_count_call` for an unbilled rate-limit / overload answer. None when the
@@ -1092,7 +1101,7 @@ class _Work:
         )
         # M6 (RT20): the share policy is re-checked before every provider request,
         # `count_tokens` included (it sends the content too).
-        if await self._policy_blocked():
+        if await self._policy_blocked(ctx.scope):
             return await self._finish(AiRunStatus.FAILED, AiErrorCode.POLICY_BLOCKED)
         estimate = await self._estimate(provider, request, ctx)
         if estimate + max_output > st.run_token_cap:
@@ -1126,7 +1135,7 @@ class _Work:
             log.warning("ai run %s: budget unavailable; waiting", self.run_id)
             return await self._wait(BROKER_RETRY_S)
 
-        if self.st.provider == AiProviderName.ANTHROPIC and await self._policy_blocked():
+        if self.st.provider == AiProviderName.ANTHROPIC and await self._policy_blocked(ctx.scope):
             # count_tokens took a round trip: check once more right before the call.
             await self._settle(reservation, 0)
             return await self._finish(AiRunStatus.FAILED, AiErrorCode.POLICY_BLOCKED)

@@ -4,6 +4,7 @@ files, reprs without key material, and the committed dev pair."""
 import base64
 import json
 import uuid
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -12,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
 from cyberlab_jobs.report import TLP, Manifest, Profile, manifest_bytes
 
-from app.core.config import DEV_REPORT_SIGNING_PUBLIC_KEYS
+from app.core.config import DEV_REPORT_SIGNING_PUBLIC_KEYS, Settings, get_settings
 from app.core.signing import (
     SigningError,
     load_public_keys,
@@ -21,6 +22,7 @@ from app.core.signing import (
     sign,
     verify,
 )
+from app.modules.reports import signing as report_signing
 
 REPO = Path(__file__).resolve().parents[4]
 
@@ -139,3 +141,99 @@ def test_the_committed_dev_pair_matches_its_public_key() -> None:
     loaded = load_signing_keys(dev)
     assert set(loaded) == {"dev-report-1"}
     assert {public_key_b64(loaded["dev-report-1"])} == set(DEV_REPORT_SIGNING_PUBLIC_KEYS)
+
+
+# --- prod api startup check (review L3) ---------------------------------------------------
+
+
+@pytest.fixture
+def prod_api(
+    monkeypatch: pytest.MonkeyPatch, keys: tuple[Path, Ed25519PrivateKey]
+) -> Iterator[tuple[Settings, Ed25519PrivateKey]]:
+    path, private = keys
+    settings = get_settings()
+    monkeypatch.setattr(settings, "env", "prod")
+    monkeypatch.setattr(settings, "process_role", "api")
+    monkeypatch.setattr(settings, "report_signing_keys_file", str(path))
+    monkeypatch.setattr(settings, "report_signing_active_kid", "k1")
+    monkeypatch.setattr(settings, "report_signing_public_keys", {"k1": public_key_b64(private)})
+    report_signing.reset_cache()
+    yield settings, private
+    report_signing.reset_cache()
+
+
+def test_startup_check_accepts_a_matching_pair(
+    prod_api: tuple[Settings, Ed25519PrivateKey],
+) -> None:
+    report_signing.check_startup_keys()
+
+
+def test_startup_check_refuses_a_published_key_of_another_pair(
+    monkeypatch: pytest.MonkeyPatch, prod_api: tuple[Settings, Ed25519PrivateKey]
+) -> None:
+    settings, _ = prod_api
+    other = public_key_b64(Ed25519PrivateKey.generate())
+    monkeypatch.setattr(settings, "report_signing_public_keys", {"k1": other})
+    with pytest.raises(SigningError, match="active_key_mismatch"):
+        report_signing.check_startup_keys()
+
+
+def test_startup_check_refuses_an_active_kid_missing_from_the_file(
+    monkeypatch: pytest.MonkeyPatch, prod_api: tuple[Settings, Ed25519PrivateKey]
+) -> None:
+    settings, private = prod_api
+    monkeypatch.setattr(settings, "report_signing_active_kid", "k2")
+    monkeypatch.setattr(settings, "report_signing_public_keys", {"k2": public_key_b64(private)})
+    with pytest.raises(SigningError, match="active_kid_not_in_key_file"):
+        report_signing.check_startup_keys()
+
+
+def test_startup_check_refuses_an_unreadable_key_file(
+    monkeypatch: pytest.MonkeyPatch, prod_api: tuple[Settings, Ed25519PrivateKey], tmp_path: Path
+) -> None:
+    settings, _ = prod_api
+    monkeypatch.setattr(settings, "report_signing_keys_file", str(tmp_path / "missing.json"))
+    with pytest.raises(SigningError, match="signing_keys_unreadable"):
+        report_signing.check_startup_keys()
+
+
+def test_startup_check_refuses_the_committed_dev_private_key(
+    monkeypatch: pytest.MonkeyPatch, prod_api: tuple[Settings, Ed25519PrivateKey]
+) -> None:
+    """A key whose public half is a committed dev public key is the dev private key."""
+    _, private = prod_api
+    monkeypatch.setattr(
+        report_signing, "DEV_REPORT_SIGNING_PUBLIC_KEYS", frozenset({public_key_b64(private)})
+    )
+    with pytest.raises(SigningError, match="dev_signing_key"):
+        report_signing.check_startup_keys()
+
+
+def test_the_real_dev_private_key_is_refused(
+    monkeypatch: pytest.MonkeyPatch, prod_api: tuple[Settings, Ed25519PrivateKey]
+) -> None:
+    dev = REPO / "infra/reports/dev-signing-private.json"
+    if not dev.exists():
+        pytest.skip("infra/ is not mounted in this container")
+    settings, _ = prod_api
+    monkeypatch.setattr(settings, "report_signing_keys_file", str(dev))
+    monkeypatch.setattr(settings, "report_signing_active_kid", "dev-report-1")
+    monkeypatch.setattr(
+        settings,
+        "report_signing_public_keys",
+        {"dev-report-1": next(iter(DEV_REPORT_SIGNING_PUBLIC_KEYS))},
+    )
+    with pytest.raises(SigningError, match="dev_signing_key"):
+        report_signing.check_startup_keys()
+
+
+def test_startup_check_is_prod_api_only(
+    monkeypatch: pytest.MonkeyPatch, prod_api: tuple[Settings, Ed25519PrivateKey], tmp_path: Path
+) -> None:
+    settings, _ = prod_api
+    monkeypatch.setattr(settings, "report_signing_keys_file", str(tmp_path / "missing.json"))
+    monkeypatch.setattr(settings, "env", "test")
+    report_signing.check_startup_keys()
+    monkeypatch.setattr(settings, "env", "prod")
+    monkeypatch.setattr(settings, "process_role", "analyst")
+    report_signing.check_startup_keys()

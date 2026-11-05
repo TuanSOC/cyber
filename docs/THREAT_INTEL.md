@@ -231,6 +231,12 @@ Resilience under synthetic faults, not provider quality (RT24): 600 lookups over
 - **Cache (2nd pass):** 587 of 600 served from cache (0.978), i.e. every `ok` / `not_found` answer.
 - Counts are identical from run to run (a retry that would cross a slice's end waits for the next slice instead of becoming an error); only slice counts and time to answer move with task timing. Full report: `plans/reports/ti-metric-261105.md`.
 
+## Share policy and IOC collections (M6)
+
+- **Enrichment refused by policy.** A case with `ti_excluded`, an evidence item with its own `ti_excluded` flag, or a case at **TLP:RED** (which implies both exclusions) refuses job-scope enrichments: `POST …/analyses/{job_id}/enrichments` answers `409 policy_blocked` with `reason` (`tlp_red`, `case_ti_excluded`, `evidence_ti_excluded`). The enrich-worker re-checks before each provider slice; a flag set after the request ends the run without a further provider call (its pending items are abandoned with the new `ti_run_items.reason` `policy_blocked`). Turning a flag off needs `integrations.manage` and is audited. Details: [REPORTS.md](REPORTS.md#share-policy-do-not-send-to-ai--ti).
+- **Manual lookups are not checked** (`POST /ti/lookups` carries no case scope; residual). The case and evidence pages hide "Look up" and "Enrich" while the case or evidence blocks TI.
+- **IOC collections** normalize items with the same normalizer and `compute_ioc_key`, so a collection item joins its `ti_results` history by `ioc_key` (the item list shows the latest answer per provider, attributed as everywhere). Values that are never sent (private IPs, internal names) stay in a collection with `ti_eligible=false`. Reports embed the latest TI answer per provider for the selected IOCs, attributed and verdict-free.
+
 ## Limitations
 
 - **Unverified quotas and behaviour.** No provider has been checked with a live call yet; adapters are tested against handcrafted fixtures.

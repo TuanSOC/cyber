@@ -161,6 +161,8 @@ class Ioc(_JobRow, Base):
     __tablename__ = "iocs"
     __table_args__ = (
         _job_fk(),
+        # Parent of the same-org composite FK of `ioc_collection_items` (0013, M6 review L4).
+        UniqueConstraint("id", "organization_id"),
         # md5(value): values may exceed the btree entry size limit; exact duplicates are
         # refused by ingest validation before this index is ever reached.
         Index("uq_iocs_job_id_type_value", "job_id", "type", func.md5("value"), unique=True),

@@ -215,6 +215,51 @@ def test_extended_deny_refuses_netlink_packet_and_io_uring_with_eacces(
     assert seen["AF_UNIX"] == "ok"
 
 
+_UNIX_ONLY_PROBE = (
+    "import errno, socket\n"
+    "def attempt(name, family, kind):\n"
+    "    try:\n"
+    "        socket.socket(family, kind).close()\n"
+    "        print(name, 'ok')\n"
+    "    except OSError as exc:\n"
+    "        print(name, errno.errorcode.get(exc.errno, str(exc.errno)))\n"
+    "for name in ('AF_INET', 'AF_INET6', 'AF_NETLINK', 'AF_PACKET'):\n"
+    "    attempt(name, getattr(socket, name), socket.SOCK_DGRAM)\n"
+    "attempt('AF_ALG', 38, socket.SOCK_SEQPACKET)\n"
+    "attempt('AF_VSOCK', 40, socket.SOCK_STREAM)\n"
+    "attempt('AF_UNIX', socket.AF_UNIX, socket.SOCK_STREAM)\n"
+    "for name, family in (('pair_unix', socket.AF_UNIX), ('pair_tipc', 30)):\n"
+    "    try:\n"
+    "        a, b = socket.socketpair(family, socket.SOCK_DGRAM)\n"
+    "        a.close(); b.close()\n"
+    "        print(name, 'ok')\n"
+    "    except OSError as exc:\n"
+    "        print(name, errno.errorcode.get(exc.errno, str(exc.errno)))\n"
+)
+
+
+def test_unix_only_filter_denies_every_other_socket_family(dirs: sandbox.JobDirs) -> None:
+    """The renderer's allowlist (review L5): only AF_UNIX `socket()` / `socketpair()`."""
+    sandbox.run_tool(["python3", "-c", _UNIX_ONLY_PROBE], dirs, timeout_s=10,
+                     stdout_name="unix.txt", unix_sockets_only=True)  # fmt: skip
+    seen = dict(line.split(" ", 1) for line in _read(dirs, "unix.txt").splitlines())
+    for name in ("AF_INET", "AF_INET6", "AF_NETLINK", "AF_PACKET", "AF_ALG", "AF_VSOCK"):
+        assert seen[name] == "EACCES", name
+    assert seen["pair_tipc"] == "EACCES"
+    assert seen["AF_UNIX"] == "ok" and seen["pair_unix"] == "ok"
+
+
+def test_tool_uid_comes_from_the_image_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CYBERLAB_TOOL_UID", "10004")
+    assert sandbox._tool_id("CYBERLAB_TOOL_UID") == 10004  # noqa: SLF001
+    monkeypatch.delenv("CYBERLAB_TOOL_UID")
+    assert sandbox._tool_id("CYBERLAB_TOOL_UID") == 10003  # noqa: SLF001
+    for bad in ("0", "999", "65534"):
+        monkeypatch.setenv("CYBERLAB_TOOL_UID", bad)
+        with pytest.raises(ValueError, match="unprivileged"):
+            sandbox._tool_id("CYBERLAB_TOOL_UID")  # noqa: SLF001
+
+
 def test_default_filter_is_unchanged_for_the_analyzers(dirs: sandbox.JobDirs) -> None:
     """Without the M6 options a tool keeps netlink (and io_uring is whatever the container
     runtime decides): the analyzers' filter is exactly the M2/M3 one."""

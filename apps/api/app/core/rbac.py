@@ -102,14 +102,15 @@ def require(
 
 @asynccontextmanager
 async def org_session(
-    org_id: uuid.UUID, user: CurrentUser, permission: Permission
+    org_id: uuid.UUID, user: CurrentUser, permission: Permission, *, snapshot_read: bool = False
 ) -> AsyncIterator[OrgContext]:
     """A short, explicitly scoped tenant session with the membership check inside it.
 
     Long-running routes (evidence transfer) use several of these instead of one
     request-wide session, so no connection is held while bytes move and the caller is
-    re-authorized before every write.
+    re-authorized before every write. `snapshot_read=True` (M6, RT14) opens it as one
+    REPEATABLE READ READ ONLY transaction (the report snapshot builder).
     """
-    async with tenant_session(org_id, user.id) as session:
+    async with tenant_session(org_id, user.id, snapshot_read=snapshot_read) as session:
         role = check(await membership_role(session, org_id, user.id), permission)
         yield OrgContext(org_id=org_id, user=user, role=role, session=session)

@@ -2,7 +2,10 @@
 # Report renderer (M6): renders a signed report snapshot (attacker-controlled text) to
 # PDF/A-3a, HTML and Markdown. The Celery process (root, few capabilities, see
 # docker-compose.yml) never renders itself; the renderer runs as the unprivileged `tool` user
-# (uid 10003) in a sandboxed subprocess (phase 4).
+# (uid 10004: its own uid, not the static worker's 10003, whose RLIMIT_NPROC count it would
+# share; the worker kit reads CYBERLAB_TOOL_UID / CYBERLAB_TOOL_GID) in a sandboxed
+# subprocess (`python -I -B -m report_worker.render`, seccomp allowing AF_UNIX sockets only
+# and no io_uring, rlimits; report_worker/sandbox.py).
 #
 # No Ghostscript in the image (RT16: EPS images reached Ghostscript through Pillow before
 # WeasyPrint 70); a build step fails if `gs` is present. Fontconfig lists only the bundled
@@ -23,8 +26,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && if command -v gs >/dev/null 2>&1; then echo "ghostscript must not be installed" >&2; exit 1; fi
 COPY --from=ghcr.io/astral-sh/uv:0.9.30 /uv /bin/
-RUN groupadd --system --gid 10003 tool \
-    && useradd --system --uid 10003 --gid 10003 --no-create-home --shell /usr/sbin/nologin tool
+RUN groupadd --system --gid 10004 tool \
+    && useradd --system --uid 10004 --gid 10004 --no-create-home --shell /usr/sbin/nologin tool
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -35,16 +38,20 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    FONTCONFIG_FILE=/app/assets/fonts.conf
+    FONTCONFIG_FILE=/app/assets/fonts.conf \
+    CYBERLAB_TOOL_UID=10004 \
+    CYBERLAB_TOOL_GID=10004
 WORKDIR /srv/workers/report
 COPY --from=jobs . /packages/py-jobs
 COPY --from=worker_kit . /packages/py-worker-kit
 COPY pyproject.toml uv.lock ./
 COPY assets /app/assets
+# The trusted templates (Jinja2, autoescaped), root-owned and read-only like the CSS.
+COPY templates /app/templates
 # The font cache for exactly the bundled fonts, read-only at runtime.
 RUN mkdir -p /var/cache/fontconfig \
     && fc-cache -f \
-    && chmod -R a+rX,go-w /var/cache/fontconfig /app/assets
+    && chmod -R a+rX,go-w /var/cache/fontconfig /app/assets /app/templates
 
 FROM base AS venv-dev
 RUN uv sync --no-install-project

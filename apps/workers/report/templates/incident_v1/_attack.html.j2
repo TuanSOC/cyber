@@ -1,0 +1,21 @@
+{#- Analyst-confirmed or suspected ATT&CK techniques with their rationale. -#}
+{% if present.attack %}
+<section id="attack">
+<h2>MITRE ATT&amp;CK mapping</h2>
+{{ m.shown(s.attack) }}
+<table>
+<thead><tr><th scope="col" class="w14">Technique</th><th scope="col" class="w22">Name</th><th scope="col" class="w16">Tactics</th><th scope="col" class="w12">Status</th><th scope="col">Rationale</th></tr></thead>
+<tbody>
+{% for a in s.attack.items %}
+<tr>
+<td>{{ a.technique_id }}{% if a.revoked %}<br><span class="muted">revoked</span>{% endif %}</td>
+<td>{{ m.t(a.name) }}</td>
+<td>{{ a.tactics|join(", ") or "—" }}</td>
+<td>{{ a.status }}</td>
+<td><span class="prose">{{ m.o(a.rationale) }}</span>{{ m.cites(a.cite_nos) }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</section>
+{% endif %}

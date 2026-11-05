@@ -91,7 +91,6 @@ export const NAV: NavItem[] = [
     label: "Reports",
     icon: FileText,
     segment: "reports",
-    plannedFor: "Milestone 6",
     summary: "Investigation reports with evidence citations.",
   },
   {

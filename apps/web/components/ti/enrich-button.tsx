@@ -5,6 +5,7 @@ import { Sparkles } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { PolicyBlocked } from "@/components/ai/policy-blocked";
 import { NoProvidersNotice, ProviderPicker } from "@/components/ti/provider-picker";
 import { Button } from "@/components/ui/button";
 import {
@@ -88,6 +89,7 @@ export function EnrichButton({ orgId, jobId, busy }: { orgId: string; jobId: str
         ) : (
           <ProviderPicker providers={providers} selected={selected} onChange={setPicked} idPrefix={`enrich-${jobId}`} />
         )}
+        {start.isError && <PolicyBlocked orgId={orgId} error={start.error} jobId={jobId} what="This threat-intel enrichment" />}
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel

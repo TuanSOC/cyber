@@ -647,10 +647,13 @@ async def case_timeline_items(
     cap: int = CAP_TIMELINE,
     exclude_evidence: frozenset[uuid.UUID] = frozenset(),
 ) -> Selection:
-    """M6: `exclude_evidence` (the share policy's AI-excluded evidence) drops their entries
-    from the page; `total` then counts the remaining entries of the page as at least."""
-    entries = await case_timeline.page(session, org_id, investigation_id, limit=cap)
-    total = await case_timeline.count(session, org_id, investigation_id)
+    """M6: only the M5 evidence-derived kinds (`EVIDENCE_KINDS`): analyst notes and status
+    reasons never enter AI context. `exclude_evidence` (the share policy's AI-excluded
+    evidence) drops their entries from the page; `total` then counts the remaining entries
+    of the page as at least."""
+    kinds = case_timeline.EVIDENCE_KINDS
+    entries = await case_timeline.page(session, org_id, investigation_id, limit=cap, kinds=kinds)
+    total = await case_timeline.count(session, org_id, investigation_id, kinds=kinds)
     if exclude_evidence:
         kept = [e for e in entries if e.evidence_id not in exclude_evidence]
         total = max(total - (len(entries) - len(kept)), len(kept))

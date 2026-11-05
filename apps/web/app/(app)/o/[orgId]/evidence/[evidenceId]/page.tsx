@@ -11,6 +11,7 @@ import { EvidenceAnalysesCard } from "@/components/analysis/evidence-analyses-ca
 import { CustodyTimeline } from "@/components/evidence/custody-timeline";
 import { EvidenceActions } from "@/components/evidence/evidence-actions";
 import { HashValue } from "@/components/hash-value";
+import { EvidenceExclusionBadges, EvidenceSharePolicyCard } from "@/components/investigations/evidence-share-policy";
 import { NotFoundCard } from "@/components/not-found-card";
 import { PageHeader } from "@/components/page-header";
 import { Pager } from "@/components/pager";
@@ -87,6 +88,7 @@ export default function EvidencePage() {
         actions={
           <>
             {e.status === "archived" && <Badge variant="outline">archived</Badge>}
+            <EvidenceExclusionBadges evidence={e} />
             <EvidenceActions
               orgId={orgId}
               evidence={e}
@@ -133,6 +135,15 @@ export default function EvidencePage() {
               )}
             </CardContent>
           </Card>
+          {investigation.data ? (
+            <EvidenceSharePolicyCard
+              orgId={orgId}
+              evidenceId={e.id}
+              investigationId={e.investigation_id}
+              tlpRed={investigation.data.tlp === "red"}
+              readOnly={investigation.data.status === "archived"}
+            />
+          ) : null}
           <EvidenceAnalysesCard
             orgId={orgId}
             evidence={e}

@@ -1,4 +1,4 @@
-"""Migrations replay from scratch in one alembic run (M3 RT7); 0012, 0011, 0010, 0009 and
+"""Migrations replay from scratch in one alembic run (M3 RT7); 0013, 0012, 0011, 0010, 0009 and
 0006 downgrade cleanly.
 
 `env.py` applies every pending revision in a single transaction; 0006 adds an enum value,
@@ -113,6 +113,18 @@ M6_CASE_COLUMNS = (
 )
 
 
+# 0013 (M6 review L4): same-org composite FKs for job IOCs and AI citations.
+SAME_ORG_FKS = (
+    "SELECT conname::text FROM pg_constraint WHERE contype = 'f' AND conrelid IN "
+    "(to_regclass('ioc_collection_items'), to_regclass('report_citations')) AND "
+    "(conname LIKE '%ioc_id%' OR conname LIKE '%ai_citation_id%') ORDER BY conname"
+)
+SAME_ORG_UNIQUES = (
+    "SELECT conname::text FROM pg_constraint WHERE conname IN "
+    "('uq_iocs_id_organization_id', 'uq_ai_citations_id_organization_id') ORDER BY conname"
+)
+
+
 async def _m6_tables(engine: AsyncEngine) -> list[object]:
     async with engine.connect() as conn:
         return [t for t in (await conn.execute(text(M6_REGCLASSES))).one() if t is not None]
@@ -121,6 +133,12 @@ async def _m6_tables(engine: AsyncEngine) -> list[object]:
 async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine) -> None:
     await get_engine().dispose()
     try:
+        _alembic("downgrade", "0012")  # 0013 (M6 review L4) restores the plain FKs
+        assert await _scalars(owner_engine, SAME_ORG_FKS) == [
+            "fk_ioc_collection_items_ioc_id_iocs",
+            "fk_report_citations_ai_citation_id_ai_citations",
+        ]
+        assert await _scalars(owner_engine, SAME_ORG_UNIQUES) == []
         _alembic("downgrade", "0011")  # 0012 (M6 reports + case management) goes away
         assert await _m6_tables(owner_engine) == []
         assert await _scalars(owner_engine, M6_FUNCTIONS) == []
@@ -150,7 +168,15 @@ async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine)
         _alembic("upgrade", "head")  # never leave the shared test database half-migrated
         await get_engine().dispose()
 
-    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0012"]
+    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0013"]
+    assert await _scalars(owner_engine, SAME_ORG_FKS) == [
+        "fk_ioc_collection_items_ioc_id_organization_id_iocs",
+        "fk_report_citations_ai_citation_id_organization_id_ai_citations",
+    ]
+    assert await _scalars(owner_engine, SAME_ORG_UNIQUES) == [
+        "uq_ai_citations_id_organization_id",
+        "uq_iocs_id_organization_id",
+    ]
     assert await _m6_tables(owner_engine) == list(M6_TABLES)
     assert await _scalars(owner_engine, M6_CASE_COLUMNS) == ["ai_excluded", "ti_excluded", "tlp"]
     assert await _scalars(owner_engine, M6_FUNCTIONS) == [

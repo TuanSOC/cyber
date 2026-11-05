@@ -1,0 +1,42 @@
+{#- Indicators and attributed threat-intelligence answers (never platform verdicts). -#}
+{% if present.iocs %}
+<section id="iocs">
+<h2>Indicators of compromise</h2>
+{{ m.shown(s.iocs) }}
+<table>
+<thead><tr><th scope="col" class="w10">Type</th><th scope="col">Value</th><th scope="col" class="w6">Jobs</th><th scope="col" class="w18">Seen</th><th scope="col" class="w12">Collections</th></tr></thead>
+<tbody>
+{% for i in s.iocs.items %}
+<tr>
+<td>{{ i.ioc_type }}</td>
+<td class="ioc">{{ m.t(i.value) }}{{ m.maybe_cite(i.cite_no) }}</td>
+<td>{{ i.count_jobs|num }}</td>
+<td>{{ i.first_seen|ts }}<br>{{ i.last_seen|ts }}</td>
+<td>{% for c in i.collections %}{{ m.t(c) }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</section>
+{% endif %}
+{% if present.ti %}
+<section id="ti">
+<h2>Threat intelligence</h2>
+<p class="muted">Answers attributed to their providers, as returned at the time shown. They are third-party opinions, not verdicts of this platform.</p>
+{{ m.shown(s.ti) }}
+<table>
+<thead><tr><th scope="col" class="w22">Indicator</th><th scope="col" class="w12">Provider</th><th scope="col" class="w12">Result</th><th scope="col">Summary</th><th scope="col" class="w18">Fetched</th></tr></thead>
+<tbody>
+{% for t in s.ti.items %}
+<tr>
+<td class="ioc">{{ m.t(ioc_values.get(t.ioc_key, t.ioc_key[:16] ~ "…")) }}{{ m.maybe_cite(t.cite_no) }}</td>
+<td>{{ t.provider }}</td>
+<td>{{ t.status }}{% if t.found %}, found{% endif %}{% if t.score is not none %}<br>score {{ t.score }}{% if t.score_scale %} ({{ t.score_scale }}){% endif %}{% endif %}</td>
+<td>{{ m.o(t.summary) }}</td>
+<td>{{ t.fetched_at|ts }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</section>
+{% endif %}

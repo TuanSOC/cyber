@@ -14,6 +14,7 @@ pnpm verify               # full gate (see TESTING.md)
 - Init scripts (`infra/postgres/init`, MinIO buckets) run only on empty volumes. After changing them: `docker compose down -v`.
 - Dependency changes need a rebuild: `pnpm dev` already passes `--build --renew-anon-volumes`. Since M4 the `backend` network has no egress and `UV_NO_SYNC=1` / `UV_OFFLINE=1` are set, so `uv run` never syncs at runtime: after editing `pyproject.toml`, relock with `docker compose run --rm --no-deps -e UV_FROZEN= api uv lock` while the network is up, then `docker compose build api`.
 - MinIO console: not published (MinIO sits only on internal networks, which cannot publish ports). Use the client inside the container, e.g. `docker compose exec minio mc ls local/` after `docker compose exec minio mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"`.
+- Upgrading an existing checkout to M6: add `BROKER_REPORT_PASSWORD`, `REPORTS_BUCKET`, `REPORTS_TEST_BUCKET`, the `REPORT_SIGNING_*` lines and (optionally) `PUBLIC_BASE_URL` from `.env.example` to `.env` (the dev compose file falls back to a `change-me` broker password and the dev signing pair), restart `redis-broker` (new ACL user `report`) and `minio-init` (creates the object-locked `reports` / `reports-test` buckets and the new policy), build the `cyberlab/report-worker` image (`docker compose build report-worker`) and run the migrations (`0012`).
 - Upgrading an existing checkout to M5: add `BROKER_ANALYST_PASSWORD`, the `AI_*` lines and `AI_MOCK_EXPECTED_KEY` from `.env.example` to `.env` (the dev compose file falls back to a `change-me` broker password for an older `.env`, RT25), rebuild the api image (new dependencies `anthropic`, `google-genai`) and run the migrations (`0011`).
 - Upgrading an existing checkout to M4: `docker compose --profile test --profile e2e down` once (the `backend` network must be recreated as `internal`), add `BROKER_ENRICH_PASSWORD`, the `TI_*` lines and `TI_MOCK_EXPECTED_KEY` from `.env.example` to `.env`, then `pnpm dev`.
 
@@ -64,6 +65,33 @@ AI_PLATFORM_PROVIDER=anthropic docker compose -f docker-compose.yml \
 The overlay mounts the key as a compose secret into the analyst-worker only and tells the API which provider it covers (`platform_key` on the catalog). It is used only for orgs without their own key for that provider, after they enabled AI and acknowledged the terms, and is capped globally at `AI_PLATFORM_DAILY_TOKENS` (200 000 per UTC day). `ENV=prod` refuses it; it is never part of the gate.
 
 **ai-mock profiles.** `ai-mock` runs in the `test` and `e2e` profiles only, on `egress`, and accepts `AI_MOCK_EXPECTED_KEY`. With the dev default `AI_MOCK_ENABLED=true`, the "Test analyst (mock)" provider appears on the Integrations page; start a stack with the `e2e` (or `test`) profile so `ai-mock` runs, and enter that key there.
+
+## Reports (M6)
+
+Details: [REPORTS.md](REPORTS.md).
+
+**Buckets.** `minio-init` creates `reports` and `reports-test` with `mc mb --with-lock` (object lock, versioned) and **no bucket default retention**: a default retention would make MinIO demand `Content-MD5` on the renderer's presigned POST. Retention is set per object (GOVERNANCE, `EVIDENCE_LOCK_DAYS`) by the API on each snapshot and by the ingest worker on each artifact after its re-hash. An existing bucket without object lock is refused (recreate it with `docker compose down -v`). `reports-test` gets the test lifecycle rule (noncurrent versions expire); `reports` gets none, so a signed report is never auto-deleted. The api / ingest MinIO user (`infra/minio/api-policy.template.json`) may get, version-get, put and get / put retention on both report buckets, and has **no** `DeleteObject` / `DeleteObjectVersion` there. api-test uses `REPORTS_BUCKET=${REPORTS_TEST_BUCKET}`.
+
+**report-worker.** Image `cyberlab/report-worker` (`apps/workers/report`, targets `dev` and `prod`; build contexts `jobs` and `worker_kit`): python 3.12-slim-trixie, Pango, HarfBuzz, libseccomp, Noto core and mono fonts, WeasyPrint 70, no Ghostscript. `init`, read-only rootfs, `cap_drop: ALL` plus the analyzers' six capabilities, no-new-privileges, `pids_limit: 128`, 1 GiB, 1 CPU, tmpfs `/tmp` 16 MiB and `/work` 96 MiB (`noexec`), `analysis` network only, env `BROKER_URL` only (user `report`). It needs no database, MinIO credentials, JWT secret or signing key. The prod overlay uses `cyberlab/report-worker:prod`, `ENV: prod`, `volumes: !reset []` and requires `BROKER_REPORT_PASSWORD`. **Scaling:** one replica renders one report at a time (prefork, concurrency 1); `REPORT_ACTIVE_RENDERS_GLOBAL` (4) is sized for one replica, so raise it with the replica count. `report-worker-test` (test profile) is not an api-test dependency; the end-to-end render test starts it.
+
+**Signing keys (prod).** `ENV=prod` refuses `dev-` kids and the committed dev public key, and the api requires `REPORT_SIGNING_KEYS_FILE`. Before the first prod start:
+
+```bash
+docker run --rm -v "$PWD:/repo" -w /repo cyberlab/api:dev python scripts/gen_report_signing_keys.py
+```
+
+It writes `.secrets/report_signing_private.json` (mode 0400, chowned to uid 10001 when run as root, else it prints the `chown 10001` command) and prints `REPORT_PROD_SIGNING_ACTIVE_KID` / `REPORT_PROD_SIGNING_PUBLIC_KEYS` for `.env`. Only the **api** mounts the private file (compose secret `report_signing_private`, `REPORT_SIGNING_KEYS_FILE=/run/secrets/report_signing_private`); ingest, enrich, analyst and the report-worker never get it, and `Settings` refuses it in any role but `api`. Rotation: `--add --kid <new>`, keep every old public key in `REPORT_PROD_SIGNING_PUBLIC_KEYS`, switch the active kid ([REPORTS.md](REPORTS.md#key-rotation-prod)).
+
+**Published public keys.** External recipients verify reports with `GET /api/v1/report-signing-keys` (unauthenticated) or a key list the operator publishes with the deployment. Record every kid ever used here, for example:
+
+| kid | Ed25519 public key (base64) | Status |
+|---|---|---|
+| `dev-report-1` | `zS2iP9napZDeshJwfCiTwYl8amzPuWJEJwHK8CpnF2k=` | dev only, refused in prod (its private half is committed) |
+| `prod-report-YYYYMMDD` | from `REPORT_PROD_SIGNING_PUBLIC_KEYS` | fill in per deployment; never delete a row |
+
+**`PUBLIC_BASE_URL`** (api): the origin printed in front of the citation paths of internal reports (e.g. `https://cyberlab.example`). Empty: paths only. Prod requires `https` (plain `http` only for localhost); `external` reports never carry it.
+
+**Backups.** A report is a DB row (`report_versions`: sha256, manifest, signature, object version id) plus the locked objects in `reports`. Back up the database and the `reports` bucket (all versions) together: a snapshot object without its row is an orphan, and a row without its object answers `409 integrity_failed`. `apps/api/app/scripts/reconcile_orphans.py` covers only evidence objects without a row; report orphans (a finalize that failed after the put) are logged by the API with their key and version id.
 
 ## Environment variables
 
@@ -122,6 +150,12 @@ The overlay mounts the key as a compose secret into the analyst-worker only and 
 | `AI_DEFAULT_PROVIDER`, `AI_MAX_INPUT_TOKENS`, `AI_MAX_OUTPUT_TOKENS`, `AI_CALL_TIMEOUT_S`, `AI_CALL_IDLE_TIMEOUT_S`, `AI_MAX_CALLS_PER_RUN`, `AI_RUN_DEADLINE_S`, `AI_INCIDENT_DEADLINE_S`, `AI_MAX_JOBS_PER_INCIDENT`, `AI_CEILINGS`, `AI_PLATFORM_DAILY_TOKENS`, `AI_RUNS_PER_USER_10MIN`, `AI_ACTIVE_RUNS_PER_ORG`, `AI_ACTIVE_RUNS_GLOBAL` | api, analyst-worker | settings fields with defaults `anthropic`, 60 000, 16 000, 300, 60, 3, 1200, 3600, 10, catalog ceilings, 200 000, 10, 12, 40; compose does not pass them. `AI_CEILINGS` is JSON `{daily_token_budget, run_token_cap, incident_token_cap, per_minute: {provider: n}}` |
 | `AI_ANTHROPIC_BASE_URL`, `AI_GEMINI_BASE_URL` | analyst-worker (tests) | replay endpoints; refused in prod |
 | `UV_NO_SYNC`, `UV_OFFLINE` | migrate, api, api-test, ingest-*, enrich-*, analyst-* | `uv run` never syncs (no egress on `backend`) |
+| `BROKER_REPORT_PASSWORD` | redis-broker (ACL user `report`), report-worker(-test) | confined to `report*` / `test.report*`, write-only to ingest; dev default `change-me-broker-report`, required in prod |
+| `REPORTS_BUCKET`, `REPORTS_TEST_BUCKET` | minio-init, api, ingest-* (api-test uses the test bucket as its `REPORTS_BUCKET`) | object lock, versioned, no default retention; per-object GOVERNANCE retention (`EVIDENCE_LOCK_DAYS`) |
+| `PUBLIC_BASE_URL` | api | origin in front of internal citation paths; https in prod (localhost excepted); empty: none |
+| `REPORT_SIGNING_ACTIVE_KID`, `REPORT_SIGNING_PUBLIC_KEYS` | api only | kid and `{kid: base64 Ed25519 public key}` JSON; dev: the committed `dev-report-1` pair; prod from `REPORT_PROD_SIGNING_ACTIVE_KID` / `REPORT_PROD_SIGNING_PUBLIC_KEYS` (a `dev-` kid or the dev key is refused) |
+| `REPORT_SIGNING_KEYS_FILE` | api only (compose secret `report_signing_private`) | dev: `infra/reports/dev-signing-private.json`; prod: `.secrets/report_signing_private.json`; refused for every other `PROCESS_ROLE` |
+| `REPORT_MAX_SNAPSHOT_BYTES`, `REPORT_MAX_ARTIFACT_BYTES`, `REPORT_MAX_RENDER_UNITS`, `REPORT_MAX_PAGES`, `REPORT_RENDER_DEADLINE_S`, `REPORT_RENDER_TIMEOUT_S`, `REPORT_RENDERS_PER_USER_10MIN`, `REPORT_FINALIZE_PER_USER_10MIN`, `REPORT_PREVIEW_PER_USER_10MIN`, `REPORT_ACTIVE_RENDERS_PER_ORG`, `REPORT_ACTIVE_RENDERS_GLOBAL`, `TIMELINE_EXPORT_MAX_ROWS` | api | settings fields with defaults 8 MiB, 32 MiB, 450 000 (calibrated, RT1), 300, 600, 120, 20, 10, 30, 2, 4 (per renderer replica), 50 000; compose does not pass them. The snapshot, artifact and page settings can only be lowered: the contract values are their ceilings, and the renderer enforces the contract values |
 
 ## Capacity notes
 
@@ -142,7 +176,7 @@ The overlay mounts the key as a compose secret into the analyst-worker only and 
 
 | Service | Image | Trust | Notes |
 |---|---|---|---|
-| `redis-broker` | redis 7.4 | — | separate from the app Redis; ACL users `api`, `ingest`, `pcap`, `static`, `enrich`, `analyst` (+ `healthcheck`), no persistence, `maxmemory 256mb noeviction` |
+| `redis-broker` | redis 7.4 | — | separate from the app Redis; ACL users `api`, `ingest`, `pcap`, `static`, `enrich`, `analyst`, `report` (+ `healthcheck`), no persistence, `maxmemory 256mb noeviction` |
 | `pcap-worker` | `cyberlab/pcap-worker` (Zeek 8 base + tshark + suricata) | untrusted | `analysis` network only, read-only rootfs, `cap_drop: ALL` + 6 caps, tini init, `restart: unless-stopped` (fails closed), 2 GiB / 2 CPUs |
 | `static-worker` | `cyberlab/static-worker` (python 3.12-slim-trixie + ClamAV, yara-python, pefile, pyelftools, capa, FLOSS) | untrusted | same isolation as pcap-worker (`analysis` network, read-only rootfs, caps, tini, fail-closed restart), 3 GiB / 2 CPUs |
 | `ingest-worker` | `cyberlab/api` | trusted | `celery worker --pool solo`, app DB role + scoped MinIO user |
@@ -151,15 +185,16 @@ The overlay mounts the key as a compose secret into the analyst-worker only and 
 | `ti-mock` | python 3.12-alpine (stdlib server) | test / e2e only | deterministic provider sink on `egress` only |
 | `analyst-worker` | `cyberlab/api` | trusted, internet-facing | AI analyst (M5); `celery -A app.workers.analyst_app worker -Q analyst --pool solo` without gossip/mingle/heartbeat; `enrich` + `egress`, uid 10001, read-only rootfs, tmpfs `/tmp`, `cap_drop: ALL`, no-new-privileges; least-privilege env (no JWT secret, MinIO, app Redis or TI key); AI seal private keys as a compose secret; 2 replicas in prod |
 | `ai-mock` | python 3.12-alpine (stdlib server) | test / e2e only | deterministic LLM sink on `egress` only (uid 65534, read-only) |
+| `report-worker` | `cyberlab/report-worker` (python 3.12-slim-trixie + WeasyPrint 70, Pango, Noto fonts; no Ghostscript) | untrusted | report renderer (M6): `analysis` network only, read-only rootfs, `cap_drop: ALL` + 6 caps, tini init, prefork concurrency 1 with one task per child, 1 GiB / 1 CPU, `/work` tmpfs 96 MiB; env `BROKER_URL` only; renders in a uid-10004 sandboxed subprocess (its own tool uid, not the static worker's 10003) |
 
-## Networks and egress (M4, M5)
+## Networks and egress (M4, M5, M6)
 
 | Network | Internal | Members |
 |---|---|---|
 | `backend` | yes (no egress) | postgres, redis, redis-broker, minio, minio-init, migrate, api, ingest-worker, ingest-beat, gateway, api-test |
 | `enrich` | yes | postgres, redis-broker, enrich-worker(-test), analyst-worker(-test): the workers' data path, without the app Redis, MinIO, the API or the gateway |
 | `frontend` | no | web, gateway, e2e |
-| `analysis` | yes | pcap-worker(-test), static-worker(-test), redis-broker, minio |
+| `analysis` | yes | pcap-worker(-test), static-worker(-test), report-worker(-test), redis-broker, minio |
 | `egress` | no | enrich-worker(-test), analyst-worker(-test), ti-mock, ai-mock |
 
 Runtime egress per service (checked 2026-11-05 on Docker Desktop 4.x / WSL2: `/proc/net/route`, a TCP connect to 1.1.1.1:443 and a lookup of `example.org` in each container; `tests/container/test_egress.py` pins it for api-test):
@@ -171,6 +206,7 @@ Runtime egress per service (checked 2026-11-05 on Docker Desktop 4.x / WSL2: `/p
 | migrate, api, api-test | no | none | `UV_NO_SYNC` / `UV_OFFLINE`; the API never calls a provider or resolves an external name (MISP URLs are checked syntactically) |
 | ingest-worker, ingest-beat | no | none | broker, Postgres, MinIO only |
 | pcap-worker, static-worker | no | none | `analysis` (unchanged); rules and AV DB are baked at build time |
+| report-worker(-test) | no | none | `analysis`; fonts and templates baked into the image; the render subprocess cannot open inet sockets at all (`apps/workers/report/tests/test_isolation.py`, `test_sandbox.py`) |
 | enrich-worker(-test) | **yes** (provider APIs) | via `egress` | one of two (with the analyst-worker); on `enrich` + `egress`, never `backend` or `analysis` (`tests/container/test_enrich_network.py`, run by the gate inside `enrich-worker-test`) |
 | analyst-worker(-test) | **yes** (Anthropic / Gemini APIs) | via `egress` | on `enrich` + `egress`, never `backend` or `analysis` (`tests/container/test_analyst_network.py`, run inside `analyst-worker-test`) |
 | gateway, web | dev `next/font` and future ACME only | via `frontend` | prod uses Caddy `tls internal` |
@@ -179,7 +215,7 @@ Runtime egress per service (checked 2026-11-05 on Docker Desktop 4.x / WSL2: `/p
 - External DNS: containers on `backend` only cannot resolve public names on this engine (`example.org` → `gaierror` from api and ingest-worker), so Docker's embedded DNS is not a lookup channel here (RT22; phase 7 asserts it in the egress suite).
 - Image builds (apt, uv, pnpm, freshclam, capa rules) use the build network, not these.
 
-- **Code reload:** Celery workers do not hot-reload. After changing worker code in dev, run `docker compose restart pcap-worker static-worker ingest-worker enrich-worker analyst-worker` (and `pcap-worker-test` / `static-worker-test` / `enrich-worker-test` / `analyst-worker-test` for tests).
+- **Code reload:** Celery workers do not hot-reload. After changing worker code in dev, run `docker compose restart pcap-worker static-worker ingest-worker enrich-worker analyst-worker report-worker` (and `pcap-worker-test` / `static-worker-test` / `enrich-worker-test` / `analyst-worker-test` / `report-worker-test` for tests). A template, CSS, font or WeasyPrint change needs an image rebuild and a render-budget recalibration ([REPORTS.md](REPORTS.md#render-budget-and-caps-rt1)).
 - **Rules:** the ET Open snapshot is baked into the pcap-worker image at build time. Rebuild the image to update rules and parsers.
 - **Static worker freshness:** the ClamAV DB (freshclam in a cached build stage) and capa rules (pinned tag, sha256-checked) are baked into the image. The DB is only re-downloaded when `CLAMAV_DB_REFRESH` changes, e.g. `docker compose build --build-arg CLAMAV_DB_REFRESH=$(date +%F) static-worker`; if freshclam fails (e.g. CDN rate limit), the image ships without a DB and every scan reports `av_unavailable`, never "clean". New capa rules need a new pin in `apps/workers/static/docker/fetch_capa_assets.py`. The AV DB date is shown in the Malware Lab. Rebuilding also updates ClamAV, libmagic and the Python parsers.
 

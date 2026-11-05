@@ -42,7 +42,9 @@ DEV_AI_SEAL_PUBLIC_KEYS = frozenset({"YqrtDS8h4Q5PCQ0wa+0X7Qy72jDi3HYjQfotX+oH6i
 # dev-report-1, M6): its private half is public, so prod refuses its public key.
 DEV_REPORT_SIGNING_PUBLIC_KEYS = frozenset({"zS2iP9napZDeshJwfCiTwYl8amzPuWJEJwHK8CpnF2k="})
 # Report defaults shared with the renderer contract (`cyberlab_jobs.report`).
-REPORT_DEFAULT_MAX_RENDER_UNITS = 750_000  # ~250 A4 pages; phase 4 calibrates (RT1)
+REPORT_DEFAULT_MAX_RENDER_UNITS = (
+    450_000  # phase 4 calibration: worst 594 MiB RSS of 768, <=214 pages (RT1)
+)
 # Per-org AI budget defaults (`ai_org_settings` server defaults, migration 0011, RT9).
 AI_DEFAULT_DAILY_TOKEN_BUDGET = 1_000_000
 AI_DEFAULT_RUN_TOKEN_CAP = 100_000

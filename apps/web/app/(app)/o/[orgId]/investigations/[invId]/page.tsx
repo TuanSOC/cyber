@@ -1,68 +1,40 @@
 "use client";
 
-import type { Schemas } from "@cyberlab/contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { Suspense } from "react";
 import { toast } from "sonner";
 
-import { IncidentCard } from "@/components/ai/incident-card";
-import { InvestigationAnalyses } from "@/components/analysis/investigation-analyses";
-import { EvidenceTable } from "@/components/evidence/evidence-table";
-import { EvidenceUploader } from "@/components/evidence/evidence-uploader";
-import {
-  EditInvestigationDialog,
-  type InvestigationEdit,
-} from "@/components/investigations/edit-investigation-dialog";
+import { EditInvestigationDialog } from "@/components/investigations/edit-investigation-dialog";
+import { CaseWorkspace } from "@/components/investigations/case-workspace";
 import { StatusControl } from "@/components/investigations/status-control";
 import { NotFoundCard } from "@/components/not-found-card";
 import { PageHeader } from "@/components/page-header";
 import { QueryError } from "@/components/query-error";
 import { SeverityBadge } from "@/components/severity-badge";
+import { TlpBadge } from "@/components/tlp/tlp-badge";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ApiError, api, errorMessage, unwrap } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { type InvestigationUpdate, caseErrorMessage } from "@/lib/case";
 import { STATUS_LABELS, formatDate } from "@/lib/format";
 import { orgPath } from "@/lib/nav";
 import { useOrg } from "@/lib/org-context";
+import { useInvestigation, useUpdateInvestigation } from "@/lib/use-case";
 
-type Change = InvestigationEdit & { status?: Schemas["InvestigationStatus"] };
-
+/** The case workspace page: a thin shell (header, status, edit) around the tabbed workspace. */
 export default function InvestigationPage() {
   const { invId } = useParams<{ invId: string }>();
   const { orgId, can } = useOrg();
-  const queryClient = useQueryClient();
-  const key = ["org", orgId, "investigation", invId];
-
-  const investigation = useQuery({
-    queryKey: key,
-    queryFn: async () =>
-      unwrap(
-        await api.GET("/api/v1/orgs/{org_id}/investigations/{investigation_id}", {
-          params: { path: { org_id: orgId, investigation_id: invId } },
-        }),
-      ),
-  });
-
-  const update = useMutation({
-    mutationFn: async (body: Change) =>
-      unwrap(
-        await api.PATCH("/api/v1/orgs/{org_id}/investigations/{investigation_id}", {
-          params: { path: { org_id: orgId, investigation_id: invId } },
-          body,
-        }),
-      ),
-    onSuccess: async (updated) => {
-      queryClient.setQueryData(key, updated);
-      await queryClient.invalidateQueries({ queryKey: ["org", orgId, "investigations"] });
-      toast.success("Investigation updated");
-    },
-    onError: async (error) => {
-      toast.error(errorMessage(error));
-      await queryClient.invalidateQueries({ queryKey: key }); // stale data (e.g. 409): reload
-    },
-  });
+  const investigation = useInvestigation(orgId, invId);
+  const update = useUpdateInvestigation(orgId, invId);
+  const save = (body: InvestigationUpdate) =>
+    update.mutateAsync(body).then(
+      () => toast.success("Investigation updated"),
+      (error: unknown) => {
+        toast.error(caseErrorMessage(error));
+      },
+    );
 
   const back = orgPath(orgId, "investigations");
   if (investigation.error instanceof ApiError && investigation.error.status === 404) {
@@ -87,12 +59,22 @@ export default function InvestigationPage() {
         description={`${inv.case_ref} · opened by ${inv.created_by_name} · ${created.local}`}
         actions={
           <>
+            <TlpBadge tlp={inv.tlp} />
             <SeverityBadge severity={inv.severity} />
             {writable && (
               <EditInvestigationDialog
                 investigation={inv}
                 pending={update.isPending}
-                onSave={(changes) => update.mutateAsync(changes)}
+                onSave={(changes) =>
+                  // Rejects on error so the dialog stays open with the user's input.
+                  update.mutateAsync(changes).then(
+                    () => toast.success("Investigation updated"),
+                    (error: unknown) => {
+                      toast.error(caseErrorMessage(error));
+                      throw error;
+                    },
+                  )
+                }
               />
             )}
             {writable && inv.allowed_transitions.length > 0 ? (
@@ -100,7 +82,7 @@ export default function InvestigationPage() {
                 status={inv.status}
                 allowed={inv.allowed_transitions}
                 pending={update.isPending}
-                onChange={(status) => update.mutate({ status })}
+                onChange={(status, reason) => void save(reason ? { status, status_reason: reason } : { status })}
               />
             ) : (
               <Badge variant="secondary">{STATUS_LABELS[inv.status]}</Badge>
@@ -108,23 +90,9 @@ export default function InvestigationPage() {
           </>
         }
       />
-      {inv.description && (
-        <p className="mb-6 max-w-3xl text-sm whitespace-pre-wrap text-muted-foreground">{inv.description}</p>
-      )}
-      <Card>
-        <CardHeader>
-          <CardTitle>Evidence</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {writable && can("evidence.write") && <EvidenceUploader orgId={orgId} investigationId={invId} />}
-          {inv.status === "archived" && (
-            <p className="text-sm text-muted-foreground">This investigation is archived and read-only.</p>
-          )}
-          <EvidenceTable orgId={orgId} investigationId={invId} />
-        </CardContent>
-      </Card>
-      <InvestigationAnalyses orgId={orgId} investigationId={invId} />
-      <IncidentCard orgId={orgId} investigationId={invId} />
+      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading the case…</p>}>
+        <CaseWorkspace orgId={orgId} inv={inv} can={can} pending={update.isPending} onUpdate={(body) => void save(body)} />
+      </Suspense>
     </>
   );
 }

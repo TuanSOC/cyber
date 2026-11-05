@@ -51,4 +51,16 @@ A deployable, secure base that later analysis engines (PCAP, malware, TI, AI ana
 
 ## Later milestones
 
-M2–M5 are delivered (see ROADMAP). M5 adds the AI analyst: evidence-cited explanations of normalized findings that never give verdicts, never use tools and are never acted on automatically. It is opt-in per organization with a privacy acknowledgement (evidence excerpts go to the chosen provider; internal names are pseudonymized by default), provider keys are bring-your-own, and Gemini is limited to paid-tier keys. Details: [AI_ANALYST.md](AI_ANALYST.md).
+M2–M6 are delivered (see ROADMAP). M5 adds the AI analyst: evidence-cited explanations of normalized findings that never give verdicts, never use tools and are never acted on automatically. It is opt-in per organization with a privacy acknowledgement (evidence excerpts go to the chosen provider; internal names are pseudonymized by default), provider keys are bring-your-own, and Gemini is limited to paid-tier keys. Details: [AI_ANALYST.md](AI_ANALYST.md).
+
+M6 adds reports and the remaining case management ([REPORTS.md](REPORTS.md)). User stories:
+
+1. As an analyst I write notes on a case, edit them (every version is kept) and delete them (the history stays readable); only the author or an admin changes a note.
+2. As an analyst I build IOC collections from job IOCs or typed values (normalized and deduplicated) and export them as CSV, JSON or a STIX 2.1 bundle, marked with the case TLP.
+3. As an analyst I close, reopen or archive a case with a reason, and the change appears in its history and timeline.
+4. As an analyst I set the case TLP and mark a case or an evidence item "do not send to AI / TI"; AI runs and TI enrichments for it are then refused. Only an admin lowers a TLP or lifts an exclusion.
+5. As an analyst I confirm, suspect or reject ATT&CK techniques for a case, from suggestions (capa, findings, verified AI) or by id, and see them as a tactic matrix.
+6. As an analyst I export the case timeline as CSV or JSON.
+7. As an analyst I write a report (executive summary, scope, methodology, impact, root cause, actions, recommendations, lessons learned), choose the evidence, findings, IOCs, ATT&CK mappings, notes and verified AI runs it includes, preview it, and finalize it into a signed, immutable version with a change note; a later finalize creates the next version.
+8. As a reader I download the PDF, HTML or Markdown of a version, follow every `[Cn]` citation to the row it rests on, and see whether the signature and hash are valid; an external recipient verifies a PDF offline with the published public key.
+9. As an analyst I produce an `external` version in which internal hosts, IPs and users are pseudonymized consistently, after reviewing the preview and stating the distribution.

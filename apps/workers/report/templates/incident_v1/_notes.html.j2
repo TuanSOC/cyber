@@ -1,0 +1,14 @@
+{#- Analyst notes (opt-in, internal profile only). Plain text. -#}
+{% if present.notes %}
+<section id="notes">
+<h2>Analyst notes</h2>
+{{ m.shown(s.notes) }}
+{% for n in s.notes.items %}
+<div class="note">
+<h3>{{ m.t(n.author) }}, {{ n.updated_at|ts }} (version {{ n.version }})</h3>
+<div class="prose">{{ m.t(n.body) }}</div>
+{% if n.cite_nos %}<p>{{ m.cites(n.cite_nos) }}</p>{% endif %}
+</div>
+{% endfor %}
+</section>
+{% endif %}

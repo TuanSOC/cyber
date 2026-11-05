@@ -1,0 +1,20 @@
+{#- The case timeline (UTC, in order). -#}
+{% if present.timeline %}
+<section id="timeline">
+<h2>Timeline</h2>
+{{ m.shown(s.timeline) }}
+<table>
+<thead><tr><th scope="col" class="w20">When (UTC)</th><th scope="col" class="w12">Kind</th><th scope="col">Event</th><th scope="col" class="w12">Severity</th></tr></thead>
+<tbody>
+{% for t in s.timeline.items %}
+<tr>
+<td>{{ t.ts|ts }}<br><span class="muted">{{ t.ts_source }}</span></td>
+<td>{{ t.kind }}</td>
+<td>{{ m.t(t.title) }}{{ m.maybe_cite(t.cite_no) }}</td>
+<td>{% if t.severity %}{{ m.sev(t.severity) }}{% else %}—{% endif %}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</section>
+{% endif %}

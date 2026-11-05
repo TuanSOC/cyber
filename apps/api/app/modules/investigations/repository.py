@@ -2,14 +2,20 @@ import enum
 import re
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, Select, UnaryExpression, func, or_, select, update
+from sqlalchemy import ColumnElement, Select, UnaryExpression, func, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.pagination import PageParams
 from app.modules.evidence.models import Evidence
-from app.modules.investigations.models import Investigation, InvestigationStatus, Severity
+from app.modules.investigations.models import (
+    Investigation,
+    InvestigationStatus,
+    InvestigationStatusEvent,
+    Severity,
+)
 from app.modules.organizations.models import Organization
 from app.modules.users.models import User
 
@@ -131,3 +137,24 @@ async def get_row(
         stmt = stmt.with_for_update(of=Investigation, key_share=True)
     result = (await session.execute(stmt)).one_or_none()
     return Row(result[0], result[1], result[2]) if result else None
+
+
+async def list_status_events(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    investigation_id: uuid.UUID,
+    *,
+    limit: int,
+    before: tuple[datetime, uuid.UUID] | None = None,
+) -> list[tuple[InvestigationStatusEvent, str]]:
+    """Newest first; `before` is the (occurred_at, id) key of the previous page's last row."""
+    e = InvestigationStatusEvent
+    stmt = (
+        select(e, User.display_name)
+        .join(User, User.id == e.actor_id)
+        .where(e.organization_id == org_id, e.investigation_id == investigation_id)
+    )
+    if before is not None:
+        stmt = stmt.where(tuple_(e.occurred_at, e.id) < tuple_(*before))
+    stmt = stmt.order_by(e.occurred_at.desc(), e.id.desc()).limit(limit)
+    return [(event, name) for event, name in (await session.execute(stmt)).all()]

@@ -1,6 +1,7 @@
 import type { Schemas } from "@cyberlab/contracts";
 
 import { ApiError, errorMessage } from "@/lib/api";
+import { policyBlockedReason, shareReasonText } from "@/lib/case";
 import { formatDate } from "@/lib/format";
 
 /*
@@ -212,6 +213,7 @@ export function verifyErrorText(code: string | null | undefined): string | null 
 
 const TI_ERROR_TEXT: Record<string, string> = {
   terms_not_acknowledged: "Acknowledge the provider's terms before enabling it.",
+  policy_blocked: "The case or evidence share policy does not allow sending these indicators to threat-intel providers.",
   api_key_required: "Store an API key before enabling this provider.",
   key_required_for_url_change: "Changing the MISP URL requires entering the key again.",
   misp_url_invalid: "The MISP URL must be https, without user name, password, query or fragment.",
@@ -235,6 +237,9 @@ const TI_ERROR_TEXT: Record<string, string> = {
 
 /** Error text for TI API calls: known codes get a specific message. */
 export function tiErrorMessage(error: unknown): string {
+  // A policy_blocked answer names the specific reason (TLP:RED, case or evidence exclusion).
+  const reason = policyBlockedReason(error);
+  if (reason) return `${shareReasonText(reason)} Nothing was sent to the providers.`;
   if (error instanceof ApiError && Object.hasOwn(TI_ERROR_TEXT, error.code)) return TI_ERROR_TEXT[error.code];
   return errorMessage(error);
 }

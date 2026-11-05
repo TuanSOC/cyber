@@ -1,0 +1,23 @@
+{#- Shared fragments. `n` is always an integer citation number from the snapshot.
+
+    t(value): snapshot text, made visible (`vis`) and autoescaped piece by piece, with a
+    <wbr> break opportunity every 512 characters inside longer unbroken runs (`runs`).
+    WeasyPrint's line breaking is quadratic in the length of an unbroken run; the breaks
+    keep it linear, so the render budget holds (RT1). <wbr> adds no character to the
+    text. o(value): the same, or an em dash for None / "". -#}
+{% macro t(value) %}{% for part in value|runs %}{% if not loop.first %}<wbr>{% endif %}{{ part }}{% endfor %}{% endmacro %}
+
+{% macro o(value) %}{% if value is none or value == "" %}—{% else %}{{ t(value) }}{% endif %}{% endmacro %}
+{% macro cite(n) %}<sup class="cite"><a href="#c{{ n }}">[C{{ n }}]</a></sup>{% endmacro %}
+
+{% macro cites(numbers) %}{% for n in numbers %}{{ cite(n) }}{% endfor %}{% endmacro %}
+
+{% macro maybe_cite(n) %}{% if n is not none %}{{ cite(n) }}{% endif %}{% endmacro %}
+
+{% macro shown(section) %}
+{% if section.total > section.items|length %}
+<p class="shown">Showing {{ section.items|length|num }} of {{ section.total|num }}.</p>
+{% endif %}
+{% endmacro %}
+
+{% macro sev(value) %}<span class="sev {{ value|sev_class }}">{{ value|opt }}</span>{% endmacro %}

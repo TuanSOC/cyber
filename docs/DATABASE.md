@@ -1,6 +1,6 @@
 # Database
 
-PostgreSQL 17. Schema owned by Alembic (`apps/api/alembic/versions`): `0001` is M1, `0002`–`0005` M2 (analysis jobs, pcap results), `0006`–`0008` M3 (static analyzer, malware results, storage quota), `0009`–`0010` M4 (threat intelligence), `0011` M5 (AI analyst).
+PostgreSQL 17. Schema owned by Alembic (`apps/api/alembic/versions`): `0001` is M1, `0002`–`0005` M2 (analysis jobs, pcap results), `0006`–`0008` M3 (static analyzer, malware results, storage quota), `0009`–`0010` M4 (threat intelligence), `0011` M5 (AI analyst), `0012` M6 (reports and case management; `0013` is reserved for later M6 schema fixes and does not exist yet).
 
 ## Roles
 
@@ -57,6 +57,18 @@ erDiagram
   ai_runs ||--o{ ai_context_refs : "label map"
   ai_runs ||--o| ai_outputs : "verified output"
   ai_outputs ||--o{ ai_citations : "checked citations"
+  investigations ||--o{ investigation_status_events : "status history"
+  evidence ||--o| evidence_share_policies : "share flags"
+  investigations ||--o{ analyst_notes : notes
+  analyst_notes ||--o{ analyst_note_versions : versions
+  investigations ||--o{ ioc_collections : collections
+  ioc_collections ||--o{ ioc_collection_items : items
+  investigations ||--o{ case_attack_mappings : "ATT&CK mapping"
+  investigations ||--o{ reports : "report drafts"
+  reports ||--o{ report_versions : "signed versions"
+  report_versions ||--o{ report_citations : "C1..Cn"
+  report_versions ||--o{ report_renders : renditions
+  report_renders ||--|| report_render_index : "system lookup"
 ```
 
 (`malware_exports` and `malware_resources` hang off `analysis_jobs` the same way.)
@@ -68,7 +80,7 @@ erDiagram
 | `refresh_tokens` | user | sha256 of opaque token, `family_id`, `revoked_reason` (rotated/logout/reuse) |
 | `organizations` | tenant | `slug` unique, `next_case_number` counter; `storage_quota_bytes` (NULL = `DEFAULT_STORAGE_QUOTA_BYTES`, set by an operator only) |
 | `organization_members` | tenant | unique (org, user); role owner/admin/analyst/viewer |
-| `investigations` | tenant | unique (org, case_number); status open/in_progress/closed/archived |
+| `investigations` | tenant | unique (org, case_number); status open/in_progress/closed/archived; M6: `tlp` (`clear` / `green` / `amber` / `amber_strict` / `red`, default `amber`, existing rows backfilled), `ai_excluded`, `ti_excluded` (default false) |
 | `evidence` | tenant | object `storage_bucket/key/version_id`; identity columns immutable |
 | `evidence_hashes` | tenant | append-only; md5/sha1/sha256 per evidence |
 | `evidence_custody_events` | tenant | append-only chain of custody |
@@ -101,6 +113,18 @@ erDiagram
 | `ai_context_refs` | tenant, append-only | PK (run_id, label): `stage`, `label` (`^(J[0-9]{1,3}:)?[A-Z][0-9]{1,4}$`), `kind` (16 values), `ref_table`, `ref_id` (uuid text or a Zeek `flow_ref`), `job_id` (composite FK), `fields_sha256`; index (org, kind, ref_id) for M6 "which outputs cite this row" |
 | `ai_outputs` | tenant, append-only | `run_id` unique: `body` jsonb ≤ 64 KiB (validated, sanitized `AnalysisOutput`; raw model text is never stored), `verification` ≤ 32 KiB (claim verdicts, citation counts, dropped refs, invalid ATT&CK, truncation, digest reuse), `flags` jsonb array |
 | `ai_citations` | tenant, append-only | `output_id`, `run_id`, `claim_path`, `section`, `claim_id`, `claim_status` supported / unsupported / hypothesis, `label`, `kind`, `ref_id`, `job_id`, `status` verified / unverified / invalid, `reason`, `field`, `quote` ≤ 256, `stale`; indexes on `output_id` and (org, kind, ref_id) |
+| `investigation_status_events` | tenant, append-only | M6: `investigation_id` (composite FK), `from_status` (NULL or a status), `to_status`, `reason` ≤ 500, `actor_id`, `occurred_at`; index (investigation_id, occurred_at) |
+| `evidence_share_policies` | tenant | M6: PK `evidence_id` (composite FK), `ai_excluded`, `ti_excluded`, `updated_by`, `updated_at`; a separate table so the `evidence_immutable` trigger is untouched |
+| `analyst_notes` | tenant | M6: `investigation_id`, `created_by`, `current_version` ≥ 1, `pinned`, `include_in_reports`, `deleted_at` / `deleted_by` (both or neither); index (investigation_id, created_at) |
+| `analyst_note_versions` | tenant, append-only | M6: PK (note_id, version): `body` 1–20 000 characters, `refs` jsonb array ≤ 20 entries and ≤ 16 KiB, `author_id`, `created_at` |
+| `ioc_collections` | tenant | M6: `investigation_id`, `name` 1–120 (unique per case on `lower(name)`), `description` ≤ 2 000, `archived_at` |
+| `ioc_collection_items` | tenant | M6: `collection_id`, `ioc_type` (`^[a-z][a-z0-9_]{0,31}$`), `value_norm` 1–2 048, `ioc_key` (64 hex), `source` `job_ioc` / `manual` with `job_id` + `ioc_id` both or neither (and set iff `job_ioc`), `note` ≤ 500, `added_by/at`, `removed_at/by` (both or neither); unique (collection, ioc_key) among items not removed; index (org, ioc_key) to join `ti_results` |
+| `case_attack_mappings` | tenant | M6: `investigation_id`, `technique_id` (`^T\d{4}(\.\d{3})?$`), `status` confirmed / suspected / rejected, `rationale` ≤ 2 000, `sources` jsonb array ≤ 32 and ≤ 16 KiB, `created_by`, `updated_by`; unique (investigation, technique) |
+| `reports` | tenant | M6: the draft: `investigation_id`, `template` `incident_v1`, `title` 1–200, `tlp`, `profile` internal / external, `draft` jsonb object ≤ 1 MiB, `distribution` ≤ 500, `status` draft / discarded, `revision` ≥ 1, `latest_version` ≥ 0, `created_by`; indexes (org, updated_at), (investigation_id, created_at) |
+| `report_versions` | tenant, append-only | M6: unique (report, version): `schema_version` `cyberlab.report.v1`, `tlp`, `profile`, `snapshot_sha256`, `snapshot_bytes`, `object_key`, `object_version_id`, `manifest` jsonb ≤ 4 KiB, `signature` (base64 Ed25519, 88 characters), `kid`, `section_counts` ≤ 4 KiB, `change_note` ≤ 500, `finalized_by/at`; index (org, finalized_at) |
+| `report_citations` | tenant, append-only | M6: `version_id`, `cite_no` > 0 (unique per version), `kind`, `ref_table`, `ref_id` (1–64, uuid text or a Zeek `flow_ref`), `job_id`, `fields_sha256`, `source` ai / selection / note / attack, `ai_citation_id`; **index (org, kind, ref_id)** for "which report versions cite this row", next to the M5 `ai_context_refs` and `ai_citations` indexes |
+| `report_renders` | tenant | M6: `version_id`, `format` pdf / html / md (DOCX deferred), `status` queued / running / succeeded / failed (failed needs `error_code`), `token_sha256`, `sha256`, `bytes`, `pages`, `object_version_id`, `renderer_version`, `requested_by`, `started_at`, `finished_at`; unique (version, format, renderer version) among non-failed renders; index (org, created_at) |
+| `report_render_index` | system lookup | M6: PK `render_id` (composite FK, cascade) → org, `status`, `dispatched_at`, `deadline_at`, `attempts`; the `ai_run_index` RLS pattern; index (status, deadline_at) for the reaper |
 | `ti_results` | tenant | append-only provider answers (history = cache): `provider`, `ioc_type`, `value_norm`, `ioc_key` (sha256 of type ‖ 0 ‖ value), `status` ok / not_found / error / auth_failed, `found` (only with ok), `detections`, `score` + `score_scale`, `tags`, `families`, `attack_ids`, `first_seen`, `last_seen`, `summary` (strict per-provider model, ≤ 16 KiB, never the raw body), `permalink` (`https://` only), `error_code`, `latency_ms`, `fetched_at`, `expires_at` (NULL for errors); unique (run_id, provider, ioc_key); index (org, ioc_key, provider, fetched_at DESC) |
 
 All ids are UUIDs (client-generated `uuid4`, server default `gen_random_uuid()`); timestamps are `timestamptz`.
@@ -114,7 +138,7 @@ Analysis result tables (migrations 0004/0005):
 Static results (migration 0007) follow the same rules:
 - Every `malware_*` row points at its job with a composite FK `(job_id, organization_id) → analysis_jobs(id, organization_id)`, `ON DELETE CASCADE`.
 - Findings and IOCs of static jobs go into the shared `analysis_findings` and `iocs`. The §11 `malware_findings` table is therefore `analysis_findings` of static jobs.
-- Reports are built on demand; there is no `reports` table yet.
+- The static JSON report is still built on demand per job; the persisted, signed case reports are the M6 `reports` tables below.
 
 Threat intel (migrations 0009/0010; details in [THREAT_INTEL.md](THREAT_INTEL.md)):
 - `iocs` is unchanged: results join on `ioc_key`, computed in Python.
@@ -126,6 +150,12 @@ AI analyst (migration 0011; details in [AI_ANALYST.md](AI_ANALYST.md)):
 - The API writes a run, its index row, its base input, its refs and the audit row in one transaction (incident children with them); the analyst-worker writes the output, the citations and the run's usage / cost / metrics in one transaction.
 - `ai_runs.context_stats` never carries field names, titles or filenames (RT4); `ai_run_inputs.context` is exactly what was sent.
 - Nothing in `ai_*` is ever purged yet (no retention policy, RT28).
+
+Reports and case management (migration 0012; details in [REPORTS.md](REPORTS.md)):
+- Finalize writes a version, its citations, the PDF render, its index row and the audit row in one short transaction, after the snapshot object was stored and locked outside any transaction; a version whose write fails leaves a logged orphan object, never a row without an object.
+- The snapshot bytes live in MinIO (`reports` bucket, exact `object_version_id`); the row keeps their sha256, size, the signed manifest and the signature, so every read is verified.
+- `ti_run_items.reason` gains `policy_blocked` (the share-policy outcome of the enrich-worker); `ai_runs.error_code` has no CHECK, so its `policy_blocked` needed no change.
+- Notes, collections, mappings, reports and versions are never purged (no retention policy); versions and note versions are append-only, and a deleted note keeps its versions.
 
 ## Tenant isolation (RLS)
 
@@ -140,8 +170,8 @@ app_user_id() = NULLIF(current_setting('app.user_id', true), '')::uuid
 
 | Table | Command | Policy |
 |---|---|---|
-| investigations, evidence, evidence_hashes, evidence_custody_events, audit_logs, analysis_jobs, pcap result tables, `malware_*`, `ti_*` except `ti_run_index`, `ai_*` except `ai_run_index` | ALL | `organization_id = app_org_id()` (USING + CHECK) |
-| analysis_job_index, ti_run_index, ai_run_index | ALL | `app_org_id() IS NULL OR organization_id = app_org_id()`: trusted workers' system sessions see every row, tenant sessions only their org's |
+| investigations, evidence, evidence_hashes, evidence_custody_events, audit_logs, analysis_jobs, pcap result tables, `malware_*`, `ti_*` except `ti_run_index`, `ai_*` except `ai_run_index`, the M6 tables except `report_render_index` | ALL | `organization_id = app_org_id()` (USING + CHECK) |
+| analysis_job_index, ti_run_index, ai_run_index, report_render_index | ALL | `app_org_id() IS NULL OR organization_id = app_org_id()`: trusted workers' system sessions see every row, tenant sessions only their org's |
 | organization_members | SELECT | `organization_id = app_org_id() OR user_id = app_user_id()` |
 | organization_members | INSERT / UPDATE / DELETE | `organization_id = app_org_id()` |
 | organizations | SELECT | `id = app_org_id() OR id IN (memberships of app_user_id())` |
@@ -186,12 +216,27 @@ Rules:
 | `ai_runs` | SELECT, INSERT; UPDATE on `status, error_code, served_model, usage, cost_micros, price_version, metrics, started_at, finished_at` |
 | `ai_run_index` | SELECT, INSERT; UPDATE on `status, resume_at, deadline_at, dispatched_at, lease_until, lease_owner, attempts, calls` |
 | `ai_run_inputs`, `ai_context_refs`, `ai_outputs`, `ai_citations` | SELECT, INSERT |
+| `investigation_status_events`, `analyst_note_versions`, `report_versions`, `report_citations` | SELECT, INSERT (append-only) |
+| `evidence_share_policies` | SELECT, INSERT; UPDATE on `ai_excluded, ti_excluded, updated_by, updated_at` |
+| `analyst_notes` | SELECT, INSERT; UPDATE on `current_version, pinned, include_in_reports, deleted_at, deleted_by, updated_at` |
+| `ioc_collections` | SELECT, INSERT; UPDATE on `name, description, archived_at, updated_at` |
+| `ioc_collection_items` | SELECT, INSERT; UPDATE on `removed_at, removed_by, note` |
+| `case_attack_mappings` | SELECT, INSERT; UPDATE on `status, rationale, sources, updated_by, updated_at` |
+| `reports` | SELECT, INSERT; UPDATE on `title, tlp, profile, draft, distribution, status, revision, latest_version, updated_at` |
+| `report_renders` | SELECT, INSERT; UPDATE on `status, error_code, sha256, bytes, pages, object_version_id, renderer_version, started_at, finished_at` |
+| `report_render_index` | SELECT, INSERT; UPDATE on `status, dispatched_at, deadline_at, attempts` |
+
+No M6 table has a DELETE grant. `investigations` keeps its table-wide UPDATE (M1), which covers the new `tlp`, `ai_excluded` and `ti_excluded` columns; the rules for them (downgrade, turning a flag off) are enforced by the API.
 
 The enrich and analyst workers use the same `cyberlab_app` role as the API (no dedicated role yet; accepted residual, see THREAT_MODEL). The app role can never UPDATE `organization_id`, `provider`, `task` or `created_at` of an `ai_*` row.
 
 ## Triggers
 
-- `forbid_mutation()` — `BEFORE UPDATE OR DELETE` on the four append-only tables, on `ti_results` (M4) and on `ai_run_inputs`, `ai_context_refs`, `ai_outputs`, `ai_citations` (M5); it fires for the owner too.
+- `forbid_mutation()` — `BEFORE UPDATE OR DELETE` on the four append-only tables, on `ti_results` (M4), on `ai_run_inputs`, `ai_context_refs`, `ai_outputs`, `ai_citations` (M5) and on `investigation_status_events`, `analyst_note_versions`, `report_versions`, `report_citations` (M6); it fires for the owner too.
+- `analyst_note_guard()` (M6) — `BEFORE UPDATE` on `analyst_notes`: `current_version` never decreases, `deleted_at/by` are set once, identity columns (id, org, case, creator, `created_at`) are immutable.
+- `ioc_collection_item_guard()` (M6) — `BEFORE UPDATE` on `ioc_collection_items`: the removal is set once; type, value, key, source, job, IOC, adder and `added_at` are immutable.
+- `report_guard()` (M6) — `BEFORE UPDATE` on `reports`: a discarded report is final; `revision` increases by exactly one per update; `latest_version` never decreases; a report with versions cannot be discarded; identity columns (id, org, case, template, creator, `created_at`) are immutable.
+- `report_render_transition()` (M6) — `BEFORE UPDATE` on `report_renders`: only `queued → running / failed` and `running → succeeded / failed`; final states never change; id, org, version, format, `token_sha256`, requester and `created_at` are immutable.
 - `ti_run_transition()` — `BEFORE UPDATE` on `ti_enrichment_runs`: only `queued → running / partial / failed`, `running → waiting / completed / partial / failed`, `waiting → running / partial / failed`; final states never change; identity columns (`id`, org, `scope`, `job_id`, `requested_by`, `providers`, `created_at`) are immutable.
 - `ti_key_version_guard()` — `BEFORE UPDATE` on `ti_provider_configs`: `key_version` never decreases; new sealed columns need a higher `key_version`, except a re-seal of the same key (same version and last4) under another kid. Clearing a key keeps the version, so an old ciphertext can never be put back (RT18).
 - `ai_run_transition()` — `BEFORE UPDATE` on `ai_runs`: only `queued → running / failed`, `running → waiting / completed / partial / failed / refused`, `waiting → running / failed`; final states (`completed`, `partial`, `failed`, `refused`) never change; identity columns (id, org, task, scope, job, investigation, target, parent, provider, model, prompt and schema versions, `context_sha256`, `context_stats`, requester, `supersedes_run_id`, `deadline_at`, `created_at`) are immutable, even for the owner.
@@ -227,7 +272,13 @@ M5 migration:
 
 | Revision | Changes |
 |---|---|
-| `0011` AI analyst | the eight `ai_*` tables with checks (provider and task lists, statuses, scope / target / parent shapes, model pattern, label grammar, hash shapes, jsonb size caps, sealed-column shapes, enable-needs-acknowledgement), composite tenant FKs (incl. the run self-references), RLS ENABLE + FORCE with `tenant_isolation` (and `run_index_scope` on `ai_run_index`), table grants without DELETE plus per-column UPDATE grants, the run-transition, key-version and append-only triggers. Later schema changes go into `0012` |
+| `0011` AI analyst | the eight `ai_*` tables with checks (provider and task lists, statuses, scope / target / parent shapes, model pattern, label grammar, hash shapes, jsonb size caps, sealed-column shapes, enable-needs-acknowledgement), composite tenant FKs (incl. the run self-references), RLS ENABLE + FORCE with `tenant_isolation` (and `run_index_scope` on `ai_run_index`), table grants without DELETE plus per-column UPDATE grants, the run-transition, key-version and append-only triggers |
+
+M6 migration:
+
+| Revision | Changes |
+|---|---|
+| `0012` reports and case management | `investigations` gains `tlp` (check, default `amber`, backfilled), `ai_excluded`, `ti_excluded`; `ti_run_items.reason` accepts `policy_blocked`; the eleven tenant tables `investigation_status_events`, `evidence_share_policies`, `analyst_notes`, `analyst_note_versions`, `ioc_collections`, `ioc_collection_items`, `case_attack_mappings`, `reports`, `report_versions`, `report_citations`, `report_renders` plus the system lookup `report_render_index`, with named checks (length caps with `char_length` / `octet_length`, jsonb shapes, hash and signature shapes), composite tenant FKs, RLS ENABLE + FORCE (`tenant_isolation`; the run-index pattern on `report_render_index`), SELECT / INSERT plus per-column UPDATE grants and no DELETE, the four guard triggers and `forbid_mutation()` on the four append-only tables. Indexes include `report_citations (organization_id, kind, ref_id)` and `ioc_collection_items (organization_id, ioc_key)`. Later M6 schema changes go into `0013`, assigned by the parent; none exists yet |
 
 asyncpg executes one statement per call, so raw SQL in migrations is issued statement by statement. `citext` is created by migration `0001` (trusted extension, created by the database owner); `gen_random_uuid()` is built in.
 

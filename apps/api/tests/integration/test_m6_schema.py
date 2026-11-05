@@ -1,6 +1,6 @@
-"""Migration 0012 (M6 phase 1): RLS and FORCE on every new table, cross-org FKs, the
-append-only tables (owner included), the guard triggers, column grants, no DELETE, checks
-and the backfilled case defaults."""
+"""Migrations 0012 (M6 phase 1) and 0013 (review L4): RLS and FORCE on every new table,
+cross-org FKs, the append-only tables (owner included), the guard triggers, column grants,
+no DELETE, checks and the backfilled case defaults."""
 
 import uuid
 
@@ -10,6 +10,9 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.core.tenancy import tenant_session
+from app.modules.ai.contracts import CitationResult, CitationStatus
+from tests.ai_api_helpers import finish_run
+from tests.ai_helpers import seed_ai_run, seed_job
 from tests.case_helpers import (
     seed_case,
     seed_collection,
@@ -142,6 +145,91 @@ async def test_children_cannot_point_at_another_orgs_rows() -> None:
         "note": foreign["note"],
         "col": foreign["collection"],
         "ver": foreign["version"],
+    }
+    for statement in statements:
+        with pytest.raises(DBAPIError, match="foreign key"):
+            async with tenant_session(a.org_id, a.owner_id) as s:
+                await s.execute(text(statement), params)
+
+
+SAME_ORG_FKS = (
+    "SELECT conrelid::regclass::text, conname::text, array_length(conkey, 1) "
+    "FROM pg_constraint WHERE contype = 'f' AND conname IN ("
+    "'fk_ioc_collection_items_ioc_id_organization_id_iocs', "
+    "'fk_report_citations_ai_citation_id_organization_id_ai_citations', "
+    "'fk_ioc_collection_items_ioc_id_iocs', 'fk_report_citations_ai_citation_id_ai_citations'"
+    ") ORDER BY 1"
+)
+
+
+async def test_job_iocs_and_ai_citations_are_same_org_fks(owner_engine: AsyncEngine) -> None:
+    """0013 (M6 review L4): the two plain `id` FKs of 0012 are composite same-org FKs."""
+    async with owner_engine.connect() as conn:
+        rows = (await conn.execute(text(SAME_ORG_FKS))).all()
+    assert [tuple(r) for r in rows] == [
+        ("ioc_collection_items", "fk_ioc_collection_items_ioc_id_organization_id_iocs", 2),
+        (
+            "report_citations",
+            "fk_report_citations_ai_citation_id_organization_id_ai_citations",
+            2,
+        ),
+    ]
+
+
+async def test_items_and_citations_cannot_name_another_orgs_ioc_or_ai_citation() -> None:
+    a = await seed_tenant("alpha")
+    b = await seed_tenant("bravo")
+    foreign_job = await seed_job(b)
+    async with tenant_session(b.org_id, b.owner_id) as s:
+        foreign_ioc = (
+            await s.execute(
+                text(
+                    "INSERT INTO iocs (organization_id, job_id, type, value, first_seen, "
+                    "last_seen, count, source) VALUES (:o, :j, 'domain', 'x.example', now(), "
+                    "now(), 1, 'dns') RETURNING id"
+                ),
+                {"o": b.org_id, "j": foreign_job},
+            )
+        ).scalar_one()
+    run = await seed_ai_run(b, job_id=foreign_job)
+    await finish_run(
+        b.org_id,
+        run,
+        body={"summary": "x"},
+        citations=[
+            CitationResult(
+                claim_path="observed[0].citations[0]",
+                section="observed",
+                label="A1",
+                status=CitationStatus.UNVERIFIED,
+            )
+        ],
+    )
+    async with tenant_session(b.org_id, b.owner_id) as s:
+        foreign_citation = (
+            await s.execute(text("SELECT id FROM ai_citations WHERE run_id = :r"), {"r": run})
+        ).scalar_one()
+
+    own_job = await seed_job(a)
+    collection = await seed_collection(a)
+    report = await seed_report(a)
+    version = (await seed_version(a, report, new_signing_keys(), store=False)).version_id
+    statements = (
+        "INSERT INTO ioc_collection_items (organization_id, collection_id, ioc_type, "
+        "value_norm, ioc_key, source, job_id, ioc_id, added_by) VALUES (:o, :col, 'domain', "
+        "'x.example', repeat('d', 64), 'job_ioc', :job, :ioc, :u)",
+        "INSERT INTO report_citations (organization_id, version_id, cite_no, kind, ref_table, "
+        "ref_id, fields_sha256, source, ai_citation_id) VALUES (:o, :ver, 1, 'finding', "
+        "'analysis_findings', 'x', repeat('a', 64), 'ai', :cit)",
+    )
+    params = {
+        "o": a.org_id,
+        "u": a.owner_id,
+        "col": collection,
+        "job": own_job,
+        "ioc": foreign_ioc,
+        "ver": version,
+        "cit": foreign_citation,
     }
     for statement in statements:
         with pytest.raises(DBAPIError, match="foreign key"):

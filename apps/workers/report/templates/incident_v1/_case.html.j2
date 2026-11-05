@@ -1,0 +1,32 @@
+{#- The case itself and its status history. -#}
+<section id="case">
+<h2>Case</h2>
+<table class="meta">
+<tbody>
+<tr><th scope="row">Reference</th><td>{{ s.case.case_ref }}</td></tr>
+<tr><th scope="row">Title</th><td>{{ m.t(s.case.title) }}</td></tr>
+<tr><th scope="row">Status</th><td>{{ s.case.status }}</td></tr>
+<tr><th scope="row">Severity</th><td>{{ m.sev(s.case.severity) }}</td></tr>
+<tr><th scope="row">Case TLP</th><td>{{ s.case.tlp|tlp_label }}</td></tr>
+<tr><th scope="row">Opened</th><td>{{ s.case.created_at|ts }}</td></tr>
+</tbody>
+</table>
+{% if s.case.description %}
+<h3>Description</h3>
+<div class="prose">{{ m.t(s.case.description) }}</div>
+{% endif %}
+{% if s.case.status_history %}
+<h3 id="status-history">Status history</h3>
+{% if s.case.status_history_total > s.case.status_history|length %}
+<p class="shown">Showing {{ s.case.status_history|length|num }} of {{ s.case.status_history_total|num }}.</p>
+{% endif %}
+<table>
+<thead><tr><th scope="col" class="w22">When</th><th scope="col" class="w14">From</th><th scope="col" class="w14">To</th><th scope="col" class="w18">By</th><th scope="col">Reason</th></tr></thead>
+<tbody>
+{% for e in s.case.status_history %}
+<tr><td>{{ e.occurred_at|ts }}</td><td>{{ m.o(e.from_status) }}</td><td>{{ e.to_status }}</td><td>{{ m.t(e.actor) }}</td><td>{{ m.o(e.reason) }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endif %}
+</section>

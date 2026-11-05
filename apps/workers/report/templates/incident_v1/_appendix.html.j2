@@ -1,0 +1,30 @@
+{#- Citation appendix (block layout, RT1) and the integrity statement. Links are built only
+    from the snapshot's base_url (PUBLIC_BASE_URL, internal profile) and the cited path
+    (render_html.platform_links); the external profile carries neither, so no link is
+    emitted (RT8). -#}
+{% if present.citations %}
+<section id="citations">
+<h2>Citation appendix</h2>
+{{ m.shown(s.citations) }}
+{% if s.citations.dropped_out_of_scope %}
+<p class="muted">{{ s.citations.dropped_out_of_scope|num }} cited row(s) were out of scope at snapshot time and are not shown.</p>
+{% endif %}
+{% for c in s.citations.items %}
+<div class="citation" id="c{{ c.cite_no }}">
+<p class="cite-head">[C{{ c.cite_no }}] {{ c.kind }} · {{ c.ref_table }} · <code>{{ c.ref_id }}</code> · source: {{ c.source }}</p>
+{% if c.job_id %}<p class="field"><span class="name">job</span> <code>{{ c.job_id }}</code></p>{% endif %}
+<p class="field"><span class="name">fields_sha256</span> <code>{{ c.fields_sha256 }}</code></p>
+{% for name, value in c.fields|dictsort %}
+<p class="field"><span class="name">{{ name }}</span> <span class="value">{{ m.t(value) }}</span></p>
+{% endfor %}
+{% if c.path %}
+<p class="field"><span class="name">path</span> <code>{{ c.path }}</code>{% if c.cite_no in links %} <a href="{{ links[c.cite_no] }}">open in CyberLab</a>{% endif %}</p>
+{% endif %}
+</div>
+{% endfor %}
+</section>
+{% endif %}
+<section id="integrity">
+<h2>Integrity</h2>
+<p>This document is a rendition of the signed snapshot <code>{{ sha256 }}</code> ({{ s.schema_version }}). The snapshot, its manifest and the detached Ed25519 signature are the record of truth; in the PDF they are embedded as attachments (snapshot.json, manifest.json, manifest.sig.json). Verify them offline against the published report signing keys.</p>
+</section>

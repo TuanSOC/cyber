@@ -31,6 +31,8 @@ def to_out(row: repo.EvidenceRow) -> EvidenceOut:
         uploaded_by_name=row.uploaded_by_name,
         uploaded_at=e.uploaded_at,
         hashes=row.hashes,
+        ai_excluded=row.ai_excluded,
+        ti_excluded=row.ti_excluded,
     )
 
 

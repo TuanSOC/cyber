@@ -24,7 +24,7 @@ ALLOWED = {
 }
 # Allowlisted ahead of their implementation (M6 phase 1 stubs): exempt from the "still
 # needed" check until the owning phase lands. Phase 9 asserts this set is empty.
-PENDING_ALLOWED = frozenset({"modules/reports/render_ingest.py"})
+PENDING_ALLOWED: frozenset[str] = frozenset()
 
 
 def _org_argument_is_set(call: ast.Call) -> bool:

@@ -1,0 +1,27 @@
+{#- Verified AI runs: supported claims and labelled hypotheses only, flags inline (RT15). -#}
+{% if present.ai %}
+<section id="ai">
+<h2>AI-assisted analysis</h2>
+{{ m.shown(s.ai) }}
+{% for entry in ai_runs %}
+{% set run = entry.run %}
+<section class="ai-run">
+<h3>{{ run.task }}: {{ run.provider }} / {{ run.model }}</h3>
+<div class="ai-box">
+<p class="ai-warning">AI-generated interpretation: observations to verify, not verdicts.</p>
+<p>Model {{ run.model }}, prompt {{ run.prompt_version }}, context sha256 <code>{{ run.context_sha256[:12] }}…</code>, finished {{ run.finished_at|ts }}{% if run.overall_confidence %}, overall confidence {{ run.overall_confidence }}{% endif %}.</p>
+<p>{{ m.t(run.disclaimer) }}</p>
+{% if run.omitted_unsupported or run.omitted_flagged %}
+<p class="muted">Omitted: {{ run.omitted_unsupported|num }} unsupported claim(s), {{ run.omitted_flagged|num }} flagged claim(s).</p>
+{% endif %}
+</div>
+{% for group in entry.groups %}
+<h3>{{ group.title }}</h3>
+{% for c in group.claims %}
+<p class="claim">{% if c.status == "hypothesis" %}<strong>Hypothesis:</strong> {% endif %}{{ m.t(c.text) }}{{ m.cites(c.cite_nos) }}{% if c.confidence %} <span class="muted">({{ c.confidence }})</span>{% endif %}{% for flag in c.flags %} <span class="flag">{{ flag }}</span>{% endfor %}</p>
+{% endfor %}
+{% endfor %}
+</section>
+{% endfor %}
+</section>
+{% endif %}

@@ -8,6 +8,11 @@ M6 (RT3): `deny_network(extra_domains=..., deny_io_uring=...)` lets a worker den
 domains (the report renderer adds `AF_NETLINK`) and the io_uring syscalls, whose
 `IORING_OP_SOCKET` would bypass a `socket()` filter. Denied calls fail with `EACCES`. The
 defaults keep the analyzers' filter exactly as before.
+
+M6 review L5: `unix_only=True` (the report renderer) turns the domain list into an allowlist:
+`socket()` and `socketpair()` fail with `EACCES` for every domain except `AF_UNIX`
+(`AF_VSOCK`, `AF_BLUETOOTH`, `AF_ALG`, ... included), so a family missing from a denylist
+cannot be reached.
 """
 
 import ctypes
@@ -18,6 +23,7 @@ from collections.abc import Sequence
 
 SCMP_ACT_ALLOW = 0x7FFF0000
 SCMP_ACT_ERRNO_BASE = 0x00050000
+SCMP_CMP_NE = 1
 SCMP_CMP_EQ = 4
 DENIED_DOMAINS = (socket.AF_INET, socket.AF_INET6, socket.AF_PACKET)
 IO_URING_SYSCALLS = (b"io_uring_setup", b"io_uring_enter", b"io_uring_register")
@@ -56,23 +62,37 @@ def _library() -> ctypes.CDLL:
 # Resolved in the parent so the child does as little as possible between fork and exec.
 _LIB = _library()
 _SOCKET = _LIB.seccomp_syscall_resolve_name(b"socket")
+_SOCKETPAIR = _LIB.seccomp_syscall_resolve_name(b"socketpair")
 # __NR_SCMP_ERROR (negative) when libseccomp does not know a syscall.
 _IO_URING = tuple(_LIB.seccomp_syscall_resolve_name(name) for name in IO_URING_SYSCALLS)
 
 
-def deny_network(extra_domains: Sequence[int] = (), deny_io_uring: bool = False) -> None:
+def deny_network(
+    extra_domains: Sequence[int] = (), deny_io_uring: bool = False, unix_only: bool = False
+) -> None:
     """Install the filter in the current process (call from preexec_fn). Raises on failure.
 
     Denies `socket()` for AF_INET, AF_INET6, AF_PACKET and every domain in
     `extra_domains`, and (with `deny_io_uring`) the three io_uring syscalls, all with
-    `EACCES`. AF_UNIX stays allowed.
+    `EACCES`. AF_UNIX stays allowed. With `unix_only`, `socket()` and `socketpair()` are
+    denied for every domain other than AF_UNIX (an allowlist; `extra_domains` may still
+    name AF_UNIX to deny it too).
     """
     ctx = _LIB.seccomp_init(SCMP_ACT_ALLOW)
     if not ctx:
         raise OSError("seccomp_init failed")
     try:
         action = SCMP_ACT_ERRNO_BASE | errno.EACCES
-        for domain in (*DENIED_DOMAINS, *extra_domains):
+        if unix_only:
+            if _SOCKETPAIR < 0:
+                raise OSError("socketpair syscall not resolvable")
+            for number in (_SOCKET, _SOCKETPAIR):
+                # The domain is an int: a garbage upper half compares unequal (denied).
+                cmp = _ArgCmp(arg=0, op=SCMP_CMP_NE, datum_a=int(socket.AF_UNIX), datum_b=0)
+                if _LIB.seccomp_rule_add_array(ctx, action, number, 1, ctypes.byref(cmp)) != 0:
+                    raise OSError("seccomp_rule_add failed (unix only)")
+        denied = tuple(extra_domains) if unix_only else (*DENIED_DOMAINS, *extra_domains)
+        for domain in denied:
             cmp = _ArgCmp(arg=0, op=SCMP_CMP_EQ, datum_a=int(domain), datum_b=0)
             if _LIB.seccomp_rule_add_array(ctx, action, _SOCKET, 1, ctypes.byref(cmp)) != 0:
                 raise OSError("seccomp_rule_add failed")
