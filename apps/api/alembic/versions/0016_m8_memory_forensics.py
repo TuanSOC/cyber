@@ -313,7 +313,7 @@ def _create_tables() -> None:
         _text_max(t, "image_path", 1024 * 4),
     )
     op.execute(
-        f"CREATE UNIQUE INDEX uq_{t}_job_id_pid_offset ON {t} (job_id, pid, \"offset\") "
+        f'CREATE UNIQUE INDEX uq_{t}_job_id_pid_offset ON {t} (job_id, pid, "offset") '
         "NULLS NOT DISTINCT"
     )
     op.create_index(op.f(f"ix_{t}_job_id_ppid"), t, ["job_id", "ppid"])

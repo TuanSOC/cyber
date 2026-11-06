@@ -261,7 +261,11 @@ async def test_memory_size_refusals(sent: SentJobs, monkeypatch: pytest.MonkeyPa
     assert sent == []
 
 
-async def test_one_active_memory_job_per_org(sent: SentJobs) -> None:
+async def test_one_active_memory_job_per_org(
+    sent: SentJobs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # api-test raises the caps (tests create many jobs): restore the plan's per-org default.
+    monkeypatch.setattr(get_settings(), "memory_max_active_per_org", 1)
     reg, _, _ = await mr.queued_job(sent)
     case = await new_case(reg)
     other = (await mr.upload_memory(reg, case)).json()

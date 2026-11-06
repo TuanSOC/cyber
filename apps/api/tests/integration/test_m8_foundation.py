@@ -1,6 +1,7 @@
-"""M8 phase 1 plumbing: the frozen memory routes exist, check membership and answer 501 until
-their phase lands; a memory analysis request is accepted by schema (profile and OS hint
-defaults, the `memory` queue); a `kind=memory` upload gets no automatic analysis (RT3)."""
+"""M8 plumbing, final state: every memory route exists, checks membership first and none is a
+501 stub any more (phases 7 and 8 landed them); a memory analysis request is accepted by
+schema (profile and OS hint defaults, the `memory` queue); a `kind=memory` upload gets no
+automatic analysis (RT3)."""
 
 import uuid
 
@@ -11,7 +12,8 @@ from tests.analysis_helpers import new_case, upload
 from tests.factories import csrf, register
 from tests.security import idor_cases_memory, idor_cases_memory_sensitivity
 
-PENDING = idor_cases_memory.PENDING_ROUTES | idor_cases_memory_sensitivity.PENDING_ROUTES
+MODULES = (idor_cases_memory, idor_cases_memory_sensitivity)
+ROUTES: frozenset[tuple[str, str]] = frozenset().union(*(m.ROUTE_CASES for m in MODULES))
 
 
 def _org_routes() -> set[tuple[str, str]]:
@@ -23,12 +25,13 @@ def _org_routes() -> set[tuple[str, str]]:
     }
 
 
-def test_every_m8_route_is_frozen() -> None:
-    assert len(PENDING) == 8
-    assert PENDING <= _org_routes(), sorted(PENDING - _org_routes())
+def test_every_m8_route_exists_and_none_is_pending() -> None:
+    assert len(ROUTES) == 8
+    assert ROUTES <= _org_routes(), sorted(ROUTES - _org_routes())
+    assert all(not module.PENDING_ROUTES for module in MODULES)
 
 
-async def test_m8_routes_answer_501_to_members_and_404_to_outsiders() -> None:
+async def test_m8_routes_check_membership_first_and_none_answers_501() -> None:
     owner = await register(org_name="M8 Org")
     outsider = await register(org_name="M8 Outsider")
     ids = {
@@ -37,24 +40,21 @@ async def test_m8_routes_answer_501_to_members_and_404_to_outsiders() -> None:
         "evidence_id": str(uuid.uuid4()),
         "pid": "4",
     }
-    for method, template in sorted(PENDING):
+    for method, template in sorted(ROUTES):
         url = template.format(**ids)
-        kwargs = (
-            {"json": {"acknowledge": True, "reason": "case closed"}, "headers": csrf(owner.client)}
-            if method == "POST"
-            else {}
+        body = {"acknowledge": True, "reason": "case closed"} if method == "POST" else None
+        response = await owner.client.request(
+            method,
+            url,
+            **({"json": body, "headers": csrf(owner.client)} if body is not None else {}),
         )
-        response = await owner.client.request(method, url, **kwargs)
-        assert response.status_code == 501, (url, response.text)
-        assert response.json()["error"]["code"] == "not_implemented"
+        # Unknown job / evidence ids: implemented, so a 404 rather than the 501 stub.
+        assert response.status_code != 501, (url, response.text)
+        assert response.status_code < 500, (url, response.text)
         foreign = await outsider.client.request(
             method,
             url,
-            **(
-                {"json": kwargs["json"], "headers": csrf(outsider.client)}
-                if method == "POST"
-                else {}
-            ),
+            **({"json": body, "headers": csrf(outsider.client)} if body is not None else {}),
         )
         assert foreign.status_code in (403, 404), (url, foreign.status_code)
 

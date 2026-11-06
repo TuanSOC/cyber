@@ -25,7 +25,10 @@ def _settings(**overrides: Any) -> Settings:
     return Settings(**{**BASE, **overrides})
 
 
-def test_defaults_match_the_plan() -> None:
+def test_defaults_match_the_plan(monkeypatch: pytest.MonkeyPatch) -> None:
+    # api-test sets small / high test values for these through the environment.
+    for name in ("MEMORY_MAX_BYTES", "MEMORY_MAX_ACTIVE_PER_ORG", "MEMORY_MAX_ACTIVE_TOTAL"):
+        monkeypatch.delenv(name, raising=False)
     s = _settings(memory_max_bytes=8 * GIB)
     assert s.memory_max_bytes == 8 * GIB
     assert s.memory_max_result_bytes == 256 * 1024**2

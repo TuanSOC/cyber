@@ -86,9 +86,7 @@ def _rows(org_id: uuid.UUID, job_id: uuid.UUID, lines: list[BaseModel]) -> list[
         elif isinstance(line, MemoryProcessRecord):
             data = line.model_dump(exclude={"kind", "sources"})
             rows.append(
-                MemoryProcess(
-                    **common, **data, sources=sum(SOURCE_BITS[s] for s in line.sources)
-                )
+                MemoryProcess(**common, **data, sources=sum(SOURCE_BITS[s] for s in line.sources))
             )
         elif isinstance(line, MemoryConnectionRecord):
             data = line.model_dump(exclude={"kind", "local_addr", "remote_addr"})
@@ -137,9 +135,7 @@ async def seed_memory_job(
     return job.id
 
 
-async def restricted_memory_evidence(
-    t: Tenant, evidence_id: uuid.UUID | None = None
-) -> uuid.UUID:
+async def restricted_memory_evidence(t: Tenant, evidence_id: uuid.UUID | None = None) -> uuid.UUID:
     """Evidence marked as a restricted memory image, AI and TI excluded."""
     if evidence_id is None:
         evidence_id = await seed_evidence(t, filename="memory.raw")

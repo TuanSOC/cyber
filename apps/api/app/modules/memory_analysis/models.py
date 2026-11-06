@@ -184,9 +184,7 @@ class MemorySensitivity(Base):
 
     evidence_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
-    state: Mapped[str] = mapped_column(
-        String(16), server_default=SensitivityState.RESTRICTED.value
-    )
+    state: Mapped[str] = mapped_column(String(16), server_default=SensitivityState.RESTRICTED.value)
     defaulted_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     defaulted_at: Mapped[datetime] = mapped_column(server_default=func.now())
     released_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))

@@ -38,22 +38,10 @@ from tests.ops_helpers import (
     seed_job_outcomes,
 )
 from tests.report_helpers import purge_reports_test_bucket, reports_test_bucket
-from tests.security import (
-    idor_cases_correlation,
-    idor_cases_memory,
-    idor_cases_memory_sensitivity,
-    idor_cases_ops,
-    idor_cases_retention,
-)
+from tests.security import idor_cases_correlation, idor_cases_ops, idor_cases_retention
 from tests.storage_helpers import evidence_test_bucket, lane_key, purge_test_bucket, root_minio
 
 M7_MODULES = (idor_cases_retention, idor_cases_correlation, idor_cases_ops)
-# M8 phase 1 froze its routes as 501 stubs (phases 7 and 8 land them): the only stubs allowed.
-M8_PENDING_PATHS = frozenset(
-    path
-    for module in (idor_cases_memory, idor_cases_memory_sensitivity)
-    for _, path in module.PENDING_ROUTES
-)
 ORG = "/api/v1/orgs/{org_id}"
 
 
@@ -75,13 +63,11 @@ def test_every_m7_route_exists_and_none_is_pending() -> None:
 
 def test_no_route_still_raises_the_501_stub() -> None:
     """Generic over the route table: no endpoint body raises `not_implemented()` any more
-    (every frozen M6 / M7 stub has been replaced by its phase)."""
+    (every frozen M6 / M7 / M8 stub has been replaced by its phase)."""
     stubbed = sorted(
         route.path
         for route in app.routes
-        if isinstance(route, APIRoute)
-        and "not_implemented(" in inspect.getsource(route.endpoint)
-        and route.path not in M8_PENDING_PATHS
+        if isinstance(route, APIRoute) and "not_implemented(" in inspect.getsource(route.endpoint)
     )
     assert not stubbed, stubbed
 

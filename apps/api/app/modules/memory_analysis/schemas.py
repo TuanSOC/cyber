@@ -57,6 +57,7 @@ def _attributes_out(value: object) -> object:
             out[key] = item
     return out
 
+
 MemoryOsName = Literal["windows", "linux"]
 SymbolsStatus = Literal["resolved", "missing"]
 PluginRunState = Literal["ok", "failed", "timeout", "skipped", "unsupported"]

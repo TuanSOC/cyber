@@ -34,9 +34,7 @@ def memory_limits(settings: Settings) -> MemoryLimits:
 
 
 def build_memory_message(item: DispatchInput, settings: Settings) -> MemoryJobV1:
-    expires = timedelta(
-        seconds=settings.analysis_queue_ttl_s + settings.analysis_memory_timeout_s
-    )
+    expires = timedelta(seconds=settings.analysis_queue_ttl_s + settings.analysis_memory_timeout_s)
     common = presigned_common(item, settings, get_expires=expires)
     return MemoryJobV1.model_validate(
         {

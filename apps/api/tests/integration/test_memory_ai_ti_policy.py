@@ -90,9 +90,12 @@ async def test_ai_on_a_restricted_memory_job_is_policy_blocked_until_release_and
 async def test_the_incident_builder_skips_restricted_memory_evidence() -> None:
     reg = await register(org_name="Memory Incident Org")
     t, evidence_id, job_id = await _memory_job(reg)
+    # A second, unrestricted job in the case: with the memory job as the only one the builder
+    # would refuse the whole case (`context_empty`) rather than skip it.
+    other_job = await seed_memory_job(t, fixture=None)
     async with tenant_session(t.org_id, t.owner_id) as s:
         case = await builder._case_jobs(s, t.org_id, t.investigation_id, OPTS)  # noqa: SLF001
-    assert job_id not in [j.id for j in case.jobs]
+    assert [j.id for j in case.jobs] == [other_job]
     assert case.excluded == frozenset({evidence_id})
 
     await release_and_clear(reg, evidence_id)

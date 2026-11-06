@@ -166,7 +166,9 @@ async def children_counts(
         .where(*_scope(m, org_id, job_id), m.ppid.in_(wanted), m.pid != m.ppid)
         .group_by(m.ppid)
     )
-    return {int(ppid): int(count) for ppid, count in (await session.execute(stmt)).all()}
+    rows = (await session.execute(stmt)).all()
+    # ppid IN (…) never matches NULL; the guard only narrows the nullable column type.
+    return {int(ppid): int(count) for ppid, count in rows if ppid is not None}
 
 
 def _instance_order() -> tuple[Any, ...]:

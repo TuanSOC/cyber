@@ -132,8 +132,12 @@ async def test_connection_injection_and_artifact_rows(ingested: dispatch.Dispatc
     assert sorted(a.type for a in artifacts) == sorted(
         o["type"] for o in objs if o["kind"] == "artifact"
     )
-    service = next(a for a in artifacts if a.type == "service")
-    assert service.attributes["name"] == "UpdaterSvc"
+    # Row order is not part of the contract: compare the service names as a set.
+    names = {a.attributes["name"] for a in artifacts if a.type == "service"}
+    assert names == {
+        o["attributes"]["name"] for o in objs if o["kind"] == "artifact" and o["type"] == "service"
+    }
+    assert "UpdaterSvc" in names
 
 
 async def test_shared_findings_iocs_and_timeline(ingested: dispatch.DispatchInput) -> None:
