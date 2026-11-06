@@ -332,3 +332,33 @@ def test_memory_limit_is_given_once(dirs: sandbox.JobDirs) -> None:
     with pytest.raises(ValueError, match="once"):
         sandbox.run_tool(["true"], dirs, timeout_s=5, memory_bytes=1024**3,
                          rlimits=sandbox.Rlimits(as_bytes=1024**3))  # fmt: skip
+
+
+def test_a_failed_kill_helper_fork_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Security review: when root cannot fork its kill helper (pids limit exhausted by a fork
+    bomb), the tool processes count as alive: the container is stopped, never left running."""
+    import signal
+
+    signals: list[tuple[int, int]] = []
+
+    def no_fork() -> int:
+        raise BlockingIOError(11, "Resource temporarily unavailable")
+
+    def record_kill(pid: int, sig: int) -> None:
+        signals.append((pid, sig))
+
+    monkeypatch.setattr(sandbox, "tool_pids", lambda: [4242])
+    monkeypatch.setattr(os, "fork", no_fork)
+    monkeypatch.setattr(os, "kill", record_kill)
+    with pytest.raises(sandbox.SandboxCompromised):
+        sandbox.kill_tool_processes()
+    assert signals == [(1, signal.SIGTERM)]
+
+
+def test_no_survivor_means_no_fork(monkeypatch: pytest.MonkeyPatch) -> None:
+    def no_fork() -> int:
+        raise AssertionError("nothing to kill: no helper is forked")
+
+    monkeypatch.setattr(sandbox, "tool_pids", lambda: [])
+    monkeypatch.setattr(os, "fork", no_fork)
+    sandbox.kill_tool_processes()

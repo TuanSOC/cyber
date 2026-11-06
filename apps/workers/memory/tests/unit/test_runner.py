@@ -347,6 +347,7 @@ def test_the_volatility_engine_sandbox_arguments(
     assert seen["unix_sockets_only"] is True and seen["deny_io_uring"] is True
     assert seen["rlimits"].as_bytes == config.plugin_rlimit_as
     assert seen["rlimits"].fsize_bytes == 512 * 1024**2
+    assert seen["rlimits"].nproc == 16
     assert seen["cwd"] == dirs.input and seen["stdout_name"] == ROWS
     env = seen["extra_env"]
     assert env["HOME"] == env["XDG_CONFIG_HOME"] == "/nonexistent"

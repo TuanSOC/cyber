@@ -182,3 +182,5 @@ class IocExportJson(BaseModel):
     exported_at: datetime
     defanged: bool
     items: list[IocCollectionItemOut]
+    # M8: items of restricted memory evidence left out below TLP:RED (absent when none).
+    omissions: dict[str, int] | None = None

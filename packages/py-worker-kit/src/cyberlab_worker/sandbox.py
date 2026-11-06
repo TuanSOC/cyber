@@ -336,11 +336,19 @@ def _kill_as_tool_uid() -> None:
 
 
 def kill_tool_processes() -> None:
-    """Kill every tool-uid process; if any survives, stop the whole container (fail closed)."""
+    """Kill every tool-uid process; if any survives, stop the whole container (fail closed).
+
+    The kill helper is a fork of root: when that fork fails (EAGAIN with the container's pids
+    limit exhausted by a fork bomb, ENOMEM), the processes cannot be killed from here, so
+    they count as survivors and the container stops (security review)."""
     for _ in range(20):
         if not tool_pids():
             return
-        _kill_as_tool_uid()
+        try:
+            _kill_as_tool_uid()
+        except OSError as exc:
+            log.critical("cannot fork the kill helper (%s): treating tool processes as alive", exc)
+            break
         time.sleep(0.05)
     log.critical("tool processes survived SIGKILL: %s; stopping the container", tool_pids())
     with contextlib.suppress(OSError):

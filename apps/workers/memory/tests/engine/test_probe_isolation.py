@@ -265,6 +265,7 @@ def test_the_probe_runs_as_its_own_unprivileged_uid(
         "print('cwd', os.getcwd())\n"
         "print('as', resource.getrlimit(resource.RLIMIT_AS)[1])\n"
         "print('fsize', resource.getrlimit(resource.RLIMIT_FSIZE)[1])\n"
+        "print('nproc', resource.getrlimit(resource.RLIMIT_NPROC)[1])\n"
         "print('env', ','.join(sorted(os.environ)))\n"
     )
     run = engine.identify(ws, OsHint.AUTO, 30)
@@ -273,5 +274,6 @@ def test_the_probe_runs_as_its_own_unprivileged_uid(
     assert seen["cwd"] == str(ws.dirs.input)
     assert seen["as"] == str(engine.config.plugin_rlimit_as)
     assert seen["fsize"] == str(volatility.FSIZE_BYTES)
+    assert seen["nproc"] == str(volatility.NPROC) == "16"
     assert set(seen["env"].split(",")) <= {"PATH", "HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME",
                                           "TMPDIR", "LANG", "LC_CTYPE"}  # fmt: skip

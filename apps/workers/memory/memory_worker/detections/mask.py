@@ -25,8 +25,24 @@ MASKED = re.compile(r"[^*]{0,2}\*+\(\d{1,4}\)")
 # separators. Group "v" is what gets masked (the quotes stay visible).
 _VALUE = r"""(?:"(?P<dq>[^"\n]{1,512})"|'(?P<sq>[^'\n]{1,512})'|(?P<bare>[^\s"'&;|]{1,512}))"""
 
-# password= / pwd= / passwd= / pass= and the `name:value` switch form (wmic /password:x).
-_KEY_VALUE = re.compile(r"(?i)(?<![a-z0-9_])(?:password|passwd|pwd|pass)\s*[=:]\s*" + _VALUE)
+# password= / pwd= / passwd= / pass= and the `name:value` switch form (wmic /password:x),
+# also as the end of an env-style name (security review): `DB_PASSWORD=`, `MY_DB_PASSWORD=`,
+# `MYSQL_PWD=`, `ADMIN_PASS=` (any prefix ending in `_`) and upper-case glued names such as
+# `PGPASSWORD=`. A lower-case glued word (`bypass:`, `compass:`) is not a key, and the keyword
+# must be followed by `=` / `:` (`PGPASSWORD_FILE=` names a file, not a secret).
+_KEY_NAME = (
+    r"(?:[A-Za-z0-9]*_(?i:password|passwd|pwd|pass)"
+    r"|[A-Z0-9]*(?:PASSWORD|PASSWD|PWD|PASS)"
+    r"|(?i:password|passwd|pwd|pass))"
+)
+_KEY_VALUE = re.compile(r"(?<![A-Za-z0-9])" + _KEY_NAME + r"\s*[=:]\s*" + _VALUE)
+# Secret-bearing URL query parameters (security review): the value up to the next `&`, `#`,
+# quote or space, so an IOC URL never carries it (the `?password=` form is `_KEY_VALUE`'s).
+_URL_QUERY = re.compile(
+    r"(?i)[?&;](?:access_token|refresh_token|id_token|auth_token|token|api_key|apikey|key|"
+    r"sig|signature|secret|client_secret|x-amz-signature|x-amz-credential|"
+    r"x-amz-security-token)=(?P<bare>[^\s&#\"'<>]{1,512})"
+)
 # PowerShell / CLI `-Password <value>` (space separated).
 _DASH_PASSWORD = re.compile(r"(?i)(?<![a-z0-9_-])-(?:password|passwd)\s+" + _VALUE)
 # --token / --secret / --api-key (and close relatives), `=` or space separated.
@@ -67,6 +83,7 @@ _PEM_END = re.compile(r"-----END [A-Z0-9 ]{0,40}PRIVATE KEY-----")
 
 _SIMPLE_RULES = (
     _KEY_VALUE,
+    _URL_QUERY,
     _DASH_PASSWORD,
     _LONG_FLAG,
     _NET_USER,

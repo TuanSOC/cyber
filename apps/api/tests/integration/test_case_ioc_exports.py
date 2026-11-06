@@ -1,5 +1,6 @@
 """IOC collection exports through the API (M6 phase 2): headers, TLP marking, defang default,
-never redacted, the `defang=false` permission, formula-safe CSV and the audit row."""
+never redacted, the `defang=false` permission, formula-safe CSV and the audit row. M8
+(security review): items of restricted memory evidence are withheld below TLP:RED."""
 
 import csv
 import io
@@ -16,9 +17,17 @@ from app.core.tenancy import tenant_session
 from app.modules.threat_intel.models import TiResult
 from tests.factories import Registered, register
 from tests.integration.seed import Tenant
-from tests.integration.test_case_ioc_collections import collection_with
+from tests.integration.test_case_ioc_collections import (
+    add,
+    collection_with,
+    job_iocs,
+    new_collection,
+)
+from tests.integration.test_case_notes import _job_case
 from tests.integration.test_case_policy_api import _member
 from tests.integration.test_case_status import API, patch
+from tests.integration.test_memory_sensitivity import release
+from tests.memory_helpers import restricted_memory_evidence
 from tests.ti_helpers import seed_run
 
 ENTRIES = (
@@ -247,3 +256,87 @@ async def test_exports_are_tenant_scoped_and_validated() -> None:
     assert (await export(reg.client, reg.org_id, collection_id, format="xml")).status_code == 422
     unknown = await export(reg.client, reg.org_id, str(uuid.uuid4()))
     assert unknown.status_code == 404
+
+
+# --- M8 (security review): restricted memory evidence below TLP:RED -------------------------
+
+
+async def _memory_collection(reg: Registered) -> tuple[str, str, uuid.UUID]:
+    """A collection holding two IOCs of a job on restricted memory evidence plus one manual
+    entry: (case id, collection id, evidence id)."""
+    job, evidence_id, case_id = await _job_case(reg)
+    tenant = Tenant(reg.org_id, reg.user_id, uuid.UUID(case_id))
+    await restricted_memory_evidence(tenant, uuid.UUID(evidence_id))
+    own = await job_iocs(reg, job)
+    created = await new_collection(reg.client, reg.org_id, case_id)
+    collection_id = str(created.json()["id"])
+    added = await add(
+        reg.client,
+        reg.org_id,
+        collection_id,
+        {"ioc_id": own["192.0.2.1"]},
+        {"ioc_id": own["example.com"]},
+        {"type": "domain", "value": "manual.example.net"},
+    )
+    assert [r["outcome"] for r in added.json()["results"]] == ["added"] * 3
+    return case_id, collection_id, uuid.UUID(evidence_id)
+
+
+async def test_restricted_memory_items_are_withheld_below_tlp_red() -> None:
+    reg = await register()
+    case_id, collection_id, _ = await _memory_collection(reg)
+    # CSV: only the manual item, the withheld count in the comment line and the header.
+    response = await export(reg.client, reg.org_id, collection_id, format="csv")
+    assert response.status_code == 200, response.text
+    assert response.headers["x-export-withheld"] == "2"
+    assert response.headers["x-export-count"] == "1"
+    first, rest = response.text.split("\r\n", 1)
+    assert "2 item(s) of restricted memory evidence withheld" in first
+    rows = list(csv.reader(io.StringIO(rest)))
+    assert [r[1] for r in rows[1:]] == ["manual[.]example[.]net"]
+    assert "192.0.2" not in response.text and "example[.]com" not in response.text
+    # JSON: the additive `omissions`.
+    body = (await export(reg.client, reg.org_id, collection_id, format="json")).json()
+    assert [i["value"] for i in body["items"]] == ["manual[.]example[.]net"]
+    assert body["omissions"] == {"memory_restricted": 2}
+    # STIX: one indicator.
+    stix = await export(reg.client, reg.org_id, collection_id, format="stix21", defang="false")
+    _, _, *indicators = json.loads(stix.content)["objects"]
+    assert [i["pattern"] for i in indicators] == ["[domain-name:value = 'manual.example.net']"]
+    assert stix.headers["x-export-withheld"] == "2"
+    assert b"192.0.2.1" not in stix.content
+    logs = (
+        await reg.client.get(
+            f"{API}/{reg.org_id}/audit-logs", params={"action": "ioc_collection.exported"}
+        )
+    ).json()
+    assert {item["details"]["withheld"] for item in logs["items"]} == {2}
+
+
+async def test_tlp_red_or_a_release_exports_every_item() -> None:
+    reg = await register()
+    case_id, collection_id, evidence_id = await _memory_collection(reg)
+    raised = await patch(reg.client, reg.org_id, case_id, tlp="red")
+    assert raised.status_code == 200, raised.text
+    body = (await export(reg.client, reg.org_id, collection_id, format="json")).json()
+    assert len(body["items"]) == 3 and "omissions" not in body
+    # Back below RED: withheld again until an admin releases the evidence.
+    lowered = await patch(reg.client, reg.org_id, case_id, tlp="amber",
+                          acknowledge_tlp_downgrade=True)  # fmt: skip
+    assert lowered.status_code == 200, lowered.text
+    response = await export(reg.client, reg.org_id, collection_id, format="csv")
+    assert response.headers["x-export-withheld"] == "2"
+    released = await release(reg.client, reg.org_id, evidence_id)
+    assert released.status_code == 200, released.text
+    response = await export(reg.client, reg.org_id, collection_id, format="csv")
+    assert response.headers["x-export-withheld"] == "0"
+    assert response.headers["x-export-count"] == "3"
+    assert "withheld" not in response.text.split("\r\n", 1)[0]
+
+
+async def test_exports_without_memory_evidence_are_unchanged() -> None:
+    reg = await register()
+    _, collection_id = await _seeded(reg)
+    response = await export(reg.client, reg.org_id, collection_id, format="json")
+    assert response.headers["x-export-withheld"] == "0"
+    assert "omissions" not in response.json()

@@ -59,6 +59,54 @@ def test_every_pattern_masks_its_secret(text: str, secret: str) -> None:
     assert mask_value(secret) in masked
 
 
+@pytest.mark.parametrize(
+    ("text", "secret"),
+    [
+        # Env-style names (security review): a prefix ending in `_`, or an upper-case glue.
+        ("export DB_PASSWORD=hunter2", "hunter2"),
+        ("export MY_DB_PASSWORD='two words'", "two words"),
+        ("PGPASSWORD=s3cret psql -h db -U app", "s3cret"),
+        ("MYSQL_PWD=x mysql -u root", "x"),
+        ("ADMIN_PASS=Adm1nPw ./setup.sh", "Adm1nPw"),
+        ("db_password: hunter2pw", "hunter2pw"),
+        ("REDIS_PASSWD=r3d1sPw redis-server", "r3d1sPw"),
+        # Secret-bearing URL query parameters.
+        ("curl https://api.example.com/v1/items?token=Tok3nValue99&page=2", "Tok3nValue99"),
+        ("wget 'https://x.example.com/a?access_token=ya29.a0AfH6&x=1'", "ya29.a0AfH6"),
+        ("curl https://maps.example.com/api?api_key=AIzaSyA1b2c3", "AIzaSyA1b2c3"),
+        ("curl https://h.example.com/f?a=1&key=k3yV4lue#frag", "k3yV4lue"),
+        ("curl 'https://blob.example.net/c/b?sv=2022&sig=AbC%2Bd%3D'", "AbC%2Bd%3D"),
+        ("curl https://h.example.com/hook?secret=whsec_123abc", "whsec_123abc"),
+        (
+            "curl https://b.s3.amazonaws.com/o?X-Amz-Credential=AKIDX%2F20260101&X-Amz-Signature=9f8e7d6c",
+            "9f8e7d6c",
+        ),
+        ("curl https://h.example.com/login?user=bob&password=Pw0rd!x", "Pw0rd!x"),
+    ],
+)
+def test_env_style_and_url_query_secrets_are_masked(text: str, secret: str) -> None:
+    masked = mask(text)
+    assert secret not in masked
+    assert mask_value(secret) in masked
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "export PGPASSWORD_FILE=/etc/app/pgpass",
+        "export DB_PASSWORD_FILE=/run/secrets/db",
+        "bypass the proxy: set NO_PROXY=localhost",
+        "compass: north",
+        "Passport: none",
+        "curl https://example.com/search?q=monkey&keyboard=us&page=2",
+        "curl https://example.com/?keyword=tokens&skey=1&monkey=x",
+        "curl https://example.com/docs/api_key.html",
+    ],
+)
+def test_near_misses_are_not_masked(text: str) -> None:
+    assert mask(text) == text
+
+
 def test_overlapping_rules_mask_once() -> None:
     assert mask("tool --password=abcdefgh") == "tool --password=ab******(8)"
 

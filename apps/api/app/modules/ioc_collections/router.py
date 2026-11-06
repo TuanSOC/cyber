@@ -146,6 +146,7 @@ async def export_collection(
             "Content-Disposition": content_disposition(out.filename),
             "X-Export-Count": str(out.count),
             "X-Export-Skipped": str(out.skipped),
+            "X-Export-Withheld": str(out.withheld),
             "X-Export-Defanged": "true" if defang else "false",
         },
     )

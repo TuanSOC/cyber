@@ -13,6 +13,11 @@
 - Served as a streamed attachment (RFC 5987 filename, `nosniff`, `no-store`,
   `Content-Security-Policy: sandbox`) and audited `ioc_collection.exported` (format, count,
   defang).
+- M8 (security review, the report guard's rule, RT10): below TLP:RED an item taken from a job
+  of restricted memory evidence (`memory_analysis.sensitivity.restricted_job_ids`) is left
+  out of every format and counted: `X-Export-Withheld`, the CSV comment line, the JSON
+  `omissions.memory_restricted` (absent when nothing was left out) and the audit details. A
+  manual item (no job) is never withheld; at TLP:RED or after the release nothing is.
 """
 
 import json
@@ -35,6 +40,7 @@ from app.modules.ioc_collections import service, stix
 from app.modules.ioc_collections.normalize import defang as defang_value
 from app.modules.ioc_collections.normalize import ti_eligible
 from app.modules.ioc_collections.schemas import ExportFormat, IocExportJson
+from app.modules.memory_analysis.sensitivity import restricted_job_ids
 from app.modules.organizations.models import Organization
 
 CSV_HEADER = ("type", "value", "ioc_key", "source", "job_id", "note", "added_at", "ti_eligible")
@@ -54,6 +60,7 @@ class Export:
     content_type: str
     count: int
     skipped: int
+    withheld: int = 0
 
 
 def _filename(case_number: int, name: str, fmt: str, tlp: TLP) -> str:
@@ -93,6 +100,14 @@ async def export_collection(
     tlp = TLP(case.tlp)
     rows = await service.item_rows(ctx.session, ctx.org_id, collection_id)
     rows.reverse()  # oldest first in an export
+    withheld = 0
+    if tlp != TLP.RED:
+        jobs = {item.job_id for item, _ in rows if item.job_id is not None}
+        restricted = await restricted_job_ids(ctx.session, ctx.org_id, jobs)
+        if restricted:
+            kept = [(item, name) for item, name in rows if item.job_id not in restricted]
+            withheld = len(rows) - len(kept)
+            rows = kept
     exported_at = datetime.now(UTC)
     shown = [
         (item, name, defang_value(item.ioc_type, item.value_norm) if defang else item.value_norm)
@@ -105,6 +120,7 @@ async def export_collection(
             f"{json.dumps(collection.name, ensure_ascii=False)} exported "
             f"{exported_at.isoformat()} by {ctx.user.id}; not redacted; "
             f"{'defanged' if defang else 'NOT defanged'}"
+            + (f"; {withheld} item(s) of restricted memory evidence withheld" if withheld else "")
         )
         lines = [
             (
@@ -137,8 +153,11 @@ async def export_collection(
                 service.item_out(item, name, ti.get(item.ioc_key, []), value=value)
                 for item, name, value in shown
             ],
+            omissions={"memory_restricted": withheld} if withheld else None,
         )
-        chunks = iter([body.model_dump_json().encode()])
+        # `omissions` only when something was left out (M6 bytes otherwise).
+        dump = body.model_dump_json(exclude=None if withheld else {"omissions"})
+        chunks = iter([dump.encode()])
     else:
         org = await ctx.session.scalar(select(Organization).where(Organization.id == ctx.org_id))
         if org is None:  # never: the caller is a member of it
@@ -174,6 +193,7 @@ async def export_collection(
             "format": fmt,
             "count": len(rows) - skipped,
             "skipped": skipped,
+            "withheld": withheld,
             "defang": defang,
             "tlp": tlp.value,
             "redacted": False,
@@ -187,4 +207,5 @@ async def export_collection(
         content_type=CONTENT_TYPES[fmt],
         count=len(rows) - skipped,
         skipped=skipped,
+        withheld=withheld,
     )

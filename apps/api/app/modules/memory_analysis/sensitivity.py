@@ -21,6 +21,7 @@ transaction ends and can never clear the flags the default has just set.
 """
 
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select
@@ -30,6 +31,7 @@ from starlette.requests import HTTPConnection
 
 from app.core.errors import NotFound
 from app.core.rbac import OrgContext
+from app.modules.analysis.models import AnalysisJob
 from app.modules.audit import service as audit
 from app.modules.evidence import repository as evidence_repo
 from app.modules.investigations.models import EvidenceSharePolicy
@@ -103,6 +105,28 @@ async def state_of(
 ) -> dict[uuid.UUID, str]:
     """`{evidence_id: "restricted" | "released"}` for the given evidence that have a row."""
     return await evidence_repo.memory_sensitivity_states(session, org_id, evidence_ids)
+
+
+async def restricted_job_ids(
+    session: AsyncSession, org_id: uuid.UUID, job_ids: Iterable[uuid.UUID]
+) -> frozenset[uuid.UUID]:
+    """The given jobs whose evidence is restricted memory (any analyzer: every result of a
+    memory image is memory-derived), as `reports.snapshot_sections.memory_guard` decides."""
+    ids = sorted(set(job_ids))
+    if not ids:
+        return frozenset()
+    m = MemorySensitivity
+    found = await session.scalars(
+        select(AnalysisJob.id)
+        .join(m, m.evidence_id == AnalysisJob.evidence_id)
+        .where(
+            AnalysisJob.organization_id == org_id,
+            m.organization_id == org_id,
+            m.state == RESTRICTED,
+            AnalysisJob.id.in_(ids),
+        )
+    )
+    return frozenset(found)
 
 
 async def is_restricted(session: AsyncSession, org_id: uuid.UUID, evidence_id: uuid.UUID) -> bool:

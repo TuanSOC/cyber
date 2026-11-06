@@ -3,7 +3,10 @@
 Every probe runs through the worker kit's `run_tool` as the tool uid (10006, RT18) in
 `python -I -s -B -m memory_worker.probe ...` with:
 - seccomp: every socket family but AF_UNIX denied, io_uring denied (RT7);
-- `RLIMIT_AS` = `MEMORY_PLUGIN_RLIMIT_AS`, `RLIMIT_FSIZE` = 512 MiB, CPU = the timeout;
+- `RLIMIT_AS` = `MEMORY_PLUGIN_RLIMIT_AS`, `RLIMIT_FSIZE` = 512 MiB, CPU = the timeout,
+  `RLIMIT_NPROC` = 16 (security review: a probe needs one process; the cap stops a fork bomb
+  of the tool uid long before the container's pids limit, so root can still fork its kill
+  helper);
 - a wall-clock timeout (kill of the whole session on expiry, kill-by-uid before the next);
 - cwd = the root-owned, read-only input dir; a fresh out dir (`Workspace.fresh`);
 - env: `PATH`, `TMPDIR` = the out dir, `XDG_CACHE_HOME` = `<out>/cache` (seeded identifier
@@ -25,6 +28,7 @@ from memory_worker.engines.workspace import ROWS, Workspace
 MODULE = "memory_worker.probe"
 FSIZE_BYTES = 512 * 1024**2
 NOFILE = 512
+NPROC = 16
 
 
 class VolatilityEngine:
@@ -50,7 +54,10 @@ class VolatilityEngine:
             "XDG_CONFIG_HOME": "/nonexistent",
         }
         limits = sandbox.Rlimits(
-            as_bytes=self.config.plugin_rlimit_as, fsize_bytes=FSIZE_BYTES, nofile=NOFILE
+            as_bytes=self.config.plugin_rlimit_as,
+            fsize_bytes=FSIZE_BYTES,
+            nofile=NOFILE,
+            nproc=NPROC,
         )
         started = time.monotonic()
         end: ProcessEnd = "exited"

@@ -3,8 +3,12 @@
 - `connection`: remote addresses of connections (internal ones kept: the M6 normalizer marks
   them non-TI-eligible at ingest); loopback and unspecified addresses are not observables.
 - `cmdline` / `bash`: URLs, domains and IPs in command lines and bash history, through the
-  shared extractor `cyberlab_worker.iocs`, run over the **masked** text (RT13), so a secret in
-  a URL (`https://u:pw@host`, `?password=`) never reaches an IOC value.
+  shared extractor `cyberlab_worker.iocs`, run over the **masked** text (RT13). What the
+  masker recognizes is masked before extraction, so it never reaches an IOC value: URL
+  userinfo (`https://u:pw@host`), `password=` / `pwd=` / `pass=` parameters and the query
+  parameters of `mask._URL_QUERY` (`token`, `access_token`, `api_key`, `key`, `sig`,
+  `secret`, `X-Amz-Signature`, ...). A secret under any other parameter name (`?q=`,
+  `?session=`) is not recognized and stays in the URL value.
 
 Each IOC records first / last seen (connection `created`, else the owning process's create
 time; history line time; process create time; else the image time), count and first source.
