@@ -31,6 +31,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import SchemaItem
 
 from alembic import op
 
@@ -178,7 +179,7 @@ def _text_max(table: str, column: str, limit: int) -> sa.CheckConstraint:
     return _ck(table, f"{column}_length", f"{column} IS NULL OR octet_length({column}) <= {limit}")
 
 
-def _bulk(table: str) -> list[sa.SchemaItem]:
+def _bulk(table: str) -> list[SchemaItem]:
     """`id`, `organization_id`, `job_id` (RT23), the job FK and the PK."""
     return [
         sa.Column("id", sa.Uuid(), server_default=sa.text("gen_random_uuid()"), nullable=False),
