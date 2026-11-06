@@ -33,6 +33,7 @@ from memory_worker.symbols import fetch_windows as fetch_mod
 from memory_worker.symbols import import_isf, reindex
 from memory_worker.symbols.isolate import safe_text
 from memory_worker.symbols.manifest import (
+    MANIFEST,
     TOOL_VERSION,
     ManifestInvalid,
     StoreError,
@@ -208,8 +209,14 @@ def cmd_verify(_args: argparse.Namespace) -> int:
 
 
 def cmd_list(_args: argparse.Namespace) -> int:
+    root = store_root()
+    if not os.path.lexists(root / MANIFEST):
+        # A store nothing has written to yet (a fresh volume): empty, not an error. Anything
+        # at the manifest path (a symlink, a broken file) still goes through read_manifest.
+        log("listed", files=0, volatility_version=None, empty=True)
+        return 0
     try:
-        manifest = read_manifest(store_root())
+        manifest = read_manifest(root)
     except ManifestInvalid as exc:
         log("error", message=str(exc))
         return 1

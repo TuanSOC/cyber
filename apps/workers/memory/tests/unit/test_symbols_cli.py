@@ -204,5 +204,26 @@ def test_the_module_entry_point(tmp_path: Path) -> None:
         timeout=60,
         check=False,
     )
-    assert proc.returncode == 1  # no manifest in an empty dir
-    assert json.loads(proc.stderr.splitlines()[0])["event"] == "start"
+    # A never-written store (no manifest yet) lists as empty, not as an error.
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == ""
+    events = [json.loads(line) for line in proc.stderr.splitlines()]
+    assert events[0]["event"] == "start"
+    assert events[-1] == {
+        "tool": "memory-symbols",
+        "event": "listed",
+        "files": 0,
+        "volatility_version": None,
+        "empty": True,
+    }
+
+
+def test_a_dangling_manifest_link_is_still_an_error(env: dict[str, Path]) -> None:
+    manifest = env["root"] / "manifest.json"
+    os.chmod(env["root"], 0o755)
+    manifest.unlink()
+    try:
+        manifest.symlink_to(env["root"] / "nowhere.json")
+    except OSError:
+        pytest.skip("symlinks need privileges on this host")
+    assert main(["list"]) == 1
