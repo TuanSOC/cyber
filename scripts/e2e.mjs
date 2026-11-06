@@ -57,6 +57,19 @@ docker([
   "-c", "python -m samples.generate /tmp/samples >/dev/null && cp /tmp/samples/downloader_imports.bin /tmp/samples/packed_like.bin /out/static/ && chmod -R a+rX /out",
 ]);
 
+// M10 phase 12: the synthetic RE builds for reverse.spec.ts (`/data/re/`: the M3 `injector`
+// and the adversarial `strings_refs` twin DLL among them, `labels.json` and `truth/`), compiled
+// by the RE worker's dev image (gcc / mingw-w64 never reach prod; the M3 C sources are baked
+// in at /opt/samples/m3c) with the generator sources mounted, like the pcap dataset above.
+// Benign programs of our own, compiled and parsed only, never run. No bulk build (the latency
+// case of the metric run) and no structural edge cases: the spec needs neither.
+const reSamplesSrc = resolve("apps/workers/reverse/samples");
+docker([
+  ...asRoot, "--entrypoint", "sh", "-v", `${reSamplesSrc}:/srv/workers/reverse/samples:ro`,
+  "cyberlab/re-worker:dev",
+  "-c", "python -m samples.generate /out/re --no-bulk --no-edges && chmod -R a+rX /out/re",
+]);
+
 // Dev: the `mock` providers' sinks (their keys reach the e2e container through compose
 // interpolation, never through this script's output). Prod has no sink: the specs assert
 // the mocks are refused there. ai-mock is recreated so it forgets the markers it has seen.
