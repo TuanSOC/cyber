@@ -27,6 +27,9 @@ ALLOWED = {
     "workers/retention.py": "org from the non-tenant retention_policy_index (system lookup)",
     # M7: the correlation indexer (phase 4): org from the non-tenant analysis_job_index.
     "modules/correlation/indexer.py": "org from the non-tenant analysis_job_index",
+    # M8 phase 6: the memory `symbols_missing` diagnostic, called by workers/ingest.py with
+    # the job it already resolved (non-tenant job index, message org match, job token).
+    "modules/memory_analysis/ingest.py": "job resolved and verified by workers/ingest.py",
 }
 # Allowlisted ahead of their implementation (M6 phase 1 stubs): exempt from the "still
 # needed" check until the owning phase lands. Phase 9 asserts this set is empty.

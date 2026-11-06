@@ -206,7 +206,7 @@ async def test_the_numbers_equal_a_hand_count_and_other_orgs_are_absent() -> Non
     report = items[("report", "pdf")]
     assert (report["total"], report["succeeded"], report["failed"]) == (2, 1, 1)
     assert report["error_classes"] == {"infra": 1}
-    assert body["active"] == {"pcap": 1, "static": 1, "ti": 1, "ai": 0, "report": 0}
+    assert body["active"] == {"pcap": 1, "static": 1, "memory": 0, "ti": 1, "ai": 0, "report": 0}
 
     week = (await owner.client.get(URL.format(org_id=owner.org_id), params={"window": "7d"})).json()
     assert _by_kind(week)[("pcap", None)]["total"] == 6
@@ -224,7 +224,7 @@ async def test_an_empty_org_and_the_default_window() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["window"] == "24h" and body["items"] == []
-    assert body["active"] == {"pcap": 0, "static": 0, "ti": 0, "ai": 0, "report": 0}
+    assert body["active"] == {"pcap": 0, "static": 0, "memory": 0, "ti": 0, "ai": 0, "report": 0}
     assert body["recent_failures"] == []
     bad = await owner.client.get(URL.format(org_id=owner.org_id), params={"window": "30d"})
     assert bad.status_code == 422
