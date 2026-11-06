@@ -42,6 +42,11 @@ class CustodyAction(enum.StrEnum):
     # system user); `sent_to_sandbox` is reserved for dynamic analysis (not enabled).
     PURGED = "purged"
     SENT_TO_SANDBOX = "sent_to_sandbox"
+    # M9 (migration 0017, phase 10): a file export of a disk job was requested / promoted to
+    # derived evidence (on every source segment), and the derivation on the new evidence.
+    EXPORT_REQUESTED = "export_requested"
+    EXPORT_PROMOTED = "export_promoted"
+    DERIVED_FROM = "derived_from"
 
 
 class Evidence(UUIDPk, Base):

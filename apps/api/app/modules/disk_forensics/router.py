@@ -17,6 +17,7 @@ import uuid
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import StreamingResponse
 from pydantic import AwareDatetime
 
@@ -44,7 +45,23 @@ Search = Annotated[SearchTerm | None, Query(min_length=1, max_length=128)]
 # `ref=<row id>`: a page with just that row of the job (citation deep links; 404 otherwise).
 RowRef = Annotated[uuid.UUID | None, Query()]
 PartitionFilter = Annotated[int | None, Query(ge=0, le=127)]
-Address = Annotated[int | None, Query(ge=0, le=2**64 - 1)]
+# An unsigned 64-bit inode number as DECIMAL TEXT (the schema says string: a JSON / JS number
+# loses its low bits above 2**53; M9 phase 10 for the web's directory browser).
+Address = Annotated[str | None, Query(pattern=r"^[0-9]{1,20}$", examples=["1234"])]
+U64_MAX = 2**64 - 1
+
+
+def _u64(value: str | None) -> int | None:
+    if value is None:
+        return None
+    number = int(value)
+    if number > U64_MAX:
+        raise RequestValidationError(
+            [{"type": "less_than_equal", "loc": ("query", "parent"), "msg": "above 2**64 - 1"}]
+        )
+    return number
+
+
 Since = Annotated[AwareDatetime | None, Query(alias="from")]
 Until = Annotated[AwareDatetime | None, Query(alias="to")]
 ArtifactFilter = Annotated[str | None, Query(pattern=r"^[a-z_]{1,32}$")]
@@ -141,7 +158,7 @@ async def list_dir(
     when omitted; the lowest partition with files when `partition` is omitted; RT13)."""
     await service.ready_job(ctx.session, ctx.org_id, job_id)
     return await service.dir_page(
-        ctx.session, ctx.org_id, job_id, page, partition=partition, parent=parent
+        ctx.session, ctx.org_id, job_id, page, partition=partition, parent=_u64(parent)
     )
 
 
@@ -206,9 +223,7 @@ async def merged_timeline(
 @router.get(
     "/exports/{name}",
     response_class=StreamingResponse,
-    responses={
-        200: {"content": {"text/plain": {}, "text/csv": {}, "application/x-ndjson": {}}}
-    },
+    responses={200: {"content": {"text/plain": {}, "text/csv": {}, "application/x-ndjson": {}}}},
 )
 async def interop_export(
     job_id: uuid.UUID,

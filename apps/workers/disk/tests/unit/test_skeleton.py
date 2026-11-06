@@ -1,6 +1,6 @@
-"""M9 phase 1 skeleton: a valid disk job is reported `started` then `failed / not_implemented`
-(never `succeeded`); an export job likewise; an invalid message is dropped unreported; the frozen
-entry points exist with their signatures."""
+"""M9 phase 1 skeleton: a valid disk job is reported `started` then `failed` (never
+`succeeded`; phases 2 / 10: the download's own failure); an export job likewise; an invalid
+message is dropped unreported; the frozen entry points exist with their signatures."""
 
 import inspect
 import uuid
@@ -94,9 +94,11 @@ def test_a_disk_job_without_its_segments_is_started_then_failed(no_sandbox: None
     assert sent[1].result_version_id is None
 
 
-def test_an_export_job_is_started_then_failed_not_implemented() -> None:
+def test_an_export_job_without_its_segments_is_started_then_failed(no_sandbox: None) -> None:
+    # Phase 10 implemented the export (its own tests: test_export.py); an unreachable segment
+    # (or a too small /tmp) still never gives `succeeded`, and nothing is uploaded.
     sent: list[IngestMessageV1] = []
-    config = load({"BROKER_URL": "redis://disk:x@redis-broker:6379/0"})
+    config = load({"BROKER_URL": "redis://disk:x@redis-broker:6379/0", "WORK_DIR": "/tmp"})
     files = [
         {"export_id": str(uuid.uuid4()), "partition_index": 1, "meta_addr": 7, "expected_size": 9}
     ]
@@ -106,7 +108,9 @@ def test_an_export_job_is_started_then_failed_not_implemented() -> None:
         sent.append,
     )
     assert [m.event.value for m in sent] == ["started", "finished"]
-    assert sent[1].error_code == "not_implemented"
+    assert sent[1].outcome is not None and sent[1].outcome.value == "failed"
+    assert sent[1].error_code in {"insufficient_disk", "evidence_unavailable", "url_expired"}
+    assert sent[1].result_version_id is None
 
 
 def test_an_invalid_message_is_dropped_unreported() -> None:
@@ -121,7 +125,7 @@ def test_frozen_entry_points() -> None:
     params = {
         stage.run_stage: ["argv", "dirs", "stage", "limits", "budget"],
         analyzer.analyze: ["job", "dirs", "config"],
-        export.handle_export: ["msg"],
+        export.handle_export: ["msg", "dirs", "config"],  # phase 10: + dirs, config
         scan.build_candidates: ["files", "profile", "limits"],
         scan.parse_scan_output: ["path"],
         detections.run: ["view", "limits"],

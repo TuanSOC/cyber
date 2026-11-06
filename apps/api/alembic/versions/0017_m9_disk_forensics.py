@@ -19,7 +19,13 @@ expects 0018, M11 0019). The M4-M8 conventions:
 - Every tenant table has FORCE RLS on `organization_id = app_org_id()` and composite
   (id, organization_id) FKs; the bulk tables carry `id`, `organization_id`, `job_id`.
 - `disk_exports`: forward-only states (`pending -> ready | failed`, `ready -> promoted |
-  expired`); `object_deleted_at` is set once (the retention worker, RT19).
+  expired | failed`: a promotion whose trusted re-hash differs fails the export, phase 10);
+  `object_deleted_at` is set once (the retention worker, RT19). A system session (no org
+  context: the expiry beat, the retention sweep) may SELECT every row (the `analysis_job_index`
+  pattern), never write one: both then act per org in tenant sessions (M9 phase 10: expired
+  export objects are deleted for every org, not only orgs with a retention policy).
+- `custody_action` gains `export_requested`, `export_promoted` and `derived_from` (phase 10),
+  in the autocommit block (0014's rule; the downgrade cannot drop them).
 - `memory_sensitivity` is **not renamed** (RT2): it gains `source` (`memory` / `disk` /
   `derived`, default `memory` for every existing row). Its guard, policy and grants are
   untouched (the app role's table-level INSERT covers the new column).
@@ -72,6 +78,9 @@ ARTIFACTS = (
     "preprocess",
 )
 FS_TYPES = ("ntfs", "fat12", "fat16", "fat32", "exfat", "ext2", "ext3", "ext4")
+# Custody of file exports (phase 10): requested / promoted on every source segment, and the
+# derivation on the new evidence.
+CUSTODY_ACTIONS = ("export_requested", "export_promoted", "derived_from")
 M8_KINDS = "('pcap', 'static', 'memory', 'ti', 'ai', 'report')"
 M9_KINDS = "('pcap', 'static', 'memory', 'disk', 'ti', 'ai', 'report')"
 
@@ -136,7 +145,7 @@ BEGIN
   END IF;
   IF NEW.state IS DISTINCT FROM OLD.state AND NOT (
        (OLD.state = 'pending' AND NEW.state IN ('ready', 'failed'))
-    OR (OLD.state = 'ready' AND NEW.state IN ('promoted', 'expired'))
+    OR (OLD.state = 'ready' AND NEW.state IN ('promoted', 'expired', 'failed'))
   ) THEN
     RAISE EXCEPTION 'illegal disk export transition % -> %', OLD.state, NEW.state
       USING ERRCODE = 'insufficient_privilege';
@@ -260,6 +269,8 @@ def upgrade() -> None:
     op.execute(ROLE_GUARD)
     with op.get_context().autocommit_block():
         op.execute("ALTER TYPE analyzer ADD VALUE IF NOT EXISTS 'disk'")
+        for action in CUSTODY_ACTIONS:
+            op.execute(f"ALTER TYPE custody_action ADD VALUE IF NOT EXISTS '{action}'")
     op.execute(ROLE_GUARD)  # the autocommit block ended the guarded transaction
     _alter_existing()
     _create_tables()
@@ -574,6 +585,9 @@ def _create_security() -> None:
         "BEFORE INSERT OR UPDATE OR DELETE ON analysis_job_segments "
         "FOR EACH ROW EXECUTE FUNCTION analysis_job_segments_guard()"
     )
+    # System sessions (no org context) read every export (the expiry beat and the retention
+    # sweep find the orgs to act on); they never write one (no system UPDATE policy).
+    op.execute("CREATE POLICY system_read ON disk_exports FOR SELECT USING (app_org_id() IS NULL)")
     op.execute(EXPORT_TRANSITIONS)
     op.execute(
         "CREATE TRIGGER disk_exports_transition BEFORE UPDATE OR DELETE ON disk_exports "
@@ -589,11 +603,18 @@ def _create_security() -> None:
 
 
 def downgrade() -> None:
-    # Postgres cannot drop an enum value: 'disk' stays in `analyzer` (unused by 0016 code).
+    # Postgres cannot drop an enum value: 'disk' stays in `analyzer` (unused by 0016 code),
+    # the export actions in `custody_action`.
     # Disk jobs already recorded keep analyzer = 'disk'; the restored 0016 checks are NOT
     # VALID (they bind new rows only, 0014 / 0016's precedent).
-    for table in ("disk_exports", "disk_events", "disk_files", "disk_partitions", "disk_images",
-                  "analysis_job_segments"):
+    for table in (
+        "disk_exports",
+        "disk_events",
+        "disk_files",
+        "disk_partitions",
+        "disk_images",
+        "analysis_job_segments",
+    ):
         op.drop_table(table)  # indexes, policies, triggers and grants go with the table
     op.execute("DROP FUNCTION IF EXISTS disk_exports_transition()")
     op.execute("DROP FUNCTION IF EXISTS analysis_job_segments_guard()")

@@ -20,7 +20,7 @@ import contextlib
 import logging
 import shutil
 import uuid
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 
 import magic
 from starlette.requests import ClientDisconnect, Request
@@ -157,6 +157,11 @@ def _reserve_spool(directory: str, size: int) -> Iterator[None]:
         _spool_reserved -= size
 
 
+# M9 phase 10: work a caller adds to the evidence transaction (the derived-evidence promote:
+# the export row, the inherited restriction, the derivation custody), after the records.
+OnInsert = Callable[[OrgContext, EvidenceOut], Awaitable[None]]
+
+
 async def _insert_records(
     ctx: OrgContext,
     request: Request,
@@ -284,43 +289,75 @@ async def upload(
         if kind == DISK and spooled.size == 0:
             spooled.path.unlink(missing_ok=True)
             raise DiskImageEmpty()
+        return await store_spooled(
+            request,
+            org_id=org_id,
+            investigation_id=investigation_id,
+            user=user,
+            spooled=spooled,
+            filename=filename,
+            description=description,
+            kind=kind,
+        )
+
+
+async def store_spooled(
+    request: Request,
+    *,
+    org_id: uuid.UUID,
+    investigation_id: uuid.UUID,
+    user: CurrentUser,
+    spooled: Spooled,
+    filename: str,
+    description: str,
+    kind: UploadKind | None = None,
+    on_insert: OnInsert | None = None,
+) -> EvidenceOut:
+    """The evidence pipeline after the bytes are spooled and hashed (by `spool()`, from a
+    request body or, M9 phase 10, from a results-bucket object's chunks): store the exact
+    version, record the evidence (hashes, sniff, quota, custody, audit, and `on_insert` in the
+    same transaction), lock the version, then the automatic analysis. Always removes the spool
+    file. Shared by the upload route and the derived-evidence promote (no copy of the code)."""
+    try:
+        key = f"{org_id}/{uuid.uuid4()}"
+        version_id = await storage.put_file(key, spooled.path)
+        committed = False
+        committing = False
         try:
-            key = f"{org_id}/{uuid.uuid4()}"
-            version_id = await storage.put_file(key, spooled.path)
-            committed = False
-            committing = False
-            try:
-                # Re-authorized: membership may have changed during a long upload.
-                async with org_session(org_id, user, Permission.EVIDENCE_WRITE) as ctx:
-                    out = await _insert_records(
-                        ctx,
-                        request,
-                        investigation_id=investigation_id,
-                        spooled=spooled,
-                        key=key,
-                        version_id=version_id,
-                        filename=filename,
-                        description=description,
-                        kind=kind,
-                    )
-                    committing = True  # leaving the block commits
-                committed = True
-                await lock_version(org_id, user, out.id, key, version_id, request)
-            except BaseException:
-                if committing and not committed:
-                    # The COMMIT itself failed (or was cancelled): its outcome is unknown,
-                    # the row may be committed or still committing, so a check now could
-                    # race it. Keep the version (`reconcile_orphans.py` reports an orphan).
-                    log.error("kept upload %s %s: commit outcome unknown", key, version_id)
-                elif not committed:
-                    await discard_version(org_id, user, investigation_id, key, version_id)
-                raise
-        finally:
-            spooled.path.unlink(missing_ok=True)
+            # Re-authorized: membership may have changed during a long upload.
+            async with org_session(org_id, user, Permission.EVIDENCE_WRITE) as ctx:
+                out = await _insert_records(
+                    ctx,
+                    request,
+                    investigation_id=investigation_id,
+                    spooled=spooled,
+                    key=key,
+                    version_id=version_id,
+                    filename=filename,
+                    description=description,
+                    kind=kind,
+                )
+                if on_insert is not None:
+                    await on_insert(ctx, out)
+                committing = True  # leaving the block commits
+            committed = True
+            await lock_version(org_id, user, out.id, key, version_id, request)
+        except BaseException:
+            if committing and not committed:
+                # The COMMIT itself failed (or was cancelled): its outcome is unknown,
+                # the row may be committed or still committing, so a check now could
+                # race it. Keep the version (`reconcile_orphans.py` reports an orphan).
+                log.error("kept upload %s %s: commit outcome unknown", key, version_id)
+            elif not committed:
+                await discard_version(org_id, user, investigation_id, key, version_id)
+            raise
+    finally:
+        spooled.path.unlink(missing_ok=True)
     # Best effort, after commit: uploads are analyzed automatically (never fails the upload).
     # M8 RT3: never a memory image (an automatic static `av` run would read its contents
     # before the TLP:RED default applies); a memory run is always an explicit request. M9:
-    # never a disk image segment either.
+    # never a disk image segment either (derived evidence is a plain file: it gets its normal
+    # static job, its TI / AI use blocked by the inherited flags).
     if kind not in IMAGE_KINDS:
         await analysis_service.auto_request(
             org_id, user, out.id, spooled.head, spooled.size, request

@@ -52,6 +52,7 @@ def to_out(row: repo.EvidenceRow) -> EvidenceOut:
         type_mismatch=e.type_mismatch,
         memory_sensitivity=_SENSITIVITY.get(row.memory_sensitivity or ""),
         sensitivity=_sensitivity(row.sensitivity),
+        derived_from=row.derived_from,
     )
 
 

@@ -6,6 +6,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.pagination import PageParams
+from app.modules.analysis.models import AnalysisJob
+from app.modules.disk_forensics.models import DiskExport
 from app.modules.evidence.models import Evidence, EvidenceCustodyEvent, EvidenceHash
 from app.modules.investigations.models import EvidenceSharePolicy, Investigation
 from app.modules.memory_analysis.models import MemorySensitivity
@@ -31,6 +33,9 @@ class EvidenceRow:
     memory_sensitivity: str | None = None
     # M9 (RT2): `(state, source)` of the evidence's `memory_sensitivity` row, any source.
     sensitivity: tuple[str, str] | None = None
+    # M9 phase 10: the source evidence (segment 0 of the analyzed disk job) of a file promoted
+    # from a disk export (`disk_exports.evidence_id`).
+    derived_from: uuid.UUID | None = None
 
 
 async def get_investigation(
@@ -104,6 +109,22 @@ async def sensitivity_states(
     return {evidence_id: (str(state), str(source)) for evidence_id, state, source in rows.all()}
 
 
+async def derived_sources(
+    session: AsyncSession, org_id: uuid.UUID, evidence_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, uuid.UUID]:
+    """`{derived evidence id: source evidence id}` of promoted disk exports (M9 phase 10):
+    the source is the analyzed disk job's evidence (segment 0)."""
+    if not evidence_ids:
+        return {}
+    x, j = DiskExport, AnalysisJob
+    rows = await session.execute(
+        select(x.evidence_id, j.evidence_id)
+        .join(j, (j.id == x.source_job_id) & (j.organization_id == x.organization_id))
+        .where(x.organization_id == org_id, x.evidence_id.in_(evidence_ids))
+    )
+    return {derived: source for derived, source in rows.tuples() if derived is not None}
+
+
 async def _purges(
     session: AsyncSession, org_id: uuid.UUID, evidence_ids: list[uuid.UUID]
 ) -> dict[uuid.UUID, tuple[datetime, uuid.UUID]]:
@@ -130,6 +151,7 @@ async def _rows(
     flags = await _flags(session, org_id, ids)
     purges = await _purges(session, org_id, ids)
     sensitivity = await sensitivity_states(session, org_id, ids)
+    derived = await derived_sources(session, org_id, ids)
     holds = await active_holds(session, org_id, now=datetime.now(UTC)) if ids else None
     out = []
     for e, name in rows:
@@ -146,6 +168,7 @@ async def _rows(
                 # M8's field keeps its meaning: memory images only (M9, RT2).
                 memory_sensitivity=_memory_state(sensitivity.get(e.id)),
                 sensitivity=sensitivity.get(e.id),
+                derived_from=derived.get(e.id),
             )
         )
     return out

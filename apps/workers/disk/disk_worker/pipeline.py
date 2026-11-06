@@ -1,7 +1,8 @@
 """One job: validate -> started -> analyze / export -> upload -> finished (M9 phases 1-2; the
 calls `run_job(message, config, send)` and `run_export_job(message, config, send)` from
-`celery_app.py` are frozen; `analyzer.analyze` (phase 2) and `export.handle_export` (phase 10)
-are the bodies they reach).
+`celery_app.py` are frozen; `analyzer.analyze` (phase 2) and `export.handle_export(msg, dirs,
+config)` (phase 10; it gained the job dirs and the config of `analyze`) are the bodies they
+reach).
 
 - A full result is uploaded and reported `succeeded` with its version id.
 - A diagnostic stream (`no_supported_filesystem`, `unsupported_disk_format`: header and at most
@@ -96,7 +97,11 @@ def run_job(raw: object, config: Config, send: SendIngest) -> None:
 
 
 def run_export_job(raw: object, config: Config, send: SendIngest) -> None:
-    """`disk.export` (profile `extract`, phase 10): the same envelope around `handle_export`."""
+    """`disk.export` (profile `extract`, phase 10): the same envelope around `handle_export`.
+    Its result stream (each file's outcome) goes to the LAST result POST (the files' own POSTs
+    come first, `handle_export` uploads them) and is reported `succeeded`: a file's failure is
+    the ingest's to record; only a job-wide failure (download, integrity, format, layout,
+    disk space) is reported `failed` with its code and no result."""
     try:
         job = DiskExportJobV1.model_validate(raw)
     except ValidationError:
@@ -104,8 +109,16 @@ def run_export_job(raw: object, config: Config, send: SendIngest) -> None:
         return
 
     send(message(job, IngestEvent.STARTED))
+    dirs: sandbox.JobDirs | None = None
     try:
-        handle_export(job)
+        dirs = sandbox.prepare(config.work_dir, str(job.job_id))
+        result = handle_export(job, dirs, config)
+        version_id = upload(job.result_posts[-1], result)
+        send(
+            message(
+                job, IngestEvent.FINISHED, outcome=Outcome.SUCCEEDED, result_version_id=version_id
+            )
+        )
     except JobFailed as exc:
         log.warning("disk export job %s failed: %s", job.job_id, exc)
         send(_failed(job, exc.code))
@@ -114,3 +127,5 @@ def run_export_job(raw: object, config: Config, send: SendIngest) -> None:
     except Exception:
         log.exception("disk export job %s crashed", job.job_id)
         send(_failed(job, "analyzer_error"))
+    finally:
+        sandbox.cleanup(dirs)

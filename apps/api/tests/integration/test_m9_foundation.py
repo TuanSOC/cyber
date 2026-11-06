@@ -31,7 +31,7 @@ def _org_routes() -> set[tuple[str, str]]:
 
 
 def test_every_m9_route_is_frozen() -> None:
-    assert len(PENDING) == 11
+    assert len(PENDING) == 0  # phases 8 and 10 cased every M9 route
     assert PENDING <= _org_routes(), sorted(PENDING - _org_routes())
     generic = {
         ("GET", "/api/v1/orgs/{org_id}/evidence/{evidence_id}/sensitivity"),

@@ -102,9 +102,6 @@ def disk_ingest(message: dict[str, Any]) -> None:
 # (phase 10); the retention worker deletes the object versions (phase 9, RT19).
 @celery_app.task(name=DISK_EXPIRE_EXPORTS)  # type: ignore[untyped-decorator]
 def disk_expire_exports(message: dict[str, Any] | None = None) -> None:
-    try:
-        expired = run(disk_exports.expire_exports(500))
-    except NotImplementedError:
-        return  # M9 phase 1: the body lands with phase 10
+    expired = run(disk_exports.expire_exports(500))
     if expired:
         log.info("disk exports: %d expired", expired)

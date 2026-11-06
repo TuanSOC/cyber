@@ -1,6 +1,10 @@
 """The `disk.v1` / `disk-export.v1` job messages (M9 phase 1 entry points; phase 7 owns
 `build_disk_message`, phase 10 `build_export_message`; neither changes the signature).
 
+`build_export_message(job, source_job, segments, exports, settings) -> DiskExportJobV1` (phase
+10): the source job's segment GETs, one POST per exported file (`export_key`), the result
+stream POST, `DiskLimits` of the `extract` profile and the deadline.
+
 `build_disk_message(job, segments, settings) -> DiskJobV1`: one presigned GET per segment (the
 exact evidence version, expiring with the queue TTL plus the job timeout), the profile, the
 OS hint, `DiskLimits` from settings and the job deadline (RT5). No image cache key (RT1).
@@ -15,6 +19,7 @@ the worker's stage budget can never outlive it. A job that waits in the queue ge
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from cyberlab_jobs import PresignedPost
 from cyberlab_jobs.disk import (
     DEADLINE_RESERVE_S,
     PROFILE_BUDGETS,
@@ -27,6 +32,7 @@ from cyberlab_jobs.disk import (
     split_event_quotas,
 )
 from cyberlab_jobs.memory import OsHint
+from minio.datatypes import PostPolicy
 
 from app.core.clients import get_minio
 from app.core.config import Settings
@@ -119,8 +125,80 @@ def build_disk_message(job: Any, segments: list[Any], settings: Settings) -> Dis
     )
 
 
+def export_key(job_id: Any, export_id: Any) -> str:
+    """The only results-bucket key an `extract` job may write for one exported file (phase
+    10); the ingest re-derives it, never trusts one."""
+    return f"exports/{job_id}/{export_id}"
+
+
+def _file_post(job: Any, export: Any, settings: Settings, expires_at: datetime) -> PresignedPost:
+    """A presigned POST of one exported file: its fixed key, at most its listed size."""
+    minio = get_minio()
+    key = export_key(job.job_id, export.export_id)
+    policy = PostPolicy(settings.results_bucket, expires_at)
+    policy.add_equals_condition("key", key)
+    policy.add_content_length_range_condition(0, int(export.expected_size))
+    fields = {**minio.presigned_post_policy(policy), "key": key}
+    scheme = "https" if settings.minio_secure else "http"
+    return PresignedPost(
+        url=f"{scheme}://{settings.need('minio_endpoint')}/{settings.results_bucket}",
+        fields=fields,
+    )
+
+
 def build_export_message(
     job: Any, source_job: Any, segments: list[Any], exports: list[Any], settings: Settings
 ) -> DiskExportJobV1:
-    """One presigned POST per exported file plus one for the result stream (phase 10)."""
-    raise NotImplementedError("disk file export dispatch lands with M9 phase 10")
+    """`job`: the dispatch input of the `extract` job; `source_job`: the id of the analyzed
+    disk job; `segments`: its ordered segment set (`segments.Segment`, copied from the source
+    job); `exports`: one `export_service.Planned` per file (export id, natural key, listed
+    size). One presigned GET per segment (the image is downloaded and re-verified again: no
+    cache, RT1), one presigned POST per file under `exports/<job>/<export_id>` capped at the
+    file's listed size, plus the result stream POST (the shared fixed key). Blocking (MinIO):
+    called from a worker thread."""
+    from app.modules.analysis.dispatch import presigned_common
+
+    if not segments:
+        raise ValueError(f"disk export job {job.job_id} has no segments")
+    if not exports:
+        raise ValueError(f"disk export job {job.job_id} exports no file")
+    timeout = settings.analysis_disk_timeout_s
+    expires = timedelta(seconds=settings.analysis_queue_ttl_s + timeout)
+    common = presigned_common(job, settings, get_expires=expires)
+    expires_at = datetime.now(UTC) + expires
+    source_id = getattr(source_job, "id", source_job)
+    return DiskExportJobV1.model_validate(
+        {
+            "job_id": job.job_id,
+            "organization_id": job.organization_id,
+            "source_job_id": source_id,
+            "segments": [
+                {
+                    "ordinal": s.ordinal,
+                    "evidence_id": s.evidence_id,
+                    "expected_sha256": s.sha256,
+                    "size_bytes": s.size_bytes,
+                    "url": _segment_url(s, expires),
+                }
+                for s in segments
+            ],
+            "files": [
+                {
+                    "export_id": e.export_id,
+                    "partition_index": e.partition_index,
+                    "meta_addr": e.meta_addr,
+                    "meta_seq": e.meta_seq,
+                    "stream": e.stream,
+                    "expected_size": e.expected_size,
+                }
+                for e in exports
+            ],
+            "result_posts": [
+                *(_file_post(job, e, settings, expires_at) for e in exports),
+                common["result_post"],
+            ],
+            "ingest_token": job.ingest_token,
+            "limits": disk_limits(settings, DiskProfile.EXTRACT.value),
+            "deadline_at": datetime.now(UTC) + timedelta(seconds=timeout),
+        }
+    )

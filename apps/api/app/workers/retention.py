@@ -14,15 +14,18 @@
   keyset cursor per hold, 0015), under the org's advisory lock. Returns the number of object
   versions changed.
 
-- `purge_expired_exports(org_id)` (M9 phase 9, RT19): every sweep, for every indexed org and
-  whatever its retention mode, holds or schedule, deletes the exact object version of each
-  `expired` disk export (an unpromoted file copy is never evidence) with the purge user, the
-  only MinIO user with Delete on the results bucket, and stamps `object_deleted_at`; a failed
-  delete leaves the row unstamped, so the next sweep retries it.
+- `purge_expired_exports(org_id)` (M9 phases 9 and 10, RT19): every sweep, for EVERY org with
+  such an export (found in a system session through 0017's read-only `system_read` policy on
+  `disk_exports`, with or without a retention policy) and whatever its retention mode, holds
+  or schedule, deletes the exact object version of each `expired` disk export (an unpromoted
+  file copy is never evidence; also a `failed` one that kept its object) with the purge user,
+  the only MinIO user with Delete on the results bucket, and stamps `object_deleted_at`; a
+  failed delete leaves the row unstamped, so the next sweep retries it.
 
 Every org id comes from `retention_policy_index` or must be listed there (a message org that
-is not is dropped). The process runs as `cyberlab_retention` (DELETE on the purgeable tables
-only) and the MinIO user `cyberlab-purge` (no governance bypass, no snapshot delete).
+is not is dropped); the export purge's orgs come from `disk_exports` itself. The process
+runs as `cyberlab_retention` (DELETE on the purgeable tables only) and the MinIO user
+`cyberlab-purge` (no governance bypass, no snapshot delete).
 """
 
 import logging
@@ -238,6 +241,8 @@ async def sweep() -> int:
                 started += 1
         except Exception:  # noqa: BLE001 - one org's failure never stops the sweep
             log.exception("retention sweep failed for org %s", org_id)
+    # M9 (RT19): every org with an export object to delete, policy or not.
+    for org_id in await export_purge_orgs():
         try:
             await purge_expired_exports(org_id)
         except Exception:  # noqa: BLE001 - one org's failure never stops the sweep
@@ -245,34 +250,56 @@ async def sweep() -> int:
     return started
 
 
-# --- expired disk exports (M9 phase 9, RT19) -------------------------------------------------
+# --- expired disk exports (M9 phases 9 and 10, RT19) ----------------------------------------
 
-# An `expired` export (phase 10's beat marks unpromoted copies after DISK_EXPORT_TTL_S) whose
-# object version is not deleted yet; `skip` holds this pass's failed deletes.
+# Exports whose copy is never evidence and whose object version is not deleted yet: `expired`
+# (phase 10's beat marks unpromoted copies after DISK_EXPORT_TTL_S) and `failed` with a stored
+# object (a promote whose trusted re-hash differed, phase 10). `skip` holds this pass's failed
+# deletes.
+_PURGEABLE = (
+    "state IN ('expired', 'failed') AND object_deleted_at IS NULL "
+    "AND object_key IS NOT NULL AND object_version_id IS NOT NULL"
+)
+# The orgs to visit, in a system session (0017's read-only `system_read` policy): every org,
+# whether or not it has a retention policy (phase 10 fixed phase 9's indexed-orgs-only loop).
+_EXPORT_ORGS = text(
+    f"SELECT DISTINCT organization_id FROM disk_exports WHERE {_PURGEABLE} "  # noqa: S608
+    "ORDER BY organization_id LIMIT :n"
+)
 _EXPIRED_EXPORTS = text(
-    """
+    f"""
 SELECT id, object_key, object_version_id FROM disk_exports
-WHERE organization_id = :org AND state = 'expired' AND object_deleted_at IS NULL
-  AND object_key IS NOT NULL AND object_version_id IS NOT NULL
+WHERE organization_id = :org AND {_PURGEABLE}
   AND NOT (id = ANY(CAST(:skip AS uuid[])))
 ORDER BY created_at, id
 LIMIT :n
-"""
+"""  # noqa: S608 - a module constant, no input
 )
 _STAMP_EXPORT = text(
     "UPDATE disk_exports SET object_deleted_at = now() "
-    "WHERE organization_id = :org AND id = :id AND state = 'expired' "
+    "WHERE organization_id = :org AND id = :id AND state IN ('expired', 'failed') "
     "AND object_deleted_at IS NULL"
 )
 # Deletes attempted per org and sweep (the rest waits for the next sweep).
 EXPORT_PURGE_MAX = 5_000
+# Orgs visited per sweep (the rest waits for the next sweep).
+EXPORT_PURGE_ORGS_MAX = 1_000
+
+
+async def export_purge_orgs() -> list[uuid.UUID]:
+    """Every org with an export object to delete (system data; the ids come from the
+    database, never from a message)."""
+    async with _session(None) as s:
+        rows = await s.execute(_EXPORT_ORGS, {"n": EXPORT_PURGE_ORGS_MAX})
+        return [org for (org,) in rows.all()]
 
 
 async def purge_expired_exports(org_id: uuid.UUID) -> int:
-    """Delete the exact object version of every `expired` disk export of the org (the purge
-    user; the api user has no Delete on the results bucket, RT19), then stamp the row's
-    `object_deleted_at` (set once, trigger). A version already gone counts as deleted; a
-    failed delete is logged and retried by the next sweep. Returns the number stamped."""
+    """Delete the exact object version of every `expired` (or `failed` with an object) disk
+    export of the org (the purge user; the api user has no Delete on the results bucket,
+    RT19), then stamp the row's `object_deleted_at` (set once, trigger). A version already
+    gone counts as deleted; a failed delete is logged and retried by the next sweep. Returns
+    the number stamped."""
     settings = get_settings()
     batch = settings.retention_batch_objects
     started = time.monotonic()

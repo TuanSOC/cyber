@@ -54,6 +54,7 @@ from app.modules.analysis.models import (
 )
 from app.modules.analysis.result_stream import InvalidResult
 from app.modules.audit import service as audit
+from app.modules.disk_forensics import export_service as disk_export_service
 from app.modules.disk_forensics import handoff as disk_handoff
 from app.modules.disk_forensics import ingest as disk_ingest
 from app.modules.disk_forensics import ingest_export as disk_ingest_export
@@ -222,6 +223,10 @@ async def _fail(session: AsyncSession, job: AnalysisJob, code: str) -> None:
         error_code=code,
     ):
         _audit(session, job, "analysis.failed", error_code=code)
+        if job.analyzer == Analyzer.DISK:
+            # M9 phase 10: a failed `extract` job fails its `pending` exports (a no-op, and
+            # no statement, for any other disk job).
+            await disk_export_service.fail_pending_exports(session, job)
 
 
 async def _fail_job(job: AnalysisJob, code: str) -> None:
