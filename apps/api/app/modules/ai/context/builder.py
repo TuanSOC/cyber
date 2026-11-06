@@ -358,9 +358,15 @@ async def _attack_mapping(
 async def _memory_digest(
     session: AsyncSession, org_id: uuid.UUID, job: AnalysisJob, opts: Options
 ) -> list[Selection]:
-    """M8 phase 8 (STUB): a memory job's digest is its findings and IOCs only, after the
-    evidence's memory sensitivity was released (never a pcap summary, RT1)."""
-    raise NotImplementedError("the memory job digest lands in M8 phase 8")
+    """M8 phase 8: a memory job's digest is its findings and IOCs only (with the TI answers
+    of those IOCs when asked), never a pcap summary (RT1). Finding text and IOC context carry
+    masked secrets (phase 3, RT13); process lists, raw command lines and artifacts never
+    enter a context. The job only gets here once the evidence is no longer AI-excluded
+    (an admin released it and the flags were cleared): the case builder skips excluded
+    evidence and the run request refuses it (`409 policy_blocked`)."""
+    jobs = [job.id]
+    iocs = await sel.iocs(session, org_id, jobs)
+    return [await sel.findings(session, org_id, jobs), iocs, await _ti(session, org_id, iocs, opts)]
 
 
 async def _digest_selections(

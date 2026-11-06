@@ -42,7 +42,9 @@ from app.modules.reports.dispatch import render_key
 from app.modules.retention.holds import HoldSet, active_holds
 
 CATEGORIES = ("ti_results", "ai_runs", "closed_case")
-# The bulk derived rows of a closed case's jobs (plan Retention; the DELETE grants of 0014).
+# The bulk derived rows of a closed case's jobs (plan Retention; the DELETE grants of 0014,
+# and of 0016 for the four memory tables, M8). `memory_images`, `memory_sensitivity`,
+# findings and IOCs are never purged.
 BULK_TABLES = (
     "analysis_timeline",
     "malware_exports",
@@ -50,6 +52,10 @@ BULK_TABLES = (
     "malware_resources",
     "malware_sections",
     "malware_strings",
+    "memory_artifacts",
+    "memory_connections",
+    "memory_injections",
+    "memory_processes",
     "network_flows",
     "network_records",
 )

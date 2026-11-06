@@ -282,7 +282,8 @@ def _data_sections(s: ReportSnapshot) -> list[str]:
             s.jobs.total,
             table(["Job", "Analyzer", "Status", "Finished", "Tool versions"], rows),
         )
-    if s.findings.items:
+    omitted = render_html.omissions_line(s)
+    if s.findings.items or omitted is not None:
         rows = [
             [
                 md_cell(f.severity),
@@ -293,12 +294,15 @@ def _data_sections(s: ReportSnapshot) -> list[str]:
             ]
             for f in s.findings.items
         ]
-        out += _section(
-            "Findings",
-            len(s.findings.items),
-            s.findings.total,
-            table(["Severity", "Finding", "Description", "Category", "ATT&CK"], rows),
+        body = (
+            table(["Severity", "Finding", "Description", "Category", "ATT&CK"], rows)
+            if rows
+            else ""
         )
+        if omitted is not None:
+            # M8 (RT10): a fixed sentence around one integer, escaped like any text.
+            body = (body + "\n\n" if body else "") + f"_{md_text(omitted)}_"
+        out += _section("Findings", len(s.findings.items), s.findings.total, body)
     if s.alerts.items:
         rows = [
             [

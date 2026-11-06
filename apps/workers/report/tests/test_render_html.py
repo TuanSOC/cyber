@@ -7,7 +7,13 @@ import re
 from html.parser import HTMLParser
 
 import pytest
-from cyberlab_jobs.report import HTML_HEAD, ReportSnapshot, canonical_json
+from cyberlab_jobs.report import (
+    HTML_HEAD,
+    FindingsSection,
+    Omissions,
+    ReportSnapshot,
+    canonical_json,
+)
 
 from report_worker import render_html, text
 
@@ -305,3 +311,48 @@ def test_severity_and_tlp_classes_are_fixed() -> None:
     assert text.sev_class('x" onmouseover="y') == "sev-unknown"
     assert text.sev_class(None) == "sev-unknown"
     assert text.tlp_class("amber_strict") == "tlp-amber-strict"
+
+
+# --- M8: the omitted memory items line (RT10) ---------------------------------------------
+
+LINE_3 = "3 memory items omitted (restricted evidence; TLP:RED required)"
+
+
+def _omitting(snapshot: ReportSnapshot, n: int, *, findings: bool = True) -> ReportSnapshot:
+    update: dict[str, object] = {"omissions": Omissions(memory_restricted=n)}
+    if not findings:
+        update["findings"] = FindingsSection()
+    return snapshot.model_copy(update=update)
+
+
+def test_no_omissions_no_line(golden: ReportSnapshot) -> None:
+    assert golden.omissions is None
+    assert render_html.omissions_line(golden) is None
+    assert "memory item" not in render(golden)
+
+
+@pytest.mark.parametrize("mode", ["pdf", "html"])
+def test_the_omitted_line_is_under_the_findings(mode: str, golden: ReportSnapshot) -> None:
+    html = render(_omitting(golden, 3), mode)
+    start = html.index('<section id="findings">')
+    end = html.index("</section>", start)
+    assert f'<p class="shown">{LINE_3}</p>' in html[start:end]
+    assert html.count("memory items omitted") == 1
+
+
+def test_the_line_alone_keeps_the_findings_section(golden: ReportSnapshot) -> None:
+    snapshot = _omitting(golden, 1, findings=False)
+    html = render(snapshot)
+    ids = [a.get("id") for _, a in parse(html).tags]
+    assert "findings" in ids
+    start = html.index('<section id="findings">')
+    section = html[start : html.index("</section>", start)]
+    assert "<table>" not in section
+    assert "1 memory item omitted (restricted evidence; TLP:RED required)" in section
+    assert any(e.anchor == "findings" for e in render_html.context(snapshot, "0" * 64)["toc"])
+
+
+def test_the_omitted_line_keeps_the_markup_allowlist(golden: ReportSnapshot) -> None:
+    for tag, attrs in parse(render(_omitting(golden, 2))).tags:
+        for name in (attrs.get("class") or "").split():
+            assert tag in ALLOWED_TAGS and name in FIXED_CLASSES, (tag, name)

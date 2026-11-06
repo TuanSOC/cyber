@@ -1,7 +1,7 @@
 """Evidence metadata, custody chain and archiving (transfers: uploads.py / transfer.py)."""
 
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from starlette.requests import HTTPConnection
 
@@ -14,6 +14,12 @@ from app.modules.evidence import repository as repo
 from app.modules.evidence.models import CustodyAction, EvidenceCustodyEvent, EvidenceStatus
 from app.modules.evidence.schemas import CustodyEventOut, CustodyPage, EvidenceOut, EvidencePage
 from app.modules.investigations.models import InvestigationStatus
+
+# M8: the stored `memory_sensitivity.state` as the `EvidenceOut` literal.
+_SENSITIVITY: dict[str, Literal["restricted", "released"]] = {
+    "restricted": "restricted",
+    "released": "released",
+}
 
 
 def to_out(row: repo.EvidenceRow) -> EvidenceOut:
@@ -38,6 +44,7 @@ def to_out(row: repo.EvidenceRow) -> EvidenceOut:
         legal_hold=row.legal_hold,
         declared_type=e.declared_type,
         type_mismatch=e.type_mismatch,
+        memory_sensitivity=_SENSITIVITY.get(row.memory_sensitivity or ""),
     )
 
 

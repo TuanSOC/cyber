@@ -9,7 +9,7 @@ import random
 import re
 
 import pytest
-from cyberlab_jobs.report import ReportSnapshot, canonical_json
+from cyberlab_jobs.report import FindingsSection, Omissions, ReportSnapshot, canonical_json
 from markdown_it import MarkdownIt
 
 from report_worker import render_md
@@ -216,3 +216,43 @@ def test_the_golden_document_has_every_section(golden: ReportSnapshot) -> None:
         assert f"<h3>C{c.cite_no}</h3>" in out
         assert f'<a href="#c{c.cite_no}">[C{c.cite_no}]</a>' in out
     assert "AI-generated interpretation: observations to verify, not verdicts." in visible(out)
+
+
+# --- M8: the omitted memory items line (RT10) ---------------------------------------------
+
+LINE_3 = "3 memory items omitted (restricted evidence; TLP:RED required)"
+
+
+def _omitting(snapshot: ReportSnapshot, n: int, *, findings: bool = True) -> ReportSnapshot:
+    update: dict[str, object] = {"omissions": Omissions(memory_restricted=n)}
+    if not findings:
+        update["findings"] = FindingsSection()
+    return snapshot.model_copy(update=update)
+
+
+def test_no_omissions_no_line(golden: ReportSnapshot) -> None:
+    assert golden.omissions is None
+    assert "memory item" not in visible(render("gfm", _doc(golden)))
+
+
+@pytest.mark.parametrize("parser", list(PARSERS))
+def test_the_omitted_line_follows_the_findings(parser: str, golden: ReportSnapshot) -> None:
+    out = render(parser, _doc(_omitting(golden, 3)))
+    shown = visible(out)
+    assert LINE_3 in shown
+    findings_at = out.index("<h2>Findings</h2>")
+    assert findings_at < out.index("memory items omitted") < out.index("<h2>Alerts</h2>")
+    # The line is text only: no link, html or extra heading.
+    kinds = set(tokens(parser, _doc(_omitting(golden, 3))))
+    assert not kinds & {"html_block", "html_inline", "image"}
+
+
+def test_the_line_alone_keeps_the_findings_section(golden: ReportSnapshot) -> None:
+    out = render("gfm", _doc(_omitting(golden, 1, findings=False)))
+    assert "<h2>Findings</h2>" in out
+    assert "1 memory item omitted (restricted evidence; TLP:RED required)" in visible(out)
+    assert "<th>Severity</th>" not in out[out.index("<h2>Findings</h2>") : out.index("<h2>Alerts")]
+
+
+def test_a_zero_count_prints_nothing(golden: ReportSnapshot) -> None:
+    assert "memory item" not in visible(render("gfm", _doc(_omitting(golden, 0))))

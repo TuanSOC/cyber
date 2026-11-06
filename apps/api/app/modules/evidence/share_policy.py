@@ -4,6 +4,11 @@ The flags live in `evidence_share_policies` (one row per evidence, upserted), so
 evidence row and its `evidence_immutable` trigger are never touched. Turning a flag on
 needs `evidence.write` (the route); turning one off also needs `integrations.manage`.
 Enforcement is `investigations.policy.load_policy` at the AI / TI choke points.
+
+M8 (phase 8): while the evidence is a `restricted` memory image, a PUT that turns a flag off
+answers `409 memory_sensitivity_restricted` (an admin releases it first,
+`memory_analysis/sensitivity.release`); turning flags on is always allowed. The sensitivity
+row is read after the evidence lock, which the memory default also takes.
 """
 
 import uuid
@@ -24,6 +29,8 @@ from app.modules.investigations.schemas import (
     EvidenceSharePolicyOut,
     SharePolicyOut,
 )
+from app.modules.memory_analysis import sensitivity
+from app.modules.memory_analysis.errors import MemorySensitivityRestricted
 
 
 async def _out(
@@ -70,6 +77,8 @@ async def put_policy(
     turned_off = any(before[flag] and not after[flag] for flag in before)
     if turned_off and Permission.INTEGRATIONS_MANAGE not in ROLE_PERMISSIONS[ctx.role]:
         raise Forbidden("Turning a share-policy exclusion off needs integrations.manage")
+    if turned_off and await sensitivity.is_restricted(ctx.session, ctx.org_id, evidence_id):
+        raise MemorySensitivityRestricted()
     if before == after:  # nothing changes: no write, no audit row
         return await _out(ctx, evidence_id, current)
 

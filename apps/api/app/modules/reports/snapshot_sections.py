@@ -8,6 +8,14 @@ Builders return plain JSON-able dicts in the shape of `cyberlab_jobs.report`. A 
 be cited carries a private `_cite` key (one `CiteKey`), a row that cites carries `_cites`
 (a list); `snapshot.py` replaces both with the `C<n>` numbers once every citation is
 resolved. Evidence-derived and AI text is defanged here, once (RT24); analyst text is not.
+
+M8 (phase 8, RT10): every row derived from an analysis job of evidence whose memory
+sensitivity is `restricted` (TLP:RED material by default) is left out of a report below
+TLP:RED: its findings, alerts, timeline entries, IOCs seen only there (shared IOCs stay, with
+the restricted jobs' sightings removed), job-scope AI runs, citations of its rows and the job
+row's summary (tool versions). `memory_guard` finds those jobs once per build; every left-out
+item is counted and `omissions()` gives the snapshot's additive `omissions` field (None when
+nothing was left out, so a report without such evidence keeps byte-identical canonical JSON).
 """
 
 import re
@@ -27,9 +35,10 @@ from cyberlab_jobs.report import (
     truncate_text,
 )
 from sqlalchemy import case as sql_case
-from sqlalchemy import func, select
+from sqlalchemy import func, select, union_all
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.core.config import get_settings
 from app.modules.ai import postprocess
@@ -39,7 +48,7 @@ from app.modules.ai.contracts import AiRunStatus, ClaimStatus, OutputFlag
 from app.modules.ai.models import AiCitation, AiContextRef, AiRun
 from app.modules.ai.schemas import AiOutputOut
 from app.modules.ai.service_outputs import LinkContext, build, has_canary_leak
-from app.modules.analysis.models import AnalysisJob, AnalysisStatus
+from app.modules.analysis.models import AnalysisJob, AnalysisStatus, Analyzer
 from app.modules.attack.index import label as attack_label
 from app.modules.case_attack.models import CaseAttackMapping
 from app.modules.evidence.models import (
@@ -53,9 +62,10 @@ from app.modules.investigations.models import Investigation, InvestigationStatus
 from app.modules.investigations.schemas import case_ref
 from app.modules.ioc_collections import case_iocs as case_iocs_mod
 from app.modules.ioc_collections.models import IocCollection, IocCollectionItem
+from app.modules.memory_analysis.models import MemorySensitivity, SensitivityState
 from app.modules.notes.models import AnalystNote, AnalystNoteVersion
-from app.modules.pcap_analysis.models import AnalysisFinding, NetworkAlert
-from app.modules.reports.citations import CaseScope, CiteKey, Registry, cite_key
+from app.modules.pcap_analysis.models import AnalysisFinding, Ioc, NetworkAlert
+from app.modules.reports.citations import CaseScope, CiteKey, Registry, Resolved, cite_key
 from app.modules.reports.models import Report, ReportVersion
 from app.modules.reports.repository import user_names
 from app.modules.reports.schemas import ReportDraft
@@ -157,6 +167,10 @@ class Build:
     # (pseudonym, original) of every reversed run map, in run order: the external profile
     # seeds its report-level map with them (`redact.seed_run_maps`, RT2).
     run_originals: list[tuple[str, str]] = field(default_factory=list)
+    # M8: jobs of restricted memory evidence (empty at TLP:RED; `memory_guard`) and the
+    # number of items left out because of them (`omissions.memory_restricted`).
+    withheld_jobs: frozenset[uuid.UUID] = frozenset()
+    withheld: int = 0
 
     async def name_of(self, user_ids: Sequence[uuid.UUID | None]) -> None:
         missing = [u for u in user_ids if u is not None and u not in self.names]
@@ -167,6 +181,139 @@ class Build:
 
     def count(self, section: str, **values: int) -> None:
         self.counts.setdefault(section, {}).update(values)
+
+
+# --- the memory sensitivity guard (M8 phase 8) ----------------------------------------------
+
+# Citation tables that are not a job's results: a cited job row (shown in the jobs section),
+# evidence and custody stay.
+_WITHHELD_EXEMPT_TABLES = frozenset({"analysis_jobs", "evidence", "evidence_custody_events"})
+# Timeline ref kinds that are a job's results (job lifecycle and custody entries stay).
+_WITHHELD_TIMELINE_KINDS = frozenset({"timeline", "finding", "alert"})
+
+
+async def memory_guard(b: Build) -> None:
+    """Below TLP:RED, the jobs of the case's restricted memory evidence (any analyzer: every
+    result of a memory image is memory-derived)."""
+    if b.report.tlp == "red" or not b.scope.evidence_ids:
+        return
+    m = MemorySensitivity
+    restricted = select(m.evidence_id).where(
+        m.organization_id == b.org_id,
+        m.state == SensitivityState.RESTRICTED.value,
+        m.evidence_id.in_(list(b.scope.evidence_ids)),
+    )
+    jobs = await b.session.scalars(
+        select(AnalysisJob.id).where(
+            AnalysisJob.organization_id == b.org_id, AnalysisJob.evidence_id.in_(restricted)
+        )
+    )
+    b.withheld_jobs = frozenset(jobs)
+
+
+def omissions(b: Build) -> dict[str, int] | None:
+    """The snapshot's `omissions` (absent unless something was left out, RT10)."""
+    return {"memory_restricted": b.withheld} if b.withheld else None
+
+
+def withhold_citations(b: Build, resolved: dict[CiteKey, Resolved]) -> int:
+    """Drop (in place) the resolved citations of the withheld jobs' result rows; returns how
+    many (counted as omitted, not as out of scope)."""
+    if not b.withheld_jobs:
+        return 0
+    gone = [
+        key
+        for key, r in resolved.items()
+        if r.job_id in b.withheld_jobs and r.ref_table not in _WITHHELD_EXEMPT_TABLES
+    ]
+    for key in gone:
+        del resolved[key]
+    b.withheld += len(gone)
+    return len(gone)
+
+
+async def _withheld_count(b: Build, model: Any, where: Sequence[Any]) -> int:
+    """Rows of the withheld jobs among `job_ids` matching a section's other filters."""
+    found = await b.session.scalar(select(func.count(model.id)).where(*where))
+    return int(found or 0)
+
+
+async def _latest_job_ids(b: Build) -> set[uuid.UUID]:
+    """The job set of `case_iocs` (the latest succeeded job per evidence and analyzer)."""
+    latest = union_all(
+        *(
+            select(sub.c.id)
+            for sub in (
+                case_timeline.latest_succeeded_jobs(b.org_id, b.case.id, analyzer)
+                for analyzer in Analyzer
+            )
+        )
+    ).subquery()
+    return set(await b.session.scalars(select(latest.c.id)))
+
+
+@dataclass(frozen=True)
+class _Sightings:
+    count_jobs: int
+    first_seen: datetime | None
+    last_seen: datetime | None
+    job_ids: list[uuid.UUID]
+
+
+async def _open_sightings(
+    b: Build, open_jobs: Sequence[uuid.UUID], values: Sequence[str]
+) -> dict[str, _Sightings]:
+    """`{ioc_key: sightings}` of the given values in the case-IOC jobs not withheld."""
+    if not open_jobs or not values:
+        return {}
+    i = Ioc
+    rows = await b.session.execute(
+        select(
+            i.type,
+            i.value,
+            func.count(func.distinct(i.job_id)),
+            func.min(i.first_seen),
+            func.max(i.last_seen),
+            func.array_agg(func.distinct(i.job_id)),
+        )
+        .where(
+            i.organization_id == b.org_id,
+            i.job_id.in_(list(open_jobs)),
+            i.value.in_(sorted(set(values))),
+        )
+        .group_by(i.type, i.value)
+    )
+    out: dict[str, _Sightings] = {}
+    for ioc_type, value, n, first, last, job_ids in rows.all():
+        _, key = case_iocs_mod.key_of(ioc_type, value)
+        found = _Sightings(int(n), first, last, sorted(set(job_ids or [])))
+        if key not in out or found.count_jobs > out[key].count_jobs:
+            out[key] = found
+    return out
+
+
+async def _restricted_only_iocs(b: Build, latest: set[uuid.UUID]) -> int:
+    """Distinct case IOCs (type, value) seen only in withheld jobs."""
+    withheld = [j for j in latest if j in b.withheld_jobs]
+    if not withheld:
+        return 0
+    open_jobs = [j for j in latest if j not in b.withheld_jobs]
+    r = aliased(Ioc)
+    where: list[Any] = [r.organization_id == b.org_id, r.job_id.in_(withheld)]
+    if open_jobs:
+        o = aliased(Ioc)
+        where.append(
+            ~select(o.id)
+            .where(
+                o.organization_id == b.org_id,
+                o.job_id.in_(open_jobs),
+                o.type == r.type,
+                o.value == r.value,
+            )
+            .exists()
+        )
+    grouped = select(r.type, r.value).where(*where).group_by(r.type, r.value).subquery()
+    return int(await b.session.scalar(select(func.count()).select_from(grouped)) or 0)
 
 
 # --- report and case ----------------------------------------------------------------------
@@ -405,20 +552,24 @@ async def jobs(b: Build) -> tuple[dict[str, Any], list[uuid.UUID]]:
             else []
         )
     kept = rows[: CAPS["jobs"]]
-    items = [
-        {
-            "job_id": str(j.id),
-            "evidence_id": str(j.evidence_id),
-            "analyzer": ident_or(j.analyzer),
-            "profile": ident(j.profile),
-            "status": ident_or(j.status),
-            "created_at": iso(j.created_at),
-            "finished_at": iso(j.finished_at),
-            "tool_versions": _tool_versions(j.summary),
-            "_cite": cite_key("job", str(j.id), None),
-        }
-        for j in kept
-    ]
+    items = []
+    for j in kept:
+        withheld = j.id in b.withheld_jobs
+        if withheld:
+            b.withheld += 1  # the job row stays; its summary (tool versions) does not
+        items.append(
+            {
+                "job_id": str(j.id),
+                "evidence_id": str(j.evidence_id),
+                "analyzer": ident_or(j.analyzer),
+                "profile": ident(j.profile),
+                "status": ident_or(j.status),
+                "created_at": iso(j.created_at),
+                "finished_at": iso(j.finished_at),
+                "tool_versions": {} if withheld else _tool_versions(j.summary),
+                "_cite": cite_key("job", str(j.id), None),
+            }
+        )
     return {"items": items, "total": len(rows)}, [j.id for j in kept]
 
 
@@ -446,11 +597,14 @@ async def findings(b: Build, job_ids: Sequence[uuid.UUID]) -> dict[str, Any]:
         return {"items": [], "total": 0}
     m = AnalysisFinding
     rank = sql_case(SEVERITY_RANK, value=m.severity, else_=0)
-    where = [
-        m.organization_id == b.org_id,
-        m.job_id.in_(list(job_ids)),
-        rank >= SEVERITY_RANK[sel.min_severity],
-    ]
+    where = [m.organization_id == b.org_id, rank >= SEVERITY_RANK[sel.min_severity]]
+    hidden = [j for j in job_ids if j in b.withheld_jobs]
+    if hidden:
+        b.withheld += await _withheld_count(b, m, [*where, m.job_id.in_(hidden)])
+    shown = [j for j in job_ids if j not in b.withheld_jobs]
+    if not shown:
+        return {"items": [], "total": 0}
+    where.append(m.job_id.in_(shown))
     total = int(await b.session.scalar(select(func.count(m.id)).where(*where)) or 0)
     rows = await b.session.scalars(
         select(m)
@@ -486,7 +640,14 @@ async def alerts(b: Build, job_ids: Sequence[uuid.UUID]) -> dict[str, Any]:
         for n, name in ALERT_SEVERITY.items()
         if SEVERITY_RANK[name] >= SEVERITY_RANK[sel.min_severity]
     ]
-    where = [m.organization_id == b.org_id, m.job_id.in_(list(job_ids)), m.severity.in_(allowed)]
+    where = [m.organization_id == b.org_id, m.severity.in_(allowed)]
+    hidden = [j for j in job_ids if j in b.withheld_jobs]
+    if hidden:
+        b.withheld += await _withheld_count(b, m, [*where, m.job_id.in_(hidden)])
+    shown = [j for j in job_ids if j not in b.withheld_jobs]
+    if not shown:
+        return {"items": [], "total": 0}
+    where.append(m.job_id.in_(shown))
     total = int(await b.session.scalar(select(func.count(m.id)).where(*where)) or 0)
     rows = await b.session.scalars(
         select(m).where(*where).order_by(m.severity, m.ts, m.id).limit(min(sel.max, CAPS["alerts"]))
@@ -524,6 +685,11 @@ async def iocs(b: Build) -> dict[str, Any]:
     }
     by_key: dict[str, dict[str, Any]] = {}
     total = 0
+    guarded = bool(b.withheld_jobs) and sel.case_iocs and cap > 0
+    latest = await _latest_job_ids(b) if guarded else set()
+    open_jobs = sorted(j for j in latest if j not in b.withheld_jobs)
+    restricted_only = await _restricted_only_iocs(b, latest) if guarded else 0
+    b.withheld += restricted_only
     if sel.case_iocs and cap > 0:
         cursor: str | None = None
         first = True
@@ -537,20 +703,45 @@ async def iocs(b: Build) -> dict[str, Any]:
             )
             if first:
                 total = page.total if page.total is not None else 0
+                total = max(total - restricted_only, 0)
                 first = False
+            # M8: an IOC a withheld job may have contributed to (one of its listed jobs, or
+            # more jobs than listed) is re-aggregated over the other jobs, or left out.
+            touched = {
+                item.ioc_key: item
+                for item in page.items
+                if guarded
+                and (
+                    not b.withheld_jobs.isdisjoint(item.job_ids)
+                    or item.count_jobs > len(item.job_ids)
+                )
+            }
+            sightings = await _open_sightings(b, open_jobs, [i.value for i in touched.values()])
             for item in page.items:
                 if len(by_key) >= cap or not _SHA256.fullmatch(item.ioc_key):
                     continue
+                count_jobs, first_seen, last_seen = item.count_jobs, item.first_seen, item.last_seen
+                job_list = list(item.job_ids)
+                if item.ioc_key in touched:
+                    seen = sightings.get(item.ioc_key)
+                    if seen is None:
+                        continue  # seen only in withheld jobs (counted in `restricted_only`)
+                    count_jobs, first_seen, last_seen = (
+                        seen.count_jobs,
+                        seen.first_seen,
+                        seen.last_seen,
+                    )
+                    job_list = seen.job_ids
                 by_key.setdefault(
                     item.ioc_key,
                     {
                         "ioc_type": ident_or(item.ioc_type),
                         "value": defang(item.value),
                         "ioc_key": item.ioc_key,
-                        "count_jobs": max(int(item.count_jobs), 0),
-                        "first_seen": iso(item.first_seen),
-                        "last_seen": iso(item.last_seen),
-                        "job_ids": [str(j) for j in item.job_ids[:5]],
+                        "count_jobs": max(int(count_jobs), 0),
+                        "first_seen": iso(first_seen),
+                        "last_seen": iso(last_seen),
+                        "job_ids": [str(j) for j in job_list[:5]],
                         "collections": [
                             title(collections[c]) for c in item.in_collections if c in collections
                         ][:MAX_REFS_PER_ROW],
@@ -732,6 +923,9 @@ async def timeline(b: Build) -> dict[str, Any]:
                 break
             if wanted is not None and e.ref_kind not in wanted:
                 continue
+            if e.job_id in b.withheld_jobs and e.ref_kind in _WITHHELD_TIMELINE_KINDS:
+                b.withheld += 1
+                continue
             total += 1
             if len(items) < min(sel.max, CAPS["timeline"]):
                 items.append(
@@ -863,6 +1057,9 @@ async def ai_runs(b: Build) -> dict[str, Any]:
             or run.error_code == "canary_leak"
         ):
             dropped += 1
+            continue
+        if run.job_id is not None and run.job_id in b.withheld_jobs:
+            b.withheld += 1  # a job-scope run over restricted memory evidence
             continue
         output = await ai_repo.output_of(b.session, b.org_id, run.id)
         if output is None or has_canary_leak(output):

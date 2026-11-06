@@ -11,6 +11,9 @@
 - Links: in-document anchors built from integers (`#c12`, section ids), and in the appendix
   the platform path behind the snapshot's `base_url` (PUBLIC_BASE_URL, internal profile
   only; `external` carries no `base_url` or paths, RT8).
+- M8 (RT10): a snapshot whose `omissions.memory_restricted` is set prints
+  "N memory items omitted (restricted evidence; TLP:RED required)" under the findings (the
+  section is shown for the line alone when no finding is left); the PDF follows the HTML.
 - The HTML artifact carries the trusted constant CSS inline and the meta CSP
   `default-src 'none'; style-src 'unsafe-inline'` (RT19). The CSS is inserted by replacing
   the template's own empty `<style id="report-css"></style>` element in the head: the
@@ -183,6 +186,16 @@ def platform_links(snapshot: ReportSnapshot) -> dict[int, str]:
     return links
 
 
+def omissions_line(snapshot: ReportSnapshot) -> str | None:
+    """The fixed sentence of the snapshot's omitted count (M8), or None when nothing was
+    left out. Only an integer comes from the snapshot."""
+    n = snapshot.omissions.memory_restricted if snapshot.omissions is not None else 0
+    if n <= 0:
+        return None
+    noun = "item" if n == 1 else "items"
+    return f"{_num(n)} memory {noun} omitted (restricted evidence; TLP:RED required)"
+
+
 def _ai_entries(snapshot: ReportSnapshot) -> list[AiEntry]:
     entries = []
     for run in snapshot.ai.items:
@@ -200,6 +213,9 @@ def context(snapshot: ReportSnapshot, sha256: str) -> dict[str, Any]:
         if getattr(snapshot.sections, name)
     ]
     present = {name: bool(getattr(snapshot, name).items) for name, _, _ in DATA_SECTIONS}
+    omitted = omissions_line(snapshot)
+    if omitted is not None:
+        present["findings"] = True
     toc = [TocEntry(a.anchor, a.title) for a in analyst]
     toc.append(TocEntry("case", "Case"))
     toc += [TocEntry(anchor, title) for name, anchor, title in DATA_SECTIONS if present[name]]
@@ -215,6 +231,7 @@ def context(snapshot: ReportSnapshot, sha256: str) -> dict[str, Any]:
         "links": platform_links(snapshot),
         "ioc_values": {i.ioc_key: i.value for i in snapshot.iocs.items},
         "ai_runs": _ai_entries(snapshot),
+        "omitted_line": omitted,
     }
 
 

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.pagination import PageParams
 from app.modules.evidence.models import Evidence, EvidenceCustodyEvent, EvidenceHash
 from app.modules.investigations.models import EvidenceSharePolicy, Investigation
+from app.modules.memory_analysis.models import MemorySensitivity
 from app.modules.retention.holds import active_holds
 from app.modules.retention.models import EvidencePurge
 from app.modules.users.models import User
@@ -26,6 +27,8 @@ class EvidenceRow:
     purged_at: datetime | None = None
     purge_run_id: uuid.UUID | None = None
     legal_hold: bool = False
+    # M8: `restricted` / `released` when the evidence is a memory image (`memory_sensitivity`).
+    memory_sensitivity: str | None = None
 
 
 async def get_investigation(
@@ -69,6 +72,21 @@ async def _flags(
     return {evidence_id: (ai, ti) for evidence_id, ai, ti in rows.all()}
 
 
+async def memory_sensitivity_states(
+    session: AsyncSession, org_id: uuid.UUID, evidence_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, str]:
+    """`{evidence_id: "restricted" | "released"}` of the given evidence that have a row (M8)."""
+    if not evidence_ids:
+        return {}
+    m = MemorySensitivity
+    rows = await session.execute(
+        select(m.evidence_id, m.state).where(
+            m.organization_id == org_id, m.evidence_id.in_(evidence_ids)
+        )
+    )
+    return {evidence_id: str(state) for evidence_id, state in rows.all()}
+
+
 async def _purges(
     session: AsyncSession, org_id: uuid.UUID, evidence_ids: list[uuid.UUID]
 ) -> dict[uuid.UUID, tuple[datetime, uuid.UUID]]:
@@ -90,6 +108,7 @@ async def _rows(
     hashes = await _hashes(session, ids)
     flags = await _flags(session, org_id, ids)
     purges = await _purges(session, org_id, ids)
+    sensitivity = await memory_sensitivity_states(session, org_id, ids)
     holds = await active_holds(session, org_id, now=datetime.now(UTC)) if ids else None
     out = []
     for e, name in rows:
@@ -103,6 +122,7 @@ async def _rows(
                 purged_at=purged_at,
                 purge_run_id=run_id,
                 legal_hold=holds is not None and holds.covers(e.investigation_id),
+                memory_sensitivity=sensitivity.get(e.id),
             )
         )
     return out

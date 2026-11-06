@@ -10,6 +10,10 @@ happen after it (phase 3). The signature never changes.
 Citation numbers `C1…Cn` follow the first use in document order (evidence, jobs, findings,
 alerts, TI, ATT&CK, timeline, notes, AI claims), then the rows only the analyst selected, in
 draft order; the same draft over the same data always numbers the same way.
+
+M8 (phase 8): below TLP:RED the rows of restricted memory evidence are left out
+(`sections.memory_guard`, `withhold_citations`) and counted in the additive `omissions`
+field, which stays absent when nothing was left out (RT10).
 """
 
 import uuid
@@ -137,6 +141,7 @@ async def build_snapshot(
         external=report.profile == "external",
         scope=scope,
     )
+    await sections.memory_guard(b)
     data: dict[str, Any] = {"schema_version": "cyberlab.report.v1"}
     data["report"] = await sections.report_info(b)
     data["case"] = await sections.case_section(b)
@@ -172,10 +177,11 @@ async def build_snapshot(
         drop_kinds=drop_kinds,
         drop_tables=drop_tables,
     )
+    withheld = sections.withhold_citations(b, resolved)
     numbers = _number(data, resolved, list(b.registry.requests))
     _apply_numbers(data, numbers)
     considered = sum(1 for r in requests if r.kind not in drop_kinds)
-    dropped = b.registry.invalid + (considered - len(resolved))
+    dropped = b.registry.invalid + (considered - len(resolved) - withheld)
     by_number = sorted(numbers.items(), key=lambda kv: kv[1])
     data["citations"] = {
         "items": [
@@ -195,6 +201,7 @@ async def build_snapshot(
         "total": len(resolved),
         "dropped_out_of_scope": dropped,
     }
+    data["omissions"] = sections.omissions(b)
     snapshot = ReportSnapshot.model_validate(data)
     rows = [
         CitationRow(
