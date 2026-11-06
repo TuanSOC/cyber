@@ -1216,6 +1216,9 @@ services:
       WORKER_QUEUE: disk
       # The replay timeline engine and the M3 test rules are refused unless this is set.
       TEST_PROFILE: "1"
+      # `plaso` (the image default); the gate's replay pass (M9 phase 13) recreates this
+      # service with DISK_TEST_TIMELINE_ENGINE=replay for the Windows psort fixtures.
+      DISK_TIMELINE_ENGINE: ${DISK_TEST_TIMELINE_ENGINE:-plaso}
       DISK_WORK_MIN_FREE_BYTES: "67108864"
       RUFF_CACHE_DIR: /tmp/ruff
       MYPY_CACHE_DIR: /tmp/mypy

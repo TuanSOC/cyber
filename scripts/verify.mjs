@@ -2,7 +2,8 @@
 // One command for the whole gate: `pnpm verify` (add `--prod` to also check the prod stack and
 // run the M7 restore drill as its last, exclusive step). Runs on the host with Node 22 +
 // Docker; every tool runs inside containers, except the host-side dynamic gate checks (Python
-// 3 with pytest and PyYAML). `pnpm ops:metrics` (the heavy replay) is never part of the gate.
+// 3 with pytest and PyYAML). `pnpm ops:metrics` (the heavy replay), `pnpm disk:fuzz` and
+// `pnpm disk:metrics` (M9 heavy steps, run alone) are never part of the gate.
 // Set COMPOSE_PROJECT_NAME to run against a separate project with fresh volumes. The prod
 // phase always runs in its own project, `<dev project>-prod` (scripts/lib/gate.mjs): dev MinIO
 // writes its IAM with the dev KMS key, which the prod key cannot read.
@@ -16,6 +17,8 @@ const PROD = process.argv.includes("--prod");
 delete process.env.CYBERLAB_LIVE_TI;
 // Nor are live AI tests or the live AI evaluation (M5): real keys, real money.
 delete process.env.AI_EVAL_LIVE;
+// The disk worker test service runs the real Plaso engine except in the replay pass (M9).
+delete process.env.DISK_TEST_TIMELINE_ENGINE;
 const PROJECTS = gateProjects();
 const COMPOSE_DEV = composeCommand(PROJECTS.dev);
 const COMPOSE_PROD = composeCommand(PROJECTS.prod, { prod: true });
@@ -145,6 +148,10 @@ async function verifyProd() {
     "Retention-worker envs: retention role, broker user and purge keys only, backend only; no api policy legal hold; prod secrets not dev",
     "node scripts/check-retention-worker-env.mjs",
   );
+  run(
+    "Disk envs: worker BROKER_URL only on analysis, hash sets read-only; ingest_disk on backend; hash-set tools offline; no privileged / loop / FUSE (M9)",
+    "node scripts/check-disk-worker-env.mjs",
+  );
   // The dev stack stops first (host memory; containers and volumes kept): the prod stack runs
   // in its own project with its own volumes, and `restoreDev()` starts the dev stack again.
   run(
@@ -173,6 +180,18 @@ async function verifyProd() {
   // The untrusted renderer has no mock: the prod e2e renders a real PDF through it (M6).
   await probe("Prod report-worker: running, never restarted, ENV=prod, prod image", () =>
     workerProblems("report-worker", { ENV: "prod" }, "cyberlab/report-worker:prod"),
+  );
+  // M9: the disk analyzer runs the prod image (no image tools, no compiler; only BROKER_URL in
+  // its compose env, checked above), its trusted ingest the prod api image on ingest_disk.
+  await probe("Prod disk-worker: running, never restarted, prod image", () =>
+    workerProblems("disk-worker", {}, "cyberlab/disk-worker:prod"),
+  );
+  await probe("Prod disk-ingest-worker: running, never restarted, ENV=prod, PROCESS_ROLE=ingest", () =>
+    workerProblems("disk-ingest-worker", { ENV: "prod", PROCESS_ROLE: "ingest" }, "cyberlab/api:prod"),
+  );
+  run(
+    "Prod disk image: versions.json target prod, no TSK / ewf / mkfs / ntfs-3g / sfdisk tool or compiler, tool uid 10007",
+    "node scripts/check-disk-worker-env.mjs --image cyberlab/disk-worker:prod",
   );
   // The prod-like stack uses Caddy's internal CA: skip certificate checks for these probes.
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -224,7 +243,14 @@ try {
   // Celery workers do not hot-reload: recreate them so the gate tests the current code.
   run(
     "Workers: reload code",
-    "docker compose --profile test up -d --force-recreate --no-deps pcap-worker pcap-worker-test static-worker static-worker-test ingest-worker ingest-beat enrich-worker enrich-worker-test ti-mock analyst-worker analyst-worker-test ai-mock report-worker report-worker-test retention-worker retention-worker-test",
+    "docker compose --profile test up -d --force-recreate --no-deps pcap-worker pcap-worker-test static-worker static-worker-test ingest-worker ingest-beat enrich-worker enrich-worker-test ti-mock analyst-worker analyst-worker-test ai-mock report-worker report-worker-test retention-worker retention-worker-test disk-worker disk-worker-test disk-ingest-worker disk-ingest-worker-test",
+  );
+  // M9 phase 13: the generated disk images (our own content, never downloaded) and the test
+  // hash sets (one known-good and one known-bad file of `ext4_linux`) for the disk pipeline
+  // tests and the engine tests below; the operator's hash-set store is never touched.
+  run(
+    "Disk images: generate the synthetic set and import the test hash sets (M9)",
+    "node scripts/disk-gen.mjs --test-hashsets",
   );
   run(
     "API: ruff, format, mypy --strict, pytest",
@@ -232,8 +258,32 @@ try {
     // the real AI pipeline (analyst-worker-test + ai-mock); live TI / AI tests skip.
     // REPORT_E2E=1 (M6): the render pipeline tests go through report-worker-test, which the
     // reload step started on the default lane's broker db.
-    'docker compose --profile test run --rm -e CYBERLAB_LIVE_TI=0 -e AI_EVAL_LIVE=0 -e REPORT_E2E=1 api-test sh -c "uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest -q"',
+    // DISK_PIPELINE_IMAGES (M9): the disk pipeline tests upload the generated images to
+    // disk-worker-test (real TSK / libewf / Plaso, the test hash sets) and ingest on
+    // disk-ingest-worker-test, both started by the reload step on the default lane.
+    'docker compose --profile test run --rm -e CYBERLAB_LIVE_TI=0 -e AI_EVAL_LIVE=0 -e REPORT_E2E=1 -v cyberlab_e2e_samples:/samples:ro -e DISK_PIPELINE_IMAGES=/samples/disk api-test sh -c "uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest -q"',
   );
+  // M9 phase 13: the second disk pipeline pass, with the test-profile replay timeline engine
+  // (the Windows psort fixtures over `ntfs_windows`: the EVTX / registry / Prefetch / LNK
+  // normalizers, detections and tables end to end, labelled `timeline_engine: replay`). The
+  // engine is a worker setting, so disk-worker-test is recreated for the pass and back after.
+  run(
+    "Disk worker test: replay timeline engine (M9 replay pass)",
+    "docker compose --profile test up -d --force-recreate --no-deps disk-worker-test",
+    { DISK_TEST_TIMELINE_ENGINE: "replay" },
+  );
+  try {
+    run(
+      "API: disk pipeline, replay pass (Windows artifacts replay-tested only)",
+      'docker compose --profile test run --rm -v cyberlab_e2e_samples:/samples:ro -e DISK_PIPELINE_IMAGES=/samples/disk -e DISK_PIPELINE_TIMELINE_ENGINE=replay api-test uv run pytest -q tests/integration/test_disk_pipeline.py -k replay',
+    );
+  } finally {
+    run(
+      "Disk worker test: back to the Plaso engine",
+      "docker compose --profile test up -d --force-recreate --no-deps disk-worker-test",
+      { DISK_TEST_TIMELINE_ENGINE: "plaso" },
+    );
+  }
   // The dynamic-analysis gate's broker and compose checks (M7 phase 7) read repository files
   // that api-test does not mount, so they skip there: run them on the host (stdlib, pytest
   // and PyYAML only, no app import; see the test's docstring).
@@ -258,7 +308,14 @@ try {
   run("AI key leak: a fresh sentinel key is absent from every container log", "node scripts/check-ai-key-leak.mjs");
   // test:workers includes the report renderer (M6): ruff, mypy and its pytest in
   // report-worker-test (sandbox EACCES, isolation, PDF/A-3a, determinism, hostile escapes).
-  run("Workers (pcap, static, report, kit): ruff, format, mypy, sandbox + engine tests", "pnpm -s test:workers");
+  run("Workers (pcap, static, report, memory, disk, kit): ruff, format, mypy, sandbox + engine tests", "pnpm -s test:workers");
+  // M9: the disk engine tests on the generated set (TSK / libewf against each image's ground
+  // truth, the generators' own tool checks, Plaso on the Linux tree, the stage proofs).
+  // Fuzz-lite and the metric run are heavy steps of their own, never part of the gate.
+  run(
+    "Disk engine tests: TSK / libewf / Plaso on the generated images (M9)",
+    "docker compose --profile test run --rm --no-deps -v cyberlab_e2e_samples:/samples:ro -e DISK_ENGINE_IMAGES=/samples/disk -e DISKGEN_ENGINE=1 disk-worker-test pytest -q -p no:cacheprovider tests/engine",
+  );
   run(
     "Web: typecheck, eslint, unit tests",
     'docker compose run --rm --no-deps web sh -c "pnpm typecheck && pnpm exec eslint . && pnpm test"',
