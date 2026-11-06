@@ -128,7 +128,8 @@ def test_frozen_entry_points() -> None:
         export.handle_export: ["msg", "dirs", "config"],  # phase 10: + dirs, config
         scan.build_candidates: ["files", "profile", "limits"],
         scan.parse_scan_output: ["path"],
-        detections.run: ["view", "limits"],
+        # phase 6: + the keyword-only rule -> severity map (phase 5's scan computes it)
+        detections.run: ["view", "limits", "yara_severity"],
         timeline.run_timeline: ["dirs", "partitions", "profile", "limits", "budget"],
         catalog.match: ["files", "os", "profile"],
         HashSetStore.match: ["self", "sha256", "sha1", "md5"],
@@ -136,6 +137,8 @@ def test_frozen_entry_points() -> None:
     }
     for func, names in params.items():
         assert list(inspect.signature(func).parameters) == names, func
+    severity = inspect.signature(detections.run).parameters["yara_severity"]
+    assert severity.kind is inspect.Parameter.KEYWORD_ONLY and severity.default is None
     with pytest.raises(ValueError):
         analyzer.DiagnosticResult("timed_out", Path("x"))
     assert analyzer.DiagnosticResult("no_supported_filesystem", Path("x")).code == (
