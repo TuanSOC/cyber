@@ -43,7 +43,7 @@ ERRORS = {
 }
 TRUNCATION_KEYS = {
     "sections", "imports", "exports", "resources", "strings", "signature_matches",
-    "capabilities", "capa_output", "floss_output",
+    "capabilities", "capability_locations", "capa_output", "floss_output",
 }  # fmt: skip
 ARCHIVE_FORMATS = {"none", "zip", "7z", "rar"}
 ARCHIVE_COUNTS = ("members", "declared_bytes", "largest_member", "depth")

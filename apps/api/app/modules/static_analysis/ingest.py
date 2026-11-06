@@ -2,6 +2,11 @@
 transaction): the one `malware_samples` row (sample + pe/elf), then every other record in
 batches (see app.modules.analysis.result_rows). Findings and IOCs go into the shared tables
 with the same row shape as pcap's.
+
+M10 phase 6 (additive `static.v1` fields, RT18): a capability's `locations` are stored as
+decimal strings in `malware_capabilities.locations` (a JSON number cannot carry an unsigned
+64-bit value exactly; the 0018 check), the header's `capa_base_address` in
+`malware_samples.capa_base_address`. A stream from before M10 has neither: `[]` / NULL.
 """
 
 import uuid
@@ -95,6 +100,7 @@ def to_row(record: StaticRecordLine) -> tuple[Table, dict[str, Any]]:
             "attack": list(record.attack),
             "mbc": list(record.mbc),
             "matches": record.matches,
+            "locations": [str(address) for address in record.locations],
         }
     if isinstance(record, FindingRecord | IocRecord):
         return pcap_ingest.to_row(record)  # the shared tables, one row shape
@@ -115,6 +121,7 @@ def sample_row(result: stream.Validated) -> dict[str, Any]:
         "file_format": result.header.file_format,
         "pe": None if result.pe is None else result.pe.model_dump(mode="json", exclude={"kind"}),
         "elf": None if result.elf is None else result.elf.model_dump(mode="json", exclude={"kind"}),
+        "capa_base_address": result.header.capa_base_address,
     }
 
 

@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Static capa locations for function linking"
-status: pending
+status: code-complete (untested in Docker)
 priority: P2
 effort: "8h"
 dependencies: [1]
@@ -35,3 +35,21 @@ M3's capa records carry no addresses, so capabilities cannot be tied to function
 ## Risk Assessment
 - **capa JSON shape changes across versions:** the reducer reads only `rules.*.matches[*][0]` and `meta.analysis.base_address`, with fixture tests pinned to the bundled capa version.
 - **Mixed image versions:** additive fields with defaults; the order api-first is required (an old ingest refuses `locations`); tested both ways.
+
+## Notes (as built, untested in Docker)
+
+Code-only (no container ran). Host checks: `tests/unit/test_capa_locations.py` pure parts (29 passed on the host with the sandbox module stubbed; the two probe round-trip tests need the static image), py_compile of every changed file.
+
+- **Reducer** (`probe/reduce.py`, tool uid): `capa_locations()` keeps `absolute` match addresses only (`rules.*.matches[*][0]`, a capa `Address` `{type, value}` with an unsigned 64-bit int), deduplicated, sorted, the lowest 32 kept (`summary.truncated.capability_locations`, a new allow-listed key in `engines/probes.py`). Every other entry (relative, file, no address, .NET / dynamic kinds, malformed) is dropped and counted. `capa_base()` reads `meta.analysis.base_address` (absolute only; the pre-10 bare integer is not accepted). One `capa_meta` line `{base_address, dropped_locations}` is written after the capability lines (also when the record cap cut them).
+- **Root** (`engines/capa.py`): `parse()` now iterates the probe lines itself (same validation as `ProbeRun.records()`), reads the `capa_meta` line into a `CapaMeta` (base validated as 0 <= x < 2**64, else ignored; it can never become a record). `run()` / `parse()` keep their return type (`list[CapabilityRecord]`, the M3 tests unchanged) and take an optional `meta=`.
+- **Header** (`analyzer.py`, not `pipeline.py`: the header is assembled there): `capa_base_address(got)` = capa's base, else the PE `ImageBase` when capa ran, else None. **Deviation:** no ELF fallback and no `base_source` record: `ElfInfo` has no load address and `static.v1` is frozen (capa 10.x always reports `base_address` for a static analysis, so the fallback is for robustness only).
+- **Ingest** (`static_analysis/ingest.py`): `locations` as decimal strings, `capa_base_address` on the sample row; an old stream stores `[]` / NULL. The read model (`CapabilityLinkedOut.locations`, `0x…` text) was frozen in phase 1; `functions` is phase 8's.
+- **Report / snapshot** unchanged: `CapabilityOut` and `reports/citations.py` / `ai/context/fields.capability_fields` pick explicit fields, so nothing new reaches `cyberlab.report.static.v1` or the M6 snapshot. `test_static_capa_locations.py` proves the report's result sections are equal for a new-format and an old-format ingest of the same result (ids normalized) and name no location or base.
+
+**For phase 7 (RT8):** the API join uses `capa_file_va = loc - (capa_base - preferred_base)`. Phase 7 takes `preferred_base` from the RE program record (`re_programs.preferred_base`, the file's own base) at ingest, and from the static facts at dispatch (PE `pe.image_base`; ELF: the lowest allocated section VA page-aligned down, since `ElfInfo` has no PT_LOAD field). What vivisect reports as `base_address` for PE / ELF PIE / ELF non-PIE is **not measured yet** (needs the static image).
+
+**Remains (Docker):**
+1. `scripts/lane-test.sh 9 --service static-worker-test pytest -q tests/unit/test_capa_locations.py tests/unit/test_hostile_output.py tests/unit/test_engines.py` (the M3 tests must pass unchanged).
+2. Once, `--heavy`: capa on the mingw `injector` build: locations present and inside `.text`; record `meta.analysis.base_address` for the PE, an ELF PIE and an ELF non-PIE build here (phase 7 / 12 rely on it).
+3. `scripts/lane-test.sh 9 uv run pytest -q tests/integration/test_static_capa_locations.py tests/integration/test_static_results.py tests/integration/test_m10_foundation.py`; `ruff format`, `ruff check`, `mypy` on the static worker and the API.
+4. Rollout (RT18): rebuild the api image before the static image.
