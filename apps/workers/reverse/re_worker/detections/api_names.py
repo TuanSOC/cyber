@@ -1,0 +1,290 @@
+"""Exact API names for `heuristic:re_runtime_api_resolution@1` (M10 phase 5): a string a
+function references counts as "an API name" only when it equals one of these.
+
+Source (recorded as the phase requires): compiled by hand for CyberLab from the function
+names of the public Microsoft Win32 / Native API reference and the POSIX / glibc manual
+pages. Function names are interface facts; no third-party file or list was copied, so the
+list is the project's own (MIT-compatible by construction). Its count is asserted by
+`tests/unit/test_detections_rules.py` (about 1 900 after expansion, near the plan's
+"about 2 000" estimate: a learning-grade list, extend it here when a real sample shows a gap).
+
+Notation: `Name*` expands to the ANSI and wide exports `NameA` / `NameW`; every `Nt*` native
+call also exists as `Zw*`. The M3 suspicious API sets (`cyberlab_worker.apisets`) are always
+included, so a resolved set member is never missed.
+"""
+
+from cyberlab_worker.apisets import api_names as set_api_names
+
+_WIN32 = """
+CreateFile* ReadFile WriteFile CloseHandle DeleteFile* CopyFile* CopyFileEx* MoveFile* MoveFileEx*
+GetFileSize GetFileSizeEx SetFilePointer SetFilePointerEx FlushFileBuffers GetFileAttributes*
+GetFileAttributesEx* SetFileAttributes* FindFirstFile* FindNextFile* FindFirstFileEx* FindClose
+CreateDirectory* RemoveDirectory* GetTempPath* GetTempFileName* GetCurrentDirectory*
+SetCurrentDirectory* GetFullPathName* GetLongPathName* GetShortPathName* GetFileType GetFileTime
+SetFileTime LockFile UnlockFile LockFileEx UnlockFileEx ReadFileEx WriteFileEx GetOverlappedResult
+DeviceIoControl CreateFileMapping* OpenFileMapping* MapViewOfFile MapViewOfFileEx UnmapViewOfFile
+FlushViewOfFile CreatePipe CreateNamedPipe* ConnectNamedPipe DisconnectNamedPipe PeekNamedPipe
+WaitNamedPipe* CallNamedPipe* TransactNamedPipe GetDriveType* GetLogicalDrives
+GetLogicalDriveStrings* GetVolumeInformation* GetDiskFreeSpace* GetDiskFreeSpaceEx*
+GetWindowsDirectory* GetSystemDirectory* GetSystemWindowsDirectory* GetSystemWow64Directory*
+CreateSymbolicLink* CreateHardLink* GetBinaryType* SearchPath*
+Wow64DisableWow64FsRedirection Wow64RevertWow64FsRedirection
+CreateProcess* CreateProcessAsUser* CreateProcessWithTokenW CreateProcessWithLogonW OpenProcess
+TerminateProcess ExitProcess GetExitCodeProcess GetCurrentProcess GetCurrentProcessId
+GetCurrentThread GetCurrentThreadId CreateThread CreateRemoteThread CreateRemoteThreadEx ExitThread
+TerminateThread SuspendThread ResumeThread GetThreadContext SetThreadContext Wow64GetThreadContext
+Wow64SetThreadContext OpenThread GetExitCodeThread SetThreadPriority GetThreadPriority QueueUserAPC
+Sleep SleepEx SwitchToThread WaitForSingleObject WaitForSingleObjectEx WaitForMultipleObjects
+WaitForMultipleObjectsEx SignalObjectAndWait CreateEvent* OpenEvent* SetEvent ResetEvent PulseEvent
+CreateMutex* OpenMutex* ReleaseMutex CreateSemaphore* OpenSemaphore* ReleaseSemaphore
+CreateWaitableTimer* SetWaitableTimer CancelWaitableTimer InitializeCriticalSection
+InitializeCriticalSectionAndSpinCount EnterCriticalSection LeaveCriticalSection
+TryEnterCriticalSection DeleteCriticalSection InitializeSRWLock AcquireSRWLockExclusive
+ReleaseSRWLockExclusive AcquireSRWLockShared ReleaseSRWLockShared InitOnceExecuteOnce TlsAlloc
+TlsFree TlsGetValue TlsSetValue FlsAlloc FlsFree FlsGetValue FlsSetValue CreateToolhelp32Snapshot
+Process32First Process32FirstW Process32Next Process32NextW Module32First Module32FirstW
+Module32Next Module32NextW Thread32First Thread32Next IsWow64Process IsWow64Process2 GetProcessId
+GetThreadId GetProcessTimes GetThreadTimes GetPriorityClass SetPriorityClass GetProcessHeap
+GetProcessHeaps GetStartupInfo* GetCommandLine* GetEnvironmentVariable* SetEnvironmentVariable*
+ExpandEnvironmentStrings* GetEnvironmentStrings* FreeEnvironmentStrings*
+QueryFullProcessImageName* K32EnumProcesses K32EnumProcessModules K32GetModuleFileNameEx*
+K32GetModuleBaseName* K32GetProcessImageFileName* DebugActiveProcess DebugActiveProcessStop
+ContinueDebugEvent WaitForDebugEvent IsDebuggerPresent CheckRemoteDebuggerPresent
+OutputDebugString* DebugBreak CreateJobObject* AssignProcessToJobObject SetInformationJobObject
+TerminateJobObject DuplicateHandle SetHandleInformation GetHandleInformation
+CreateIoCompletionPort GetQueuedCompletionStatus PostQueuedCompletionStatus
+BindIoCompletionCallback CreateTimerQueue CreateTimerQueueTimer DeleteTimerQueueTimer
+ConvertThreadToFiber CreateFiber SwitchToFiber DeleteFiber WinExec ProcessIdToSessionId
+WTSGetActiveConsoleSessionId SetProcessDEPPolicy GetProcessDEPPolicy SetThreadExecutionState
+VirtualAlloc VirtualAllocEx VirtualAllocExNuma VirtualFree VirtualFreeEx VirtualProtect
+VirtualProtectEx VirtualQuery VirtualQueryEx VirtualLock VirtualUnlock ReadProcessMemory
+WriteProcessMemory HeapCreate HeapDestroy HeapAlloc HeapReAlloc HeapFree HeapSize HeapValidate
+HeapCompact HeapWalk GlobalAlloc GlobalFree GlobalLock GlobalUnlock GlobalSize GlobalReAlloc
+GlobalMemoryStatus GlobalMemoryStatusEx LocalAlloc LocalFree LocalLock LocalUnlock LocalReAlloc
+LocalSize FlushInstructionCache GetSystemInfo GetNativeSystemInfo GetLargePageMinimum
+LoadLibrary* LoadLibraryEx* FreeLibrary FreeLibraryAndExitThread GetModuleHandle* GetModuleHandleEx*
+GetModuleFileName* GetProcAddress DisableThreadLibraryCalls SetDllDirectory* AddDllDirectory
+RemoveDllDirectory SetDefaultDllDirectories LoadResource LockResource SizeofResource FindResource*
+FindResourceEx* FreeResource EnumResourceNames* EnumResourceTypes* BeginUpdateResource*
+UpdateResource* EndUpdateResource*
+GetLastError SetLastError FormatMessage* RaiseException SetUnhandledExceptionFilter
+UnhandledExceptionFilter AddVectoredExceptionHandler RemoveVectoredExceptionHandler
+AddVectoredContinueHandler RtlCaptureContext RtlUnwind RtlLookupFunctionEntry RtlVirtualUnwind
+GetTickCount GetTickCount64 QueryPerformanceCounter QueryPerformanceFrequency GetSystemTime
+GetLocalTime SetSystemTime SetLocalTime GetSystemTimeAsFileTime GetSystemTimePreciseAsFileTime
+FileTimeToSystemTime SystemTimeToFileTime FileTimeToLocalFileTime LocalFileTimeToFileTime
+GetTimeZoneInformation GetComputerName* GetComputerNameEx* SetComputerName* GetVersion GetVersionEx*
+VerifyVersionInfo* GetUserDefaultLCID GetSystemDefaultLCID GetUserDefaultLangID
+GetSystemDefaultLangID GetUserDefaultUILanguage GetLocaleInfo* GetACP GetOEMCP MultiByteToWideChar
+WideCharToMultiByte lstrlen* lstrcpy* lstrcpyn* lstrcat* lstrcmp* lstrcmpi* CompareString*
+GetStringType* GetConsoleWindow AllocConsole FreeConsole AttachConsole GetStdHandle SetStdHandle
+WriteConsole* ReadConsole* SetConsoleTitle* GetConsoleMode SetConsoleMode SetConsoleCtrlHandler
+GetPrivateProfileString* WritePrivateProfileString* GetProfileString* Beep GetSystemFirmwareTable
+EnumSystemFirmwareTables SetErrorMode GetErrorMode GlobalAddAtom* GlobalFindAtom* GlobalDeleteAtom
+IsProcessorFeaturePresent GetCurrentProcessorNumber
+RegOpenKey* RegOpenKeyEx* RegCreateKey* RegCreateKeyEx* RegCloseKey RegQueryValue* RegQueryValueEx*
+RegSetValue* RegSetValueEx* RegSetKeyValue* RegGetValue* RegDeleteKey* RegDeleteKeyEx*
+RegDeleteValue* RegDeleteTree* RegEnumKey* RegEnumKeyEx* RegEnumValue* RegQueryInfoKey* RegFlushKey
+RegLoadKey* RegSaveKey* RegSaveKeyEx* RegRestoreKey* RegConnectRegistry* RegNotifyChangeKeyValue
+RegOverridePredefKey RegDisableReflectionKey OpenProcessToken OpenThreadToken GetTokenInformation
+SetTokenInformation AdjustTokenPrivileges LookupPrivilegeValue* LookupPrivilegeName* DuplicateToken
+DuplicateTokenEx ImpersonateLoggedOnUser ImpersonateSelf RevertToSelf LogonUser* LookupAccountSid*
+LookupAccountName* GetUserName* AllocateAndInitializeSid FreeSid EqualSid IsValidSid
+GetSidSubAuthority GetSidSubAuthorityCount CheckTokenMembership ConvertSidToStringSid*
+ConvertStringSidToSid* InitializeSecurityDescriptor SetSecurityDescriptorDacl GetSecurityInfo
+SetSecurityInfo GetNamedSecurityInfo* SetNamedSecurityInfo* SetEntriesInAcl* GetAce AddAce
+AddAccessAllowedAce InitializeAcl ConvertStringSecurityDescriptorToSecurityDescriptor*
+OpenSCManager* CreateService* OpenService* StartService* StartServiceCtrlDispatcher*
+RegisterServiceCtrlHandler* RegisterServiceCtrlHandlerEx* SetServiceStatus ControlService
+DeleteService CloseServiceHandle QueryServiceStatus QueryServiceStatusEx QueryServiceConfig*
+ChangeServiceConfig* ChangeServiceConfig2* EnumServicesStatus* EnumServicesStatusEx*
+CryptAcquireContext* CryptReleaseContext CryptGenRandom CryptCreateHash CryptHashData
+CryptGetHashParam CryptDestroyHash CryptDeriveKey CryptGenKey CryptDestroyKey CryptEncrypt
+CryptDecrypt CryptImportKey CryptExportKey CryptSetKeyParam CredRead* CredWrite* CredEnumerate*
+CredDelete* CredFree LsaOpenPolicy LsaClose LsaRetrievePrivateData LsaStorePrivateData
+LsaEnumerateLogonSessions LsaGetLogonSessionData LsaFreeReturnBuffer LsaQueryInformationPolicy
+LsaConnectUntrusted LsaLookupAuthenticationPackage LsaCallAuthenticationPackage
+LsaRegisterLogonProcess LsaDeregisterLogonProcess OpenEventLog* ReadEventLog* ClearEventLog*
+CloseEventLog BackupEventLog* ReportEvent* RegisterEventSource* DeregisterEventSource
+SystemFunction032 SystemFunction036 InitiateSystemShutdown* InitiateSystemShutdownEx*
+AbortSystemShutdown*
+MessageBox* MessageBoxEx* CreateWindowEx* DestroyWindow ShowWindow UpdateWindow RegisterClass*
+RegisterClassEx* UnregisterClass* DefWindowProc* GetMessage* PeekMessage* TranslateMessage
+DispatchMessage* PostMessage* SendMessage* SendMessageTimeout* PostQuitMessage PostThreadMessage*
+FindWindow* FindWindowEx* GetWindowText* SetWindowText* GetWindowTextLength* GetClassName*
+GetForegroundWindow SetForegroundWindow GetDesktopWindow GetActiveWindow GetWindowThreadProcessId
+EnumWindows EnumChildWindows EnumThreadWindows IsWindowVisible IsWindow GetWindowRect GetClientRect
+MoveWindow SetWindowPos GetWindowLong* SetWindowLong* GetWindowLongPtr* SetWindowLongPtr*
+CallWindowProc* SetWindowsHookEx* UnhookWindowsHookEx CallNextHookEx GetAsyncKeyState GetKeyState
+GetKeyboardState GetKeyboardLayout GetKeyNameText* MapVirtualKey* MapVirtualKeyEx* ToAscii ToUnicode
+ToUnicodeEx VkKeyScan* RegisterRawInputDevices GetRawInputData GetRawInputDeviceList keybd_event
+mouse_event SendInput BlockInput GetCursorPos SetCursorPos ClipCursor GetSystemMetrics
+SystemParametersInfo* GetDC GetWindowDC ReleaseDC OpenClipboard CloseClipboard EmptyClipboard
+GetClipboardData SetClipboardData IsClipboardFormatAvailable RegisterHotKey UnregisterHotKey
+LoadIcon* LoadCursor* LoadImage* LoadString* LoadMenu* SetTimer KillTimer GetSysColor DrawText*
+BeginPaint EndPaint InvalidateRect wsprintf* wvsprintf* AttachThreadInput GetLastInputInfo
+LockWorkStation ExitWindowsEx OpenDesktop* OpenInputDesktop SwitchDesktop CreateDesktop*
+GetThreadDesktop SetThreadDesktop CloseDesktop OpenWindowStation* SetProcessWindowStation
+GetUserObjectInformation* CharNext* CharPrev* CharUpper* CharLower* IsCharAlpha*
+IsCharAlphaNumeric* PrintWindow GetWindowInfo ChangeWindowMessageFilter ChangeWindowMessageFilterEx
+BitBlt StretchBlt CreateCompatibleDC CreateCompatibleBitmap SelectObject DeleteObject DeleteDC
+GetDIBits GetDeviceCaps CreateDIBSection GetObject* TextOut* CreateFont* CreateSolidBrush
+RtlCreateUserThread RtlCreateUserProcess RtlInitUnicodeString RtlInitAnsiString
+RtlFreeUnicodeString RtlAnsiStringToUnicodeString RtlUnicodeStringToAnsiString RtlCopyMemory
+RtlMoveMemory RtlZeroMemory RtlFillMemory RtlCompareMemory RtlGetVersion RtlGetNtVersionNumbers
+RtlAdjustPrivilege RtlSetProcessIsCritical RtlDecompressBuffer RtlCompressBuffer
+RtlGetCompressionWorkSpaceSize RtlAllocateHeap RtlFreeHeap RtlCreateHeap RtlDestroyHeap
+RtlExitUserThread RtlExitUserProcess RtlNtStatusToDosError RtlImageNtHeader
+RtlImageDirectoryEntryToData RtlAddVectoredExceptionHandler RtlRemoveVectoredExceptionHandler
+RtlDosPathNameToNtPathName_U RtlGetCurrentPeb RtlQueryEnvironmentVariable_U RtlRandomEx
+RtlComputeCrc32 RtlIpv4StringToAddressA RtlIpv4AddressToStringA LdrLoadDll LdrUnloadDll
+LdrGetProcedureAddress LdrGetProcedureAddressEx LdrGetDllHandle LdrGetDllHandleEx
+LdrQueryProcessModuleInformation LdrEnumerateLoadedModules LdrFindResource_U LdrAccessResource
+LdrRegisterDllNotification LdrUnregisterDllNotification DbgUiRemoteBreakin DbgBreakPoint DbgPrint
+KiUserExceptionDispatcher KiUserApcDispatcher EtwEventWrite EtwEventRegister
+WSAStartup WSACleanup WSAGetLastError WSASetLastError WSASocket* WSAConnect WSAConnectByName*
+WSARecv WSARecvFrom WSASend WSASendTo WSAIoctl WSAEventSelect WSAAsyncSelect WSACreateEvent
+WSACloseEvent WSAWaitForMultipleEvents WSAEnumNetworkEvents WSAAddressToString* WSAStringToAddress*
+WSALookupServiceBegin* WSALookupServiceNext* WSALookupServiceEnd WSAPoll closesocket ioctlsocket
+InetPton* InetNtop* GetAddrInfoW GetAddrInfoEx* FreeAddrInfoW FreeAddrInfoEx* GetNameInfoW
+GetAdaptersInfo GetAdaptersAddresses GetIpNetTable GetTcpTable GetExtendedTcpTable GetUdpTable
+GetExtendedUdpTable GetIfTable GetIpAddrTable SendARP GetNetworkParams GetBestInterface
+IcmpCreateFile IcmpSendEcho IcmpCloseHandle DnsQuery_A DnsQuery_W DnsQuery_UTF8 DnsRecordListFree
+DnsQueryEx InternetOpen* InternetOpenUrl* InternetConnect* InternetReadFile InternetReadFileEx*
+InternetWriteFile InternetCloseHandle InternetSetOption* InternetQueryOption* InternetCrackUrl*
+InternetCanonicalizeUrl* InternetGetConnectedState InternetCheckConnection* InternetSetCookie*
+InternetGetCookie* InternetQueryDataAvailable HttpOpenRequest* HttpSendRequest* HttpSendRequestEx*
+HttpAddRequestHeaders* HttpQueryInfo* HttpEndRequest* FtpOpenFile* FtpGetFile* FtpPutFile*
+FtpSetCurrentDirectory* FtpCreateDirectory* FtpDeleteFile* FtpFindFirstFile* InternetFindNextFile*
+DeleteUrlCacheEntry* WinHttpOpen WinHttpConnect WinHttpOpenRequest WinHttpSendRequest
+WinHttpReceiveResponse WinHttpQueryHeaders WinHttpQueryDataAvailable WinHttpReadData
+WinHttpWriteData WinHttpCloseHandle WinHttpSetOption WinHttpQueryOption WinHttpSetTimeouts
+WinHttpCrackUrl WinHttpCreateUrl WinHttpAddRequestHeaders WinHttpSetCredentials
+WinHttpGetProxyForUrl WinHttpGetIEProxyConfigForCurrentUser WinHttpGetDefaultProxyConfiguration
+WinHttpSetStatusCallback WinHttpWebSocketCompleteUpgrade WinHttpWebSocketSend
+WinHttpWebSocketReceive WinHttpWebSocketClose URLDownloadToFile* URLDownloadToCacheFile*
+URLOpenStream* URLOpenBlockingStream* ObtainUserAgentString CoInternetParseUrl
+ShellExecute* ShellExecuteEx* SHGetFolderPath* SHGetSpecialFolderPath* SHGetKnownFolderPath
+SHFileOperation* SHCreateDirectoryEx* SHGetFileInfo* ExtractIcon* CommandLineToArgvW DragQueryFile*
+Shell_NotifyIcon* SHChangeNotify IsUserAnAdmin SHEmptyRecycleBin* SHGetPathFromIDList*
+SHBrowseForFolder* PathFileExists* PathCombine* PathAppend* PathFindFileName* PathFindExtension*
+PathRemoveFileSpec* PathIsDirectory* PathStripPath* StrStr* StrStrI* StrCmpI* StrCmpNI* StrChr*
+StrRChr* StrToInt* StrDup* wnsprintf* SHGetValue* SHSetValue* SHDeleteKey* SHDeleteValue*
+UrlEscape* UrlUnescape* UrlCanonicalize* CoInitialize CoInitializeEx CoUninitialize
+CoCreateInstance CoCreateInstanceEx CoGetObject CoSetProxyBlanket CoInitializeSecurity
+CoTaskMemAlloc CoTaskMemFree CoCreateGuid CLSIDFromString CLSIDFromProgID StringFromGUID2
+StringFromCLSID OleInitialize OleUninitialize SysAllocString SysAllocStringLen SysFreeString
+SysStringLen VariantInit VariantClear VariantChangeType SafeArrayCreate SafeArrayDestroy
+SafeArrayAccessData SafeArrayUnaccessData CryptUnprotectData CryptProtectData
+CryptStringToBinary* CryptBinaryToString* CertOpenStore CertOpenSystemStore* CertCloseStore
+CertFindCertificateInStore CertEnumCertificatesInStore CertFreeCertificateContext
+CertGetCertificateContextProperty CertAddEncodedCertificateToStore CryptDecodeObjectEx
+CryptEncodeObjectEx PFXImportCertStore PFXExportCertStoreEx CryptQueryObject
+BCryptOpenAlgorithmProvider BCryptCloseAlgorithmProvider BCryptGenerateSymmetricKey
+BCryptImportKey BCryptImportKeyPair BCryptExportKey BCryptDestroyKey BCryptEncrypt BCryptDecrypt
+BCryptHash BCryptCreateHash BCryptHashData BCryptFinishHash BCryptDestroyHash BCryptGenRandom
+BCryptSetProperty BCryptGetProperty BCryptDeriveKeyPBKDF2 NCryptOpenStorageProvider NCryptOpenKey
+NCryptDecrypt NCryptEncrypt NCryptFreeObject NCryptExportKey MiniDumpWriteDump SymInitialize
+SymCleanup SymFromAddr SymLoadModuleEx SymGetModuleBase64 StackWalk64 ImageNtHeader EnumProcesses
+EnumProcessModules EnumProcessModulesEx GetModuleFileNameEx* GetModuleBaseName*
+GetProcessImageFileName* GetMappedFileName* GetModuleInformation GetProcessMemoryInfo
+EmptyWorkingSet EnumDeviceDrivers GetDeviceDriverBaseName* QueryWorkingSet
+AcquireCredentialsHandle* InitializeSecurityContext* AcceptSecurityContext QueryContextAttributes*
+DeleteSecurityContext FreeCredentialsHandle EncryptMessage DecryptMessage GetUserNameEx*
+SamIConnect SamrQueryInformationUser SamConnect SamOpenDomain SamOpenUser SamEnumerateUsersInDomain
+SamQueryInformationUser SamCloseHandle NetUserEnum NetUserGetInfo NetUserAdd NetUserDel
+NetUserSetInfo NetLocalGroupAddMembers NetLocalGroupEnum NetLocalGroupGetMembers NetGroupEnum
+NetShareEnum NetShareAdd NetSessionEnum NetWkstaGetInfo NetServerEnum NetServerGetInfo
+NetApiBufferFree NetScheduleJobAdd DsGetDcName* WNetAddConnection2* WNetCancelConnection2*
+WNetOpenEnum* WNetEnumResource* WNetCloseEnum WNetGetConnection* WTSEnumerateSessions*
+WTSQuerySessionInformation* WTSQueryUserToken WTSFreeMemory WTSSendMessage* WTSOpenServer*
+CreateEnvironmentBlock DestroyEnvironmentBlock GetUserProfileDirectory* EvtQuery EvtNext EvtClose
+EvtClearLog EvtRender timeGetTime timeBeginPeriod PlaySound* waveInOpen mciSendString*
+_beginthread _beginthreadex _endthreadex _wfopen _wsystem _popen _pclose _spawnl _spawnv _execl
+_execv _open _read _write _close _lseek _stat _wstat _access _getcwd _chdir _mkdir _rmdir _unlink
+_strdup _stricmp _strnicmp _wcsicmp _snprintf _vsnprintf _snwprintf _itoa _ltoa _ultoa _wtoi
+_atoi64 wcslen wcscpy wcsncpy wcscat wcscmp wcsncmp wcschr wcsrchr wcsstr wcstombs mbstowcs
+swprintf wprintf _wgetenv _wputenv
+"""
+
+# Every native call below also exists as Zw*.
+_NATIVE = """
+NtCreateFile NtOpenFile NtReadFile NtWriteFile NtClose NtQueryInformationFile NtSetInformationFile
+NtDeleteFile NtQueryDirectoryFile NtCreateSection NtOpenSection NtMapViewOfSection
+NtUnmapViewOfSection NtAllocateVirtualMemory NtFreeVirtualMemory NtProtectVirtualMemory
+NtReadVirtualMemory NtWriteVirtualMemory NtQueryVirtualMemory NtFlushInstructionCache
+NtCreateProcess NtCreateProcessEx NtCreateUserProcess NtOpenProcess NtTerminateProcess
+NtSuspendProcess NtResumeProcess NtQueryInformationProcess NtSetInformationProcess NtCreateThread
+NtCreateThreadEx NtOpenThread NtTerminateThread NtSuspendThread NtResumeThread NtGetContextThread
+NtSetContextThread NtQueryInformationThread NtSetInformationThread NtQueueApcThread
+NtQueueApcThreadEx NtAlertResumeThread NtTestAlert NtDelayExecution NtYieldExecution
+NtWaitForSingleObject NtWaitForMultipleObjects NtCreateEvent NtSetEvent NtCreateMutant
+NtQuerySystemInformation NtSetSystemInformation NtQueryObject NtDuplicateObject NtCreateKey
+NtOpenKey NtOpenKeyEx NtSetValueKey NtQueryValueKey NtDeleteKey NtDeleteValueKey NtEnumerateKey
+NtEnumerateValueKey NtLoadDriver NtUnloadDriver NtRaiseHardError NtShutdownSystem
+NtAdjustPrivilegesToken NtOpenProcessToken NtOpenProcessTokenEx NtOpenThreadToken
+NtQueryInformationToken NtDuplicateToken NtImpersonateThread NtContinue NtRaiseException
+NtCreateDebugObject NtDebugActiveProcess NtRemoveProcessDebug NtSystemDebugControl
+NtQuerySystemTime NtQueryPerformanceCounter NtCreateTransaction NtRollbackTransaction
+NtCommitTransaction NtCreateNamedPipeFile NtFsControlFile NtDeviceIoControlFile
+NtQueryAttributesFile NtQueryFullAttributesFile NtCreateIoCompletion NtSetTimer NtCreateTimer
+NtGetNextProcess NtGetNextThread NtAlertThread NtMapUserPhysicalPages NtCreateSymbolicLinkObject
+NtOpenDirectoryObject NtQueryDirectoryObject NtOpenSymbolicLinkObject NtQuerySymbolicLinkObject
+NtCreateMailslotFile NtSetInformationObject NtSetSecurityObject NtQuerySecurityObject
+NtAccessCheck NtPrivilegeCheck NtQueryInformationJobObject NtTraceEvent
+"""
+
+_POSIX = """
+malloc calloc realloc free memcpy memmove memset memcmp memchr strlen strnlen strcpy strncpy strcat
+strncat strcmp strncmp strcasecmp strncasecmp strchr strrchr strstr strtok strtok_r strdup strndup
+strerror strtol strtoul strtoll strtoull strtod atoi atol atoll atof sprintf snprintf vsprintf
+vsnprintf printf vprintf fprintf vfprintf sscanf fscanf scanf puts fputs fgets fgetc fputc getc
+putc getchar putchar fopen fdopen freopen fclose fread fwrite fseek ftell rewind fflush feof ferror
+fileno setvbuf tmpfile tmpnam remove rename perror exit _exit abort atexit getenv setenv unsetenv
+putenv system qsort bsearch rand srand random srandom time clock difftime mktime localtime gmtime
+strftime localtime_r gmtime_r ctime asctime gettimeofday clock_gettime nanosleep usleep sleep alarm
+open openat close read write pread pwrite lseek stat fstat lstat fstatat access chmod fchmod chown
+fchown lchown unlink unlinkat rmdir mkdir mkdirat renameat link symlink readlink readlinkat
+truncate ftruncate dup dup2 dup3 pipe pipe2 fcntl ioctl mmap munmap mprotect madvise mlock munlock
+msync brk sbrk fork vfork clone execve execv execvp execvpe execl execlp execle waitpid wait wait3
+wait4 waitid kill raise signal sigaction sigprocmask sigemptyset sigfillset sigaddset sigdelset
+pause getpid getppid getuid geteuid getgid getegid setuid setgid seteuid setegid setreuid setregid
+setresuid setresgid setsid setpgid getpgid chdir fchdir getcwd chroot umask opendir readdir
+closedir rewinddir scandir glob globfree realpath dirname basename isatty ttyname getlogin getpwnam
+getpwuid getgrnam getgrgid getrlimit setrlimit getrusage prctl ptrace syscall uname sysconf
+sysinfo gethostname sethostname getifaddrs freeifaddrs if_nametoindex socket bind listen accept
+accept4 connect send recv sendto recvfrom sendmsg recvmsg shutdown setsockopt getsockopt
+getpeername getsockname socketpair poll ppoll select pselect epoll_create epoll_create1 epoll_ctl
+epoll_wait inotify_init inotify_init1 inotify_add_watch eventfd timerfd_create signalfd getaddrinfo
+freeaddrinfo gai_strerror getnameinfo gethostbyname gethostbyname2 gethostbyaddr getservbyname
+getservbyport getprotobyname inet_addr inet_aton inet_ntoa inet_pton inet_ntop htons htonl ntohs
+ntohl res_query res_search dlopen dlsym dlvsym dlclose dlerror dladdr dl_iterate_phdr
+pthread_create pthread_join pthread_detach pthread_exit pthread_self pthread_kill
+pthread_mutex_init pthread_mutex_lock pthread_mutex_unlock pthread_mutex_destroy pthread_cond_init
+pthread_cond_wait pthread_cond_signal pthread_cond_broadcast pthread_once pthread_key_create
+pthread_setspecific pthread_getspecific pthread_attr_init pthread_attr_setstacksize
+pthread_setname_np memfd_create mkstemp mkdtemp mkfifo mknod mount umount umount2 reboot
+init_module finit_module delete_module kexec_load personality setns unshare capget capset
+getrandom getentropy sched_setaffinity sched_getaffinity sched_yield setpriority getpriority nice
+openlog syslog closelog daemon popen pclose posix_spawn posix_spawnp process_vm_readv
+process_vm_writev crypt
+"""
+
+
+def _expand(text: str) -> set[str]:
+    names: set[str] = set()
+    for token in text.split():
+        if token.endswith("*"):
+            names.update((token[:-1] + "A", token[:-1] + "W"))
+        else:
+            names.add(token)
+    return names
+
+
+def _build() -> frozenset[str]:
+    native = _expand(_NATIVE)
+    zw = {"Zw" + name[2:] for name in native}
+    return frozenset(_expand(_WIN32) | native | zw | _expand(_POSIX) | set_api_names())
+
+
+API_NAMES: frozenset[str] = _build()

@@ -1,0 +1,347 @@
+{
+  "caveat": "These scenarios were designed alongside the RE detectors: precision and recall here show that the rules behave as specified on synthetic views, not their real-world quality. A finding is a true positive of its rule, never a statement about maliciousness.",
+  "scenarios": {
+    "baseline_crt_library": {
+      "findings": [],
+      "iocs": [],
+      "kind": "baseline",
+      "note": "FID library code calling the injection set is never cited"
+    },
+    "baseline_file_io": {
+      "findings": [],
+      "iocs": [],
+      "kind": "baseline"
+    },
+    "baseline_gui": {
+      "findings": [],
+      "iocs": [],
+      "kind": "baseline"
+    },
+    "baseline_updater": {
+      "findings": [
+        {
+          "function": "check_updates",
+          "method": "heuristic:re_network_string_function@1",
+          "severity": "low",
+          "type": "network_string_function"
+        }
+      ],
+      "iocs": [
+        {
+          "type": "url",
+          "value": "https://updates.cyberlab-app.example/latest.json"
+        }
+      ],
+      "kind": "baseline",
+      "note": "a true positive of the rule, not of maliciousness"
+    },
+    "nm_anti_debug_check_only": {
+      "findings": [],
+      "iocs": [],
+      "kind": "near_miss"
+    },
+    "nm_credential_one_group": {
+      "findings": [],
+      "iocs": [],
+      "kind": "near_miss"
+    },
+    "nm_downloader_download_only": {
+      "findings": [],
+      "iocs": [],
+      "kind": "near_miss"
+    },
+    "nm_injection_split": {
+      "findings": [],
+      "iocs": [],
+      "kind": "near_miss",
+      "note": "M3's file-level rule fires on the union of the two functions"
+    },
+    "nm_injection_two_groups": {
+      "findings": [],
+      "iocs": [],
+      "kind": "near_miss"
+    },
+    "nm_keylogging_hook_only": {
+      "findings": [],
+      "iocs": [],
+      "kind": "near_miss"
+    },
+    "nm_names_without_resolver": {
+      "findings": [],
+      "iocs": [],
+      "kind": "near_miss"
+    },
+    "nm_network_api_no_string": {
+      "findings": [],
+      "iocs": [],
+      "kind": "near_miss"
+    },
+    "nm_persistence_no_run_key": {
+      "findings": [],
+      "iocs": [],
+      "kind": "near_miss"
+    },
+    "nm_resolver_two_names": {
+      "findings": [],
+      "iocs": [],
+      "kind": "near_miss"
+    },
+    "nm_run_key_elsewhere": {
+      "findings": [],
+      "iocs": [],
+      "kind": "near_miss"
+    },
+    "nm_url_no_network_api": {
+      "findings": [],
+      "iocs": [
+        {
+          "type": "url",
+          "value": "https://docs.cyberlab-app.example/help.html"
+        }
+      ],
+      "kind": "near_miss"
+    },
+    "pos_anti_debug": {
+      "findings": [
+        {
+          "function": "target_fn",
+          "method": "heuristic:re_api_set_function@1",
+          "severity": "low",
+          "type": "api_anti_debug"
+        }
+      ],
+      "iocs": [],
+      "kind": "positive"
+    },
+    "pos_credential_access": {
+      "findings": [
+        {
+          "function": "target_fn",
+          "method": "heuristic:re_api_set_function@1",
+          "severity": "medium",
+          "type": "api_credential_access"
+        }
+      ],
+      "iocs": [],
+      "kind": "positive"
+    },
+    "pos_downloader": {
+      "findings": [
+        {
+          "function": "target_fn",
+          "method": "heuristic:re_api_set_function@1",
+          "severity": "low",
+          "type": "api_downloader"
+        }
+      ],
+      "iocs": [],
+      "kind": "positive"
+    },
+    "pos_injection": {
+      "findings": [
+        {
+          "function": "target_fn",
+          "method": "heuristic:re_api_set_function@1",
+          "severity": "medium",
+          "type": "api_injection"
+        }
+      ],
+      "iocs": [],
+      "kind": "positive"
+    },
+    "pos_injection_via_thunks": {
+      "findings": [
+        {
+          "function": "target_fn",
+          "method": "heuristic:re_api_set_function@1",
+          "severity": "medium",
+          "type": "api_injection"
+        }
+      ],
+      "iocs": [],
+      "kind": "positive"
+    },
+    "pos_keylogging_hook": {
+      "findings": [
+        {
+          "function": "target_fn",
+          "method": "heuristic:re_api_set_function@1",
+          "severity": "medium",
+          "type": "api_keylogging"
+        }
+      ],
+      "iocs": [],
+      "kind": "positive"
+    },
+    "pos_keylogging_raw": {
+      "findings": [
+        {
+          "function": "target_fn",
+          "method": "heuristic:re_api_set_function@1",
+          "severity": "medium",
+          "type": "api_keylogging"
+        }
+      ],
+      "iocs": [],
+      "kind": "positive"
+    },
+    "pos_network_elf": {
+      "findings": [
+        {
+          "function": "target_fn",
+          "method": "heuristic:re_network_string_function@1",
+          "severity": "low",
+          "type": "network_string_function"
+        }
+      ],
+      "iocs": [
+        {
+          "type": "ip",
+          "value": "192.0.2.10"
+        }
+      ],
+      "kind": "positive"
+    },
+    "pos_network_wininet": {
+      "findings": [
+        {
+          "function": "target_fn",
+          "method": "heuristic:re_network_string_function@1",
+          "severity": "low",
+          "type": "network_string_function"
+        }
+      ],
+      "iocs": [
+        {
+          "type": "ip",
+          "value": "203.0.113.20"
+        },
+        {
+          "type": "url",
+          "value": "http://203.0.113.20/feed"
+        }
+      ],
+      "kind": "positive"
+    },
+    "pos_persistence_run_key": {
+      "findings": [
+        {
+          "function": "target_fn",
+          "method": "heuristic:re_api_set_function@1",
+          "severity": "low",
+          "type": "api_persistence"
+        }
+      ],
+      "iocs": [],
+      "kind": "positive"
+    },
+    "pos_persistence_service": {
+      "findings": [
+        {
+          "function": "target_fn",
+          "method": "heuristic:re_api_set_function@1",
+          "severity": "low",
+          "type": "api_persistence"
+        }
+      ],
+      "iocs": [],
+      "kind": "positive"
+    },
+    "pos_resolution_dlsym": {
+      "findings": [
+        {
+          "function": "target_fn",
+          "method": "heuristic:re_runtime_api_resolution@1",
+          "severity": "low",
+          "type": "runtime_api_resolution"
+        }
+      ],
+      "iocs": [],
+      "kind": "positive"
+    },
+    "pos_resolution_low": {
+      "findings": [
+        {
+          "function": "target_fn",
+          "method": "heuristic:re_runtime_api_resolution@1",
+          "severity": "low",
+          "type": "runtime_api_resolution"
+        }
+      ],
+      "iocs": [],
+      "kind": "positive"
+    },
+    "pos_resolution_medium": {
+      "findings": [
+        {
+          "function": "target_fn",
+          "method": "heuristic:re_runtime_api_resolution@1",
+          "severity": "medium",
+          "type": "runtime_api_resolution"
+        }
+      ],
+      "iocs": [],
+      "kind": "positive"
+    },
+    "prio_cap": {
+      "findings": [],
+      "iocs": [],
+      "kind": "priority",
+      "priority": {
+        "missing": [],
+        "order": [
+          "plain_0",
+          "plain_1",
+          "plain_2"
+        ]
+      }
+    },
+    "prio_classes": {
+      "findings": [],
+      "iocs": [
+        {
+          "type": "ip",
+          "value": "198.51.100.7"
+        },
+        {
+          "type": "url",
+          "value": "http://198.51.100.7/status"
+        }
+      ],
+      "kind": "priority",
+      "priority": {
+        "missing": [
+          "0x1"
+        ],
+        "order": [
+          "cleanup",
+          "start",
+          "exported_api",
+          "capa_hit",
+          "suspicious_caller",
+          "ioc_user",
+          "big_plain",
+          "main",
+          "parse_args"
+        ]
+      }
+    },
+    "prio_pie_capa": {
+      "findings": [],
+      "iocs": [],
+      "kind": "priority",
+      "priority": {
+        "missing": [],
+        "order": [
+          "start",
+          "capa_hit",
+          "other",
+          "main",
+          "parse_args",
+          "cleanup"
+        ]
+      }
+    }
+  },
+  "version": 1
+}

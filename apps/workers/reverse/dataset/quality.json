@@ -1,0 +1,38 @@
+{
+  "caveat": "These scenarios were designed alongside the RE detectors: precision and recall here show that the rules behave as specified on synthetic views, not their real-world quality. A finding is a true positive of its rule, never a statement about maliciousness.",
+  "false_negatives": [],
+  "false_positives": [],
+  "ioc_recall": 1.0,
+  "m3_file_level_near_misses": {
+    "nm_injection_split": [
+      "api_injection"
+    ]
+  },
+  "per_rule": {
+    "heuristic:re_api_set_function@1": {
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 9
+    },
+    "heuristic:re_network_string_function@1": {
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 3
+    },
+    "heuristic:re_runtime_api_resolution@1": {
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 3
+    }
+  },
+  "priority_checks": 3,
+  "priority_failures": [],
+  "scenarios": 33,
+  "unexpected_iocs": []
+}

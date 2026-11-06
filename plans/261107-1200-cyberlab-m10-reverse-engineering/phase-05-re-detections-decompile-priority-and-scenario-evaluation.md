@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Re detections decompile priority and scenario evaluation"
-status: pending
+status: code-complete (untested in Docker)
 priority: P2
 effort: "10h"
 dependencies: [1]
@@ -46,3 +46,61 @@ Pure functions over `ReView` (frozen in phase 1), with no engine dependency: the
 ## Risk Assessment
 - **False positives on real software** (updaters, installers, security tools call the same APIs): severity caps, verdict-free wording, the M3 caveat; analyst feedback is "Later".
 - **Set drift from M3:** none: both analyzers read `cyberlab_worker.apisets` (RT7).
+
+## Implementation notes (as built, untested in Docker)
+
+Pure Python, no engine. Host checks that passed (Python 3.14, `PYTHONPATH` = py-jobs + kit +
+worker): `python -m dataset.evaluate` (exit 0) and the RE `tests/unit` (204 passed, 3 skipped,
+including phase 2's tests present in the worktree); `test_skeleton.py`'s frozen signatures
+still hold. Not run: ruff / mypy (not installed on the host).
+
+- **Priority** (`re_worker/priority.py`): `rank(view, job)` = class 1 (requested entries that
+  are functions and not externals, request order) then classes 2-6 (entry point + exports;
+  capa file VAs via `functions_at_file_va`; calling an `apisets.api_names()` API directly or
+  through a thunk; referencing a string with a URL / domain / IP observable; the rest by size
+  desc), each function at its best class, ties by entry, thunks / externals / library skipped.
+  Length `max(limits.max_decompiled, len(class 1))`. Helpers: `ranks(view, job)` (entry ->
+  index = `priority_rank`), `missing_addresses(view, job)` (for `engine_errors:
+  function_not_found`), `classify`.
+- **Detections** (`re_worker/detections/`): `base.py` (methods, `METHOD_MAX`, `TEMPLATES`,
+  set labels, `api_name` normalization of `__imp_` / i386 `_X@n` / `@plt` / radare2
+  `sym.imp.LIB.dll_X`, `called_api_names` = import refs + thunk / external callees, `Finding`
+  -> `FindingRecord` with uuid5(program sha256, method, type, entry)), `apisets.py` (the M3
+  combination semantics per function, run-key = a referenced `has_run_key` string),
+  `rules.py` (resolution: `GetProcAddress` / `LdrGetProcedureAddress[Ex]` / `dlsym` /
+  `dlvsym` + >= 3 exact API-name strings, `medium` when >= 3 are in one M3 set; network: a
+  URL / IP / domain string + `connect`, `WSAConnect*`, `getaddrinfo` / `GetAddrInfo*`,
+  `gethostbyname`, `InternetOpenUrl*`, `InternetConnect*`, `HttpOpenRequest*`,
+  `URLDownloadTo*File*`, `WinHttp*`), `iocs.py`, `api_names.py` (1 904 names, hand-compiled
+  from the public Win32 / Native API and POSIX / glibc names; source note in the module).
+  Findings cite `attributes.function_entry` (`0x…`) and `function_name`, `evidence_refs[0] =
+  function:0x…`; ordered severity desc, method, entry, type; capped at `max_findings` /
+  `max_iocs` with `truncated`. Thunks, externals and library functions are never cited.
+- **Dataset** (`dataset/generate.py` `Builder` / `build(name)` / `job(...)`, 33 scenarios;
+  `dataset/labels.json` hand-written; `dataset/evaluate.py`): 4 baselines (the updater's
+  `network_string_function` is labelled a TP of the rule), 14 positives (every set, thunks,
+  three resolution cases, three network cases), 12 near misses (one group short per set, the
+  split injection that M3's file-level rule would report, run key in another function, 2
+  resolved names, names without a resolver, network API without a string, URL without a
+  network API), 3 priority cases (all classes with a missing request, capa VA on a rebased
+  PIE, requests beyond the cap). Result: 15 TP / 0 FP / 0 FN (1.00 / 1.00 per rule), IOC
+  recall 7/7, 0 unexpected IOCs, priority 3/3; `dataset/quality.json` written by
+  `test_dataset_quality.py` (skips the write on the read-only container mount).
+
+**Deviations / notes for the parent and phase 2 / 7 / 8:**
+- `IocRecord` has no context field (only `source`, 16 chars), so "the IOC's context names the
+  referencing functions" cannot travel in the stream: every RE IOC has `source = "re_string"`;
+  the referencing functions (<= 3) are computed (`iocs.IocHit.context()`) and are recoverable
+  from `re_string_refs` (phase 8's strings route). A contract field would be a frozen-interface
+  change.
+- `run(view, limits)` has no time argument (frozen); findings / IOCs carry `detections.now()`
+  (the analysis time, as M3's static worker does).
+- Phase 2's `engines/ghidra.py` slices `rank()` at `limits.max_decompiled`, which would cut
+  class-1 addresses when `max_decompiled < len(decompile_addresses)` (only with a setting below
+  64): use `len(rank(...))` (already `max(cap, class 1)`) instead of re-slicing. Phase 2 does
+  not yet call `priority.missing_addresses` for `function_not_found`.
+- The `api_injection` set label reads "process-injection" (the M3 wording); the RE wording test
+  keeps the M3 + M8 verdict list without M8's bare `inject`.
+
+**Remains to run (Docker):** `lane-test.sh 9 --service re-worker-test pytest -q -m 'not engine'`
+(the same unit tests in the image), `ruff format`, `ruff check`, `mypy` on the RE worker.
