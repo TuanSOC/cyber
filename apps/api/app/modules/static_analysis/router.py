@@ -15,12 +15,12 @@ from app.core.errors import NotFound
 from app.core.filenames import content_disposition
 from app.core.pagination import PageParamsDep
 from app.core.rbac import OrgContext, Permission, require
-from app.core.stubs import not_implemented
 from app.core.validation import SearchTerm
 from app.modules.audit import service as audit
 from app.modules.evidence.router import DOWNLOAD_HEADERS
-from app.modules.static_analysis import report as reports
+from app.modules.reverse_engineering import service as re_service
 from app.modules.reverse_engineering.schemas import CapabilityFunctionsOut
+from app.modules.static_analysis import report as reports
 from app.modules.static_analysis import repository as repo
 from app.modules.static_analysis.schemas import (
     REPORT_SCHEMA,
@@ -171,24 +171,33 @@ async def list_capabilities(
     ref: RowRef = None,
 ) -> CapabilityPage:
     """`namespace`: that capa namespace or below; `attack`: an ATT&CK technique id (its
-    sub-techniques included) or sub-technique id."""
+    sub-techniques included) or sub-technique id. M10: `locations` (capa's match addresses,
+    empty for static jobs from before M10) and `functions` (how many functions of the newest
+    succeeded RE job sourced from this job contain them; null without such a job)."""
     await repo.ensure_static_job(ctx.session, ctx.org_id, job_id)
     rows, total = await repo.capabilities(
         ctx.session, ctx.org_id, job_id, page, namespace=namespace, attack=attack, ref=ref
     )
-    return CapabilityPage(
-        items=[CapabilityLinkedOut.model_validate(r) for r in rows], total=total
+    counts = await re_service.capability_function_counts(
+        ctx.session, ctx.org_id, job_id, [r.id for r in rows]
     )
+    items = []
+    for row in rows:
+        item = CapabilityLinkedOut.model_validate(row)
+        item.functions = None if counts is None else counts.get(row.id, 0)
+        items.append(item)
+    return CapabilityPage(items=items, total=total)
 
 
 @router.get("/capabilities/{capability_id}/functions", response_model=CapabilityFunctionsOut)
 async def capability_functions(
     job_id: uuid.UUID, capability_id: uuid.UUID, ctx: EvidenceRead
 ) -> CapabilityFunctionsOut:
-    """M10: the functions of the newest succeeded RE job of this sample that contain the
-    capability's locations (file virtual addresses, RT8). 404 for unknown / foreign jobs and
-    capabilities. Implemented in M10 phase 8 (501 until then)."""
-    raise not_implemented()
+    """M10: the functions of the newest succeeded RE job sourced from this static job that
+    contain the capability's locations (file virtual addresses, RT8; <= 50), and how many
+    locations no listed function contains. 404 for unknown / foreign / non-static jobs and
+    for a capability of another job."""
+    return await re_service.capability_functions(ctx.session, ctx.org_id, job_id, capability_id)
 
 
 @router.get(
