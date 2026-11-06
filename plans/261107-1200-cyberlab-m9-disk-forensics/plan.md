@@ -489,8 +489,8 @@ Seed questions given to the reviewers (kept for traceability):
 |-------|------|-------|------------|--------|
 | 1 | [Foundation contracts migration and disk worker skeleton](./phase-01-foundation-contracts-migration-and-disk-worker-skeleton.md) | A | — | Pending |
 | 2 | [TSK probe image volumes filesystems and file walk](./phase-02-tsk-probe-image-volumes-filesystems-and-file-walk.md) | B (2a, lane 2, `--heavy` for image runs) | 1, 4 | Pending |
-| 3 | [Plaso artifact timeline engine](./phase-03-plaso-artifact-timeline-engine.md) | spike 3a: A′ (parallel with phase 1, one-off container); rest 3b: B (2b, lane 3, `--heavy`) | 3a: —; 3b: 1, 4 | Pending |
-| 4 | [Synthetic disk image generator](./phase-04-synthetic-disk-image-generator.md) | A′ (parallel with phase 1, one-off container; merged before group B) | — | Pending |
+| 3 | [Plaso artifact timeline engine](./phase-03-plaso-artifact-timeline-engine.md) | spike 3a: A′ (parallel with phase 1, one-off container); rest 3b: B (2b, lane 3, `--heavy`) | 3a: —; 3b: 1, 4 | Completed (code), Docker pending (3a spike, `plaso.lock`) |
+| 4 | [Synthetic disk image generator](./phase-04-synthetic-disk-image-generator.md) | A′ (parallel with phase 1, one-off container; merged before group B) | — | Completed (code), Docker pending |
 | 5 | [Known file hash sets and YARA file scan](./phase-05-known-file-hash-sets-and-yara-file-scan.md) | B (2c, lane 4) | 1 | Pending |
 | 6 | [Disk detections and scenario dataset](./phase-06-disk-detections-and-scenario-dataset.md) | B (2d, lane 5) | 1 | Pending |
 | 7 | [Disk dispatch segment sets and trusted ingest](./phase-07-disk-dispatch-segment-sets-and-trusted-ingest.md) | B (2e, lane 6) | 1 | Pending |
@@ -499,7 +499,7 @@ Seed questions given to the reviewers (kept for traceability):
 | 10 | [File export to derived evidence](./phase-10-file-export-to-derived-evidence.md) | B (2h, lane 9) | 1 | Pending |
 | 11 | [Disk forensics frontend](./phase-11-disk-forensics-frontend.md) | B (2i, web only) | 1 (frozen contracts) | Pending |
 | 12 | [Docs threat model and license notices](./phase-12-docs-threat-model-and-license-notices.md) | C | B merged | Pending |
-| 13 | [Hardening e2e fuzz metric and gate](./phase-13-hardening-e2e-fuzz-metric-and-gate.md) | D | all | Pending |
+| 13 | [Hardening e2e fuzz metric and gate](./phase-13-hardening-e2e-fuzz-metric-and-gate.md) | D | all | Completed (code), gate pending Docker |
 
 Effort (after the red team: the cache, the rename and one rule cut; stage isolation, the watchdog, the deadline budget, the disk ingest worker, the Plaso builder stage and export fallback, hard-link names and batch release added): 26 + 25 + 25 + 14 + 15 + 15 + 21 + 14 + 13 + 14 + 18 + 9 + 15 = **224 h** (phase 3 = 6 h spike + 19 h engine). Critical path: max(phase 1 26 h, A′ 14 h) → max(B) (phase 2, 25 h) → 12 (9 h) → 13 (15 h) ≈ **75 h** of wall time with nine group-B agents. At most three lane slots at once, and a `--heavy` lane takes two.
 

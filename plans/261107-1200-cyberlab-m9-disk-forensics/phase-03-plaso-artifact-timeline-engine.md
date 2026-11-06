@@ -138,6 +138,6 @@ Code-only commit `feat(disk): Plaso artifact timeline engine (M9 phase 3, untest
 - `config.timeline_engine()` (new, public) reads `DISK_TIMELINE_ENGINE` for the runner; `replay` is refused outside `TEST_PROFILE=1` by both `config` and `replay.check_allowed`.
 - The launcher refuses a non-isolated interpreter and any argv outside the fixed shape (no `--analysis`, network outputs or workers; psort `-o json_line` only) before importing Plaso; its status goes to `$TMPDIR/status.json` (the stage's out dir).
 - EVTX attributes follow phase 6's convention (`event_identifier`, `source_name`, `strings_count`, `strings.<i>` for 28, then `record_number`, `computer_name`, `user_sid`, `event_level` while ≤ 32); strings are shortened, never dropped, to fit the 4 KiB column.
-- Pre-existing, not phase 3: `test_skeleton.test_frozen_entry_points` expects `detections.run(view, limits)`, but phase 6 added the `yara_severity` keyword.
+- Pre-existing, not phase 3: `test_skeleton.test_frozen_entry_points` expected `detections.run(view, limits)`, but phase 6 added the `yara_severity` keyword (fixed in phase 13: the frozen expectation lists the keyword-only parameter).
 
 **Remains to run (Docker):** the spike items above; `pytest tests/unit` in `disk-worker-test` (incl. `test_replay`, `test_timeline_runner`, and `test_pipeline` with the new analyzer tail); `tests/engine/test_plaso_engine.py` (`--heavy`); ruff / mypy in the image; a 2 M-event normalizer run for the memory bound (the unit test uses 20 000 events).

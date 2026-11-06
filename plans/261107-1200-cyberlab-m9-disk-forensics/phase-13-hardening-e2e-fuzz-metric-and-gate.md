@@ -1,7 +1,7 @@
 ---
 phase: 13
 title: "Hardening e2e fuzz metric and gate"
-status: pending
+status: completed (code), gate pending Docker
 priority: P2
 effort: "15h"
 dependencies: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -99,3 +99,27 @@ The only phase allowed to touch other phases' files, and only for gate fixes (on
 ## Risk Assessment
 - **Heavy steps on a RAM-tight host:** run alone, with only infra up; fuzz is chunked (10 mutations per worker restart) so a leak cannot accumulate.
 - **Flaky Plaso timings:** latency is reported as measured with p50 / p95, never gated on absolute numbers.
+
+## As built (code only; gate pending Docker)
+
+Code-only commits (no container was run; ruff / mypy / tsc / Playwright not run on the host): `test(disk): frozen detections.run takes the keyword-only yara_severity`, `fix(web): custody timeline renders the M9 export custody actions`, `test(e2e): disk forensics golden path`, `feat(disk): generated test hash sets for the pipeline run`, `test(disk): fuzz-lite and in-pipeline stage proofs`, `feat(disk): disk metric harness and heavy-step scripts`, `test(api): disk pipeline, diagnostic and export runs on the real worker`, `build(gate): M9 disk steps in verify and the disk env check`.
+
+**Files:**
+- e2e: `apps/web/e2e/forensics.spec.ts`; `scripts/e2e.mjs` builds `ewf_multi` into `/data/disk/` with `cyberlab/disk-worker:dev` (generator sources mounted).
+- API pipeline (default lane, `DISK_PIPELINE_IMAGES`): `apps/api/tests/disk_pipeline_helpers.py`, `tests/integration/test_disk_pipeline.py`, `test_disk_pipeline_diagnostics.py`, `test_disk_pipeline_export.py`. Dispatch budgets are lowered in-process (`small_budgets`: 96 / 32 MiB artifacts) so a job fits the test worker's 1 GiB `/work` (the default 2 GiB triage budget fails `insufficient_disk` there).
+- Test hash sets: `samples/diskgen/hashlists.py` (+ `tests/unit/test_diskgen_hashlists.py`); `pnpm disk:gen --test-hashsets` imports `test-known-good` / `test-known-bad` into the test store.
+- Fuzz-lite: `apps/workers/disk/tests/fuzz/` (`DISK_FUZZ=1`; `pnpm disk:fuzz`); proofs: `tests/engine/test_stage_proofs.py` (hook stages injected by the test through the real `run_stage`; no production seam added).
+- Metrics: `scripts/disk_metrics.py` (`pnpm disk:metrics`) + `apps/workers/disk/dataset/metrics.py` (local-segment runner: `analyzer.download` patched in a child process).
+- Env check: `scripts/check-disk-worker-env.mjs` (+ `--image` on the built prod image).
+- Gate: `scripts/verify.mjs` (reload, `disk:gen --test-hashsets`, api-test with the samples volume, the replay pass, the disk engine tests; `verify:prod`: env check, prod worker probes, image check); `docker-compose.yml` `disk-worker-test` gets `DISK_TIMELINE_ENGINE: ${DISK_TEST_TIMELINE_ENGINE:-plaso}`.
+- Gate fixes: the custody timeline crashed on phase 10's custody actions (web); the phase-1 frozen entry point test now lists phase 6's `yara_severity`.
+
+**Deviations and gaps:**
+- The replay pass recreates `disk-worker-test` (the timeline engine is a worker setting, not a request field).
+- `no_supported_filesystem` uses a `multi_gpt` variant the test builds by wiping its two supported file systems (the generated `multi_gpt` has ext4 and FAT16).
+- The YARA test-marker finding is **not covered**: the generated trees carry no M3 test marker and `disk-worker-test` mounts no test rules (a later generator + compose change).
+- The 65 MiB export refusal is emulated by lowering the export cap; the deleted-entry and second-`SAM`-name checks are conditional on the generator's route (phase-4 gaps).
+- The restore drill does not yet seed a disk job, an export and a derived evidence item (not written).
+- Fuzz-lite runs in one-off containers: "the worker container never restarts" is covered by the gate's restart probe of the long-running `disk-worker`, not by the fuzz run.
+
+**Remains (Docker):** phase 3a's `plaso.lock` and the worker's `uv.lock` (nothing builds before them); then `pnpm verify` / `verify:prod`, `pnpm disk:fuzz`, `pnpm disk:metrics` (alone), the metric report and its TESTING line, the restore drill with the disk tables, and the gate fixes those runs find.

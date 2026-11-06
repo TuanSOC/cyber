@@ -1,12 +1,12 @@
 # Disk Forensics (Milestone 9, in progress)
 
-> **Status: draft, M9 in progress.** Phases 1, 2 and 5–9 are committed on `feat/m9-disk-forensics`; phases 10 (file export) and 11 (web) are being written; phases 3 (Plaso), 4 (the image generator) and 13 (hardening, metrics, gate) are pending. **Nothing has run in a container yet**: the disk image cannot be built until phase 3a replaces the `plaso.lock` placeholder and the worker's `uv.lock` exists. Every section says what is **built (untested in Docker)** and what is **pending (phase N)**. Nothing marked pending exists in code. Phase 13 replaces this banner once the gate (`pnpm verify:prod`) is green. Plan: [`plans/261107-1200-cyberlab-m9-disk-forensics/plan.md`](../plans/261107-1200-cyberlab-m9-disk-forensics/plan.md).
+> **Status: draft, M9 in progress.** Every phase (1–13) is committed on `feat/m9-disk-forensics` as code; phase 13's gate run (`pnpm verify:prod`), fuzz-lite and metric run are pending. **Nothing has run in a container yet**: the disk image cannot be built until phase 3a's spike replaces the `plaso.lock` placeholder and the worker's `uv.lock` exists. Every section says what is **built (untested in Docker)** and what is **pending (phase N)**. Nothing marked pending exists in code. Phase 13 replaces this banner once the gate (`pnpm verify:prod`) is green. Plan: [`plans/261107-1200-cyberlab-m9-disk-forensics/plan.md`](../plans/261107-1200-cyberlab-m9-disk-forensics/plan.md).
 
 The fourth analysis engine triages uploaded **disk images** (raw, split raw, E01) with [The Sleuth Kit](https://github.com/sleuthkit/sleuthkit) through [pytsk3](https://github.com/py4n6/pytsk) (library mode) and [libewf](https://github.com/libyal/libewf), and builds an artifact timeline with [Plaso](https://github.com/log2timeline/plaso) run on a small extracted artifact tree, never on the image. It reuses the M2 / M3 / M8 pipeline:
 
 1. An isolated, untrusted worker runs a fixed sequence of stages, **one sandboxed process per stage**, fully offline. It produces a versioned result stream (`disk.v1`).
 2. A dedicated trusted ingest worker validates that stream as a whole, then writes it into the disk tables plus the shared findings, IOCs and timeline, in one transaction.
-3. The Forensics UI shows the results (pending phase 11).
+3. The Forensics UI shows the results (phase 11, untested).
 
 Known-file hash sets come only from a local store that an operator fills with `pnpm disk:hashsets` from files they supply: nothing is ever downloaded. A disk image is treated as **TLP:RED material by default**.
 
@@ -22,18 +22,18 @@ See [MEMORY_ANALYSIS.md](MEMORY_ANALYSIS.md) for the analyzer this one is modell
 | Migration `0017`, models, RLS, grants, `source` on `memory_sensitivity`, generic sensitivity routes | 1 | built, untested |
 | Compose: `disk-worker(-test)`, `disk-ingest-worker(-test)`, `disk-hashsets(-test)`, `disk-hashsets-init`, volumes, broker user `disk`, lane 9 | 1 | built, untested |
 | Root magic check, image openers, `verify`, `layout`, `walk`, `collect` / `extract` probe code, stage runner (kill + seal), write watchdog, deadline budget | 2 | built, untested |
-| Artifact catalog (`timeline/catalog.py`), Plaso launcher and exporter, `run_timeline`, the replay engine, `plaso.lock` | 3 | **pending** (stubs: the `collect` and `timeline` stages are reported `skipped` / `not_available`) |
-| Synthetic image generator (`samples.diskgen`, `pnpm disk:gen`), its package list | 4 | **pending** (placeholders; the engine tests skip without images) |
+| Artifact catalog (`timeline/catalog.py`), collect plan, Plaso launcher and exporter, `run_timeline`, the event normalizer, the replay engine | 3 | built, untested (the 3a packaging spike and the real `plaso.lock` are **pending**: no image build until then) |
+| Synthetic image generator (`samples.diskgen`, `pnpm disk:gen`), its package list | 4 | built, untested in Docker (pure-Python writers host-tested; the tool-built images and their tool checks pending Docker) |
 | Hash-set store and tool, YARA candidates and scan | 5 | built, untested |
 | Detections, scenario dataset | 6 | built, untested |
 | `?kind=disk` upload, segment sets, dispatch, hand-off, trusted ingest, diagnostic ingest | 7 | built, untested |
 | Read API, merged timeline, interop exports | 8 | built, untested |
 | Sensitivity default, batch release, reports, AI / TI, retention, correlation | 9 | built, untested |
-| File export to derived evidence | 10 | in progress (the routes answer 501 in the committed code) |
-| Web: Forensics pages | 11 | in progress |
-| Hardening, e2e, fuzz-lite, metrics, gate | 13 | pending |
+| File export to derived evidence | 10 | built, untested |
+| Web: Forensics pages | 11 | built, untested |
+| Hardening: e2e spec, pipeline tests, fuzz-lite, metric harness, env check, gate wiring | 13 | code written; the gate run, fuzz-lite and the metric report are **pending Docker** |
 
-**Until phase 3 lands there is no Plaso event:** the timeline holds file-system times only, and the event-based detections (log cleared, service installed, account change, remote logon, dual-use execution, the registry and cron-command persistence rules) have no input.
+**Until the disk image is built and Plaso has run on the generated Linux tree** (phase 3a, then the gate), the event-based detections (log cleared, service installed, account change, remote logon, dual-use execution, the registry and cron-command persistence rules) are exercised only by unit tests and the replay engine.
 
 ## When it runs
 
@@ -129,9 +129,9 @@ Root never parses image bytes beyond the magic check: the first 4 KiB of segment
 | `layout` | probe | the image | partitions, file-system facts, OS markers, the EWF stored hashes and media size |
 | `verify` (EWF only) | probe | the whole media in 4 MiB chunks | our MD5 / SHA-1 / sha256 vs the stored ones |
 | `walk` (one per file system) | probe | the file system | one row per name, hashes within the budget |
-| `collect` (one per OS partition) | probe | the planned artifact files | the mirrored tree `artifacts/p<i>/…` + `collected.jsonl` (pending phase 3: no plan yet) |
+| `collect` (one per OS partition) | probe | the planned artifact files | the mirrored tree `artifacts/p<i>/…` + `collected.jsonl` (phase 3, untested) |
 | `scan` | probe | the YARA candidates | hit lines (rule, namespace, tags, counts; never matched data) |
-| `log2timeline`, event export (one each per OS partition) | Plaso venv | the sealed mirrored tree | Plaso storage, `events.jsonl` (pending phase 3) |
+| `log2timeline`, event export (one each per OS partition) | Plaso venv | the sealed mirrored tree | Plaso storage, `events.jsonl` (phase 3, untested) |
 | `extract` (export jobs) | probe | one file by natural key | `export/<n>` (phase 10) |
 
 ### Stage isolation (RT3–RT5)
@@ -143,7 +143,7 @@ Every probe runs as `python -I -s -B -m disk_worker.probe <stage> <input/<name>.
 | Tool uid | **10007** (`CYBERLAB_TOOL_UID` / `GID`), the disk worker's own: `RLIMIT_NPROC` counts every process of a uid on the host | built |
 | seccomp | `unix_sockets_only=True`, `deny_io_uring=True` | built |
 | rlimits per stage | `RLIMIT_AS` / `FSIZE` per stage (below), `RLIMIT_NPROC` 64, CPU = the timeout | built |
-| Audit hook | a PEP 578 hook installed after the imports refuses and counts `socket.*`, `urllib.Request`, `subprocess.Popen`, `os.exec*`, `os.posix_spawn*` / `os.spawn*`, `os.system`, `os.fork`, and `ctypes.dlopen` outside the venv; the counts reach the stage report | built (probe); the Plaso wrapper pending phase 3 |
+| Audit hook | a PEP 578 hook installed after the imports refuses and counts `socket.*`, `urllib.Request`, `subprocess.Popen`, `os.exec*`, `os.posix_spawn*` / `os.spawn*`, `os.system`, `os.fork`, and `ctypes.dlopen` outside the venv; the counts reach the stage report | built (probe and the Plaso launcher, phase 3); untested |
 | Fresh out dir | created by root after every tool process was killed, tool-owned 0700; `TMPDIR` / `XDG_CACHE_HOME` inside it, `HOME` = `XDG_CONFIG_HOME` = `/nonexistent` | built |
 | Kill + seal | after each stage root kills every tool-uid process (a `setsid` survivor cannot reach the next stage; `SandboxCompromised` stops the container) and makes the out dir root-owned read-only (dirs 0555, files 0444) through `O_NOFOLLOW` descriptors; planted symlinks, FIFOs, sockets and devices are removed, never followed | built |
 | Deadline budget | each stage's timeout is min(its cap, time left before the job deadline − 900 s); a stage that cannot get its minimum run time is `skipped` (`deadline`) and never started, so the reaper never kills a running job | built |
@@ -197,7 +197,7 @@ The caps sum past the job timeout on purpose (up to 32 file systems, 4 Plaso par
 | Artifact budget | ≤ 2 GiB, ≤ 20 000 files, ≤ 512 MiB each | ≤ 8 GiB, ≤ 20 000 files, ≤ 1 GiB each |
 | Plaso partitions | ≤ 2 OS partitions | ≤ 4 |
 
-## Artifact timeline: Plaso on a bounded tree (pending phase 3)
+## Artifact timeline: Plaso on a bounded tree (phase 3, untested in Docker)
 
 Plaso never parses image, volume or file-system formats. The `collect` stage copies the catalog's artifact files out of the image into a tree that mirrors the original layout (`artifacts/p<i>/Windows/System32/config/SYSTEM`, `…/etc/timezone`, the user profiles), so Plaso's preprocessors still find the time zone, the users and the host name; then the tree is sealed read-only and Plaso parses it. One hostile-parser stack per surface: TSK for file systems, the libyal format parsers for artifact contents.
 
@@ -274,9 +274,9 @@ Deterministic heuristics over the normalized records (built, phase 6): one strea
 - **Only `signature:yara@1` can reach `high`.** Heuristics cap at `medium`.
 - **`heuristic:disk_timestamp_anomaly@1` is cut** (RT28): it needs `$SI` / `$FN` pairs that only `full` `$MFT` events carry, and zero sub-second times are common after installs and archive extraction ("Later").
 - **IOCs** (observables only): hashes of files referenced by findings, source IPs of remote-logon findings, URLs / domains / IPs quoted in findings. Never the whole listing or browser history.
-- **Event-based rules depend on phase 3:** until Plaso events exist they have no input. EVTX field layouts are read defensively; an unknown layout is counted (`evtx_layout_unknown`), never guessed.
+- **Event-based rules depend on Plaso events** (phase 3): until the disk image runs Plaso they are exercised by unit tests and the replay engine only. EVTX field layouts are read defensively; an unknown layout is counted (`evtx_layout_unknown`), never guessed.
 
-**Quality metrics:** pending — phase 13 (`plans/reports/disk-metric-YYMMDD.md`). The precision / recall table per detector, parse success, latency per stage and per job, the ingest time at the caps and the fuzz-lite outcome will be **synthetic numbers on scenarios designed alongside the detectors**: they show that the detectors behave as specified, not real-world detection quality.
+**Quality metrics:** the harness is written (phase 13, `pnpm disk:metrics`); the run is pending Docker (`plans/reports/disk-metric-YYMMDD.md`). The precision / recall table per detector, parse success, latency per stage and per job, the ingest time at the caps and the fuzz-lite outcome will be **synthetic numbers on scenarios designed alongside the detectors**: they show that the detectors behave as specified, not real-world detection quality.
 
 ## Integrity: what "matched" means
 
@@ -346,16 +346,23 @@ No real disk image, no third-party test corpus (CFReDS, DFTT, Plaso test data, h
 
 | Engine | Coverage | Status |
 |---|---|---|
-| TSK, libewf | generated images at test time (FAT12 / 16 / 32, exFAT, ext2 / 3 / 4, NTFS, MBR and GPT, split raw, single and multi-segment E01, hard links to `SAM` and `etc/shadow`) compared against each image's `ground_truth.json` | engine tests written (phase 2, skipped without images); the generator is pending phase 4 |
-| NTFS directory trees | built without any mount (libntfs-3g as a library, else our own MFT writer, else the Windows-shaped tree on FAT32 plus a flat NTFS image; parent decision: no privileged container, RT26) | which route works is phase 4's outcome, not recorded yet |
-| Plaso | the generated Linux tree (syslog, auth.log, wtmp, bash history, cron, dpkg), and a hivex-built hive if the phase-4 spike succeeds | pending phases 3, 4 |
-| **Windows event logs, Prefetch and LNK** | **replay-tested only, not validated on a real image in CI**: no Linux writer exists, so they are covered by hand-written psort-shaped row fixtures and the test-only replay engine | pending phase 3 |
+| TSK, libewf | generated images at test time (FAT12 / 16 / 32, exFAT, ext2 / 3 / 4, NTFS, MBR and GPT, split raw, single and multi-segment E01, a stored-hash mismatch, hard links to `SAM` and `etc/shadow`) compared against each image's `ground_truth.json` | generator and engine tests written (phases 2, 4); not yet run in Docker |
+| FAT12 / 16 / 32, MBR / GPT, split raw | written byte by byte by our own Python (`fs_fat.py`, `layouts.py`): VFAT long names, a `0xE5` deleted entry, explicit times; deterministic | host-tested (an independent reader in `test_diskgen.py`); `fsck.fat -n` / `sfdisk` checks pending Docker |
+| ext2 / 3 / 4 | `mke2fs -d` of a staged tree, then `debugfs -w` sets owners and every time; the hard link `var/log/old.log` → `etc/shadow` is one inode with two names | pending Docker (`e2fsck -fn`) |
+| exFAT | `mkfs.exfat` only: an **empty** file system (exfatprogs has no userspace copy tool), the volume serial patched to a fixed value | pending Docker |
+| NTFS directory trees | built without any mount (parent decision: no privileged container, RT26): **route 1**, libntfs-3g as a library through ctypes in a child process (`ntfs_create` / `ntfs_link`), tried first; on any failure **route 3**, the Windows-shaped tree on FAT32 plus `ntfs_flat` (a flat NTFS image with the named streams). Route 2 (our own MFT writer) was not attempted. The route taken is in each `ground_truth.json` (`ntfs_route`) | whether route 1 works on trixie's libntfs-3g 2022.10.3 is pending Docker. Gaps on route 3: named streams and the second name of `SAM` exist only on NTFS (`ntfs_flat` has the streams but no directories and no hard link); no deleted MFT entry on any route (no userspace delete tool) |
+| Registry hives | our own base hive (`hives.py`), merged with `hivexregedit --merge` from `.reg` text built in code (a Run key, a service with its ImagePath in Temp, UserAssist); without hivex the base hive stays (`hive_outcome` per hive) | pending Docker |
+| E01 | `ewfacquirestream -f encase6` (single and multi-segment), case data fixed; `ewf_bad_hash` from our own section patcher | pending Docker (`ewfverify`); EWF acquiry dates are the one determinism exception besides NTFS times |
+| Plaso | the generated Linux tree (syslog, auth.log, wtmp written by our own `struct utmp` packer, bash history, cron, dpkg), and the hivex-merged hives when hivex is present | code written (phases 3, 4); pending the 3a spike's `plaso.lock` and Docker |
+| **Windows event logs, Prefetch and LNK** | **replay-tested only, not validated on a real image in CI**: no Linux writer exists, so they are covered by hand-written psort-shaped row fixtures and the test-only replay engine | replay engine and fixtures written (phase 3) |
+
+Hostile mode (`python -m samples.diskgen --hostile N --seed S`) writes 15 seeded mutations under `<out>/hostile/<nn>_<name>/` with a `mutation.json` each: a 64-level tree of 255-character names, a huge claimed MFT / inode table (sparse), an E01 claiming a media size above the cap, truncation, corrupted boot sectors / superblocks / MFT records, a directory cycle, a 300 000-entry directory, hostile names, overlapping and beyond-media partitions, a lying EWF segment count and refused-format magic. Phase 13's fuzz-lite runs them through the real stages.
 
 The first real Windows run therefore happens on the operator's own image: [DEPLOYMENT.md](DEPLOYMENT.md#disk-forensics-m9) has a manual smoke procedure (never automatic).
 
 ## Limitations
 
-- **Untested in Docker** (banner). The image cannot be built until phase 3a's `plaso.lock` exists.
+- **Untested in Docker** (banner). The image cannot be built until phase 3a's `plaso.lock` and the worker's `uv.lock` exist.
 - **Windows event logs, Prefetch and LNK: replay-tested only.** A real image may break the event normalizer or the event detectors.
 - **No VSS, no decryption, no APFS / HFS+ / LVM / ISO**; encrypted and unsupported partitions are reported, not opened.
 - **No carving**, no recovery of deleted content, no unallocated-space search, no slack space. Deleted names are listed only.
