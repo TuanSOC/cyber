@@ -1,7 +1,7 @@
 ---
 phase: 10
 title: "Reverse engineering frontend"
-status: pending
+status: code-complete (untested in Docker)
 priority: P2
 effort: "15h"
 dependencies: [1]
@@ -45,3 +45,20 @@ The Reverse Engineering module in the web app, built against the frozen phase-1 
 - **XSS through names / strings / code:** React text rendering only, the lint rule, and the e2e in phase 12 with the injection twins.
 - **Misleading code display:** the escapes make direction tricks visible; the viewer never interprets comments or markup.
 - **Large functions:** line virtualization and the server-side 64 KiB cap.
+
+## Notes (as built, untested in Docker)
+
+Code-only. With `apps/web/node_modules` temporarily junctioned to the main checkout's (read-only use, removed afterwards; vitest cache in a scratch dir): `vitest run lib/c-tokenizer.test.ts lib/reverse.test.ts components/reverse/reverse.test.tsx lib/ai.test.ts lib/analysis.test.ts` passes (180 tests), `eslint` on every touched file is clean, and a probe file proved `react/no-danger` fires on `components/reverse/**` and `app/(app)/o/[orgId]/reverse-engineering/**`. `tsc` shows only errors caused by the **stale generated contracts** (no `reverse` / `quick` / `explain_function` / `source_job_id` / `function` yet; the same errors phase 1's web code has); none in the hand-written RE types.
+
+- **Types:** the RE read models are hand-written in `lib/reverse.ts` to mirror `reverse_engineering/schemas.py` (the contracts are regenerated in Docker after the merge); `lib/use-re-job.ts` calls the frozen RE paths through a loosened `api` client (`reGet`). After `pnpm gen:contracts` they can become `Schemas[...]` aliases and typed `api.GET` calls.
+- **Files:** `lib/{c-tokenizer,reverse,use-re-job}.ts` (+ tests), `components/reverse/{code-viewer,function-view,functions-tab,symbols-tabs,re-overview,re-results}.tsx` + `reverse.test.tsx`, the three slots filled (`run-re-analysis`, `capability-functions-link`, `explain-function-button`), pages `app/(app)/o/[orgId]/reverse-engineering/{page,[jobId]/page}.tsx`.
+- **Tokenizer:** one pass, lossless, kinds keyword / type / identifier / number / string / char / comment / preprocessor / punctuation / whitespace / invalid; `L`/`u`/`U`/`u8` prefixes; unterminated literals stop at the line break; non-ASCII letters (`\p{L}`, one code point at a time) are identifiers and flagged as homoglyphs. Hidden set: C0 (except tab / LF), DEL, C1, U+00AD, U+061C, U+200B-200F, U+202A-202E, U+2060-2064, U+2066-2069, U+FEFF, U+E0000-E007F. 1 MiB of `"`, `\`, `/*`, `'`, `//`, `#`, RLO: linear (tested).
+- **Code viewer:** React spans only; escapes `⟨U+202E⟩` in a distinct style, homoglyph identifiers underlined, a banner counting both; "Copy" = escaped text, "Copy raw…" asks first (warning when hidden / look-alike characters are present); line-windowed (20 px rows, ≤ 5 000 lines shown, a note for the rest), per-line horizontal scroll, PageUp / PageDown / Home / End; `disasm` uses plain tokens; the 64 KiB case renders < 60 row elements.
+- **Pages:** list (status / profile filters, sample, engine, function count from the job summary, findings, duration); job page (facts card, stage strip with truncated flags and cgroup peak, tabs Overview / Functions / Imports / Strings / Findings / IOCs; Overview: program facts, source static job link, decompile counts, `capa_linked` / `capa_unlocated`, requested addresses, the synthetic-metrics note, "a newer RE job of this sample exists" link). URL state `?tab=`, `?fn=<entry>&tab=facts|code`, `?ref=`.
+- **Functions:** server-paginated infinite query (pages of 100, stops at the offset cap with a "narrow the filters" note), windowed rows (buttons, keyboard reachable), the API's filters (name, decompiled, has capability, suspicious import, IOC string, include library). **Sort is client-side over the loaded rows** (the frozen route has no `sort` parameter; the footer says so).
+- **Function view:** facts (signature, name source, flags, entry / RVA via `BigInt`, callers / callees as links, imports, strings, capabilities with ATT&CK chips, findings links), "why (not) decompiled" from the stored status and `priority_reason`, Code tab (`404 code_not_available` = an empty state). **Decompile this function**: confirmation, new `full` job with `decompile_addresses: [entry]`, disabled while an RE job of the sample is queued / running, navigates to the new job. **Explain function**: the `explain_function` run in a sheet (reuses the newest run; context preview; `409 policy_blocked` shows the M6 reason).
+- **Run dialog:** `full` / `quick`; quick is offered until the API answers `422 profile_unavailable` (no endpoint publishes `RE_QUICK_ENABLED`; deviation), then hidden; cost and "never executed" statements; `429 too_many_active_jobs` + `heavy_analysis_busy` = "another memory, disk or RE analysis is running; try again when it finishes" (no queue position).
+- **Malware Lab link:** no locations → "re-run static analysis to link capabilities"; `functions` count → "Functions (n)" toggle listing the linked functions (links to `?tab=facts&fn=`); nothing otherwise.
+- **Shared files touched (parent to confirm):** `lib/ai.ts` (`facts` / `code` deep links to `?fn=<0x entry>&tab=…` with a hex check; `explain_function` in the runs filter), `eslint.config.mjs` (`react/no-danger` on the RE paths).
+
+**Remains (Docker / after the merge):** `pnpm gen:contracts`, then `pnpm --filter web typecheck lint test`; the e2e (phase 12) over the seeded job.

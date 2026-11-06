@@ -80,6 +80,7 @@ export const LISTED_TASKS: AiTask[] = [
   "ioc_correlation",
   "attack_mapping",
   "incident_summary",
+  "explain_function",
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -355,8 +356,11 @@ const MALWARE_LINK_TABS = new Set(["overview", "findings", "signatures", "capabi
 const MEMORY_LINK_TABS = new Set(["overview", "findings", "iocs", "timeline"]);
 // M9: the disk job page (`/forensics/{job}`) has the same shared tabs.
 const FORENSICS_LINK_TABS = new Set(["overview", "findings", "iocs", "timeline"]);
-// M10: the RE job page (`/reverse-engineering/{job}`); phase 9 / 10 add the function links.
-const RE_LINK_TABS = new Set(["overview", "findings", "iocs", "functions", "imports", "strings"]);
+// M10: the RE job page (`/reverse-engineering/{job}`); `facts` / `code` open one function
+// (`?fn=<0x entry>&tab=…`, phase 9 deep links of `G` / `Q` citations).
+const RE_LINK_TABS = new Set(["overview", "findings", "iocs", "functions", "imports", "strings", "facts", "code"]);
+const RE_FUNCTION_TABS = new Set(["facts", "code"]);
+const HEX_ENTRY = /^0x[0-9a-f]{1,16}$/;
 const LINK_TABS: Record<JobRoute, ReadonlySet<string>> = {
   pcap: PCAP_LINK_TABS,
   malware: MALWARE_LINK_TABS,
@@ -391,6 +395,13 @@ export function deepLinkHref(orgId: string, link: AiDeepLink | null | undefined)
       const tab = link.tab ?? "overview";
       if (!tabs.has(tab)) return null;
       const params = new URLSearchParams();
+      if (link.route === "reverse-engineering" && RE_FUNCTION_TABS.has(tab)) {
+        // One function: the ref is its entry address (built by the API from the cited row).
+        if (!link.ref || !HEX_ENTRY.test(link.ref)) return null;
+        params.set("fn", link.ref);
+        params.set("tab", tab);
+        return `${base}/${link.route}/${enc(link.job_id)}?${params.toString()}`;
+      }
       if (tab !== "overview") params.set("tab", tab);
       if (link.ref) {
         if (link.ref.length > MAX_REF) return null;
