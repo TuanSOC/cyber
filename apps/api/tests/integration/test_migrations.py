@@ -1,7 +1,8 @@
-"""Migrations replay from scratch in one alembic run (M3 RT7); 0018, 0017, 0016, 0015, 0014, 0013, 0012,
-0011, 0010, 0009 and 0006 downgrade cleanly (0014 leaves its enum values and the inactive
-system user, 0016 its `memory` analyzer value, 0017 its `disk` value and keeps existing
-memory sensitivity rows as `source = memory`; 0018 its `reverse` value).
+"""Migrations replay from scratch in one alembic run (M3 RT7); 0019, 0018, 0017, 0016, 0015,
+0014, 0013, 0012, 0011, 0010, 0009 and 0006 downgrade cleanly (0014 leaves its enum values and
+the inactive system user, 0016 its `memory` analyzer value, 0017 its `disk` value and keeps existing
+memory sensitivity rows as `source = memory`; 0018 its `reverse` value; 0019 its auth event and
+revoked-reason values).
 
 `env.py` applies every pending revision in a single transaction; 0006 adds an enum value,
 which Postgres will not let that same transaction use. The session fixture already upgrades
@@ -193,6 +194,36 @@ OS_HINT_COLUMN = (
 )
 
 
+# 0019 (M11 identity and access).
+M11_TABLES = (
+    "user_sessions",
+    "user_mfa_factors",
+    "user_recovery_codes",
+    "user_action_tokens",
+    "email_outbox",
+    "org_invitations",
+    "invitation_index",
+    "org_security_policies",
+    "org_domains",
+    "org_idp_configs",
+    "sso_domain_index",
+    "user_identities",
+    "api_keys",
+)
+M11_REGCLASSES = "SELECT " + ", ".join(f"to_regclass('{t}')::text" for t in M11_TABLES)
+M11_USER_COLUMNS = (
+    "SELECT column_name FROM information_schema.columns WHERE table_name = 'users' "
+    "AND column_name IN ('kind', 'email_verified_at', 'password_changed_at') ORDER BY 1"
+)
+AUTH_EVENT_VALUES = "SELECT unnest(enum_range(NULL::auth_event_type))::text"
+REVOKED_VALUES = "SELECT unnest(enum_range(NULL::refresh_revoked_reason))::text"
+
+
+async def _m11_tables(engine: AsyncEngine) -> list[object]:
+    async with engine.connect() as conn:
+        return [t for t in (await conn.execute(text(M11_REGCLASSES))).one() if t is not None]
+
+
 # 0018 (M10 reverse engineering).
 M10_TABLES = (
     "re_programs",
@@ -267,6 +298,15 @@ def _exception_triggers(function: str) -> list[str]:
 async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine) -> None:
     await get_engine().dispose()
     try:
+        _alembic("downgrade", "0018")  # 0019 (M11) goes away; its enum values stay (RT12)
+        assert await _m11_tables(owner_engine) == []
+        assert await _scalars(owner_engine, M11_USER_COLUMNS) == []
+        assert {"mfa_success", "api_key_auth_failure"} <= set(
+            map(str, await _scalars(owner_engine, AUTH_EVENT_VALUES))
+        )
+        assert {"password_reset", "operator"} <= set(
+            map(str, await _scalars(owner_engine, REVOKED_VALUES))
+        )
         _alembic("downgrade", "0017")  # 0018 (M10) goes away; the `reverse` enum value stays
         assert await _m10_tables(owner_engine) == []
         assert await _scalars(owner_engine, M10_FUNCTIONS) == []
@@ -336,13 +376,14 @@ async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine)
         _alembic("downgrade", "base")
         assert await _scalars(owner_engine, "SELECT to_regtype('analyzer')::text") == [None]
 
-        _alembic("upgrade", "head")  # one run: 0001..0018 (the ALTER TYPEs autocommit)
+        _alembic("upgrade", "head")  # one run: 0001..0019 (the ALTER TYPEs autocommit)
     finally:
         _alembic("upgrade", "head")  # never leave the shared test database half-migrated
         await get_engine().dispose()
 
-    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0018"]
+    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0019"]
     assert await _m10_tables(owner_engine) == list(M10_TABLES)
+    assert await _m11_tables(owner_engine) == list(M11_TABLES)
     assert await _scalars(owner_engine, M10_FUNCTIONS) == [
         "analysis_jobs_re_source",
         "capability_locations_valid",

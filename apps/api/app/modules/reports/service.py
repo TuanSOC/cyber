@@ -53,7 +53,6 @@ from app.core import rate_limit
 from app.core.config import get_settings
 from app.core.errors import AppError, Conflict, Forbidden, NotFound
 from app.core.rbac import (
-    ROLE_PERMISSIONS,
     OrgContext,
     Permission,
     org_session,
@@ -234,11 +233,14 @@ async def _detail(session: AsyncSession, org_id: uuid.UUID, report: Report) -> R
 # --- rules --------------------------------------------------------------------------------------
 
 
-def _may(ctx_role: Any, permission: Permission) -> bool:
-    return permission in ROLE_PERMISSIONS[ctx_role]
+def _may(permissions: frozenset[Permission], permission: Permission) -> bool:
+    """M11 RT1: the caller's effective permissions (role, or role ∩ API-key scopes)."""
+    return permission in permissions
 
 
-def _tlp_rule(role: Any, report_tlp: str, case_tlp: str, acknowledged: bool) -> bool:
+def _tlp_rule(
+    permissions: frozenset[Permission], report_tlp: str, case_tlp: str, acknowledged: bool
+) -> bool:
     """True when the report TLP is a downgrade from the case TLP that is allowed (audited);
     `409 tlp_below_case` without the acknowledgement, `403` without `org.update`."""
     if not policy.is_downgrade(report_tlp, case_tlp):
@@ -249,7 +251,7 @@ def _tlp_rule(role: Any, report_tlp: str, case_tlp: str, acknowledged: bool) -> 
             code="tlp_below_case",
             extra={"case_tlp": case_tlp},
         )
-    if not _may(role, Permission.ORG_UPDATE):
+    if not _may(permissions, Permission.ORG_UPDATE):
         raise Forbidden(
             "Lowering the TLP below the case needs org.update", code="tlp_downgrade_forbidden"
         )
@@ -400,7 +402,7 @@ async def create_report(
         raise NotFound()
     _not_archived(case)
     tlp = body.tlp.value if body.tlp is not None else case.tlp
-    downgraded = _tlp_rule(ctx.role, tlp, case.tlp, body.acknowledge_tlp_downgrade)
+    downgraded = _tlp_rule(ctx.permissions, tlp, case.tlp, body.acknowledge_tlp_downgrade)
     report = Report(
         organization_id=ctx.org_id,
         investigation_id=case.id,
@@ -480,7 +482,9 @@ async def update_report(
         changed.append("title")
     downgraded = False
     if body.tlp is not None and body.tlp.value != report.tlp:
-        downgraded = _tlp_rule(ctx.role, body.tlp.value, case.tlp, body.acknowledge_tlp_downgrade)
+        downgraded = _tlp_rule(
+            ctx.permissions, body.tlp.value, case.tlp, body.acknowledge_tlp_downgrade
+        )
         report.tlp = body.tlp.value
         changed.append("tlp")
     if body.profile is not None and body.profile.value != report.profile:
@@ -674,7 +678,9 @@ async def _prepare(
             raise StaleDraft(extra={"revision": report.revision})
         case = await _case_of(session, ctx.org_id, report)
         _not_archived(case)
-        downgraded = _tlp_rule(ctx.role, report.tlp, case.tlp, body.acknowledge_tlp_downgrade)
+        downgraded = _tlp_rule(
+            ctx.permissions, report.tlp, case.tlp, body.acknowledge_tlp_downgrade
+        )
         _profile_rules(report, body)
         built, snapshot = await _build_redacted(session, ctx, report, case, now, body.change_note)
         revision, latest, case_tlp = report.revision, report.latest_version, case.tlp
@@ -845,7 +851,9 @@ async def _write(
         case = await _case_of(session, org_id, report)
         _not_archived(case)
         # RT7: the case TLP may have been raised while the snapshot was built and stored.
-        downgraded = _tlp_rule(wctx.role, report.tlp, case.tlp, body.acknowledge_tlp_downgrade)
+        downgraded = _tlp_rule(
+            wctx.permissions, report.tlp, case.tlp, body.acknowledge_tlp_downgrade
+        )
         counts = section_counts(prepared.snapshot)
         version = ReportVersion(
             organization_id=org_id,

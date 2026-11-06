@@ -357,3 +357,51 @@ async def test_app_role_cannot_mutate_re_rows(table: str, statement: str) -> Non
     with pytest.raises(DBAPIError, match="permission denied"):
         async with tenant_session(t.org_id, t.owner_id) as s:
             await s.execute(text(statement.format(t=table)))
+
+
+# M11 (0019): the app role never deletes identity rows (revocation, consumption and status are
+# column UPDATEs) and never rewrites an identity, owner or key column.
+M11_TABLES = [
+    "user_sessions",
+    "user_mfa_factors",
+    "user_recovery_codes",
+    "user_action_tokens",
+    "email_outbox",
+    "org_invitations",
+    "invitation_index",
+    "org_security_policies",
+    "org_domains",
+    "org_idp_configs",
+    "sso_domain_index",
+    "user_identities",
+    "api_keys",
+]
+M11_FROZEN_COLUMNS = [
+    ("user_sessions", "user_id"),
+    ("user_mfa_factors", "ct"),
+    ("user_recovery_codes", "code_hash"),
+    ("user_action_tokens", "token_hash"),
+    ("email_outbox", "status"),
+    ("org_invitations", "email"),
+    ("org_domains", "domain"),
+    ("user_identities", "subject"),
+    ("api_keys", "secret_hash"),
+    ("api_keys", "scopes"),
+]
+
+
+@pytest.mark.parametrize("table", M11_TABLES)
+async def test_app_role_cannot_delete_identity_rows(table: str) -> None:
+    t = await seed_tenant("alpha")
+    with pytest.raises(DBAPIError, match="permission denied"):
+        async with tenant_session(t.org_id, t.owner_id) as s:
+            await s.execute(text(f"DELETE FROM {table}"))
+
+
+@pytest.mark.parametrize(("table", "column"), M11_FROZEN_COLUMNS)
+async def test_app_role_cannot_rewrite_identity_columns(table: str, column: str) -> None:
+    """Column grants (RT9 for the outbox: only the mail role moves a row's status)."""
+    t = await seed_tenant("alpha")
+    with pytest.raises(DBAPIError, match="permission denied"):
+        async with tenant_session(t.org_id, t.owner_id) as s:
+            await s.execute(text(f"UPDATE {table} SET {column} = {column}"))

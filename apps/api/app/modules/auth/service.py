@@ -5,6 +5,7 @@ Commit rule: the failed-login event is committed (tenant_session block left) bef
 """
 
 import uuid
+from dataclasses import dataclass, field
 
 from sqlalchemy.exc import IntegrityError
 from starlette.requests import HTTPConnection
@@ -21,6 +22,8 @@ from app.modules.auth import sessions
 from app.modules.auth.events import record_auth_event
 from app.modules.auth.models import AuthEventType
 from app.modules.auth.schemas import LoginIn, MembershipOut, MeOut, RegisterIn
+from app.modules.identity.errors import RegistrationClosed
+from app.modules.invitations import service as invitations
 from app.modules.organizations import repository as orgs
 from app.modules.organizations.models import MemberRole, Organization, OrganizationMember
 from app.modules.organizations.service import slugify
@@ -30,6 +33,20 @@ from app.modules.users.schemas import UserOut
 
 LOGIN_FAILURE_WINDOW_S = 15 * 60
 EMAIL_UNIQUE_CONSTRAINT = "uq_users_email"
+
+
+@dataclass(frozen=True)
+class MfaChallenge:
+    """M11 phase 5: the password was right and the account has an active factor. The router
+    answers `202 MfaChallengeOut`, sets `cl_mfa` (= `challenge_id`) and `cl_csrf`; no session
+    exists yet. Phase 1 never returns one (no factor can be enrolled before phase 5)."""
+
+    challenge_id: str = field(repr=False)
+    csrf_token: str = field(repr=False)
+    methods: tuple[str, ...]
+
+
+LoginResult = tuple[MeOut, IssuedTokens] | MfaChallenge
 
 
 async def me(user_id: uuid.UUID) -> MeOut:
@@ -52,8 +69,21 @@ async def register(data: RegisterIn, request: HTTPConnection) -> tuple[MeOut, Is
     await rate_limit.hit(
         f"register:ip:{ip_key(request)}", settings.rate_limit_register_per_ip_per_10min, 600
     )
-    user_id, org_id = uuid.uuid4(), uuid.uuid4()
+    # M11: `invite_only` refuses an uninvited registration before any lookup (no bootstrap
+    # rule, RT12: the first owner comes from `identity:admin bootstrap-owner`).
+    if data.invitation_token is None and settings.registration_mode == "invite_only":
+        raise RegistrationClosed()
     password_hash = await hash_password_async(data.password)  # before opening a transaction
+    if data.invitation_token is not None:
+        # Phase 3: joins the invitation's org (no new org), email verified by the token.
+        invited_user, invited_tokens = await invitations.register_with_invitation(
+            data, password_hash, request
+        )
+        return await me(invited_user), invited_tokens
+    organization_name = data.organization_name
+    if organization_name is None:  # RegisterIn guarantees it without an invitation
+        raise RegistrationClosed()
+    user_id, org_id = uuid.uuid4(), uuid.uuid4()
     try:
         async with tenant_session(org_id, user_id) as session:
             session.add(
@@ -68,8 +98,8 @@ async def register(data: RegisterIn, request: HTTPConnection) -> tuple[MeOut, Is
             session.add(
                 Organization(
                     id=org_id,
-                    name=data.organization_name,
-                    slug=slugify(data.organization_name),
+                    name=organization_name,
+                    slug=slugify(organization_name),
                     created_by=user_id,
                 )
             )
@@ -84,7 +114,7 @@ async def register(data: RegisterIn, request: HTTPConnection) -> tuple[MeOut, Is
                 actor_id=user_id,
                 target_type="organization",
                 target_id=org_id,
-                details={"name": data.organization_name},
+                details={"name": organization_name},
                 request=request,
             )
             record_auth_event(
@@ -102,7 +132,9 @@ async def register(data: RegisterIn, request: HTTPConnection) -> tuple[MeOut, Is
     return await me(user_id), issued
 
 
-async def login(data: LoginIn, request: HTTPConnection) -> tuple[MeOut, IssuedTokens]:
+async def login(data: LoginIn, request: HTTPConnection) -> LoginResult:
+    """Password sign-in. M11: phase 5 returns an `MfaChallenge` instead of a session when the
+    account has an active factor (the router answers 202)."""
     settings = get_settings()
     ip = ip_key(request)
     email = str(data.email).lower()

@@ -5,7 +5,7 @@ from starlette.requests import HTTPConnection
 
 from app.core.errors import AppError, Conflict, Forbidden, NotFound
 from app.core.pagination import PageParams
-from app.core.rbac import ROLE_PERMISSIONS, OrgContext, Permission
+from app.core.rbac import OrgContext, Permission
 from app.modules.audit import service as audit
 from app.modules.investigations import policy
 from app.modules.investigations import repository as repo
@@ -132,8 +132,9 @@ async def create_investigation(
 
 
 def can(ctx: OrgContext, permission: Permission) -> bool:
-    """Whether the caller's role also holds `permission` (beyond the route's own)."""
-    return permission in ROLE_PERMISSIONS[ctx.role]
+    """Whether the caller also holds `permission` (beyond the route's own): the role's
+    permissions, or role ∩ scopes for an API key (M11 RT1)."""
+    return permission in ctx.permissions
 
 
 def _changes(inv: Investigation, data: InvestigationUpdate) -> dict[str, Any]:

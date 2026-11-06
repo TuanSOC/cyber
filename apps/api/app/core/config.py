@@ -1,6 +1,7 @@
 import base64
 import binascii
 import uuid
+from collections.abc import Mapping
 from functools import lru_cache
 from typing import Literal, Self
 from urllib.parse import urlsplit
@@ -20,7 +21,7 @@ from app.modules.ai.contracts import AiProviderName
 from app.modules.threat_intel.catalog import CATALOG, ProviderLimits
 from app.modules.threat_intel.providers.base import ProviderName
 
-ProcessRole = Literal["api", "ingest", "enrich", "analyst", "retention"]
+ProcessRole = Literal["api", "ingest", "enrich", "analyst", "retention", "mail", "egress_proxy"]
 
 # Settings the internet-facing enrich worker must never hold (M4 RT2): a session-forging
 # JWT secret, object-store credentials, the app Redis (token denylist, rate limits).
@@ -73,6 +74,33 @@ RETENTION_SYSTEM_USER_ID = uuid.UUID("00000000-0000-4000-8000-00000000a7e0")
 RETENTION_SYSTEM_USER_EMAIL = "retention@system.invalid"
 # The committed dev KMS key name (infra/minio/dev-kms-key): refused in prod by the env checks.
 DEV_KMS_KEY_NAME = "cyberlab-dev-kms"
+# Identity and access (M11). The mail worker (`PROCESS_ROLE=mail`) connects as its own DB role
+# (`cyberlab_mail`: SELECT / UPDATE on `email_outbox` only, RT9) and holds the broker URL, the
+# SMTP credentials and the mail seal private key, nothing else; every other role refuses that
+# DB role. The identity seal private key (TOTP secrets, IdP client secrets) is the api's only.
+MAIL_ROLE = "cyberlab_mail"
+MAIL_FORBIDDEN = (
+    "jwt_secret",
+    "redis_url",
+    "minio_endpoint",
+    "minio_access_key",
+    "minio_secret_key",
+    "ti_seal_private_keys_file",
+    "ai_seal_private_keys_file",
+    "ai_platform_key_file",
+    "report_signing_keys_file",
+    "metrics_token_file",
+    "identity_seal_private_keys_file",
+)
+# The committed dev-only seal pairs (infra/identity/dev-seal-private.json, kid dev-id-1, and
+# infra/mail/dev-seal-private.json, kid dev-mail-1): prod refuses their public keys.
+DEV_IDENTITY_SEAL_PUBLIC_KEYS = frozenset({"inKO/T3b2CUYRA4j18evHiWhy2zedKyFhkgF7EZbo2k="})
+DEV_MAIL_SEAL_PUBLIC_KEYS = frozenset({"lu5nrvsk6cgPJRP1y/AzM6dn9fZliHtNr6jx9ftoVyE="})
+# ENV=test may only deliver SMTP to the test Mailpit (no test can send real mail).
+TEST_SMTP_HOST = "mailpit-test"
+RegistrationMode = Literal["open", "invite_only"]
+MailTransport = Literal["smtp", "capture", "disabled"]
+SmtpTls = Literal["none", "starttls", "implicit"]
 AnthropicEffort = Literal["low", "medium", "high", "xhigh", "max"]
 RequiredSetting = Literal[
     "jwt_secret", "minio_endpoint", "minio_access_key", "minio_secret_key", "redis_url"
@@ -401,6 +429,65 @@ class Settings(BaseSettings):
     # it (refused for every role); the backup scripts read only its fingerprint.
     minio_kms_secret_key_file: str | None = None
 
+    # --- Identity and access (M11, frozen in phase 1) ---
+    # Registration (phase 3): `open` (dev) or `invite_only` (the prod default when unset).
+    # No bootstrap rule (RT12): the first owner comes from `identity:admin bootstrap-owner`.
+    registration_mode: RegistrationMode | None = None
+    invitation_ttl_days: int = Field(default=7, ge=1, le=14)
+    action_token_ttl_email_verify_s: int = Field(default=24 * 3600, ge=600, le=48 * 3600)
+    action_token_ttl_password_reset_s: int = Field(default=1800, ge=300, le=7200)
+    # Per-flow limits (phases 3-5, 8, 9): fixed windows in `core.rate_limit`.
+    rate_limit_invites_per_user_per_10min: int = Field(default=30, ge=1)
+    rate_limit_invites_per_user_per_day: int = Field(default=100, ge=1)
+    rate_limit_invites_per_org_per_day: int = Field(default=200, ge=1)
+    rate_limit_invite_resends_per_day: int = Field(default=3, ge=1)
+    rate_limit_invite_inspect_per_ip_per_10min: int = Field(default=20, ge=1)
+    rate_limit_email_verify_per_user_per_hour: int = Field(default=3, ge=1)
+    rate_limit_forgot_per_ip_per_10min: int = Field(default=5, ge=1)
+    rate_limit_forgot_per_email_per_hour: int = Field(default=3, ge=1)
+    rate_limit_sso_start_per_ip_per_10min: int = Field(default=30, ge=1)
+    rate_limit_api_key_failures_per_ip_per_min: int = Field(default=20, ge=1)
+    # Mail (phases 1-2). `capture` writes to the outbox row (test profile only); `disabled`
+    # fails rows with `mail_disabled` (RT19).
+    mail_transport: MailTransport = "disabled"
+    mail_from: str | None = None
+    mail_max_attempts: int = Field(default=5, ge=1, le=20)
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=25, ge=1, le=65_535)
+    smtp_username: str | None = None
+    smtp_password_file: str | None = None
+    smtp_tls: SmtpTls = "none"
+    smtp_timeout_s: int = Field(default=20, ge=1, le=120)
+    # kid -> base64 X25519 public key: the API seals link tokens for the mail worker.
+    mail_seal_public_keys: dict[str, str] = {}
+    mail_seal_active_kid: str | None = None
+    # JSON {kid: base64 private key}: the mail worker only.
+    mail_seal_private_keys_file: str | None = None
+    # TOTP secrets and IdP client secrets (`cyberlab.identity.v1`): the api seals AND opens
+    # them (decision 1); the private key file is the api role's only.
+    identity_seal_public_keys: dict[str, str] = {}
+    identity_seal_active_kid: str | None = None
+    identity_seal_private_keys_file: str | None = None
+    # Step-up and MFA (phases 1, 5). The age is compared in SQL against `now()` (RT21).
+    step_up_max_age_s: int = Field(default=600, ge=60, le=3_600)
+    mfa_challenge_ttl_s: int = Field(default=300, ge=60, le=900)
+    mfa_challenge_max_attempts: int = Field(default=5, ge=1, le=10)
+    mfa_user_failures_per_15min: int = Field(default=10, ge=1, le=100)
+    mfa_lock_threshold: int = Field(default=100, ge=10, le=1_000)
+    # SSO (phases 7-8): session cap, state lifetime, the egress proxy (no direct internet route
+    # from the api; unset only with ENV=test), the DoH resolver and the dev/test escape hatches.
+    sso_session_max_age_h: int = Field(default=12, ge=1, le=720)
+    sso_state_ttl_s: int = Field(default=600, ge=60, le=1_800)
+    identity_egress_proxy_url: str | None = None
+    identity_doh_url: str | None = None
+    identity_allow_private_issuer_hosts: list[str] = []
+    identity_extra_ca_file: str | None = None
+    identity_http_timeout_s: int = Field(default=10, ge=1, le=30)
+    identity_http_max_bytes: int = Field(default=256 * 1024, ge=4_096, le=1024**2)
+    # Platform API keys (phase 9).
+    api_keys_max_per_org: int = Field(default=20, ge=1, le=100)
+    api_key_max_days: int = Field(default=365, ge=1, le=365)
+
     def need(self, name: RequiredSetting) -> str:
         """A setting every role but enrich and analyst requires (validated at startup)."""
         value: str | None = getattr(self, name)
@@ -414,7 +501,12 @@ class Settings(BaseSettings):
             return CATALOG[provider].ceilings
         return ProviderLimits(override.per_minute, override.per_day, override.concurrency)
 
-    @field_validator("ti_seal_public_keys", "ai_seal_public_keys")
+    @field_validator(
+        "ti_seal_public_keys",
+        "ai_seal_public_keys",
+        "identity_seal_public_keys",
+        "mail_seal_public_keys",
+    )
     @classmethod
     def _public_keys(cls, value: dict[str, str], info: ValidationInfo) -> dict[str, str]:
         name = (info.field_name or "").upper()
@@ -446,6 +538,18 @@ class Settings(BaseSettings):
         "minio_purge_secret_key",
         "metrics_token_file",
         "minio_kms_secret_key_file",
+        "mail_from",
+        "smtp_host",
+        "smtp_username",
+        "smtp_password_file",
+        "mail_seal_active_kid",
+        "mail_seal_private_keys_file",
+        "identity_seal_active_kid",
+        "identity_seal_private_keys_file",
+        "identity_egress_proxy_url",
+        "identity_doh_url",
+        "identity_extra_ca_file",
+        "registration_mode",
         mode="before",
     )
     @classmethod
@@ -482,7 +586,13 @@ class Settings(BaseSettings):
             raise ValueError("PUBLIC_BASE_URL must be an origin such as https://cyberlab.example")
         return value.rstrip("/")
 
-    @field_validator("ti_seal_active_kid", "ai_seal_active_kid", "report_signing_active_kid")
+    @field_validator(
+        "ti_seal_active_kid",
+        "ai_seal_active_kid",
+        "report_signing_active_kid",
+        "identity_seal_active_kid",
+        "mail_seal_active_kid",
+    )
     @classmethod
     def _active_kid(cls, value: str | None, info: ValidationInfo) -> str | None:
         if value is not None and not KID_PATTERN.fullmatch(value):
@@ -525,10 +635,45 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _identity_role_guards(self) -> Self:
+        """M11: the mail worker's least-privilege env (RT9), the egress proxy (which reads
+        `EgressProxySettings` only), the identity and mail private keys confined to their
+        roles, the mail transport rules (no test can send real mail) and the registration
+        mode default (`invite_only` in prod)."""
+        role = self.process_role
+        if role == "egress_proxy":
+            raise ValueError("PROCESS_ROLE=egress_proxy reads EgressProxySettings only")
+        db_user = urlsplit(self.database_url).username
+        if role == "mail":
+            present = [name.upper() for name in MAIL_FORBIDDEN if getattr(self, name)]
+            if present:
+                raise ValueError(f"PROCESS_ROLE=mail must not receive: {', '.join(present)}")
+            if db_user != MAIL_ROLE:
+                raise ValueError(f"PROCESS_ROLE=mail needs DATABASE_URL of the {MAIL_ROLE} role")
+            if self.mail_transport == "smtp" and self.smtp_host is None:
+                raise ValueError("MAIL_TRANSPORT=smtp needs SMTP_HOST")
+        else:
+            if db_user == MAIL_ROLE:
+                raise ValueError(f"PROCESS_ROLE={role} must not use the {MAIL_ROLE} database role")
+            for name in ("mail_seal_private_keys_file", "smtp_password_file"):
+                if getattr(self, name) is not None:
+                    raise ValueError(f"{name.upper()} is only accepted with PROCESS_ROLE=mail")
+        if role != "api" and self.identity_seal_private_keys_file is not None:
+            raise ValueError(
+                "IDENTITY_SEAL_PRIVATE_KEYS_FILE is only accepted with PROCESS_ROLE=api"
+            )
+        test_smtp = self.env == "test" and self.mail_transport == "smtp"
+        if test_smtp and self.smtp_host != TEST_SMTP_HOST:
+            raise ValueError(f"ENV=test delivers SMTP to {TEST_SMTP_HOST} only")
+        if self.registration_mode is None:
+            self.registration_mode = "invite_only" if self.env == "prod" else "open"
+        return self
+
+    @model_validator(mode="after")
     def _role_guards(self) -> Self:
         role = self.process_role
-        if role == "retention":
-            return self  # `_ops_role_guards` (M7)
+        if role in ("retention", "mail", "egress_proxy"):
+            return self  # `_ops_role_guards` (M7), `_identity_role_guards` (M11)
         # The report signing private key: the api role only (M6). Ingest, enrich, analyst
         # and the report renderer never hold it.
         if role != "api" and self.report_signing_keys_file is not None:
@@ -710,7 +855,52 @@ class Settings(BaseSettings):
                 "AI_SEAL_PUBLIC_KEYS: the committed dev seal key is not allowed in prod"
             )
         self._report_prod_guards()
+        self._identity_prod_guards()
         return self
+
+    def _identity_prod_guards(self) -> None:
+        """M11: real seal keys for both new domains, no capture transport, no dev escape
+        hatches, invitation links on an https origin, the egress proxy, TLS to the relay."""
+        if self.mail_transport == "capture":
+            raise ValueError("MAIL_TRANSPORT=capture is not allowed in prod")
+        unsafe = [
+            name.upper()
+            for name in ("identity_allow_private_issuer_hosts", "identity_extra_ca_file")
+            if getattr(self, name)
+        ]
+        if unsafe:
+            raise ValueError(f"dev-only settings not allowed in prod: {', '.join(unsafe)}")
+        for domain, roles, dev_keys in (
+            ("identity", ("api",), _DEV_IDENTITY_KEY_BYTES),
+            ("mail", ("api", "mail"), _DEV_MAIL_KEY_BYTES),
+        ):
+            keys: dict[str, str] = getattr(self, f"{domain}_seal_public_keys")
+            kid: str | None = getattr(self, f"{domain}_seal_active_kid")
+            name = domain.upper()
+            if self.process_role in roles:
+                if not kid or kid not in keys:
+                    raise ValueError(
+                        f"{name}_SEAL_ACTIVE_KID must name a key in {name}_SEAL_PUBLIC_KEYS"
+                    )
+                if kid.lower().startswith("dev-"):
+                    raise ValueError(
+                        f"{name}_SEAL_ACTIVE_KID: dev- seal keys are not allowed in prod"
+                    )
+            if any(_key_bytes(v) in dev_keys for v in keys.values()):
+                raise ValueError(
+                    f"{name}_SEAL_PUBLIC_KEYS: the committed dev seal key is not allowed in prod"
+                )
+        if self.process_role == "api":
+            # Invitation and reset links (https outside localhost: `_report_prod_guards`).
+            if self.public_base_url is None:
+                raise ValueError("PUBLIC_BASE_URL is required for the api in prod")
+            if self.identity_egress_proxy_url is None:
+                raise ValueError("IDENTITY_EGRESS_PROXY_URL is required for the api in prod")
+        if self.process_role == "mail" and self.mail_transport == "smtp":
+            if self.mail_from is None:
+                raise ValueError("MAIL_FROM is required for the mail worker in prod")
+            if self.smtp_tls == "none":
+                raise ValueError("SMTP_TLS must be starttls or implicit in prod")
 
     def _report_prod_guards(self) -> None:
         """M6: prod signs with a real key pair, never the committed dev one, and prints
@@ -750,8 +940,70 @@ def _key_bytes(encoded: str) -> bytes:
 _DEV_KEY_BYTES = frozenset(_key_bytes(k) for k in DEV_SEAL_PUBLIC_KEYS)
 _DEV_AI_KEY_BYTES = frozenset(_key_bytes(k) for k in DEV_AI_SEAL_PUBLIC_KEYS)
 _DEV_REPORT_KEY_BYTES = frozenset(_key_bytes(k) for k in DEV_REPORT_SIGNING_PUBLIC_KEYS)
+_DEV_IDENTITY_KEY_BYTES = frozenset(_key_bytes(k) for k in DEV_IDENTITY_SEAL_PUBLIC_KEYS)
+_DEV_MAIL_KEY_BYTES = frozenset(_key_bytes(k) for k in DEV_MAIL_SEAL_PUBLIC_KEYS)
 
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()  # values come from the environment
+
+
+# Environment variables the egress proxy must never see: it holds no secret, database, Redis,
+# broker or object-store access at all (M11 phase 7 refuses to start when one is present).
+EGRESS_PROXY_FORBIDDEN_ENV = (
+    "DATABASE_URL",
+    "REDIS_URL",
+    "BROKER_URL",
+    "JWT_SECRET",
+    "MINIO_ENDPOINT",
+    "MINIO_ACCESS_KEY",
+    "MINIO_SECRET_KEY",
+    "TI_SEAL_PRIVATE_KEYS_FILE",
+    "AI_SEAL_PRIVATE_KEYS_FILE",
+    "AI_PLATFORM_KEY_FILE",
+    "REPORT_SIGNING_KEYS_FILE",
+    "METRICS_TOKEN_FILE",
+    "IDENTITY_SEAL_PRIVATE_KEYS_FILE",
+    "MAIL_SEAL_PRIVATE_KEYS_FILE",
+    "SMTP_PASSWORD_FILE",
+)
+
+
+class EgressProxySettings(BaseSettings):
+    """The egress proxy's own settings (M11, `PROCESS_ROLE=egress_proxy`; phase 7 runs it).
+
+    `Settings` refuses that role: the proxy reads only these `EGRESS_PROXY_*` caps.
+    `allow_private_hosts` is the dev/test-only allowlist of host names (e.g. `idp-mock`) the
+    proxy may connect to on a private address; refused in prod. The TI settings are never read
+    (RT25)."""
+
+    model_config = SettingsConfigDict(extra="ignore", env_prefix="EGRESS_PROXY_")
+
+    env: Literal["dev", "test", "prod"] = Field(default="dev", validation_alias="ENV")
+    listen_host: str = "0.0.0.0"  # noqa: S104 - bound on the internal `idp` network only
+    listen_port: int = Field(default=3128, ge=1, le=65_535)
+    allowed_ports: list[int] = [443]
+    allow_private_hosts: list[str] = []
+    connect_timeout_s: float = Field(default=10.0, gt=0, le=30)
+    idle_timeout_s: float = Field(default=30.0, gt=0, le=120)
+    total_timeout_s: float = Field(default=60.0, gt=0, le=300)
+    max_bytes_per_direction: int = Field(default=1024**2, ge=1_024, le=16 * 1024**2)
+    max_concurrent: int = Field(default=32, ge=1, le=256)
+    max_new_tunnels_per_min: int = Field(default=60, ge=1, le=10_000)
+
+    @model_validator(mode="after")
+    def _guards(self) -> Self:
+        if any(not 1 <= p <= 65_535 for p in self.allowed_ports):
+            raise ValueError("EGRESS_PROXY_ALLOWED_PORTS values must be 1..65535")
+        if self.env == "prod":
+            if self.allow_private_hosts:
+                raise ValueError("EGRESS_PROXY_ALLOW_PRIVATE_HOSTS is not allowed in prod")
+            if self.allowed_ports != [443]:
+                raise ValueError("EGRESS_PROXY_ALLOWED_PORTS must be [443] in prod")
+        return self
+
+
+def forbidden_env_present(environ: Mapping[str, str]) -> list[str]:
+    """The egress proxy's refusal list: secret-bearing variables present (non-empty)."""
+    return [name for name in EGRESS_PROXY_FORBIDDEN_ENV if environ.get(name, "").strip()]

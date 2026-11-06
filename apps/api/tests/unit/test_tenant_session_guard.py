@@ -27,13 +27,29 @@ ALLOWED = {
     "workers/retention.py": "org from the non-tenant retention_policy_index (system lookup)",
     # M7: the correlation indexer (phase 4): org from the non-tenant analysis_job_index.
     "modules/correlation/indexer.py": "org from the non-tenant analysis_job_index",
+    # M11 (phase 1 entries, filled by phases 3, 7 and 8).
+    "modules/invitations/service.py": "org from the non-tenant invitation_index (token hash)",
+    "modules/identity/sso/flow.py": (
+        "org from the server-side SSO state, itself set from the non-tenant sso_domain_index"
+    ),
+    "modules/invitations/admin_bootstrap.py": "operator script: the org it creates",
+    "modules/identity/admin_domains.py": "operator script: org from the CLI or verified domains",
 }
 # Allowlisted ahead of their implementation (M6 phase 1 stubs): exempt from the "still
 # needed" check until the owning phase lands. Phase 9 asserts this set is empty.
 # M7 phase 1: the retention worker (phase 3) and the correlation indexer (phase 4); phase 11
 # asserts the set is empty again.
+# M11 phase 1: the invitation flows (phase 3), the operator scripts (phases 3, 7) and the SSO
+# callback (phase 8); phase 13 asserts the set is empty again.
 PENDING_ALLOWED: frozenset[str] = frozenset(
-    {"workers/retention.py", "modules/correlation/indexer.py"}
+    {
+        "workers/retention.py",
+        "modules/correlation/indexer.py",
+        "modules/invitations/service.py",
+        "modules/identity/sso/flow.py",
+        "modules/invitations/admin_bootstrap.py",
+        "modules/identity/admin_domains.py",
+    }
 )
 
 

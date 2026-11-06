@@ -12,6 +12,7 @@ from app.modules.ai.models import (
     AiRunInput,
 )
 from app.modules.analysis.models import AnalysisJob, AnalysisJobIndex
+from app.modules.api_keys.models import ApiKey
 from app.modules.audit.models import AuditLog
 from app.modules.auth.models import AuthEvent, RefreshToken
 from app.modules.case_attack.models import CaseAttackMapping
@@ -25,12 +26,25 @@ from app.modules.disk_forensics.models import (
     DiskPartition,
 )
 from app.modules.evidence.models import Evidence, EvidenceCustodyEvent, EvidenceHash
+from app.modules.identity.models import (
+    ActionToken,
+    MfaFactor,
+    OrgDomain,
+    OrgIdpConfig,
+    OrgSecurityPolicy,
+    RecoveryCode,
+    SsoDomainIndex,
+    UserIdentity,
+    UserSession,
+)
+from app.modules.invitations.models import InvitationIndex, OrgInvitation
 from app.modules.investigations.models import (
     EvidenceSharePolicy,
     Investigation,
     InvestigationStatusEvent,
 )
 from app.modules.ioc_collections.models import IocCollection, IocCollectionItem
+from app.modules.mail.models import EmailOutbox
 from app.modules.memory_analysis.models import (
     MemoryArtifact,
     MemoryConnection,
@@ -97,6 +111,20 @@ from app.modules.threat_intel.models import (
 from app.modules.users.models import User
 
 __all__ = [
+    # M11 (migration 0019)
+    "ActionToken",
+    "ApiKey",
+    "EmailOutbox",
+    "InvitationIndex",
+    "MfaFactor",
+    "OrgDomain",
+    "OrgIdpConfig",
+    "OrgInvitation",
+    "OrgSecurityPolicy",
+    "RecoveryCode",
+    "SsoDomainIndex",
+    "UserIdentity",
+    "UserSession",
     "AnalysisJobSegment",
     "DiskEvent",
     "DiskExport",

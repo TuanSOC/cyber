@@ -52,4 +52,5 @@ def test_matrix_matches_spec() -> None:
     assert {p.value for p in ROLE_PERMISSIONS[MemberRole.VIEWER]} == read
     assert {p.value for p in ROLE_PERMISSIONS[MemberRole.ANALYST]} == analyst
     assert {p.value for p in ROLE_PERMISSIONS[MemberRole.ADMIN]} == admin
-    assert ROLE_PERMISSIONS[MemberRole.OWNER] == ROLE_PERMISSIONS[MemberRole.ADMIN]
+    # M11: `security.manage` (SSO, domains, the security policy, API keys) is the owners' only.
+    assert {p.value for p in ROLE_PERMISSIONS[MemberRole.OWNER]} == admin | {"security.manage"}

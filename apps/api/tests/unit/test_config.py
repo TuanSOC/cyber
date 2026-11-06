@@ -29,6 +29,9 @@ PUBLIC = base64.b64encode(bytes(range(32))).decode()
 # The api-test container sets the dev TI values (mock on, dev- kid): prod cases override them.
 AI_PUBLIC = base64.b64encode(bytes(range(32, 64))).decode()
 REPORT_PUBLIC = base64.b64encode(bytes(range(64, 96))).decode()
+# M11: test-only public keys of the identity and mail seal domains (never real keys).
+IDENTITY_PUBLIC = base64.b64encode(bytes(range(96, 128))).decode()
+MAIL_PUBLIC = base64.b64encode(bytes(range(128, 160))).decode()
 PROD_TI: dict[str, Any] = {
     "ti_mock_enabled": False,
     "ti_seal_active_kid": "prod-1",
@@ -41,6 +44,14 @@ PROD_TI: dict[str, Any] = {
     "report_signing_active_kid": "prod-report-1",
     "report_signing_public_keys": {"prod-report-1": REPORT_PUBLIC},
     "report_signing_keys_file": "/run/secrets/report_signing_private",
+    # M11: the prod api seals with real identity and mail keys, prints links on its public
+    # origin and reaches IdPs through the egress proxy only.
+    "identity_seal_active_kid": "prod-id-1",
+    "identity_seal_public_keys": {"prod-id-1": IDENTITY_PUBLIC},
+    "mail_seal_active_kid": "prod-mail-1",
+    "mail_seal_public_keys": {"prod-mail-1": MAIL_PUBLIC},
+    "public_base_url": "https://cyberlab.example",
+    "identity_egress_proxy_url": "http://egress-proxy:3128",
 }
 # The enrich worker gets none of the role-gated settings (explicit None beats the test env).
 ENRICH = {
@@ -67,6 +78,18 @@ def _no_env_seal_keys(monkeypatch: pytest.MonkeyPatch) -> None:
         "REPORT_SIGNING_ACTIVE_KID",
         "REPORT_SIGNING_KEYS_FILE",
         "PUBLIC_BASE_URL",
+        # M11 (the api-test env sets the dev identity / mail values and the test transport).
+        "IDENTITY_SEAL_PUBLIC_KEYS",
+        "IDENTITY_SEAL_ACTIVE_KID",
+        "IDENTITY_SEAL_PRIVATE_KEYS_FILE",
+        "MAIL_SEAL_PUBLIC_KEYS",
+        "MAIL_SEAL_ACTIVE_KID",
+        "MAIL_TRANSPORT",
+        "SMTP_HOST",
+        "IDENTITY_EGRESS_PROXY_URL",
+        "IDENTITY_ALLOW_PRIVATE_ISSUER_HOSTS",
+        "IDENTITY_EXTRA_CA_FILE",
+        "REGISTRATION_MODE",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -536,11 +559,12 @@ def test_public_base_url_must_be_an_origin(url: str) -> None:
 def test_prod_public_base_url_needs_https_outside_localhost() -> None:
     with pytest.raises(ValidationError, match="https in prod"):
         Settings(
-            **BASE, **PROD_TI, public_base_url="http://cyberlab.example", env="prod",
+            **BASE, **{**PROD_TI, "public_base_url": "http://cyberlab.example"}, env="prod",
             cookie_secure=True,
         )  # fmt: skip
     for ok in ("https://cyberlab.example/", "http://localhost:8080"):
-        settings = Settings(**BASE, **PROD_TI, public_base_url=ok, env="prod", cookie_secure=True)
+        values = {**PROD_TI, "public_base_url": ok}
+        settings = Settings(**BASE, **values, env="prod", cookie_secure=True)
         assert settings.public_base_url == ok.rstrip("/")
 
 

@@ -2,23 +2,27 @@
 
 Commit rule: revocations and their auth events are committed (tenant_session block left)
 before any error is raised.
+
+M11: every refresh family has a `user_sessions` row (`identity.sessions_store`, the access
+token's `sid`). `start_session` creates it with the family; refresh copies `amr` / `sso` from
+it, caps the new refresh token at its expiry and touches `last_seen_at`; a family without a
+live row answers `invalid_refresh` (after the 0019 backfill only forged or expired families,
+RT7); logout, reuse and deactivation revoke the row with the family.
 """
 
-import logging
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
-from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import HTTPConnection
 
 from app.core.client_ip import client_ip, user_agent
 from app.core.clients import get_redis
 from app.core.cookies import IssuedTokens
-from app.core.deps import DENYLIST_PREFIX, FAMILY_DENYLIST_PREFIX
+from app.core.deps import DENYLIST_PREFIX
 from app.core.errors import Unauthorized
 from app.core.security import (
-    ACCESS_TOKEN_TTL,
     create_access_token,
     decode_access_token,
     hash_token,
@@ -29,27 +33,64 @@ from app.core.tenancy import tenant_session
 from app.modules.auth import repository as tokens
 from app.modules.auth.events import record_auth_event
 from app.modules.auth.models import AuthEventType, RevokedReason
+from app.modules.identity import sessions_store
+from app.modules.identity.models import SessionMethod
 from app.modules.users import repository as users
 
-log = logging.getLogger(__name__)
+# Re-exported: callers since M1 import it from here.
+deny_family_access = sessions_store.deny_family_access
 
 # A token rotated this recently by another tab is "stale", not stolen.
 REFRESH_GRACE = timedelta(seconds=10)
 
 
-def issue_tokens(user_id: uuid.UUID, family_id: uuid.UUID, refresh_token: str) -> IssuedTokens:
-    access, _ = create_access_token(user_id, family_id)
+def issue_tokens(
+    user_id: uuid.UUID,
+    family_id: uuid.UUID,
+    refresh_token: str,
+    *,
+    amr: Sequence[str] = ("pwd",),
+    sso_org_id: uuid.UUID | None = None,
+) -> IssuedTokens:
+    access, _ = create_access_token(user_id, family_id, amr=tuple(amr), sso_org_id=sso_org_id)
     return IssuedTokens(
         access_token=access, refresh_token=refresh_token, csrf_token=new_csrf_token()
     )
 
 
+def reissue_access(
+    user_id: uuid.UUID,
+    family_id: uuid.UUID,
+    *,
+    amr: Sequence[str],
+    sso_org_id: uuid.UUID | None = None,
+) -> str:
+    """A new access token of the same session (after `sessions_store.add_amr`); set it with
+    `core.cookies.set_access_cookie`. The refresh token is unchanged."""
+    access, _ = create_access_token(user_id, family_id, amr=tuple(amr), sso_org_id=sso_org_id)
+    return access
+
+
 async def start_session(
-    session: AsyncSession, user_id: uuid.UUID, request: HTTPConnection
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    request: HTTPConnection,
+    *,
+    method: SessionMethod | str = SessionMethod.PASSWORD,
+    amr: Sequence[str] = ("pwd",),
+    sso_org_id: uuid.UUID | None = None,
 ) -> IssuedTokens:
-    """Create a new refresh family inside the caller's transaction."""
+    """Create a new refresh family and its `user_sessions` row inside the caller's
+    transaction."""
     refresh_token, refresh_hash = new_opaque_token()
-    family_id = uuid.uuid4()
+    family_id = await sessions_store.create(
+        session,
+        user_id,
+        method=method,
+        amr=amr,
+        sso_org_id=sso_org_id,
+        request=request,
+    )
     await tokens.create(
         session,
         user_id=user_id,
@@ -57,19 +98,9 @@ async def start_session(
         token_hash=refresh_hash,
         ip=client_ip(request),
         user_agent=user_agent(request),
+        not_after=datetime.now(UTC) + sessions_store.session_cap(method),
     )
-    return issue_tokens(user_id, family_id, refresh_token)
-
-
-async def deny_family_access(family_id: uuid.UUID) -> None:
-    """Kill access tokens of a revoked family for the rest of their lifetime."""
-    try:
-        await get_redis().set(
-            FAMILY_DENYLIST_PREFIX + str(family_id), "1", ex=int(ACCESS_TOKEN_TTL.total_seconds())
-        )
-    except RedisError:
-        # Refresh tokens are already revoked in the DB; access tokens expire within 15 min.
-        log.error("could not denylist access tokens of family %s", family_id)
+    return issue_tokens(user_id, family_id, refresh_token, amr=amr, sso_org_id=sso_org_id)
 
 
 async def refresh(refresh_token: str | None, request: HTTPConnection) -> IssuedTokens:
@@ -81,14 +112,18 @@ async def refresh(refresh_token: str | None, request: HTTPConnection) -> IssuedT
     outcome = "invalid"
     revoked_family: uuid.UUID | None = None
     rotated: tokens.Rotated | None = None
+    amr: list[str] = []
+    sso_org_id: uuid.UUID | None = None
 
     async with tenant_session(None, None) as session:
         rotated = await tokens.rotate(session, token_hash, successor_id)
         if rotated is not None:
-            if await users.get_active(session, rotated.user_id) is None:
-                # Deactivated user: no successor will exist, so drop the pointer to it.
+            row = await sessions_store.get_live(session, rotated.family_id)
+            if await users.get_active(session, rotated.user_id) is None or row is None:
+                # Deactivated user, or no live session row (RT7): no successor will exist,
+                # so drop the pointer to it and end the family.
                 await tokens.abandon_rotation(session, token_hash, RevokedReason.LOGOUT)
-                await tokens.revoke_family(session, rotated.family_id, RevokedReason.LOGOUT)
+                await sessions_store.revoke_in(session, rotated.family_id, RevokedReason.LOGOUT)
                 revoked_family = rotated.family_id
             else:
                 await tokens.create(
@@ -100,7 +135,10 @@ async def refresh(refresh_token: str | None, request: HTTPConnection) -> IssuedT
                     ip=client_ip(request),
                     user_agent=user_agent(request),
                     family_started_at=await tokens.family_started_at(session, rotated.family_id),
+                    not_after=row.expires_at,
                 )
+                await sessions_store.touch(session, rotated.family_id)
+                amr, sso_org_id = list(row.amr), row.sso_org_id
                 outcome = "ok"
         else:
             existing = await tokens.get_by_hash(session, token_hash)
@@ -113,7 +151,9 @@ async def refresh(refresh_token: str | None, request: HTTPConnection) -> IssuedT
                     outcome = "stale"
                 else:
                     outcome = "reused"
-                    await tokens.revoke_family(session, existing.family_id, RevokedReason.REUSE)
+                    await sessions_store.revoke_in(
+                        session, existing.family_id, RevokedReason.REUSE
+                    )
                     revoked_family = existing.family_id
                     record_auth_event(
                         session,
@@ -133,7 +173,9 @@ async def refresh(refresh_token: str | None, request: HTTPConnection) -> IssuedT
         raise Unauthorized("Session revoked", code="refresh_reused", clear_auth_cookies=True)
     if outcome != "ok" or rotated is None:
         raise Unauthorized("Session expired", code="invalid_refresh", clear_auth_cookies=True)
-    return issue_tokens(rotated.user_id, rotated.family_id, new_refresh)
+    return issue_tokens(
+        rotated.user_id, rotated.family_id, new_refresh, amr=amr, sso_org_id=sso_org_id
+    )
 
 
 async def logout(
@@ -158,7 +200,7 @@ async def logout(
                 family_ids.add(existing.family_id)
                 user_id = user_id or existing.user_id
             for family_id in family_ids:
-                await tokens.revoke_family(session, family_id, RevokedReason.LOGOUT)
+                await sessions_store.revoke_in(session, family_id, RevokedReason.LOGOUT)
             if user_id is not None:
                 record_auth_event(session, AuthEventType.LOGOUT, request=request, user_id=user_id)
     for family_id in family_ids:

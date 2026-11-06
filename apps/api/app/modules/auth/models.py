@@ -14,6 +14,11 @@ class RevokedReason(enum.StrEnum):
     ROTATED = "rotated"
     LOGOUT = "logout"
     REUSE = "reuse"
+    # M11 (0019, RT18): bulk revocations of `identity.sessions_store.revoke_all`.
+    PASSWORD_RESET = "password_reset"
+    USER_REVOKED = "user_revoked"
+    MFA_CHANGE = "mfa_change"
+    OPERATOR = "operator"
 
 
 class AuthEventType(enum.StrEnum):
@@ -22,6 +27,28 @@ class AuthEventType(enum.StrEnum):
     LOGIN_FAILURE = "login_failure"
     LOGOUT = "logout"
     REFRESH_REUSE_DETECTED = "refresh_reuse_detected"
+    # M11 (0019, frozen): usable after the migration committed (autocommit block).
+    MFA_CHALLENGE = "mfa_challenge"
+    MFA_SUCCESS = "mfa_success"
+    MFA_FAILURE = "mfa_failure"
+    MFA_LOCKED = "mfa_locked"
+    MFA_ENABLED = "mfa_enabled"
+    MFA_DISABLED = "mfa_disabled"
+    MFA_RESET_BY_OPERATOR = "mfa_reset_by_operator"
+    RECOVERY_CODE_USED = "recovery_code_used"
+    RECOVERY_CODES_REGENERATED = "recovery_codes_regenerated"
+    STEP_UP_SUCCESS = "step_up_success"
+    STEP_UP_FAILURE = "step_up_failure"
+    PASSWORD_RESET_REQUESTED = "password_reset_requested"
+    PASSWORD_RESET = "password_reset"
+    PASSWORD_CHANGED = "password_changed"
+    EMAIL_VERIFIED = "email_verified"
+    SESSION_REVOKED = "session_revoked"
+    SSO_LOGIN = "sso_login"
+    SSO_FAILURE = "sso_failure"
+    SSO_LINKED = "sso_linked"
+    INVITATION_ACCEPTED = "invitation_accepted"
+    API_KEY_AUTH_FAILURE = "api_key_auth_failure"
 
 
 class RefreshToken(UUIDPk, CreatedAt, Base):

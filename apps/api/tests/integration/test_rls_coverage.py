@@ -88,6 +88,15 @@ async def test_every_tenant_table_has_forced_rls(owner_engine: AsyncEngine) -> N
         "re_string_refs",
         "re_decompilations",
         "re_function_capabilities",
+        # M11 (migration 0019)
+        "org_invitations",
+        "invitation_index",
+        "org_security_policies",
+        "org_domains",
+        "org_idp_configs",
+        "sso_domain_index",
+        "user_identities",
+        "api_keys",
     }
     unprotected = [r.relname for r in rows if not (r.relrowsecurity and r.relforcerowsecurity)]
     assert unprotected == []
@@ -186,6 +195,42 @@ async def test_system_visible_retention_policy_index_holds_no_tenant_data(
     async with owner_engine.connect() as conn:
         columns = set((await conn.execute(query)).scalars())
     assert columns == {"organization_id", "updated_at"}
+
+
+@pytest.mark.parametrize(
+    ("table", "columns"),
+    [
+        ("invitation_index", {"invitation_id", "organization_id", "token_hash", "expires_at"}),
+        (
+            "sso_domain_index",
+            {"domain", "organization_id", "idp_config_id", "enabled", "updated_at"},
+        ),
+    ],
+)
+async def test_m11_system_lookups_hold_no_tenant_data(
+    owner_engine: AsyncEngine, table: str, columns: set[str]
+) -> None:
+    """M11: the invitation and SSO-domain lookups are ids, a token hash or a domain, and
+    scheduling only: never the invited email, a role, an issuer or a secret."""
+    query = text(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = 'public' AND table_name = :t"
+    )
+    async with owner_engine.connect() as conn:
+        found = set((await conn.execute(query, {"t": table})).scalars())
+    assert found == columns
+
+
+async def test_the_mail_outbox_holds_no_tenant_column(owner_engine: AsyncEngine) -> None:
+    """M11 RT9: `email_outbox` is a system table (no RLS) read by the mail worker's own DB
+    role; its org column is audit context named so the RLS rule above does not apply."""
+    query = text(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = 'public' AND table_name = 'email_outbox' "
+        "AND column_name = 'organization_id'"
+    )
+    async with owner_engine.connect() as conn:
+        assert (await conn.execute(query)).scalars().all() == []
 
 
 async def test_job_outcomes_is_a_system_table_without_tenant_data(

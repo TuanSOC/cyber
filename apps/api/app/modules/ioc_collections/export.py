@@ -28,7 +28,7 @@ from starlette.requests import HTTPConnection
 
 from app.core.csv_safe import write_csv
 from app.core.errors import Forbidden, NotFound
-from app.core.rbac import ROLE_PERMISSIONS, OrgContext, Permission
+from app.core.rbac import OrgContext, Permission
 from app.modules.audit import service as audit
 from app.modules.investigations.schemas import case_ref
 from app.modules.ioc_collections import service, stix
@@ -71,7 +71,7 @@ async def export_collection(
     request: HTTPConnection,
 ) -> Export:
     row = await service.get_row(ctx.session, ctx.org_id, collection_id)
-    if not defang and Permission.EVIDENCE_WRITE not in ROLE_PERMISSIONS[ctx.role]:
+    if not defang and Permission.EVIDENCE_WRITE not in ctx.permissions:
         audit.record(
             ctx.session,
             action="ioc_collection.export_refused",

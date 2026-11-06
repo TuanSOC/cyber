@@ -24,7 +24,7 @@ from sqlalchemy.orm import aliased
 from starlette.requests import HTTPConnection
 
 from app.core.errors import Conflict, Forbidden, NotFound
-from app.core.rbac import ROLE_PERMISSIONS, OrgContext, Permission
+from app.core.rbac import OrgContext, Permission
 from app.modules.audit import service as audit
 from app.modules.investigations.models import Investigation, InvestigationStatus
 from app.modules.notes import paging, refs
@@ -134,7 +134,7 @@ async def _locked_note(ctx: OrgContext, note_id: uuid.UUID) -> AnalystNote:
 
 
 def _may_change(ctx: OrgContext, note: AnalystNote) -> None:
-    if note.created_by != ctx.user.id and Permission.ORG_UPDATE not in ROLE_PERMISSIONS[ctx.role]:
+    if note.created_by != ctx.user.id and Permission.ORG_UPDATE not in ctx.permissions:
         raise Forbidden("Only the author or an org admin may change this note")
 
 
@@ -219,7 +219,7 @@ async def create_note(
 
 async def get_note(ctx: OrgContext, note_id: uuid.UUID) -> NoteDetail:
     row = await _one(ctx.session, ctx.org_id, note_id)
-    if row.note.deleted_at is not None and Permission.ORG_UPDATE not in ROLE_PERMISSIONS[ctx.role]:
+    if row.note.deleted_at is not None and Permission.ORG_UPDATE not in ctx.permissions:
         # A deleted note's history is for org admins only; the tombstone stays visible.
         return NoteDetail(note=_out(row), versions=[])
     v = AnalystNoteVersion

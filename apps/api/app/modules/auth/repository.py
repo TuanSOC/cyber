@@ -37,12 +37,16 @@ async def create(
     user_agent: str | None,
     token_id: uuid.UUID | None = None,
     family_started_at: datetime | None = None,
+    not_after: datetime | None = None,
 ) -> RefreshToken:
     now = datetime.now(UTC)
     expires_at = now + REFRESH_TOKEN_TTL
     if family_started_at is not None:
         # Rotation extends the sliding window, never beyond the absolute session lifetime.
         expires_at = min(expires_at, family_started_at + SESSION_MAX_AGE)
+    if not_after is not None:
+        # M11: never beyond the session row's own expiry (an SSO session's 12 h cap).
+        expires_at = min(expires_at, not_after)
     token = RefreshToken(
         id=token_id or uuid.uuid4(),
         user_id=user_id,

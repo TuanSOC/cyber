@@ -85,6 +85,15 @@ async def add_member(org_id: uuid.UUID, user_id: uuid.UUID, role: MemberRole) ->
         session.add(OrganizationMember(organization_id=org_id, user_id=user_id, role=role))
 
 
+async def add_membership(
+    org_id: uuid.UUID, user_id: uuid.UUID, role: MemberRole = MemberRole.VIEWER
+) -> None:
+    """M11: the membership of an existing user, inserted directly (FROZEN name). Replaces the
+    direct-add route (`POST /orgs/{org}/members`), which phase 3 turns into `410
+    members_direct_add_removed`; members join through invitations in the product."""
+    await add_member(org_id, user_id, role)
+
+
 async def login(email: str, password: str = PASSWORD, ip: str = "10.0.0.1") -> AsyncClient:
     client = new_client(ip)
     response = await client.post("/api/v1/auth/login", json={"email": email, "password": password})

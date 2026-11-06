@@ -26,6 +26,9 @@ dependencies = [
     # decision). anthropic uses the separate httpx2 package; google-genai uses httpx.
     "anthropic>=2.5,<3",
     "google-genai>=2.34,<3",
+    # Identity (M11): the OIDC client (phase 8; ID tokens are validated with PyJWT). Needs
+    # `uv lock` (network) before the image rebuild; UV_FROZEN images ignore it until then.
+    "authlib>=1.6,<2",
 ]
 
 [tool.uv.sources]
@@ -40,6 +43,8 @@ dev = [
     "mypy>=1.13",
     "hypothesis>=6.100",
     "pyyaml>=6.0",
+    # M11 phase 5: test-only cross-check of the own RFC 6238 verifier.
+    "pyotp>=2.9",
 ]
 
 [tool.pytest.ini_options]

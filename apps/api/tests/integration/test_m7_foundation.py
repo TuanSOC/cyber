@@ -29,6 +29,7 @@ from app.workers import tasks as ingest_tasks
 from app.workers.celery_app import celery_app
 from app.workers.retention_app import celery_app as retention_celery
 from tests.factories import Registered, csrf, new_client, register
+from tests.identity_helpers import NON_ORG_STUB_PATHS
 from tests.integration.seed import seed_tenant
 from tests.ops_helpers import (
     SHARED_IOCS,
@@ -39,9 +40,12 @@ from tests.ops_helpers import (
 )
 from tests.report_helpers import purge_reports_test_bucket, reports_test_bucket
 from tests.security import (
+    idor_cases_api_keys,
     idor_cases_correlation,
     idor_cases_disk,
     idor_cases_disk_exports,
+    idor_cases_identity,
+    idor_cases_invitations,
     idor_cases_memory,
     idor_cases_memory_sensitivity,
     idor_cases_ops,
@@ -62,6 +66,12 @@ M8_PENDING_PATHS = frozenset(
     for _, path in module.PENDING_ROUTES
 ) | frozenset(  # M10 phase 1: the RE read API and capability functions (phase 8)
     path for _, path in idor_cases_reverse.PENDING_ROUTES
+) | frozenset(  # M11 phase 1: the org identity routes (phases 3, 6, 7, 9) ...
+    path
+    for module in (idor_cases_invitations, idor_cases_identity, idor_cases_api_keys)
+    for _, path in module.PENDING_ROUTES
+) | frozenset(  # ... and the non-org identity stubs (phases 3, 4, 5, 8)
+    f"/api/v1{path}" for path in NON_ORG_STUB_PATHS
 )
 ORG = "/api/v1/orgs/{org_id}"
 

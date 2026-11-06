@@ -11,14 +11,18 @@ export type Permission =
   | "evidence.read"
   | "evidence.write"
   | "audit.read"
-  | "integrations.manage";
+  | "integrations.manage"
+  // M11: SSO, domains, the security policy and platform API keys (owners only).
+  | "security.manage";
 
 const READ: Permission[] = ["org.read", "members.read", "investigation.read", "evidence.read"];
 const ANALYST: Permission[] = [...READ, "investigation.write", "evidence.write"];
 const ADMIN: Permission[] = [...ANALYST, "org.update", "members.manage", "audit.read", "integrations.manage"];
 
+const OWNER: Permission[] = [...ADMIN, "security.manage"];
+
 const ROLE_PERMISSIONS: Record<MemberRole, ReadonlySet<Permission>> = {
-  owner: new Set(ADMIN),
+  owner: new Set(OWNER),
   admin: new Set(ADMIN),
   analyst: new Set(ANALYST),
   viewer: new Set(READ),

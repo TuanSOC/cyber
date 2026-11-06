@@ -17,6 +17,7 @@ from cyberlab_jobs import (
 )
 
 from app.core.config import get_settings
+from app.modules.mail.outbox import MAIL_QUEUE, MAIL_SWEEP
 
 _settings = get_settings()
 queues = Queues(_settings.queue_prefix)
@@ -89,6 +90,14 @@ celery_app.conf.update(
             "schedule": crontab(hour="2", minute="30"),
             "kwargs": {"message": {}},
             "options": {"queue": queues.retention, "expires": 23 * 3600},
+        },
+        # M11: the mail worker's sweep (phase 2 implements it): re-publishes due `pending`
+        # outbox rows and fails rows after MAIL_MAX_ATTEMPTS. Expires before the next tick.
+        "mail-sweep": {
+            "task": MAIL_SWEEP,
+            "schedule": 60.0,
+            "kwargs": {"message": {}},
+            "options": {"queue": f"{_settings.queue_prefix}{MAIL_QUEUE}", "expires": 55},
         },
     },
 )

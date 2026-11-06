@@ -23,6 +23,11 @@ router = APIRouter(prefix="/orgs", tags=["organizations"])
 
 # scope="function": the tenant session ends (commit/rollback) before the response is sent.
 OrgRead = Annotated[OrgContext, Depends(require(Permission.ORG_READ), scope="function")]
+# M11 (RT13): the org page itself stays reachable when the org security policy blocks the
+# session (the web explains why: `mfa_required`, `sso_required`).
+OrgReadExempt = Annotated[
+    OrgContext, Depends(require(Permission.ORG_READ, policy_exempt=True), scope="function")
+]
 OrgWrite = Annotated[OrgContext, Depends(require(Permission.ORG_UPDATE), scope="function")]
 MembersRead = Annotated[OrgContext, Depends(require(Permission.MEMBERS_READ), scope="function")]
 MembersManage = Annotated[OrgContext, Depends(require(Permission.MEMBERS_MANAGE), scope="function")]
@@ -39,7 +44,7 @@ async def create_org(body: OrgCreate, user: CurrentUserDep, request: Request) ->
 
 
 @router.get("/{org_id}", response_model=MyOrgOut)
-async def get_org(ctx: OrgRead) -> MyOrgOut:
+async def get_org(ctx: OrgReadExempt) -> MyOrgOut:
     return await service.get_org(ctx)
 
 

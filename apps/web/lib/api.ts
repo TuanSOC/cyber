@@ -47,10 +47,66 @@ export function errorBodyExtra(body: unknown): Readonly<Record<string, unknown>>
 }
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-// No retry-after-refresh for the auth endpoints themselves.
-const NO_REFRESH = ["/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/refresh"];
+// No retry-after-refresh for the auth endpoints themselves (M11: a 401 of the MFA verify is a
+// wrong code or an expired challenge, never an expired session).
+const NO_REFRESH = [
+  "/api/v1/auth/login",
+  "/api/v1/auth/register",
+  "/api/v1/auth/refresh",
+  "/api/v1/auth/mfa/verify",
+];
 
 export const AUTH_EXPIRED_EVENT = "cyberlab:auth-expired";
+
+/**
+ * M11: a `403 step_up_required` asks the user to confirm their identity. `sessionFetch`
+ * dispatches this (cancelable) event once per prompt; the step-up dialog (mounted once in the
+ * app shell, phase 10) calls `event.preventDefault()` to take it, then `settle(true)` after a
+ * successful `POST /auth/step-up` (the request is retried once) or `settle(false)` when the
+ * user cancels (the caller gets the original `ApiError`). Nobody listening = cancelled.
+ */
+export const STEP_UP_EVENT = "cyberlab:step-up-required";
+
+export type StepUpMethod = "totp" | "recovery_code" | "password" | "sso";
+
+export type StepUpRequest = {
+  /** The `StepUpAction` the API named (e.g. `provider_key_change`). */
+  action: string;
+  methods: StepUpMethod[];
+  settle: (confirmed: boolean) => void;
+};
+
+// The step-up endpoints never prompt for a step-up themselves.
+const NO_STEP_UP = ["/api/v1/auth/step-up", "/api/v1/auth/sso/start"];
+
+let stepUpInFlight: Promise<boolean> | null = null;
+
+/** Single-flight: concurrent step-up refusals in this tab share one prompt. */
+export function requestStepUp(action: string, methods: StepUpMethod[]): Promise<boolean> {
+  stepUpInFlight ??= new Promise<boolean>((resolve) => {
+    const detail: StepUpRequest = { action, methods, settle: resolve };
+    const event = new CustomEvent<StepUpRequest>(STEP_UP_EVENT, { detail, cancelable: true });
+    // dispatchEvent is false only when a listener called preventDefault (took the prompt).
+    if (typeof window === "undefined" || window.dispatchEvent(event)) resolve(false);
+  }).finally(() => {
+    stepUpInFlight = null;
+  });
+  return stepUpInFlight;
+}
+
+/** The step-up details of a `403 step_up_required` response, else null. */
+export async function stepUpDetails(
+  response: Response,
+): Promise<{ action: string; methods: StepUpMethod[] } | null> {
+  if (response.status !== 403) return null;
+  const body = (await response.clone().json().catch(() => null)) as ApiErrorBody | null;
+  if (body?.error?.code !== "step_up_required") return null;
+  const action = typeof body.error.action === "string" ? body.error.action : "";
+  const raw = Array.isArray(body.error.methods) ? body.error.methods : [];
+  const allowed: StepUpMethod[] = ["totp", "recovery_code", "password", "sso"];
+  const methods = raw.filter((m): m is StepUpMethod => allowed.includes(m as StepUpMethod));
+  return { action, methods };
+}
 
 function withCsrf(request: Request): Request {
   if (SAFE_METHODS.has(request.method)) return request;
@@ -103,7 +159,8 @@ export function refreshSession(): Promise<RefreshResult> {
 // Set on sign-out until the next successful login/register: polling queries still mounted
 // during the navigation must not hit the API (and log 401/403s) with a dead session.
 let signedOut = false;
-const SESSION_START = ["/api/v1/auth/login", "/api/v1/auth/register"];
+// M11: a login answers 202 (MFA challenge, no session yet) or 200; the MFA verify completes it.
+const SESSION_START = ["/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/mfa/verify"];
 // Still allowed after endSession(): the logout call itself and starting a new session.
 const ALLOWED_SIGNED_OUT = [...SESSION_START, "/api/v1/auth/logout"];
 
@@ -119,21 +176,33 @@ function signedOutResponse(): Response {
   });
 }
 
-async function sessionFetch(input: Request): Promise<Response> {
+/** The fetch of `api` (exported for its tests): CSRF header, refresh retry, step-up retry. */
+export async function sessionFetch(input: Request): Promise<Response> {
   const requestPath = new URL(input.url).pathname;
   if (signedOut && !ALLOWED_SIGNED_OUT.includes(requestPath)) return signedOutResponse();
   // openapi-fetch only sends small JSON bodies, so keeping a replay copy is cheap. Large
   // evidence uploads go through XHR (lib/upload.ts) and never through here.
-  const retry = input.clone();
-  const response = await fetch(withCsrf(input));
+  const replay = input.clone();
+  let response = await fetch(withCsrf(input));
   const path = new URL(input.url).pathname;
-  if (response.ok && SESSION_START.includes(path)) signedOut = false;
-  if (response.status !== 401 || NO_REFRESH.includes(path)) return response;
-
-  const refreshed = await refreshSession();
-  if (refreshed === "ok") return fetch(withCsrf(retry));
-  if (refreshed === "expired") window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
-  // "unavailable": keep the session, surface the original error to the caller.
+  // 200 / 201 only: a 202 login is an MFA challenge, not a session (M11).
+  if ((response.status === 200 || response.status === 201) && SESSION_START.includes(path)) {
+    signedOut = false;
+  }
+  if (response.status === 401 && !NO_REFRESH.includes(path)) {
+    const refreshed = await refreshSession();
+    if (refreshed === "expired") window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+    // "unavailable": keep the session, surface the original error to the caller.
+    if (refreshed !== "ok") return response;
+    response = await fetch(withCsrf(replay.clone()));
+  }
+  if (response.status === 403 && !NO_STEP_UP.includes(path)) {
+    const stepUp = await stepUpDetails(response);
+    if (stepUp && (await requestStepUp(stepUp.action, stepUp.methods))) {
+      // Retried once; a second refusal reaches the caller as an ApiError.
+      return fetch(withCsrf(replay.clone()));
+    }
+  }
   return response;
 }
 
@@ -179,4 +248,12 @@ export function errorMessage(error: unknown): string {
 }
 
 export type Me = Schemas["MeOut"];
+/** M11: the `202` of `POST /auth/login` when a second factor is needed (no session yet). */
+export type MfaChallenge = Schemas["MfaChallengeOut"];
+
+export function isMfaChallenge(value: unknown): value is MfaChallenge {
+  return (
+    typeof value === "object" && value !== null && (value as { mfa_required?: unknown }).mfa_required === true
+  );
+}
 export type MemberRole = Schemas["MemberRole"];

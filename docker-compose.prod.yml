@@ -33,17 +33,69 @@ x-prod-retention: &prod-retention
   BROKER_URL: redis://retention:${BROKER_RETENTION_PASSWORD:?set BROKER_RETENTION_PASSWORD}@redis-broker:6379/0
   MINIO_PURGE_SECRET_KEY: ${MINIO_PURGE_SECRET_KEY:?set MINIO_PURGE_SECRET_KEY}
 
+# Identity and access in prod (M11): real identity and mail seal key pairs
+# (scripts/gen_identity_seal_keys.py and scripts/gen_mail_seal_keys.py write
+# .secrets/{identity,mail}_seal_private.json and print the *_PROD_* lines for .env), the https
+# origin of invitation and reset links, and `invite_only` registration by default (the first
+# owner: `pnpm identity:admin bootstrap-owner`, RT12). Settings refuses `dev-` kids and the
+# committed dev keys, `MAIL_TRANSPORT=capture` and the dev escape hatches.
+x-prod-identity: &prod-identity
+  IDENTITY_SEAL_ACTIVE_KID: ${IDENTITY_PROD_SEAL_ACTIVE_KID:?run scripts/gen_identity_seal_keys.py and set IDENTITY_PROD_SEAL_ACTIVE_KID}
+  IDENTITY_SEAL_PUBLIC_KEYS: ${IDENTITY_PROD_SEAL_PUBLIC_KEYS:?run scripts/gen_identity_seal_keys.py and set IDENTITY_PROD_SEAL_PUBLIC_KEYS}
+  MAIL_SEAL_ACTIVE_KID: ${MAIL_PROD_SEAL_ACTIVE_KID:?run scripts/gen_mail_seal_keys.py and set MAIL_PROD_SEAL_ACTIVE_KID}
+  MAIL_SEAL_PUBLIC_KEYS: ${MAIL_PROD_SEAL_PUBLIC_KEYS:?run scripts/gen_mail_seal_keys.py and set MAIL_PROD_SEAL_PUBLIC_KEYS}
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL (the https origin of invitation and reset links)}
+  REGISTRATION_MODE: ${REGISTRATION_MODE:-invite_only}
+
 services:
   minio:
     ports: !reset []
 
+  # M11: the dev mail sink never runs in prod (the mail worker delivers to the relay).
+  mailpit:
+    profiles: ["dev-mail-sink"]
+
+  # M11 mail worker in prod: prod image, its own DB and broker passwords required, the relay
+  # over `egress` with TLS (Settings refuses SMTP_TLS=none and a missing MAIL_FROM in prod).
+  mail-worker:
+    image: cyberlab/api:prod
+    environment:
+      ENV: prod
+      DATABASE_URL: postgresql+asyncpg://cyberlab_mail:${POSTGRES_MAIL_PASSWORD:?set POSTGRES_MAIL_PASSWORD}@postgres:5432/cyberlab
+      BROKER_URL: redis://mail:${BROKER_MAIL_PASSWORD:?set BROKER_MAIL_PASSWORD}@redis-broker:6379/0
+      MAIL_TRANSPORT: smtp
+      MAIL_FROM: ${MAIL_FROM:?set MAIL_FROM}
+      SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST (the operator's relay)}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_TLS: ${SMTP_TLS:-starttls}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL}
+    secrets: [mail_seal_private, smtp_password]
+    networks: !override [enrich, egress]
+    volumes: !reset []
+    depends_on: !override
+      migrate:
+        condition: service_completed_successfully
+      redis-broker:
+        condition: service_healthy
+
+  # M11 egress proxy in prod: prod image, no source mount (it holds no secret at all).
+  egress-proxy:
+    image: cyberlab/api:prod
+    environment:
+      ENV: prod
+    volumes: !reset []
+
   postgres:
     environment:
       POSTGRES_RETENTION_PASSWORD: ${POSTGRES_RETENTION_PASSWORD:?set POSTGRES_RETENTION_PASSWORD}
+      POSTGRES_MAIL_PASSWORD: ${POSTGRES_MAIL_PASSWORD:?set POSTGRES_MAIL_PASSWORD}
 
   db-bootstrap:
     environment:
       POSTGRES_RETENTION_PASSWORD: ${POSTGRES_RETENTION_PASSWORD:?set POSTGRES_RETENTION_PASSWORD}
+      POSTGRES_MAIL_PASSWORD: ${POSTGRES_MAIL_PASSWORD:?set POSTGRES_MAIL_PASSWORD}
 
   minio-init:
     environment:
@@ -69,7 +121,7 @@ services:
       context: ./apps/api
       target: prod
     environment:
-      <<: [*prod-ti, *prod-ai, *prod-report-signing]
+      <<: [*prod-ti, *prod-ai, *prod-report-signing, *prod-identity]
       ENV: prod
       COOKIE_SECURE: "true"
     volumes: !override
@@ -131,6 +183,7 @@ services:
       BROKER_MEMORY_PASSWORD: ${BROKER_MEMORY_PASSWORD:?set BROKER_MEMORY_PASSWORD}
       BROKER_DISK_PASSWORD: ${BROKER_DISK_PASSWORD:?set BROKER_DISK_PASSWORD}
       BROKER_REVERSE_PASSWORD: ${BROKER_REVERSE_PASSWORD:?set BROKER_REVERSE_PASSWORD}
+      BROKER_MAIL_PASSWORD: ${BROKER_MAIL_PASSWORD:?set BROKER_MAIL_PASSWORD}
 
   # The report renderer in prod (M6): prod image, ENV=prod, its own broker password required;
   # still no DB, MinIO credentials or signing material.
@@ -268,6 +321,14 @@ secrets:
   # M7: the bearer token of /internal/metrics (the api only).
   metrics_token:
     file: ./.secrets/metrics_token
+  # M11: from scripts/gen_identity_seal_keys.py (the api only) and gen_mail_seal_keys.py (the
+  # mail worker only), and the SMTP relay password (the mail worker only).
+  identity_seal_private:
+    file: ./.secrets/identity_seal_private.json
+  mail_seal_private:
+    file: ./.secrets/mail_seal_private.json
+  smtp_password:
+    file: ./.secrets/smtp_password
 
 volumes:
   caddydata:

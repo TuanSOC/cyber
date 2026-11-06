@@ -68,9 +68,10 @@ async def owner_engine() -> AsyncIterator[AsyncEngine]:
 
 # M7: the inactive system user seeded by migration 0014 (the custody actor of purges, RT12)
 # comes back after every truncation, as on a migrated database.
+# M11 (0019): it is the one `kind = 'system'` account.
 _SYSTEM_USER = text(
-    "INSERT INTO users (id, email, password_hash, display_name, is_active) VALUES "
-    "(:id, :email, '!unusable:retention-system-user', 'Retention (system)', false)"
+    "INSERT INTO users (id, email, password_hash, display_name, is_active, kind) VALUES "
+    "(:id, :email, '!unusable:retention-system-user', 'Retention (system)', false, 'system')"
 )
 
 

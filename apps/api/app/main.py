@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI
 
 from app.core import health
+from app.core import logging as log_redaction
 from app.core.clients import get_redis
 from app.core.config import get_settings
 from app.core.csrf import CSRFMiddleware
@@ -11,6 +12,7 @@ from app.core.db import get_engine
 from app.core.errors import register_error_handlers
 from app.core.hashing import sweep_stale_spools
 from app.modules.ai.router import router as ai_router
+from app.modules.api_keys.router import router as api_keys_router
 from app.modules.analysis.router import router as analysis_router
 from app.modules.attack.router import router as attack_router
 from app.modules.audit.router import router as audit_router
@@ -22,6 +24,14 @@ from app.modules.disk_forensics.export_router import router as disk_export_route
 from app.modules.disk_forensics.router import router as disk_forensics_router
 from app.modules.evidence.router import router as evidence_router
 from app.modules.evidence.router_sensitivity import router as evidence_sensitivity_router
+from app.modules.identity.router_email import router as identity_email_router
+from app.modules.identity.router_mfa import router as identity_mfa_router
+from app.modules.identity.router_policy import router as identity_policy_router
+from app.modules.identity.router_recovery import router as identity_recovery_router
+from app.modules.identity.router_sessions import router as identity_sessions_router
+from app.modules.identity.router_sso import router as identity_sso_router
+from app.modules.identity.router_sso_admin import router as identity_sso_admin_router
+from app.modules.invitations.router import router as invitations_router
 from app.modules.investigations.router import router as investigations_router
 from app.modules.ioc_collections.router import router as ioc_collections_router
 from app.modules.memory_analysis.router import router as memory_analysis_router
@@ -66,6 +76,8 @@ def create_app() -> FastAPI:
     )
     register_error_handlers(app)
     app.add_middleware(CSRFMiddleware)
+    # M11: the SSO callback query and Authorization / `clk_` values never reach a log.
+    log_redaction.install()
 
     v1 = APIRouter(prefix="/api/v1")
     v1.include_router(health.router)
@@ -103,6 +115,18 @@ def create_app() -> FastAPI:
     v1.include_router(correlation_router)
     v1.include_router(search_router)
     v1.include_router(ops_router)
+    # M11: identity and access. Every route answers 501 until its phase lands (3: email,
+    # invitations; 4: recovery, sessions; 5: MFA and step-up; 6: policy; 7: SSO admin; 8: SSO
+    # sign-in; 9: API keys).
+    v1.include_router(identity_email_router)
+    v1.include_router(invitations_router)
+    v1.include_router(identity_recovery_router)
+    v1.include_router(identity_sessions_router)
+    v1.include_router(identity_mfa_router)
+    v1.include_router(identity_policy_router)
+    v1.include_router(identity_sso_admin_router)
+    v1.include_router(identity_sso_router)
+    v1.include_router(api_keys_router)
     app.include_router(v1)
     # Outside /api: the gateway never forwards it (bearer METRICS_TOKEN, RT27).
     app.include_router(ops_internal_router)

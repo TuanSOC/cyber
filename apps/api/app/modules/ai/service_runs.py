@@ -33,7 +33,7 @@ from app.core import rate_limit
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError, Conflict, Forbidden, NotFound
 from app.core.pagination import PageParams
-from app.core.rbac import ROLE_PERMISSIONS, OrgContext, Permission
+from app.core.rbac import OrgContext, Permission
 from app.modules.ai import repository, runs, service_outputs, service_settings
 from app.modules.ai.availability import provider_available
 from app.modules.ai.catalog import AI_CATALOG
@@ -451,7 +451,7 @@ def _flags(raw: Sequence[Any]) -> list[OutputFlag]:
 
 def _may_reverse(ctx: OrgContext) -> bool:
     """Showing original internal values (reversed pseudonyms, the map) needs `evidence.write`."""
-    return Permission.EVIDENCE_WRITE in ROLE_PERMISSIONS[ctx.role]
+    return Permission.EVIDENCE_WRITE in ctx.permissions  # M11 RT1: role ∩ key scopes
 
 
 async def get_run(

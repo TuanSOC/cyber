@@ -30,12 +30,15 @@ from tests.factories import Registered, add_member, csrf, make_user, new_client,
 from tests.pcap_results import seed_results
 from tests.security import (
     idor_cases_ai,
+    idor_cases_api_keys,
     idor_cases_attack,
     idor_cases_case,
     idor_cases_correlation,
     idor_cases_disk,
     idor_cases_disk_exports,
     idor_cases_disk_sensitivity,
+    idor_cases_identity,
+    idor_cases_invitations,
     idor_cases_memory,
     idor_cases_memory_sensitivity,
     idor_cases_ops,
@@ -71,12 +74,16 @@ M8_CASE_MODULES = (idor_cases_memory, idor_cases_memory_sensitivity)
 M9_CASE_MODULES = (idor_cases_disk, idor_cases_disk_exports, idor_cases_disk_sensitivity)
 # M10: the RE read API and the capability-functions route (phase 8).
 M10_CASE_MODULES = (idor_cases_reverse,)
+# M11: invitations (phase 3), the security policy (phase 6) and SSO administration (phase 7)
+# in `idor_cases_identity` (two lists), API keys (phase 9). Phase 13 asserts all are empty.
+M11_CASE_MODULES = (idor_cases_invitations, idor_cases_identity, idor_cases_api_keys)
 PENDING_MODULES = (
     *M6_CASE_MODULES,
     *M7_CASE_MODULES,
     *M8_CASE_MODULES,
     *M9_CASE_MODULES,
     *M10_CASE_MODULES,
+    *M11_CASE_MODULES,
 )
 CASE_MODULES = (*CASE_MODULES, *PENDING_MODULES)
 PENDING_ROUTES: frozenset[tuple[str, str]] = frozenset().union(

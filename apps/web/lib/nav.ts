@@ -127,7 +127,15 @@ export const SETTINGS_TABS: SettingsTab[] = [
   { key: "retention", label: "Retention", segment: "settings/retention", permission: "org.read" },
   { key: "operations", label: "Operations", segment: "settings/operations", permission: "audit.read" },
   { key: "audit", label: "Audit log", segment: "settings/audit", permission: "audit.read" },
+  // M11: the org security policy, SSO and domains (phases 6, 7, 11) and platform API keys
+  // (phases 9, 11). Owners only.
+  { key: "security", label: "Security", segment: "settings/security", permission: "security.manage" },
+  { key: "api-keys", label: "API keys", segment: "settings/api-keys", permission: "security.manage" },
 ];
+
+/** M11: the user-level account area (profile, password, MFA, sessions, security log). */
+export const ACCOUNT_PATH = "/account";
+export const ACCOUNT_SECURITY_PATH = "/account/security";
 
 export function settingsTabs(can: (permission: Permission) => boolean): SettingsTab[] {
   return SETTINGS_TABS.filter((tab) => !tab.permission || can(tab.permission));

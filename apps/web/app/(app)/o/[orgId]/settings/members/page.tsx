@@ -6,7 +6,8 @@ import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { ConfirmButton } from "@/components/confirm-button";
-import { AddMemberDialog } from "@/components/members/add-member-dialog";
+import { InvitationsCard } from "@/components/members/invitations-card";
+import { InviteDialog } from "@/components/members/invite-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -90,7 +91,8 @@ export default function MembersPage() {
               ? ""
               : "Loading members…"}
         </p>
-        {manage && <AddMemberDialog orgId={orgId} roles={assignableRoles(role)} />}
+        {/* M11 slot (phase 11): members join through invitations. */}
+        {manage && <InviteDialog orgId={orgId} roles={assignableRoles(role)} />}
       </div>
       {members.isError && (
         <div className="flex items-center gap-3 rounded-lg border border-destructive/40 p-3 text-sm">
@@ -171,6 +173,8 @@ export default function MembersPage() {
           </TableBody>
         </Table>
       </div>
+      {/* M11 slot (phase 11): pending invitations, resend and revoke. */}
+      <InvitationsCard orgId={orgId} />
     </div>
   );
 }

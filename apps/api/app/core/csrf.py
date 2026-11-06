@@ -8,8 +8,19 @@ from app.core.cookies import CSRF_COOKIE
 from app.core.errors import error_body
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
-# No session exists yet on these, so there is nothing to forge.
-EXEMPT_PATHS = frozenset({"/api/v1/auth/login", "/api/v1/auth/register"})
+# No session exists yet on these, so there is nothing to forge. M11 (RT4): the four public
+# POSTs a signed-out browser makes (it holds no `cl_csrf`): JSON bodies only, and none sets a
+# session cookie. `mfa/verify`, `step-up`, `invitations/accept` and `email/verify` stay checked.
+EXEMPT_PATHS = frozenset(
+    {
+        "/api/v1/auth/login",
+        "/api/v1/auth/register",
+        "/api/v1/auth/sso/start",
+        "/api/v1/auth/password/forgot",
+        "/api/v1/auth/password/reset",
+        "/api/v1/invitations/inspect",
+    }
+)
 HEADER = b"x-csrf-token"
 
 

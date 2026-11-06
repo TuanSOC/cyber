@@ -18,7 +18,7 @@ from sqlalchemy.dialects.postgresql import insert
 from starlette.requests import HTTPConnection
 
 from app.core.errors import Forbidden, NotFound
-from app.core.rbac import ROLE_PERMISSIONS, OrgContext, Permission
+from app.core.rbac import OrgContext, Permission
 from app.modules.audit import service as audit
 from app.modules.evidence import repository as repo
 from app.modules.evidence import sensitivity as evidence_sensitivity
@@ -74,7 +74,7 @@ async def put_policy(
     }
     after = {"ai_excluded": data.ai_excluded, "ti_excluded": data.ti_excluded}
     turned_off = any(before[flag] and not after[flag] for flag in before)
-    if turned_off and Permission.INTEGRATIONS_MANAGE not in ROLE_PERMISSIONS[ctx.role]:
+    if turned_off and Permission.INTEGRATIONS_MANAGE not in ctx.permissions:
         raise Forbidden("Turning a share-policy exclusion off needs integrations.manage")
     if turned_off:
         # M9 (RT2): `memory_sensitivity_restricted` for memory images (M8's code),

@@ -7,7 +7,7 @@ set -eu
 : "${BROKER_API_PASSWORD:?}" "${BROKER_INGEST_PASSWORD:?}" "${BROKER_PCAP_PASSWORD:?}"
 : "${BROKER_STATIC_PASSWORD:?}" "${BROKER_ENRICH_PASSWORD:?}" "${BROKER_ANALYST_PASSWORD:?}"
 : "${BROKER_REPORT_PASSWORD:?}" "${BROKER_RETENTION_PASSWORD:?}" "${BROKER_MEMORY_PASSWORD:?}"
-: "${BROKER_DISK_PASSWORD:?}" "${BROKER_REVERSE_PASSWORD:?}"
+: "${BROKER_DISK_PASSWORD:?}" "${BROKER_REVERSE_PASSWORD:?}" "${BROKER_MAIL_PASSWORD:?}"
 
 # Commands no component needs and that would let one inspect or disrupt others' queues.
 DENY="-@dangerous -@admin -keys -scan -randomkey -sort -dump -object"
@@ -62,6 +62,17 @@ retention_keys() {
   echo "$keys"
 }
 
+# The mail worker (M11, RT9) is confined like retention: only its queue and unacked keys
+# under mail* / test.mail* (the api publishes `mail.send` and the beat `mail.sweep` through their
+# `~*` users). It cannot touch ingest*, trusted.* or any other queue.
+mail_keys() {
+  keys="resetkeys ~mail* ~test.mail*"
+  for q in mail test.mail; do
+    keys="$keys ~_kombu.binding.$q ~_kombu.binding_permanent.$q"
+  done
+  echo "$keys"
+}
+
 # The untrusted report renderer (M6) is analyzer-class: `analyzer_keys report` confines it to
 # report* / test.report* (queue, unacked keys, bindings), write-only to ingest. Only api and
 # ingest (`~*`) reach report*; no other user's patterns match it.
@@ -88,6 +99,7 @@ user retention on >${BROKER_RETENTION_PASSWORD} $(retention_keys) resetchannels 
 user memory on >${BROKER_MEMORY_PASSWORD} $(analyzer_keys memory) resetchannels +@all ${DENY} ${READ_DENY}
 user disk on >${BROKER_DISK_PASSWORD} $(analyzer_keys disk) resetchannels +@all ${DENY} ${READ_DENY}
 user reverse on >${BROKER_REVERSE_PASSWORD} $(analyzer_keys reverse) resetchannels +@all ${DENY} ${READ_DENY}
+user mail on >${BROKER_MAIL_PASSWORD} $(mail_keys) resetchannels +@all ${DENY} ${READ_DENY}
 user healthcheck on nopass resetkeys +ping
 EOF
 chmod 600 /tmp/users.acl

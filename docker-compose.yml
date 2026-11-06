@@ -117,6 +117,76 @@ x-retention-worker: &retention-worker
   # Postgres, the broker and MinIO only: no egress, no gateway, no analysis network.
   networks: [backend]
 
+# Identity and access (M11), merged into the api and api-test env only (never *api-env: the
+# ingest, enrich and analyst workers carry no identity material). The api seals TOTP and IdP
+# client secrets with the identity key (and opens them: the private key file is its secret)
+# and seals mail link tokens with the mail public key. The dev defaults are the committed dev
+# pairs (infra/identity, infra/mail; kids dev-id-1, dev-mail-1), refused in prod.
+x-identity-api-env: &identity-api-env
+  IDENTITY_SEAL_ACTIVE_KID: ${IDENTITY_SEAL_ACTIVE_KID:-dev-id-1}
+  IDENTITY_SEAL_PUBLIC_KEYS: '${IDENTITY_SEAL_PUBLIC_KEYS:-{"dev-id-1":"inKO/T3b2CUYRA4j18evHiWhy2zedKyFhkgF7EZbo2k="}}'
+  IDENTITY_SEAL_PRIVATE_KEYS_FILE: /run/secrets/identity_seal_private
+  MAIL_SEAL_ACTIVE_KID: ${MAIL_SEAL_ACTIVE_KID:-dev-mail-1}
+  MAIL_SEAL_PUBLIC_KEYS: '${MAIL_SEAL_PUBLIC_KEYS:-{"dev-mail-1":"lu5nrvsk6cgPJRP1y/AzM6dn9fZliHtNr6jx9ftoVyE="}}'
+  # `open` in dev; prod defaults to `invite_only` (the first owner: identity:admin, RT12).
+  REGISTRATION_MODE: ${REGISTRATION_MODE:-open}
+  INVITATION_TTL_DAYS: ${INVITATION_TTL_DAYS:-7}
+  STEP_UP_MAX_AGE_S: ${STEP_UP_MAX_AGE_S:-600}
+  SSO_SESSION_MAX_AGE_H: ${SSO_SESSION_MAX_AGE_H:-12}
+  # The api's only route to IdPs and DoH (network `idp`, M11 phase 7).
+  IDENTITY_EGRESS_PROXY_URL: ${IDENTITY_EGRESS_PROXY_URL:-http://egress-proxy:3128}
+  IDENTITY_DOH_URL: ${IDENTITY_DOH_URL:-}
+  API_KEYS_MAX_PER_ORG: ${API_KEYS_MAX_PER_ORG:-20}
+
+# Least-privilege env of the mail worker (M11, RT9). Never merged with *api-env: its DB role is
+# `cyberlab_mail` (SELECT / UPDATE on `email_outbox` only), its broker user `mail`; it holds the
+# SMTP credentials and the mail seal private key, nothing else (Settings refuses the rest).
+# Dev delivers to Mailpit (`mail` network); the prod overlay points SMTP at the relay.
+x-mail-env: &mail-env
+  ENV: ${ENV:-dev}
+  PROCESS_ROLE: mail
+  DATABASE_URL: postgresql+asyncpg://cyberlab_mail:${POSTGRES_MAIL_PASSWORD:-change-me-mail}@postgres:5432/cyberlab
+  BROKER_URL: redis://mail:${BROKER_MAIL_PASSWORD:-change-me-broker-mail}@redis-broker:6379/0
+  QUEUE_PREFIX: ""
+  UV_NO_SYNC: "1"
+  UV_OFFLINE: "1"
+  MAIL_TRANSPORT: ${MAIL_TRANSPORT:-smtp}
+  MAIL_FROM: ${MAIL_FROM:-CyberLab <noreply@cyberlab.localhost>}
+  SMTP_HOST: ${SMTP_HOST:-mailpit}
+  SMTP_PORT: ${SMTP_PORT:-1025}
+  SMTP_TLS: ${SMTP_TLS:-none}
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://localhost:8443}
+  MAIL_SEAL_PRIVATE_KEYS_FILE: /run/secrets/mail_seal_private
+
+x-mail-worker: &mail-worker
+  image: cyberlab/api:dev
+  pull_policy: never
+  user: "10001"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs:
+    - /tmp:size=16m
+  mem_limit: 256m
+  # Postgres and the broker (`enrich`), Mailpit (`mail`); the prod overlay adds `egress` for
+  # the relay. Never `backend`: no MinIO, no app Redis.
+  networks: [enrich, mail]
+
+# The egress proxy (M11 phase 7): HTTP CONNECT to public hosts on 443 for the api only. It holds
+# nothing secret (no DB, Redis, broker, MinIO or key; EgressProxySettings only).
+x-egress-proxy: &egress-proxy
+  image: cyberlab/api:dev
+  pull_policy: never
+  user: "10001"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs:
+    - /tmp:size=8m
+  mem_limit: 128m
+  command: ["python", "-m", "app.egress_proxy"]
+  networks: [idp, egress]
+
 # Report signing (M6): the public keys and the active kid, for the api service only (merged
 # into its env, never into *api-env: ingest, enrich, analyst and the report renderer carry no
 # signing material). The dev defaults are the committed dev pair
@@ -435,6 +505,13 @@ networks:
   # M8: the memory-symbols tool's own way out (Microsoft's symbol server, verified HTTPS),
   # used by nothing else (RT17): not the shared `egress` of the enrich / analyst workers.
   symbols_egress:
+  # M11: the mail worker and Mailpit (dev / test only); api-test joins it in the test profile
+  # for the Mailpit REST client (RT24). The runtime api never joins it.
+  mail:
+    internal: true
+  # M11: the api's way to the egress proxy (and nothing else on it).
+  idp:
+    internal: true
 
 services:
   postgres:
@@ -445,6 +522,8 @@ services:
       POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD}
       # M7: init/02-m7-roles.sh (fresh volumes) runs the db-bootstrap script.
       POSTGRES_RETENTION_PASSWORD: ${POSTGRES_RETENTION_PASSWORD:-change-me-retention}
+      # M11 (RT9): the same script creates the mail worker's role.
+      POSTGRES_MAIL_PASSWORD: ${POSTGRES_MAIL_PASSWORD:-change-me-mail}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -567,6 +646,8 @@ services:
       BROKER_DISK_PASSWORD: ${BROKER_DISK_PASSWORD:-change-me-broker-disk}
       # M10 reverse-engineering analyzer: the same default rule.
       BROKER_REVERSE_PASSWORD: ${BROKER_REVERSE_PASSWORD:-change-me-broker-reverse}
+      # M11 mail worker: the same default rule.
+      BROKER_MAIL_PASSWORD: ${BROKER_MAIL_PASSWORD:-change-me-broker-mail}
     volumes:
       - ./infra/redis-broker:/init:ro
     networks: [backend, analysis, enrich]
@@ -586,6 +667,8 @@ services:
       PGUSER: postgres
       PGPASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_RETENTION_PASSWORD: ${POSTGRES_RETENTION_PASSWORD:-change-me-retention}
+      # M11 (RT9): the mail worker's role `cyberlab_mail`; 0019 needs it.
+      POSTGRES_MAIL_PASSWORD: ${POSTGRES_MAIL_PASSWORD:-change-me-mail}
     volumes:
       - ./infra/postgres/bootstrap.sh:/bootstrap/bootstrap.sh:ro
     networks: [backend]
@@ -615,17 +698,19 @@ services:
     image: cyberlab/api:dev
     build: *api-build
     environment:
-      <<: [*api-env, *report-signing-env]
+      <<: [*api-env, *report-signing-env, *identity-api-env]
       # The report signing private key (M6): a secret of the api role only.
       REPORT_SIGNING_KEYS_FILE: /run/secrets/report_signing_private
       # M7: the bearer token of GET /internal/metrics (dev: an empty file = endpoint off).
       METRICS_TOKEN_FILE: /run/secrets/metrics_token
-    secrets: [report_signing_private, metrics_token]
+    # M11: the identity seal private key (TOTP and IdP client secrets), the api role only.
+    secrets: [report_signing_private, metrics_token, identity_seal_private]
     volumes:
       - ./apps/api:/srv/api
       - ./packages/py-jobs:/packages/py-jobs
       - upload_tmp:${UPLOAD_TMP_DIR}
-    networks: [backend]
+    # M11: `idp` reaches the egress proxy only (no direct internet route, plan decision 2).
+    networks: [backend, idp]
     healthcheck: *api-healthcheck
     depends_on:
       migrate:
@@ -915,6 +1000,54 @@ services:
       redis-broker:
         condition: service_healthy
 
+  # M11 mail worker (phase 2 implements `app.workers.mail_app`): consumes `mail.send` and
+  # `mail.sweep` on the `mail` queue. `restart: "no"` until phase 2 lands the app module.
+  mail-worker:
+    <<: *mail-worker
+    command: ["celery", "-A", "app.workers.mail_app", "worker", "-Q", "mail",
+              "--pool", "solo", "--without-gossip", "--without-mingle", "--without-heartbeat",
+              "--loglevel", "INFO"]
+    environment: *mail-env
+    secrets: [mail_seal_private]
+    volumes:
+      - ./apps/api:/srv/api:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+    restart: "no"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis-broker:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  # M11 dev mail sink (MIT). Phase 2 pins the image by digest. UI and REST on loopback only.
+  mailpit:
+    image: axllent/mailpit:v1.33.0  # TODO(M11 phase 2): pin @sha256 digest
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_MAX_MESSAGES: "500"
+    ports:
+      - "127.0.0.1:8025:8025"
+    networks: [mail]
+    read_only: true
+    tmpfs:
+      - /data:size=64m
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  # M11 egress proxy (phase 7 implements `app.egress_proxy`; the phase-1 stub exits 2, so it
+  # does not restart until then).
+  egress-proxy:
+    <<: *egress-proxy
+    environment:
+      ENV: ${ENV:-dev}
+      PROCESS_ROLE: egress_proxy
+    volumes:
+      - ./apps/api:/srv/api:ro
+    restart: "no"
+
   web:
     image: cyberlab/web:dev
     build:
@@ -1029,10 +1162,30 @@ services:
       RE_MAX_ACTIVE_PER_ORG: "100"
       RE_QUICK_ENABLED: "true"
       TEST_BROKER_REVERSE_URL: redis://reverse:${BROKER_REVERSE_PASSWORD:-change-me-broker-reverse}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      # M11: the identity / mail dev keys (refused in prod), no egress proxy (ENV=test reaches
+      # idp-mock directly), the mail role on the test DB (RT9 grant tests; lane-test.sh
+      # points it at the lane DB), Mailpit's REST API, the mail broker user (ACL tests).
+      IDENTITY_SEAL_ACTIVE_KID: dev-id-1
+      IDENTITY_SEAL_PUBLIC_KEYS: '{"dev-id-1":"inKO/T3b2CUYRA4j18evHiWhy2zedKyFhkgF7EZbo2k="}'
+      IDENTITY_SEAL_PRIVATE_KEYS_FILE: /run/secrets/identity_seal_private
+      MAIL_SEAL_ACTIVE_KID: dev-mail-1
+      MAIL_SEAL_PUBLIC_KEYS: '{"dev-mail-1":"lu5nrvsk6cgPJRP1y/AzM6dn9fZliHtNr6jx9ftoVyE="}'
+      REGISTRATION_MODE: open
+      IDENTITY_EGRESS_PROXY_URL: ""
+      IDENTITY_ALLOW_PRIVATE_ISSUER_HOSTS: '["idp-mock"]'
+      MAIL_TEST_DATABASE_URL: postgresql+asyncpg://cyberlab_mail:${POSTGRES_MAIL_PASSWORD:-change-me-mail}@postgres:5432/cyberlab_test
+      MAILPIT_TEST_URL: http://mailpit-test:8025
+      TEST_BROKER_MAIL_URL: redis://mail:${BROKER_MAIL_PASSWORD:-change-me-broker-mail}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      # The mail private key stays out of api-test (Settings refuses it for the api role);
+      # the mail tests open link tokens with the committed dev file directly (test only).
+      TEST_MAIL_SEAL_PRIVATE_KEYS_FILE: /srv/infra/mail/dev-seal-private.json
+    secrets: [identity_seal_private]
     volumes:
       - ./apps/api:/srv/api
       - ./packages/py-jobs:/packages/py-jobs
       - upload_tmp_test:${UPLOAD_TMP_DIR}
+      # M11: the committed dev mail key pair (TEST_MAIL_SEAL_PRIVATE_KEYS_FILE).
+      - ./infra/mail:/srv/infra/mail:ro
       # The ai-mock server's own unit tests import it in-process.
       - ./infra/ai-mock:/srv/ai-mock:ro
       # The repository scripts (tests/unit/test_verify_report_script.py runs
@@ -1042,7 +1195,8 @@ services:
       - ai_mock_state:/srv/ai-mock-state:ro
       # The gateway config (M7: test_internal_metrics.py checks it never routes /internal/*).
       - ./infra/caddy:/srv/infra/caddy:ro
-    networks: [backend]
+    # M11 (RT24): `mail` for the Mailpit REST client (test profile only).
+    networks: [backend, mail]
     depends_on:
       postgres:
         condition: service_healthy
@@ -1380,6 +1534,92 @@ services:
       redis-broker:
         condition: service_healthy
 
+  # M11: the test mail worker (own broker db and `test.` prefix), Mailpit for tests (REST not
+  # published; the e2e profile publishes `mailpit-e2e` on loopback for the Playwright runner),
+  # the test egress proxy (idp-mock allowed on a private address) and the hostile IdP mock
+  # (phase 8; the phase-1 stub answers 503).
+  mail-worker-test:
+    <<: *mail-worker
+    profiles: ["test"]
+    command: ["celery", "-A", "app.workers.mail_app", "worker", "-Q", "test.mail",
+              "--pool", "solo", "--without-gossip", "--without-mingle", "--without-heartbeat",
+              "--loglevel", "INFO"]
+    environment:
+      <<: *mail-env
+      ENV: test
+      DATABASE_URL: postgresql+asyncpg://cyberlab_mail:${POSTGRES_MAIL_PASSWORD:-change-me-mail}@postgres:5432/cyberlab_test
+      BROKER_URL: redis://mail:${BROKER_MAIL_PASSWORD:-change-me-broker-mail}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      QUEUE_PREFIX: "test."
+      SMTP_HOST: mailpit-test
+      SMTP_PORT: "1025"
+      MAIL_TRANSPORT: smtp
+    secrets: [mail_seal_private]
+    volumes:
+      - ./apps/api:/srv/api:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-broker:
+        condition: service_healthy
+
+  mailpit-test:
+    profiles: ["test"]
+    image: axllent/mailpit:v1.33.0  # TODO(M11 phase 2): pin @sha256 digest
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_MAX_MESSAGES: "2000"
+    networks: [mail]
+    read_only: true
+    tmpfs:
+      - /data:size=64m
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  mailpit-e2e:
+    profiles: ["e2e"]
+    image: axllent/mailpit:v1.33.0  # TODO(M11 phase 2): pin @sha256 digest
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "127.0.0.1:18025:8025"
+    networks: [mail]
+    read_only: true
+    tmpfs:
+      - /data:size=64m
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  egress-proxy-test:
+    <<: *egress-proxy
+    profiles: ["test"]
+    environment:
+      ENV: test
+      PROCESS_ROLE: egress_proxy
+      EGRESS_PROXY_ALLOW_PRIVATE_HOSTS: '["idp-mock"]'
+    volumes:
+      - ./apps/api:/srv/api:ro
+    restart: "no"
+
+  idp-mock:
+    profiles: ["test", "e2e"]
+    image: cyberlab/api:dev
+    pull_policy: never
+    command: ["python", "/srv/idp-mock/server.py"]
+    volumes:
+      - ./infra/idp-mock:/srv/idp-mock:ro
+    user: "65534:65534"
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # Like ti-mock: on `egress` (reached through the egress proxy; ENV=test lanes directly).
+    networks: [egress]
+
   # --- e2e profile: Playwright against the running stack through the gateway ---
   e2e:
     profiles: ["e2e"]
@@ -1422,6 +1662,16 @@ secrets:
   # put a token in .secrets/metrics_token and point METRICS_TOKEN_SECRET_FILE at it to scrape.
   metrics_token:
     file: ${METRICS_TOKEN_SECRET_FILE:-./infra/ops/dev-metrics-token}
+  # M11: the dev-only identity seal private key (kid dev-id-1, refused in prod), the api role
+  # only; and the dev-only mail seal private key (kid dev-mail-1), the mail worker only. The
+  # prod override swaps both files.
+  identity_seal_private:
+    file: ./infra/identity/dev-seal-private.json
+  mail_seal_private:
+    file: ./infra/mail/dev-seal-private.json
+  # M11: the SMTP relay password (prod only; dev Mailpit accepts any login).
+  smtp_password:
+    file: ${SMTP_PASSWORD_SECRET_FILE:-./infra/mail/dev-smtp-password}
 
 volumes:
   pgdata:

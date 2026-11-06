@@ -8,6 +8,7 @@
 #        scripts/lane-test.sh 3 --service disk-worker-test --heavy pytest -q tests/engine  (M9)
 #        scripts/lane-test.sh 2 --service re-worker-test --heavy pytest -q tests/engine  (M10)
 #        scripts/lane-test.sh 9 --service static-worker-test pytest -q tests/unit  (M10 phase 6)
+#        scripts/lane-test.sh 2 --service mail-worker-test celery ...  (M11 phase 2)
 # `--heavy` (M8) takes two slots, atomically (both or wait): runs that load a memory image
 # (M9: or generate / open a disk image, or run Plaso; M10: or start a JVM / Ghidra).
 # Lane 9 (M9 phase 1, RT27): cyberlab_b9_test, Redis / broker db 9; M10 and M11 reuse it.
@@ -39,6 +40,8 @@ if [ "${1:-}" = "--service" ]; then
 fi
 case "$service" in
   api-test|report-worker-test|memory-worker-test|disk-worker-test|re-worker-test|static-worker-test) ;;
+  # M11: the mail worker (phase 2) and the egress proxy (phase 7).
+  mail-worker-test|egress-proxy-test) ;;
   *) echo "unsupported lane service: $service" >&2; exit 2 ;;
 esac
 need=1
@@ -57,6 +60,10 @@ redis_url="$(env_value TEST_REDIS_URL | sed -E "s#/[0-9]+\$#/${lane}#")"
 retention_pw="$(env_value POSTGRES_RETENTION_PASSWORD)"
 retention_url="$(env_value TEST_DATABASE_URL \
   | sed -E "s#//[^@/]+@#//cyberlab_retention:${retention_pw:-change-me-retention}@#; s#/[^/]+\$#/${db}#")"
+# M11 (RT9): the mail role's URL on the lane DB, derived the same way.
+mail_pw="$(env_value POSTGRES_MAIL_PASSWORD)"
+mail_url="$(env_value TEST_DATABASE_URL \
+  | sed -E "s#//[^@/]+@#//cyberlab_mail:${mail_pw:-change-me-mail}@#; s#/[^/]+\$#/${db}#")"
 
 # At most LANE_SLOTS (default 3) lane containers at once: host memory is limited. The lock
 # root is exported as LANE_LOCK_ROOT (M7, RT25) so scripts/restore-drill.mjs takes exactly
@@ -101,8 +108,12 @@ if [ "$service" = "api-test" ]; then
     -e TEST_MIGRATION_DATABASE_URL="$owner_url" \
     -e REDIS_URL="$redis_url" \
     -e RETENTION_TEST_DATABASE_URL="$retention_url" \
+    -e MAIL_TEST_DATABASE_URL="$mail_url" \
     -e TEST_LANE="$lane" \
     api-test "$@"
+elif [ "$service" = "mail-worker-test" ]; then
+  # M11: the mail worker reads the lane DB as `cyberlab_mail` (nothing else).
+  docker compose --profile test run --rm --no-deps -e DATABASE_URL="$mail_url" "$service" "$@"
 else
   # The renderer and the memory / disk / RE / static analyzers hold no DB or app Redis settings:
   # only the lane's broker db, which compose interpolates into its BROKER_URL through

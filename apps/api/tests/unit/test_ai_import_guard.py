@@ -42,7 +42,16 @@ ADAPTER_FILES = frozenset(
         ),
     }
 )
-UNSEAL_WRAPPERS = frozenset({"modules/threat_intel/unseal.py", "modules/ai/unseal.py"})
+# M11: the identity wrapper (the api opens TOTP and IdP client secrets) and the mail wrapper
+# (the mail worker opens link tokens); `test_identity_import_guard.py` confines both.
+UNSEAL_WRAPPERS = frozenset(
+    {
+        "modules/threat_intel/unseal.py",
+        "modules/ai/unseal.py",
+        "modules/identity/unseal.py",
+        "modules/mail/unseal.py",
+    }
+)
 
 
 def _matches(module: str, target: str) -> bool:
@@ -161,7 +170,17 @@ def test_sealbox_open_only_from_the_unseal_wrappers() -> None:
     source = "from app.core.sealbox_open import open_in"
     assert offenders(source, "modules/ai/unseal.py") == []
     assert offenders(source, "modules/threat_intel/unseal.py") == []
-    for rel in ("workers/enrich.py", "workers/analyst.py", "modules/ai/seal.py", "core/config.py"):
+    assert offenders(source, "modules/identity/unseal.py") == []
+    assert offenders(source, "modules/mail/unseal.py") == []
+    for rel in (
+        "workers/enrich.py",
+        "workers/analyst.py",
+        "modules/ai/seal.py",
+        "core/config.py",
+        "modules/identity/seal.py",
+        "modules/mail/seal.py",
+        "modules/mail/outbox.py",
+    ):
         assert offenders(source, rel)
 
 

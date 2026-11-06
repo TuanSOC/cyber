@@ -11,6 +11,13 @@ _SET_CONTEXT = text(
     "SELECT set_config('app.user_id', :user_id, true), set_config('app.org_id', :org_id, true)"
 )
 _SNAPSHOT_READ = text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+_SET_USER = text("SELECT set_config('app.user_id', :user_id, true)")
+
+
+async def set_app_user(session: AsyncSession, user_id: uuid.UUID) -> None:
+    """Set `app.user_id` inside an open tenant session (M11: the service account an API key
+    resolved to, `core.rbac.org_session`). Transaction-local, like `tenant_session`'s GUCs."""
+    await session.execute(_SET_USER, {"user_id": str(user_id)})
 
 
 @asynccontextmanager
