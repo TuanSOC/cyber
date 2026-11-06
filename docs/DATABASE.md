@@ -316,7 +316,7 @@ The retention role also has `USAGE` on the schema and `EXECUTE` on `app_org_id()
 | `investigation_timeline` | computed: `analysis_timeline` rows merged with status, custody and note events in `investigations/timeline.py` (`GET …/investigations/{id}/timeline`) | no stored timeline table |
 | `api_keys` | the **sealed provider keys** in `ti_provider_configs` and `ai_provider_configs` (sealed boxes per domain; the API encrypts only) | **platform API keys** (programmatic or service-account access to CyberLab) are not implemented: ROADMAP "Later" |
 | `memory_findings` | `analysis_findings` of memory jobs (M8, schema in `0016`) | shared with the pcap and static analyzers; the memory ingest that writes them is pending (M8 phase 6) |
-| `forensic_artifacts` | `memory_artifacts` for memory images (M8, `0016`; with `memory_processes`, `memory_connections`, `memory_injections`, `memory_images`) | disk forensics artifacts stay unimplemented (ROADMAP "Later") |
+| `forensic_artifacts` | memory: `memory_artifacts` (M8, `0016`; with `memory_processes`, `memory_connections`, `memory_injections`, `memory_images`). Disk (M9, `0017`): `disk_files` (the file listing), `disk_events` (parsed artifact events) and `disk_partitions`, with `disk_images` per job | findings of both stay in `analysis_findings`; M9 is in progress (see [Disk forensics (M9, migration 0017)](#disk-forensics-m9-migration-0017)) |
 
 ## Memory forensics (M8, migration 0016)
 
@@ -354,6 +354,57 @@ Addresses (`offset`, `start`, `end`) are `NUMERIC(20,0)`: unsigned 64-bit addres
 
 - `memory_sensitivity_guard()` — `BEFORE UPDATE OR DELETE` on `memory_sensitivity`: the only change is `restricted → released`, once, setting the release columns; every other UPDATE and every DELETE is refused, also for the owner.
 - The app role also gets `EXECUTE` on `memory_attributes_scalar(jsonb)`.
+
+## Disk forensics (M9, migration 0017)
+
+**In progress:** written in M9 phase 1 and not yet run in a container (`test_migrations.py` 0017 down / up, `test_m9_schema.py`, `test_rls_coverage.py`, `test_append_only.py` and the disk ingest tests are written but pending their first run). `0017_m9_disk_forensics` revises `0016` and follows the M4–M8 conventions: FORCE RLS on every tenant table (`organization_id = app_org_id()`), composite `(id, organization_id)` same-org FKs, SELECT / INSERT grants plus per-column UPDATE, named checks with `octet_length` caps, **no DELETE grant to the app role**. `0017` is frozen; later schema needs take the next number (M10 expects `0018`, M11 `0019`). Details of the analyzer: [DISK_FORENSICS.md](DISK_FORENSICS.md).
+
+### Changes to existing tables
+
+| Table / type | Change |
+|---|---|
+| `analyzer` enum | `ADD VALUE 'disk'` in an autocommit block (the 0006 rule; later SQL compares `analyzer::text`); the downgrade cannot drop it |
+| `analysis_jobs.profile` | the 0016 checks gain disk ∈ (`triage`, `full`, `extract`); `extract` is a file-export job, never an analysis |
+| `analysis_jobs.os_hint` | `ck_analysis_jobs_os_hint_iff_analyzer` replaces the M8 check: NOT NULL exactly for `memory` and `disk` jobs (`auto` for `extract`); still write-once in the job guard |
+| `job_outcomes.kind` | `ck_job_outcomes_kind` gains `disk` |
+| `custody_action` enum | phase 10 (in progress): `export_requested`, `export_promoted` (on every source segment) and `derived_from` (on the new evidence), added in the autocommit block; the downgrade cannot drop them |
+| `memory_sensitivity` | + `source` (`memory` / `disk` / `derived`, checked, default `memory` for every existing row). **Not renamed** (RT2): it is the evidence-level sensitivity table despite its name; the rename is a "Later" cleanup. Its guard, policy and grants are unchanged (the app's table-level INSERT covers the new column) |
+
+### Tables
+
+| Table | Scope | Notes |
+|---|---|---|
+| `analysis_job_segments` | tenant (PK `job_id`, `ordinal`) | the ordered segment set of a disk job: `ordinal` 0..63 (0 = `analysis_jobs.evidence_id`), `organization_id`, `evidence_id` (composite FKs to the job and the evidence, same org); unique (`job_id`, `evidence_id`); the trigger `analysis_job_segments_guard()` checks that every segment's investigation equals the job's and refuses UPDATE / DELETE (insert-only, also for the owner) |
+| `disk_images` | tenant (PK `job_id`) | one per disk job, also for a diagnostic stream: `format` (`raw` / `split_raw` / `ewf`), `segments` 1..64, `media_size` (`numeric(20,0)`), `sector_size`, `media_sha256`, `ewf_md5`, `ewf_sha1` (lowercase hex, checked), `media_hash_status` (`matched` / `mismatch` / `absent` / `not_verified`; **worker-reported**, RT17; NOT NULL exactly for `ewf`), `ewf_meta` jsonb object ≤ 2 KiB (inert acquisition text), `volume_system` (`dos` / `gpt` / `none`), `stages` jsonb array ≤ 16 KiB (per-stage and per-partition status), `counts` ≤ 4 KiB, `tool_versions` ≤ 2 KiB, `hashsets` array ≤ 4 KiB (name, kind, count and manifest sha256 of every set used), `engine` (`tsk`), `timeline_engine` (`plaso` / `replay` / `none`), `truncated` |
+| `disk_partitions` | tenant, bulk-shaped (never purged) | `index` 0..127 (unique per job), `start_sector`, `length_sectors` (`numeric(20,0)`), `description`, `vs_flags` (`alloc` / `unalloc` / `meta` / `none`), `fs_type` (`ntfs`, `fat12`, `fat16`, `fat32`, `exfat`, `ext2`, `ext3`, `ext4`), `fs_status` (`ok` / `unsupported` / `encrypted` / `undetermined` / `error` / `truncated`), `fs_label`, `fs_uuid`, `block_size`, `os` (`windows` / `linux` / `none`), `os_name` (inert text), `error_code`, `counts` jsonb |
+| `disk_files` | tenant, bulk | `id`, `organization_id`, `job_id` (every bulk table carries these three: retention counts by them and citations reference `id`); `partition_index`, `meta_addr` (`numeric(20,0)`), `meta_seq`, `stream` ≤ 255 (NTFS named stream), `path` ≤ 4 096, `parent_addr` (`numeric(20,0)`), `name` ≤ 1 024, `ext` ≤ 32, `type` (`reg` / `dir` / `lnk` / `other`), `flags` (bitmask 0..127: 1 allocated, 2 deleted, 4 orphan, 8 reallocated, 16 name_lossy, 32 path_truncated, 64 hard_linked), `size`, `mode`, `uid`, `gid`, `mtime` / `atime` / `ctime` / `crtime`, `time_basis` (`utc` / `local_unknown`), `magic` (`pe` / `elf` / `script` / `archive` / `document` / `other` / `empty`), `hash_status`, `md5`, `sha1`, `sha256` (hex, checked; a deleted entry is never hashed: `ck_disk_files_deleted_unhashed`), `known` (`good` / `bad` / `notable`) with `known_set` (both or neither), `yara_rules` text[] ≤ 16 |
+| `disk_events` | tenant, bulk | `ts`, `ts_desc` ≤ 64, `artifact` (the frozen `DiskArtifact` values), `parser` ≤ 64, `data_type` ≤ 64, `partition_index`, `path` ≤ 1 024, `file_id` (a soft reference resolved at ingest by natural key, no FK: retention deletes `disk_files` rows per job), `ordinal` (the event's position in the worker's export; findings cite it), `message` ≤ 2 048 characters, `attributes` jsonb ≤ 4 KiB with **scalar values only** (`memory_attributes_scalar()` of 0016) |
+| `disk_exports` | tenant | `export_job_id`, `source_job_id` (composite FKs), `file_id` (soft reference) and `path` (snapshot), `state` (`pending` / `ready` / `failed` / `promoted` / `expired`), `object_key`, `object_version_id` (the exact version the retention worker deletes, RT19), `size` ≤ 64 MiB, `worker_sha256` (**untrusted, display only**), `evidence_id` (after promotion; composite FK), `requested_by`, `promoted_by` / `promoted_at`, `error_code`, `object_deleted_at`, `created_at`; checks tie `promoted` to the evidence and promoter columns and `failed` to an error code |
+
+**Indexes and why** (RT13, RT14):
+- `disk_files (job_id, partition_index, parent_addr, id)`: directory listing by the walked directory's `meta_addr`. A path hash was rejected: truncated paths collide, and a B-tree entry cannot hold a 4 KiB path.
+- `disk_files (job_id, partition_index, meta_addr)`: every name of an inode (hard links, RT7), used by the never-collected check of exports.
+- `disk_files (job_id, sha256)`; partial `(job_id, flags) WHERE flags <> 1` for flagged rows.
+- One `(job_id, <time>, id)` index per time column `mtime`, `atime`, `ctime`, `crtime`: the merged timeline reads all four (and `disk_events (job_id, ts, id)`) in index order instead of sorting 500 000 rows past the 5 s statement timeout.
+- `disk_events (job_id, artifact, ts, id)` for the per-artifact filter; `disk_exports (source_job_id, created_at)`, `(export_job_id)` and `(state, created_at)` for the expiry sweep.
+
+**Size at the caps:** not measured yet (phase 7's measurement needs Docker). The plan's estimate is about 0.5–1 GiB of Postgres per job with indexes at 500 000 files and 250 000 events; DEPLOYMENT will state the measured figure.
+
+Findings, IOCs and the timeline of disk jobs use the shared `analysis_findings`, `iocs` and `analysis_timeline`; the job-level summary is `analysis_jobs.summary` (≤ 32 KiB).
+
+### Grants and triggers (M9)
+
+| Table | `cyberlab_app` | `cyberlab_retention` |
+|---|---|---|
+| `analysis_job_segments`, `disk_images`, `disk_partitions` | SELECT, INSERT | SELECT |
+| `disk_files`, `disk_events` | SELECT, INSERT | SELECT, DELETE (closed-case purge of bulk rows; in `BULK_TABLES`) |
+| `disk_exports` | SELECT, INSERT; UPDATE on `state, object_key, object_version_id, size, worker_sha256, evidence_id, promoted_by, promoted_at, error_code, object_deleted_at` | SELECT; UPDATE (`object_deleted_at`) |
+| `memory_sensitivity` | unchanged (M8) | unchanged |
+
+- `analysis_job_segments_guard()` — `BEFORE INSERT OR UPDATE OR DELETE`: the segment's evidence must be in the job's investigation; UPDATE and DELETE are refused.
+- `disk_exports_transition()` — `BEFORE UPDATE OR DELETE`: forward-only states (`pending → ready | failed`, `ready → promoted | expired`; phase 10 adds `ready → failed` for a promotion whose trusted re-hash differs), `object_deleted_at` set once, identity columns (`id`, org, jobs, `file_id`, `path`, `requested_by`, `created_at`) immutable.
+- Phase 10 (in progress) adds the policy `system_read` on `disk_exports`: a system session (no org context: the expiry beat, the retention sweep) may SELECT every row to find the orgs to act on, never write one; both then act per org in tenant sessions.
+- Never purged by retention: `disk_images`, `disk_partitions`, `disk_exports`, `analysis_job_segments`, `memory_sensitivity`, findings and IOCs.
 
 ## Migrations
 
@@ -396,6 +447,12 @@ M8 migration (in progress):
 | Revision | Changes |
 |---|---|
 | `0016` memory forensics | the `memory` analyzer value (autocommit block), the memory profile and `os_hint` checks on `analysis_jobs`, `memory` in `ck_job_outcomes_kind`, the six memory tables above with RLS, grants, `memory_attributes_scalar()` and `memory_sensitivity_guard()`. Written in phase 1, not yet run in a container; later M8 schema needs go into `0017` |
+
+M9 migration (in progress):
+
+| Revision | Changes |
+|---|---|
+| `0017` disk forensics | the `disk` analyzer value (autocommit block), the disk profiles and the `os_hint` iff check on `analysis_jobs`, `disk` in `ck_job_outcomes_kind`, `source` on `memory_sensitivity`, the six tables of [Disk forensics (M9)](#disk-forensics-m9-migration-0017) with RLS, grants, `analysis_job_segments_guard()` and `disk_exports_transition()`. Written in phase 1, not yet run in a container. The downgrade drops the tables and the column and restores the 0016 checks `NOT VALID` (recorded disk jobs keep `analyzer = 'disk'`, which Postgres cannot drop from the enum) |
 
 asyncpg executes one statement per call, so raw SQL in migrations is issued statement by statement. `citext` is created by migration `0001` (trusted extension, created by the database owner); `gen_random_uuid()` is built in.
 

@@ -9,8 +9,10 @@
 | `pnpm test:api` | API test suite (real Postgres, Redis, MinIO; no mocks of analysis or storage) |
 | `pnpm lint:api` | ruff, format check, mypy `--strict` |
 | `pnpm lint:web` | Next typegen + tsc, eslint, vitest |
-| `pnpm test:workers` | The analyzers and the renderer, each inside its real image (tools, seccomp, caps): ruff, format, mypy, engine, evaluation and fuzz-lite tests of the pcap worker, then of the static worker; the shared worker kit suite (sandbox, isolation, broker ACL) runs in both images; then the report-worker suite in `report-worker-test` (ruff, format, mypy, sandbox, isolation, renderers; M6) |
+| `pnpm test:workers` | The analyzers and the renderer, each inside its real image (tools, seccomp, caps): ruff, format, mypy, engine, evaluation and fuzz-lite tests of the pcap worker, then of the static worker; the shared worker kit suite (sandbox, isolation, broker ACL) runs in both images; then the report-worker suite in `report-worker-test` (ruff, format, mypy, sandbox, isolation, renderers; M6); then the memory worker (M8) and the disk worker (M9, `disk-worker-test`: ruff, format, mypy, its suite and the kit suite) |
 | `pnpm e2e` | Playwright golden path against the running stack (`pnpm e2e --prod` for the prod-like stack; `pnpm e2e reports` runs only the specs whose name matches) |
+| `pnpm disk:gen` | M9 (pending phase 4): generate the synthetic disk images and their ground truth inside `disk-worker-test` (test tmpfs only, never committed) |
+| `pnpm disk:metrics` | M9 (pending phase 13; a stub that exits 2 today): the disk metric report |
 | `pnpm gen:contracts` | Regenerate the OpenAPI contract and TS types (`verify` fails on drift) |
 | `node scripts/check-retention-worker-env.mjs` | M7 (in `verify:prod`): the rendered dev, test and prod configs give the retention worker only its DB role URL, broker user, purge MinIO keys and settings, on `backend` only, with no secret; no other runtime service holds the retention credentials (their creators and the test profile excepted); no legal-hold action in the api MinIO policy; no `/internal` route at the gateway; the prod KMS key and metrics token are not the dev ones |
 | `node --test scripts/lib/stack.test.mjs` | M7: the backup / restore / drill helpers on the host, no container (the `down -v` guard, RT2; the lane lock root, RT25; SQL copies in sync) |
@@ -26,7 +28,7 @@ Test isolation: the API suite uses `cyberlab_test`, Redis db 1 and the `evidence
 
 M8 lanes: `scripts/lane-test.sh <lane> --service memory-worker-test [--heavy] <command>` runs the memory worker image on the lane's broker db only (its `/work` is a per-container tmpfs, RT6); `--heavy` takes two of the `LANE_SLOTS` slots atomically (both or wait) for runs that load an image. A lane database missing on an older volume (e.g. `cyberlab_b8_test`) is created once as the superuser like `cyberlab_test` (`infra/postgres/init/01-init.sh`), then the role bootstrap grants the retention role on it: `docker compose exec postgres psql -U postgres -c "CREATE DATABASE cyberlab_b8_test OWNER cyberlab_owner" -c "REVOKE CONNECT, TEMPORARY ON DATABASE cyberlab_b8_test FROM PUBLIC" -c "GRANT CONNECT ON DATABASE cyberlab_b8_test TO cyberlab_app" && docker compose run --rm db-bootstrap` (the lane's `alembic upgrade head` runs on first use).
 
-M9 lanes (phase 1, RT27): the script accepts lane **9** (`cyberlab_b9_test`, Redis / broker db 9; M10 and M11 reuse it) and `--service disk-worker-test` (broker db only; `/work` a per-container 1 GiB tmpfs; `--heavy` for runs that generate or open an image or run Plaso). Create the lane-9 database once with the command above (`cyberlab_b9_test`) if it is missing (**pending**: not yet run on this host).
+M9 lanes (phase 1, RT27): the script accepts lane **9** (`cyberlab_b9_test`, Redis / broker db 9; M10 and M11 reuse it) and `--service disk-worker-test` (broker db only; `/work` a per-container 1 GiB tmpfs; `--heavy` for runs that generate or open an image or run Plaso). Create the lane-9 database once with the command above (`cyberlab_b9_test`) if it is missing (**pending**: not yet run on this host). Suites: [M9 disk forensics suites](#m9-disk-forensics-suites).
 
 ## Current results
 
@@ -330,3 +332,58 @@ Labels are honest by construction: every number below comes from **synthetic** d
 | Restore drill: duration per step, peak memory, 0 verify mismatches (dev images, bitnami MinIO, 2026-11-06) | **passed in 146 s**: up 28.8, seed 5.5, backup 21.9, restore 68.5 (pg_restore 1.8, verify `--db` 3.1, `--objects` 3.1, `--rls` 3.3), checks 3.5 s; peak 796 MiB; **0 mismatches**; 6 object versions, 1 tombstone, 1 signed report | `infra/backup/last-drill.json`, `plans/reports/m7-heavy-steps-261106.md` |
 | Live TI smoke / live AI eval (citation accuracy on a real model) | **not run** (needs the user's keys and budget) | `plans/reports/live-run-YYMMDD.md` |
 | Object-store conformance, bitnami 2025.5.24 | 13 passed, 1 skipped | `plans/reports/researcher-261106-m7-object-store.md` |
+
+## M9 disk forensics suites
+
+**In progress, nothing run in Docker yet.** The suites below are written for phases 1, 2 and 5–9 and run in `pnpm test:api` and `pnpm test:workers` (the `disk-worker-test` leg) once the disk image can be built (after phase 3a's `plaso.lock`). Phase 3 (Plaso), 4 (the generator), 10 (export), 11 (web) and 13 (e2e, fuzz-lite, metrics) add theirs. Design: [DISK_FORENSICS.md](DISK_FORENSICS.md).
+
+**What is synthetic and what is replay-only:**
+
+| Surface | Coverage |
+|---|---|
+| TSK and libewf (FAT12 / 16 / 32, exFAT, ext2 / 3 / 4, NTFS, MBR, GPT, split raw, single and multi-segment E01) | the **real engines** on images generated at test time, each ≤ 64 MiB, compared with each image's `ground_truth.json` (`tests/engine/test_tsk_images.py`, `--heavy` lanes; skipped until the phase-4 generator exists) |
+| Plaso on Linux artifacts (syslog, auth.log, wtmp, bash history, cron, dpkg) and, if the spike succeeds, a hivex-built registry hive | the **real Plaso** on the generated tree (phase 3) |
+| **Windows event logs, Prefetch and LNK** | **replay-tested only**: hand-written psort-shaped `json_line` rows and the test-only timeline replay engine (`DISK_TIMELINE_ENGINE=replay`, refused unless `TEST_PROFILE=1`, labelled in every header); not validated on a real image in CI |
+| Detections | the labelled scenario set (`dataset/`): generated `DiskView`s with benign baselines, labelled positives and hard negatives, in memory; `python -m dataset.evaluate` prints the table |
+| Hash sets | an RDSv3-schema SQLite and plain lists generated by the tests (`tests/hashsets_fixtures.py`); no NSRL download |
+
+No real disk image, no third-party corpus (CFReDS, DFTT, Plaso test data, hivex's test hives) and no binary image is committed or downloaded (`requirement.txt` §14).
+
+**The generated image set** (pending phase 4). `pnpm disk:gen` (`docker compose --profile test run --rm --no-deps disk-worker-test python -m samples.diskgen`) will build the images deterministically (fixed seeds and times) inside the test tmpfs, using the dev / test target's packages only (`docker/diskgen-packages.txt`: dosfstools, mtools, e2fsprogs, exfatprogs, ntfs-3g, fdisk, ewf-tools, hivex, util-linux; never in the prod image). Unprivileged: no loop device, no FUSE, no mount (parent decision, RT26). Each image comes with `ground_truth.json` (partitions, files, hashes, flags, the never-collected hard links). **Coverage gaps to record when phase 4 lands:** which NTFS route worked (libntfs-3g as a library, our own MFT writer, or the Windows-shaped tree on FAT32 plus a flat NTFS image), and whether the hard link to `SAM` exists on NTFS or only on ext.
+
+**Worker suites** (`apps/workers/disk/tests`, inside `disk-worker-test`):
+- `test_isolation.py`: env holds only `BROKER_URL` (as user `disk`) plus non-secret switches; tool uid 10007; hash sets read-only; licenses, NOTICE and pins in the image; no Debian TSK.
+- `unit/test_stage_isolation.py` (real processes as the tool uid): a `setsid` sleeper does not survive its stage; a sealed out dir rejects later writes; a planted symlink is removed, not followed; a write-budget overrun is killed (`truncated`); a stage the deadline cannot fit is `skipped` and never started. Also `test_watchdog.py`, `test_budget.py`.
+- `unit/test_offline.py`, `test_audit_hook.py`: seccomp refuses AF_INET inside a stage; the audit hook counts and the counts are zero on a clean run.
+- `unit/test_probe_magic.py`, `test_probe_layout.py`, `test_image_open.py`, `test_walker.py`, `test_names.py`, `test_normalize_records.py`, `test_pipeline.py`, `test_config.py`, `test_skeleton.py`: refused formats, refusal signatures first, family order, overlapping partitions, EWF opening and the media-size cap, the iterative walk (cycles, depth, caps, hard links, streams), hostile names and the mirrored-tree sanitizer, the job pipeline and its diagnostic streams, the replay-engine refusal outside the test profile.
+- `unit/test_hashsets_import.py`, `test_hashsets_store.py`, `integration/test_hashsets_tool.py`: imports (NSRL schema check, hostile SQLite, invalid digests, interrupted imports), store validation (an invalid store disables all matching), the tool with no network.
+- `unit/test_scan_candidates.py`, `test_scan_yara.py`: PE-only candidates within budgets, known-good files in user-writable paths still scanned, rule-hash check, severities from the M3 allow-list, no matched data emitted.
+- `unit/test_detections_files.py`, `test_detections_events.py`, `test_detections_run.py`, `test_evtx_fields.py`, `test_path_classes.py`, `test_finding_wording.py`, `test_dataset_quality.py`: every rule, near misses, caps, masking, no verdict words, no heuristic above `medium`, the scenario set well formed.
+
+**API suites** (`apps/api/tests`): `unit/test_disk_contract.py` (contract, `never_collect` over every name, limits), `unit/test_disk_stream.py` and the hostile `disk.v1` fixtures in `packages/py-jobs/tests/fixtures/disk/hostile/`, `unit/test_disk_segments.py`, `unit/test_disk_settings.py`, `unit/test_error_classes.py`, `unit/test_analyzer_exhaustive.py` (every analyzer-keyed branch has a disk arm); `integration/test_m9_schema.py`, `test_m9_foundation.py`, `test_disk_upload.py`, `test_disk_request.py`, `test_disk_segments.py`, `test_disk_dispatch.py`, `test_disk_handoff.py`, `test_disk_ingest.py`, `test_disk_ingest_caps.py`, `test_disk_diagnostic.py`, `test_disk_reaper.py`, `test_disk_known_hash_join.py`, `test_disk_reads.py`, `test_disk_dirs.py`, `test_disk_timeline_merge.py`, `test_disk_interop_exports.py`, `test_disk_sensitivity.py`, `test_disk_batch_release.py`, `test_disk_share_policy_guard.py`, `test_disk_ai_ti_policy.py`, `test_disk_reports_tlp.py`, `test_disk_retention.py`, `test_disk_export_purge.py`, `test_disk_correlation.py`, `test_disk_acl.py` (broker ACL); `security/idor_cases_disk*.py` feed the auto-enumerated `test_idor_routes.py`. Plus the M8 suite unchanged (the `memory_sensitivity` behaviour is part of M9's definition of done).
+
+**Lane 9 and its DB.** Phase 10's API tests use lane 9 (`cyberlab_b9_test`, Redis / broker db 9); create the database once with the M8 command above (with `cyberlab_b9_test`) if it is missing. Worker runs that open images or run Plaso take `--heavy`.
+
+**Metrics: pending — phase 13** (`pnpm disk:metrics`, today a stub that exits 2; the report goes to `plans/reports/disk-metric-YYMMDD.md`).
+
+| Detector | TP | FP | FN | Precision | Recall |
+|---|---|---|---|---|---|
+| disk_exec_user_writable | pending — phase 13 | | | | |
+| disk_double_extension | pending — phase 13 | | | | |
+| disk_extension_mismatch | pending — phase 13 | | | | |
+| disk_ads_executable | pending — phase 13 | | | | |
+| disk_persistence | pending — phase 13 | | | | |
+| disk_log_cleared | pending — phase 13 | | | | |
+| disk_service_installed | pending — phase 13 | | | | |
+| disk_account_change | pending — phase 13 | | | | |
+| disk_remote_logon | pending — phase 13 | | | | |
+| disk_dual_use_execution | pending — phase 13 | | | | |
+| disk_correlated_indicators | pending — phase 13 | | | | |
+| yara | pending — phase 13 | | | | |
+| hashset | pending — phase 13 | | | | |
+
+Also pending (phase 13): IOC recall, parse success over the generated image set, latency per stage and per job, the ingest time and Postgres size at the caps (the phase-7 measurement), the fuzz-lite outcome on mutated images (truncation, corrupted boot sectors, superblocks and MFT records, directory cycles, huge directories, hostile names, lying partition tables, a lying EWF segment count, a stored-hash mismatch, refused magic), the env and network checks, and the e2e spec (segment upload, run, job page, restricted banner, an export and its promotion).
+
+**Caveat:** the detection numbers will be synthetic, on scenarios designed alongside the detectors (`test_dataset_quality.py` already asserts 1.0 / 1.0 on that set). They show that the detectors behave as specified, not real-world detection quality; the event rules in particular are fed hand-written EVTX-shaped rows.
+
+**Cut by the red team ("Later"), so not tested:** the image cache (RT1), the `memory_sensitivity` rename (RT2) and `heuristic:disk_timestamp_anomaly@1` (RT28).

@@ -140,6 +140,8 @@ The body is the raw file (no multipart). Max 2 GiB (`MAX_EVIDENCE_BYTES`); at mo
 
 **Memory images (M8, in progress).** `?kind=memory` marks the upload as a memory image. Built in phase 1: such an upload gets **no automatic analysis of any kind** (RT3). Pending phase 6: the per-kind size limit `MEMORY_MAX_BYTES` (8 GiB default, at most 16 GiB; `413 memory_image_too_large`), the free-space check (`507 insufficient_storage`) and the TLP:RED default in the upload transaction (phase 8 logic). Until phase 6, a `kind=memory` upload is bounded by `MAX_EVIDENCE_BYTES` like any other. `CADDY_EVIDENCE_MAX` must cover the larger of the two limits ([DEPLOYMENT.md](DEPLOYMENT.md#memory-forensics-m8)). `EvidenceOut.memory_sensitivity` is `restricted`, `released` or null.
 
+**Disk image segments (M9, in progress).** `?kind=disk` marks the upload as a disk image segment (one E01 / split-raw segment or a whole raw image): `DISK_MAX_UPLOAD_BYTES` per request (8 GiB default, at most 16 GiB; `413 disk_image_too_large` on the declared length and while spooling), an empty body is `422 disk_image_empty`, the spool free-space check (`507 insufficient_storage`), **no automatic analysis of any kind**, and the evidence is marked restricted (source `disk`, AI and TI excluded) in the upload transaction. `EvidenceOut.sensitivity` gives the state and source of any source (memory, disk, derived); `memory_sensitivity` is kept for M8 clients; `derived_from` names the source evidence of an exported file (phase 10). Built in phase 7, untested in a container ([Disk forensics](#disk-forensics-m9-in-progress)).
+
 M7 additions to `EvidenceOut`: `declared_type` (the extension family) and `type_mismatch` (declared vs detected by magic; write-once, NULL on older rows). A mismatch is audited `evidence.type_mismatch` and **never rejects the upload**. `purged_at` is set once retention purged the bytes (then download, verify and new analyses answer `410 evidence_purged`), and `legal_hold` tells whether a hold covers the evidence. `GET /evidence/{id}` and `GET /evidence/{id}/custody` are audited (`evidence.viewed`, `evidence.custody_viewed`), at most once per user, evidence and action every 15 minutes. `InvestigationOut.legal_hold` is the case-level flag.
 
 `investigations.allowed_transitions` lists the valid next statuses for the current one.
@@ -150,7 +152,7 @@ M7 additions to `EvidenceOut`: `declared_type` (the extension family) and `type_
   - pcap/pcapng magic → `pcap`;
   - PE or non-core ELF → `static`, profile `full`;
   - any other non-empty file ≤ `STATIC_MAX_BYTES` → `static`, profile `av` (ClamAV + YARA).
-- **Manual runs:** `analyzer` defaults to `pcap`. `profile` is accepted for `static` (`full` default, `av`) and, since M8, `memory` (`triage` default, `full`); `os_hint` (`auto` default, `windows`, `linux`) only for `memory`. A memory run is never automatic.
+- **Manual runs:** `analyzer` defaults to `pcap`. `profile` is accepted for `static` (`full` default, `av`) and, since M8, `memory` (`triage` default, `full`); `os_hint` (`auto` default, `windows`, `linux`) only for `memory` and, since M9, `disk` (`triage` default, `full`; `extract` is reserved for file exports). A disk run also names its ordered `segments` (required for disk, refused otherwise). Memory and disk runs are never automatic.
 - **Job fields:** `status` is `queued`, `running`, `succeeded` or `failed`; `error_code` is set on failure; `profile` is set for static jobs only.
 - **Results:** they appear only after the trusted ingest validated the whole result stream; see [PCAP_ANALYSIS.md](PCAP_ANALYSIS.md) and [MALWARE_ANALYSIS.md](MALWARE_ANALYSIS.md). Findings and IOCs of both analyzers are served by the shared `/findings` and `/iocs` routes.
 
@@ -159,9 +161,9 @@ Refusals when requesting a run:
 | Status | Code |
 |---|---|
 | 409 | `analysis_active` (a run of this evidence by the same analyzer is queued/running), `evidence_archived`, `investigation_archived` |
-| 413 | `capture_too_large` (> `PCAP_MAX_BYTES`), `sample_too_large` (> `STATIC_MAX_BYTES`, 64 MiB), `memory_image_too_large` (> `MEMORY_MAX_BYTES`, M8) |
-| 422 | `memory_image_empty` (M8: an empty file as a memory image) |
-| 429 | `analysis_queue_full` (5 active per org / 50 overall, counted per analyzer; memory: 1 per org / 2 overall), `rate_limited` |
+| 413 | `capture_too_large` (> `PCAP_MAX_BYTES`), `sample_too_large` (> `STATIC_MAX_BYTES`, 64 MiB), `memory_image_too_large` (> `MEMORY_MAX_BYTES`, M8), `disk_image_too_large` / `disk_image_set_too_large` (M9) |
+| 422 | `memory_image_empty` (M8: an empty file as a memory image), `disk_image_empty`, `disk_segments_invalid` (M9, with `reason` and `ordinal`) |
+| 429 | `analysis_queue_full` (5 active per org / 50 overall, counted per analyzer; memory: 1 per org / 2 overall; disk: 1 per org / 1 overall), `rate_limited` |
 
 Static result routes answer `404` for jobs of another analyzer, and `404 results_not_available` from `/sample` when the job has no stored results.
 
@@ -182,6 +184,8 @@ Job `error_code` values:
 - **Static jobs** use the same input, transfer and trusted-side codes (`sample_too_large` instead of `capture_too_large`). A capped, skipped or incomplete engine does not fail the job: it is listed in the result's `engine_errors` (e.g. `av_not_fully_scanned`, `av_unavailable`, `capa_skipped`).
 
 - **Memory jobs** (M8, `MEMORY_ERROR_CODES`; written by the worker from phase 2): `symbols_missing` (with a diagnostic result naming the required symbols), `symbols_corrupt`, `memory_parse_failed`, `os_undetermined`, `unsupported_memory_format` (compressed or archived upload), `memory_image_too_large`, `memory_image_empty`, `insufficient_disk`, `identify_timeout`, `plugin_timeout`, `plugin_failed`, `engine_unavailable`, and `not_implemented` (every memory job until phase 2 lands). Per-plugin failures that do not fail the job are listed in the memory summary.
+
+- **Disk jobs** (M9, `DISK_ERROR_CODES`; classes in `ops/error_classes.py`): `unsupported_disk_format` (refused magic, an EWF set libewf will not open, or a claimed media size above `DISK_MAX_MEDIA_BYTES`; with a diagnostic result), `no_supported_filesystem` (no partition could be opened; with a diagnostic result naming the partitions), `disk_image_too_large`, `disk_image_set_too_large`, `disk_segments_invalid`, `disk_image_empty`, `disk_parse_failed`, `timeline_failed`, `walk_memory`, `insufficient_disk`, `stage_timeout`, `engine_unavailable`, `integrity_mismatch` (a segment differs from its evidence record), `export_hash_mismatch`, `disk_export_not_allowed`, `not_implemented`. Stages that fail, time out or are skipped (`deadline`) without failing the job are listed per stage and partition in the disk summary.
 
 Result lists are paged like every list. Text filters are case-insensitive substring matches with `%`/`_` escaped.
 
@@ -306,3 +310,42 @@ Design: [MEMORY_ANALYSIS.md](MEMORY_ANALYSIS.md). **Every route below is a 501 s
 | 422 | `memory_image_empty`, `acknowledgement_required` (release without `acknowledge: true`) |
 | 501 | `not_implemented` (the stubs above, until their phase lands) |
 | 507 | `insufficient_storage` (the API cannot spool the upload now; phase 6) |
+
+## Disk forensics (M9, in progress)
+
+Design: [DISK_FORENSICS.md](DISK_FORENSICS.md). Built in phases 1 and 7–9 and **untested in a container**; the file-export routes answer `501 not_implemented` in the committed code until phase 10 lands. Every route is in the IDOR enumerator (`security/idor_cases_disk.py`, `idor_cases_disk_exports.py`, `idor_cases_disk_sensitivity.py`). Paths are under `/api/v1/orgs/{org_id}`.
+
+| Method and path | Permission | Answer | Status |
+|---|---|---|---|
+| existing `POST /investigations/{investigation_id}/evidence?kind=disk` | `evidence.write` | `EvidenceOut` (restricted, source `disk`; no automatic analysis) | built (phase 7) |
+| existing `POST /evidence/{evidence_id}/analyses` `{analyzer: disk, segments: [ids], profile, os_hint}` | `evidence.write` | `AnalysisJobOut` (with `os_hint`; the segment ids are in the `analysis.requested` audit details) | built (phase 7) |
+| `GET /analyses/{job_id}/disk` | `evidence.read` | `DiskSummaryOut`: segments with the API's own sha256, format, the **worker-reported** media hash status, per-stage and per-partition status, artifact counts, the hash sets used; `404 results_not_available` for a terminal job without a stored image | built (phase 8) |
+| `GET /analyses/{job_id}/disk/partitions` | `evidence.read` | `PartitionPage` | built |
+| `GET /analyses/{job_id}/disk/files?q&partition&flag&magic&sha256&hash&ext&from&to&include_known&ref` | `evidence.read` | `FilePage`, ordered by partition, inode, id. `q`: path substring; `flag` ∈ `deleted`, `orphan`, `hard_linked`, `stream`, `known`, `notable`, `yara`; `hash`: md5, sha1 or sha256; `from` / `to` match any of the four times; known-good files hidden unless `include_known=true` | built |
+| `GET /analyses/{job_id}/disk/files/{file_id}` | `evidence.read` | `FileDetailOut`: every column, the inode's other names and streams (RT7), and whether "Export" is offered (with the reason when not) | built |
+| `GET /analyses/{job_id}/disk/dirs?partition&parent` | `evidence.read` | `DirPage`: the entries of one directory (`parent` = its `meta_addr`; the root when omitted) | built |
+| `GET /analyses/{job_id}/disk/events?q&artifact&from&to&ref` | `evidence.read` | `EventPage` (parsed artifact events in time order; `q`: message substring) | built (empty until phase 3) |
+| `GET /analyses/{job_id}/disk/timeline?source&time&artifact&from&to` | `evidence.read` | `TimelinePage`: file-system MACB times (one row per set time column) merged with the events, ordered by (ts, stream, id) in index order; `source` ∈ `file`, `event`; `time` ∈ `mtime`, `atime`, `ctime`, `crtime`; `artifact` implies events only | built |
+| `GET /analyses/{job_id}/disk/exports/{name}?excel` | `evidence.read` | streamed interop file: `bodyfile` (`text/plain`, for `mactime`), `timeline.csv` (`excel=1` adds a BOM), `timeline.jsonl`, `notable-hashes.txt` (Autopsy hash-set import); `X-CyberLab-Sensitivity` header and `-TLP-RED` in the file name for restricted evidence; audited `disk.interop_exported` | built (phase 8) |
+| `POST /analyses/{job_id}/disk/file-exports` `{file_ids}` (1–20) | `evidence.write` | `202 DiskExportList`: an `extract` job and one `disk_exports` row per file | phase 10 (501 today) |
+| `GET /disk-exports/{export_id}` | `evidence.read` | `DiskExportOut` (`state`, `size`, `worker_sha256` labelled untrusted, `evidence_id` after promotion) | phase 10 (501 today) |
+| `POST /disk-exports/{export_id}/promote` | `evidence.write` | `DiskExportOut`; streams the object through the evidence upload pipeline into derived evidence (restriction inherited) | phase 10 (501 today) |
+| `GET /evidence/{evidence_id}/sensitivity` | `evidence.read` | `EvidenceSensitivityDetailOut` {`state` `none` / `restricted` / `released`, `source` `memory` / `disk` / `derived`, `defaulted_at`, `released_at`, `released_by_name`, `release_reason`} | built (phase 1) |
+| `POST /evidence/{evidence_id}/sensitivity/release` `{acknowledge, reason, job_id?}` (reason 1–500) | `org.update` | `EvidenceSensitivityDetailOut`; once per item; with `job_id` (a disk `triage` / `full` job whose segments include this evidence) every still-restricted segment of the job, one audit row each (RT20); derived evidence is never part of a batch | built (phases 1, 9) |
+
+- **Segment rules.** `segments` is required for `analyzer: disk` and refused for every other analyzer; `segments[0]` must be the evidence of the path; 1–64 distinct evidence items of this org in the request's investigation, none purged, archived or empty; each ≤ `DISK_MAX_UPLOAD_BYTES`, the sum ≤ `DISK_MAX_IMAGE_BYTES`. A refusal other than size is `422 disk_segments_invalid` with `reason` ∈ `first_segment`, `too_many`, `duplicate`, `not_found` (also another org's id: no oracle), `other_investigation`, `purged`, `archived`, `empty` and the offending `ordinal`. The request applies the restricted default to every segment.
+- **Read rules.** Every disk read route answers `404` for unknown or foreign jobs, jobs of another analyzer and `extract` jobs, and `409 analysis_not_ready` while the job is queued or running. Reads run under a 5 s statement timeout. `from` / `to` must be timezone-aware (`422` otherwise, and when `from` is after `to`); `q` is 1–128 characters. Unsigned 64-bit values (`meta_addr`, `parent_addr`, sectors, `media_size`) are decimal strings. Paths, names, EWF values and messages are returned exactly as stored: image-supplied, inert text. Pages are not audited (the M7 evidence view audit covers the job page); `ref=<row id>` returns the page with just that row.
+- Findings, IOCs and the timeline of disk jobs are served by the shared `/findings`, `/iocs` and `/timeline` routes.
+- **M8's routes are unchanged:** `/evidence/{id}/memory-sensitivity` and `…/release` keep their codes and `memory.*` audit actions and are not deprecated. The generic routes pick the code and action by the row's source.
+- After a release, the analyst clears the share-policy flags through the M6 `PUT /evidence/{id}/share-policy`; while the evidence is restricted that PUT refuses to clear a flag.
+- **New audit actions:** `disk.sensitivity_defaulted`, `disk.sensitivity_released`, `disk.interop_exported`; with phase 10 `disk.export_requested`, `disk.export_promoted`.
+
+| Status | Code |
+|---|---|
+| 404 | `results_not_available` (summary of a terminal job without a stored image) |
+| 409 | `analysis_not_ready`, `evidence_sensitivity_restricted` (clearing a share-policy flag of restricted disk or derived evidence), `evidence_sensitivity_released` (a second release), `policy_blocked` (AI runs and job-scope TI on restricted evidence), `disk_export_not_allowed` (deleted, not a regular file, too large, not allocated, or any name of the inode on the never-collected list), `disk_export_not_ready`, `disk_export_already_promoted`, `disk_export_expired` |
+| 413 | `disk_image_too_large` (a segment > `DISK_MAX_UPLOAD_BYTES`, on upload and on request), `disk_image_set_too_large` (the sum > `DISK_MAX_IMAGE_BYTES`) |
+| 422 | `disk_segments_invalid` (with `reason`, `ordinal`), `disk_image_empty`, `acknowledgement_required` |
+| 429 | `analysis_queue_full` (disk: 1 active per org, 1 overall) |
+| 501 | `not_implemented` (the file-export routes until phase 10) |
+| 507 | `insufficient_storage` (the API cannot spool the upload now, M8's check) |

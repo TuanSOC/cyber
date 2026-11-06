@@ -21,7 +21,7 @@ flowchart LR
   A --> M
 ```
 
-The analysis, threat-intel, AI, report and retention workers attach to this core; each has its own section below. Platform operations (backup and restore, retention, correlation, search, metrics) are described in [Platform operations (M7)](#platform-operations-m7). Memory forensics (M8, in progress) adds a third analyzer and an operator symbol tool: [Memory forensics (M8)](#memory-forensics-m8).
+The analysis, threat-intel, AI, report and retention workers attach to this core; each has its own section below. Platform operations (backup and restore, retention, correlation, search, metrics) are described in [Platform operations (M7)](#platform-operations-m7). Memory forensics (M8, in progress) adds a third analyzer and an operator symbol tool: [Memory forensics (M8)](#memory-forensics-m8). Disk forensics (M9, in progress) adds a fourth analyzer, its own trusted ingest worker and an offline hash-set tool: [Disk forensics (M9)](#disk-forensics-m9).
 
 - **One origin.** The gateway serves both the app and `/api`, so session cookies are first-party and `SameSite=Strict`.
 - **Networks.** `web` cannot reach `api` directly; only the gateway (and data services) share the api's network. uvicorn trusts `X-Forwarded-For` from its peers, which is safe only because of this isolation. Since M4 `backend` is `internal` (no egress); only the enrich-worker and (M5) the analyst-worker have a route out ([Networks](#networks-m4-m5-m6)).
@@ -235,10 +235,10 @@ flowchart LR
 | `backend` | **yes** since M4 | postgres, redis, redis-broker, minio, minio-init, migrate, api, ingest-worker, ingest-beat, gateway, api-test | no service here has a route out; the API cannot reach the internet even if compromised |
 | `enrich` | yes | postgres, redis-broker, enrich-worker(-test), analyst-worker(-test) | the trusted internet-facing workers' way to their data, and nothing else (no app Redis, MinIO, API or gateway) |
 | `egress` | no | enrich-worker(-test), analyst-worker(-test), ti-mock, ai-mock | the only route out |
-| `analysis` | yes | pcap-worker(-test), static-worker(-test), report-worker(-test) (M6), memory-worker(-test) (M8), redis-broker, minio | the untrusted parsers and the renderer: the broker and presigned MinIO URLs only |
+| `analysis` | yes | pcap-worker(-test), static-worker(-test), report-worker(-test) (M6), memory-worker(-test) (M8), disk-worker(-test) (M9), redis-broker, minio | the untrusted parsers and the renderer: the broker and presigned MinIO URLs only |
 | `symbols_egress` | no | memory-symbols, memory-symbols-test (M8, profile `tools`) | the operator symbol tool's own way out (Microsoft's symbol server); used by nothing else: no broker, Postgres, MinIO or other network |
 
-M7 adds `db-bootstrap` (one-shot) and `retention-worker(-test)` to `backend` only: Postgres, the broker and MinIO, no egress, no `analysis` network.
+M7 adds `db-bootstrap` (one-shot) and `retention-worker(-test)` to `backend` only: Postgres, the broker and MinIO, no egress, no `analysis` network. M9 adds `disk-ingest-worker(-test)` to `backend` only; the operator tool `disk-hashsets(-test)` and its init have **no network at all** (`network_mode: none`).
 
 Runtime egress per service and the operational consequences (no MinIO console port, `UV_NO_SYNC`): [DEPLOYMENT.md](DEPLOYMENT.md#networks-and-egress-m4-m5-m6).
 
@@ -449,3 +449,38 @@ flowchart LR
 - **Analyzer sweep (RT1, built in phase 1).** Every former two-way analyzer branch has a memory arm: job links (`/memory/{job}`), search hrefs, case ATT&CK sources, timeline titles, ops metrics kinds, report citations and redaction, AI outputs; `tests/unit/test_analyzer_exhaustive.py` and `lib/analysis.test.ts` fail when a map misses an analyzer.
 - **License boundary.** Every Volatility-specific line stays in `apps/workers/memory/` (a VSL "Addition", see its `NOTICE.md`); the contract, ingest, API and web are tool-agnostic.
 - **Web** (pending phase 9): Memory Analysis (`/o/{org}/memory`, `/memory/{job}`) with processes, connections, injections, artifacts, findings, IOCs and timeline tabs, the per-plugin status, the symbols-missing panel and the restricted banner.
+
+## Disk forensics (M9)
+
+**In progress.** Phases 1, 2 and 5–9 are committed and untested in a container; Plaso (phase 3), the image generator (phase 4), file export (phase 10) and the web pages (phase 11) are pending or being written. Details and the build status per phase: [DISK_FORENSICS.md](DISK_FORENSICS.md).
+
+```mermaid
+flowchart LR
+  A[API] -->|disk.analyze / disk.export| RB[(redis-broker<br/>ACL user disk)]
+  RB -->|queue disk| DW[disk-worker<br/>UNTRUSTED<br/>TSK via pytsk3, libewf, Plaso, YARA<br/>one process per stage, offline]
+  DW -->|presigned GET segments / POST result| M[(MinIO)]
+  DW -->|ingest.event| RB
+  RB --> IW[ingest-worker<br/>trusted, solo]
+  IW -->|deadline + hand-off<br/>queue ingest_disk| RB
+  RB --> DI[disk-ingest-worker<br/>trusted, solo]
+  DI -->|disk.v1, one transaction| P[(PostgreSQL)]
+  HS[(disk_hashsets volume)] -->|read-only /hashsets| DW
+  OP[operator: pnpm disk:hashsets] --> HT[disk-hashsets<br/>trusted tool, profile tools<br/>network_mode none]
+  IMP[./.disk-import read-only] --> HT
+  HT -->|writes| HS
+  RW[retention-worker<br/>purge user] -->|delete expired export versions| M
+  subgraph analysis [analysis network: internal, no egress]
+    DW
+  end
+```
+
+- **Fourth analyzer, same pattern.** `Analyzer.DISK` (PG enum value `disk`, 0017), Celery tasks `disk.analyze` (`disk.v1`) and `disk.export` (`disk-export.v1`), queue `disk`, broker ACL user `disk` (`analyzer_keys disk`: its own queue keys, write-only to `ingest*`), profiles `triage` / `full` (and `extract` for file exports), `os_hint` as in M8, caps `DISK_MAX_ACTIVE_PER_ORG` = `DISK_MAX_ACTIVE_TOTAL` = 1. **Never automatic**: a `kind=disk` upload gets no analysis of any kind, and the API refuses an automatic disk job.
+- **Untrusted side** (`apps/workers/disk`): the memory worker's container isolation on `analysis` only (env `BROKER_URL` only), `mem_limit 3g`, 2 CPUs, `pids_limit 256`, concurrency 1 with one task per child; `/work` is the named volume `disk_work` (images are GiBs), the hash-set store is read-only at `/hashsets`. Root never parses image bytes beyond a 4 KiB magic check.
+- **Stage-per-process model.** `layout`, `verify` (EWF), `walk` and `collect` (one per file system), `scan`, and `log2timeline` + the event export (one each per OS partition; phase 3) each run as a separate process as uid 10007 with seccomp (AF_UNIX only, no io_uring), a PEP 578 audit hook, per-stage rlimits and a fresh out dir. After each stage root kills every tool-uid process and seals the out dir root-owned read-only (RT3), so a compromised stage cannot persist into or tamper with the next; a `statvfs` watchdog bounds what a stage writes to the shared host disk (RT4); a deadline budget skips what cannot fit before the job deadline (RT5). TSK is only ever given explicit volume and file-system families (no autodetection); Plaso only ever reads the sealed, mirrored artifact tree, never the image.
+- **Segment-set data flow (no image cache, RT1).** A job names 1–64 ordered evidence items of one investigation (`analysis_job_segments`; segment 0 is `analysis_jobs.evidence_id`). The message carries one presigned GET per segment (exact object version); the worker downloads every segment into its fresh work dir, verifies each sha256 and size, and names the files by the job's order. `sandbox.reset` empties the work dir before every job, so there is no cache: every job, re-run and export downloads and re-verifies the set.
+- **Trusted side and the ingest hand-off (RT9).** A disk result at the caps is about 750 000 rows. The shared ingest worker (`--pool solo`, also running the reaper and the M7 correlation tick) only authenticates the `finished` report (token, org from the job index), moves the job deadline by `DISK_INGEST_TIMEOUT_S` and publishes `disk.ingest` to the queue `ingest_disk`. The **`disk-ingest-worker`** (api image, its own solo process, `mem_limit 1g`, `backend` only) validates the whole stream (pass 1), then writes `disk_images`, `disk_partitions`, `disk_files`, `disk_events`, the shared `analysis_findings`, `iocs`, `analysis_timeline`, the in-org known-hash join, custody on every segment and the audit row in **one transaction** (pass 2, batched INSERTs: Postgres refuses COPY into RLS tables). A diagnostic stream (`no_supported_filesystem`, `unsupported_disk_format`) writes `disk_images` and `disk_partitions` only.
+- **`disk-hashsets` tool.** The disk image run as uid 10008 (compose profile `tools`, never part of `up`), **`network_mode: none`**, no secrets, the store rw at `/hashsets` and `./.disk-import` read-only. It is the only writer of the `disk_hashsets` volume; parses run in forked children with rlimits and the seccomp network filter (no uid change, RT25). Nothing is ever downloaded.
+- **Export / promote flow** (phase 10). An `extract` job re-downloads the segments, copies 1–20 allocated files (≤ 64 MiB, none of whose names is on the never-collected list) and POSTs each to the results bucket under `exports/`; the ingest records the exact object version and the untrusted worker sha256. "Add to case" streams that version through the existing evidence upload pipeline (trusted hashes, type sniff, quota, object lock, custody `derived_from`). **The API never parses the bytes**: it hashes and stores them, and the derived evidence gets its normal static job in the static worker. The api MinIO user cannot delete in the results bucket, so the beat marks unpromoted exports `expired` after `DISK_EXPORT_TTL_S` and the **retention worker** deletes the exact object version with the purge user and stamps `object_deleted_at` (RT19).
+- **Sensitivity without a rename (RT2).** M8's `memory_sensitivity` (PK `evidence_id`) gains a `source` column (`memory` / `disk` / `derived`) and serves as the evidence-level sensitivity table; the rename is "Later". `evidence/sensitivity.py:apply_restricted_default(…, source)` generalizes M8's function (now a wrapper); generic routes `GET /evidence/{id}/sensitivity` and `POST …/sensitivity/release` (with a batch arm for a disk job's segments, RT20) sit beside M8's unchanged `/memory-sensitivity` routes. The share-policy guard answers `evidence_sensitivity_restricted` for disk / derived and keeps `memory_sensitivity_restricted` for memory.
+- **Platform integration (phase 9).** Reports withhold restricted disk rows below TLP:RED (`omissions.disk_restricted`, absent from the canonical bytes when unused); AI and job-scope TI answer `policy_blocked`; `disk_files` and `disk_events` join the retention `BULK_TABLES`; the correlation indexer reads disk `iocs` rows like any other.
+- **Web** (phase 11, in progress): the Forensics section (`/o/{org}/forensics`, a job at `/o/{org}/forensics/{job}`), the disk upload option and the run dialog with the segment picker (`components/disk/`).

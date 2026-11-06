@@ -114,7 +114,7 @@ It writes `.secrets/report_signing_private.json` (mode 0400, chowned to uid 1000
 | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` | api, minio-init (creates the user) | scoped user, no governance bypass |
 | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | minio, minio-init (and test profile) | never given to the api |
 | `MAX_EVIDENCE_BYTES` | api | default 2 GiB |
-| `CADDY_EVIDENCE_MAX` | gateway | max(`MAX_EVIDENCE_BYTES`, `MEMORY_MAX_BYTES`) + 1 MiB on the upload route (M8: `.env.example` ships `8590983168`, 8 GiB + 1 MiB; for 16 GiB images use `17180917760`) |
+| `CADDY_EVIDENCE_MAX` | gateway | max(`MAX_EVIDENCE_BYTES`, `MEMORY_MAX_BYTES`, `DISK_MAX_UPLOAD_BYTES`) + 1 MiB on the upload route (M8 / M9: `.env.example` ships `8590983168`, 8 GiB + 1 MiB; for 16 GiB images or segments use `17180917760`) |
 | `EVIDENCE_LOCK_DAYS` | api | GOVERNANCE retention per evidence version (0 disables) |
 | `UPLOAD_TMP_DIR` | api | spool directory (volume) |
 | `MAX_CONCURRENT_UPLOADS_PER_USER` | api | also bounds concurrent verifies |
@@ -143,6 +143,7 @@ It writes `.secrets/report_signing_private.json` (mode 0400, chowned to uid 1000
 | `MEMORY_MAX_ACTIVE_PER_ORG`, `MEMORY_MAX_ACTIVE_TOTAL` | api | M8: active memory jobs per org / platform-wide (1 / 2; the test profile raises them) |
 | `MEMORY_MAX_RESULT_BYTES`, `MEMORY_MAX_RESULT_DECOMPRESSED_BYTES`, `MEMORY_MAX_{PROCESSES,CONNECTIONS,INJECTIONS,ARTIFACTS,FINDINGS,IOCS,TIMELINE}`, `MEMORY_TREE_MAX_NODES` | api | M8 settings with defaults 256 MiB, 1 GiB, 20 000, 50 000, 5 000, 50 000, 5 000, 20 000, 5 000, 5 000; compose does not pass them |
 | `MEMORY_SYMBOLS_DIR`, `MEMORY_ENGINE`, `MEMORY_PLUGIN_RLIMIT_AS` | memory-worker | M8: `/symbols`, `volatility3` (`replay` only with `TEST_PROFILE=1`), 2.5 GiB; image defaults |
+| `BROKER_DISK_PASSWORD`, `DISK_*`, `ANALYSIS_DISK_TIMEOUT_S` | redis-broker, api, disk-worker(-test) | M9 (in progress): see [Disk forensics (M9)](#disk-forensics-m9), Settings |
 | `MINIO_KMS_SECRET_KEY_FILE` (compose secret `minio_kms_key`) | minio, minio-init (name check only) | M7: SSE-S3 key `<name>:<base64 32 bytes>`; dev: `infra/minio/dev-kms-key` (name `cyberlab-dev-kms`, refused in prod); prod: `.secrets/minio_kms_key`. Refused by every app `PROCESS_ROLE` |
 | `MINIO_SSE_ENABLED` | minio-init | M7: `true` (default) sets the SSE-S3 bucket default on every bucket |
 | `MINIO_IMAGE`, `MC_IMAGE`, `MINIO_DATA_DIR`, `MINIO_READ_ONLY` | minio, minio-init, backup / restore | M7: object-store image (defaults since the switch: `localhost/cyberlab/silo:RELEASE.2026-10-26T00-00-00Z`, built from `infra/minio/silo/Dockerfile`; `bitnamilegacy/minio-client:2025.5.21`; `/data`; `true`). The bitnami rollback sets `bitnamilegacy/minio:2025.5.24`, `/bitnami/minio/data`, `false` |
@@ -196,13 +197,14 @@ It writes `.secrets/report_signing_private.json` (mode 0400, chowned to uid 1000
 
 | Service | Image | Trust | Notes |
 |---|---|---|---|
-| `redis-broker` | redis 7.4 | — | separate from the app Redis; ACL users `api`, `ingest`, `pcap`, `static`, `enrich`, `analyst`, `report`, `retention` (M7), `memory` (M8) (+ `healthcheck`), no persistence, `maxmemory 256mb noeviction` |
+| `redis-broker` | redis 7.4 | — | separate from the app Redis; ACL users `api`, `ingest`, `pcap`, `static`, `enrich`, `analyst`, `report`, `retention` (M7), `memory` (M8), `disk` (M9) (+ `healthcheck`), no persistence, `maxmemory 256mb noeviction` |
 | `db-bootstrap` | postgres 17.11-alpine | operator (superuser), one-shot | M7: creates / updates `cyberlab_retention` (`infra/postgres/bootstrap.sh`, idempotent) before `migrate`; `backend` only |
 | `retention-worker` | `cyberlab/api` | trusted, destructive | M7: `celery -A app.workers.retention_app worker -Q retention --pool solo` without gossip/mingle/heartbeat; `backend` only, uid 10001, read-only rootfs, tmpfs `/tmp`, `cap_drop: ALL`, no-new-privileges, 384 MiB; least-privilege env (`x-retention-env`, never `*api-env`); dry run unless the DB policy says `enforce` is effective |
 | `pcap-worker` | `cyberlab/pcap-worker` (Zeek 8 base + tshark + suricata) | untrusted | `analysis` network only, read-only rootfs, `cap_drop: ALL` + 6 caps, tini init, `restart: unless-stopped` (fails closed), 2 GiB / 2 CPUs |
 | `static-worker` | `cyberlab/static-worker` (python 3.12-slim-trixie + ClamAV, yara-python, pefile, pyelftools, capa, FLOSS) | untrusted | same isolation as pcap-worker (`analysis` network, read-only rootfs, caps, tini, fail-closed restart), 3 GiB / 2 CPUs |
 | `memory-worker` | `cyberlab/memory-worker` (python 3.12-slim-trixie + volatility3 2.28.2, pefile, capstone, jsonschema; no symbols) | untrusted | M8 (in progress; phase 1 fails every job `not_implemented`): same isolation as static-worker (`analysis` only, env `BROKER_URL` only, read-only rootfs, caps, tini, fail-closed restart), 3 GiB / 2 CPUs, `pids_limit 256`, `/work` on the named volume `memory_work`, `memory_symbols` read-only at `/symbols`; tool uid 10006 |
 | `memory-symbols`, `memory-symbols-test` | `cyberlab/memory-worker` | trusted operator tool | M8 (CLI pending phase 5): profile `tools` (never part of `up`), uid 10005, read-only rootfs, `cap_drop: ALL`, 2 GiB, network `symbols_egress` only, no secrets; the target store rw at `/symbols` (`memory_symbols`, or `memory_symbols_test` for `--store test`) and `./.memory-import` read-only at `/import`. `memory-symbols-init` (one-shot, no network) chowns both volumes to 10005 |
+| `disk-worker`, `disk-ingest-worker`, `disk-hashsets(-test)`, `disk-hashsets-init` | `cyberlab/disk-worker`, `cyberlab/api` | untrusted / trusted / operator tool | M9 (in progress, untested): see [Disk forensics (M9)](#disk-forensics-m9) |
 | `ingest-worker` | `cyberlab/api` | trusted | `celery worker --pool solo`, app DB role + scoped MinIO user |
 | `ingest-beat` | `cyberlab/api` | trusted | Celery beat: enqueues the reaper every 60 s |
 | `enrich-worker` | `cyberlab/api` | trusted, internet-facing | threat-intel lookups (M4); `celery -A app.workers.enrich_app worker -Q enrich --pool solo` without gossip/mingle/heartbeat; `enrich` + `egress` (never `backend` or `analysis`), uid 10001, read-only rootfs, `cap_drop: ALL`, no-new-privileges; least-privilege env (no JWT secret, MinIO credentials or app Redis); seal private keys as a compose secret |
@@ -448,3 +450,103 @@ CI never runs a real Windows image (no third-party image is used; Windows is rep
 4. Compare a handful of processes, connections and command lines against another tool you trust. Report any normalizer or column mismatch as a bug (Volatility upgrades are deliberate, pinned changes).
 5. Try `full` once and note the duration and peak disk.
 6. Delete nothing by hand: retention and legal holds govern the case as usual.
+
+## Disk forensics (M9)
+
+**In progress.** The services, volumes, broker user, lane 9 and settings below exist since phase 1, and phases 2 and 5–9 fill the worker, the API and the ingest, but **nothing has run in a container yet**. The disk image cannot be built until phase 3a replaces the `plaso.lock` placeholder (the builder's `pip download --require-hashes` fails on an empty set by design) and `apps/workers/disk/uv.lock` exists. Steps marked *pending* describe the planned behaviour. Design: [DISK_FORENSICS.md](DISK_FORENSICS.md).
+
+### Services
+
+| Service | Image | Trust | Notes |
+|---|---|---|---|
+| `disk-worker` | `cyberlab/disk-worker` (python 3.12-slim-trixie + pytsk3 20260715 with TSK 4.15.0 embedded, libewf-python 20260924, yara-python, the M3 rule sources; Plaso 20261027 in its own venv `/opt/plaso`) | untrusted | the memory worker's isolation (`analysis` only, env `BROKER_URL` only as broker user `disk`, read-only rootfs, `cap_drop: ALL` + 6 caps, tini, fail-closed restart), 3 GiB / 2 CPUs, `pids_limit 256`, concurrency 1 with one task per child; `/work` on the named volume `disk_work`, `disk_hashsets` read-only at `/hashsets`; tool uid 10007; no privileged mount of any kind |
+| `disk-ingest-worker` | `cyberlab/api` | trusted | `celery … worker --pool solo -Q ingest_disk` (RT9): the disk ingest in its own process, so one long transaction never delays the shared ingest queue; `backend` only, read-only rootfs, 1 GiB, the ingest temp volume |
+| `disk-hashsets`, `disk-hashsets-test` | `cyberlab/disk-worker` | trusted operator tool | profile `tools` (never part of `up`), uid 10008, read-only rootfs, `cap_drop: ALL`, 2 GiB, `pids_limit 64`, **`network_mode: none`**, no secrets, `/tmp` tmpfs 1 GiB; the target store rw at `/hashsets` (`disk_hashsets`, or `disk_hashsets_test` for `--store test`) and `./.disk-import` read-only at `/import`. `disk-hashsets-init` (one-shot, no network) chowns both volumes to 10008, mode 0755 |
+| `disk-worker-test`, `disk-ingest-worker-test` | as above | test profile | `/work` a per-container 1 GiB tmpfs, `TEST_PROFILE=1` (replay timeline engine and M3 test rules allowed), `DISK_WORK_MIN_FREE_BYTES` 64 MiB, the test hash-set store read-only; the test ingest consumes `test.ingest_disk` |
+
+Volumes: `disk_work`, `disk_hashsets`, `disk_hashsets_test`. The prod overlay builds the `prod` target (no generator tools, no tests) and requires `BROKER_DISK_PASSWORD`.
+
+### First start
+
+1. `cd apps/workers/disk && uv lock` once (pending: no lock is committed), and, after phase 3a, the hash-pinned `plaso.lock`.
+2. In `.env`: `BROKER_DISK_PASSWORD` (required in prod) and `CADDY_EVIDENCE_MAX` ≥ max(`MAX_EVIDENCE_BYTES`, `MEMORY_MAX_BYTES`, `DISK_MAX_UPLOAD_BYTES`) + 1 MiB.
+3. Heavy, alone: `docker compose build disk-worker` (and `docker build --target prod` for the prod image). The `plaso-builder` stage installs a C toolchain, downloads the locked sources with `--require-hashes` and compiles the sdist-only libyal bindings (libevtx, libregf, libfsntfs, libfsext, libfsfat, libbde, libfsapfs, libvsgpt) into wheels with a `SHA256SUMS` manifest; only those wheels reach the runtime stages, installed with `--no-index`. Expect the longest build of the platform (not measured yet). `docker/finalize_image.py` then asserts no Debian `sleuthkit` / `python3-tsk` / `ewf-tools`, no compiler and, in `prod`, none of the generator's GPL tools. Rebuild api, pcap-worker, static-worker, memory-worker and report-worker one at a time afterwards (py-jobs and py-worker-kit changed; the renderer must know `omissions.disk_restricted`).
+4. Recreate `redis-broker` (new ACL user `disk`) and run `migrate` (0017).
+5. `docker compose --profile tools run --rm disk-hashsets-init` once, to own the hash-set volumes.
+
+### Sizing
+
+| Resource | Need |
+|---|---|
+| Upload | each segment is one request ≤ `DISK_MAX_UPLOAD_BYTES` (8 GiB default, ≤ 16 GiB); Caddy keeps `read_body 30m`: 8 GiB needs ≥ 4.6 MB/s sustained, 16 GiB ≥ 9.2 MB/s. `CADDY_EVIDENCE_MAX`: `8590983168` for 8 GiB segments, `17180917760` for 16 GiB. No resume |
+| Set total | `DISK_MAX_IMAGE_BYTES` 16 GiB default (≤ 64 GiB), chosen to fit the 20 GiB default org quota; raise the org's quota (Operations) before raising it |
+| Host disk while a job runs | about **2 × the image + 3 × the artifact budget**: the image in MinIO and its copy in `disk_work`, plus the collected artifact tree, the Plaso storage and the exported events (artifact budget 2 GiB in `triage`, 8 GiB in `full`), **plus the 4 GiB watchdog floor** (`DISK_WORK_MIN_FREE_BYTES`) that must stay free. The worker refuses a job unless `/work` has image + 3 × artifact budget + 4 GiB + 2 GiB free (`insufficient_disk`). During the upload the API spool (`upload_tmp`) holds a third copy of each segment until the commit. Example: a 16 GiB set in `triage` occupies 16 GiB in MinIO and needs 16 + 3 × 2 + 4 + 2 = 28 GiB free on `/work` when the job starts, about 44 GiB of the Docker disk in total |
+| Retention of bytes | MinIO keeps every segment at least `EVIDENCE_LOCK_DAYS`; `/work` is emptied after every job; export objects live until promoted or expired (`DISK_EXPORT_TTL_S`, 7 days) and the retention worker deletes them |
+| Postgres | not measured yet (phase 7 needs Docker); the plan estimates 0.5–1 GiB per job at the caps (500 000 files, 250 000 events, indexes) |
+| Docker Desktop | its virtual disk grows and **does not shrink by itself** after images are deleted; compact it (Docker Desktop, or `wsl --manage <distro> --set-sparse true` / `Optimize-VHD`) when space matters |
+| RAM | `disk-worker` 3 GiB (one stage at a time, `RLIMIT_AS` ≤ 2.5 GiB per stage) plus `disk-ingest-worker` 1 GiB; `disk-hashsets` 2 GiB while it runs. The always-on workers' `mem_limit`s add up to about 13.4 GiB (pcap 2, static 3, memory 3, disk 3, report 1, disk ingest 1, retention 0.375): limits, not reservations, but size host RAM so that the analyzers that can run at once fit |
+| Concurrency | one disk job at a time on the platform (`DISK_MAX_ACTIVE_TOTAL` 1, one worker); a second request gets `429 analysis_queue_full`. Ingests of two disk results run one after the other |
+| Time | `ANALYSIS_DISK_TIMEOUT_S` 4 h; **every re-run and every file export downloads and re-verifies the whole segment set** (no image cache, RT1): minutes for 16 GiB on localhost MinIO |
+
+Tests never upload more than 64 MiB per segment (`api-test`: `DISK_MAX_UPLOAD_BYTES` 64 MiB, `DISK_MAX_IMAGE_BYTES` 256 MiB).
+
+### Settings
+
+| Variable | Read by | Default and notes |
+|---|---|---|
+| `BROKER_DISK_PASSWORD` | redis-broker (ACL user `disk`), disk-worker(-test), api-test (`TEST_BROKER_DISK_URL`) | confined to `disk*` / `test.disk*`, write-only to `ingest*`; dev default `change-me-broker-disk`, required in prod |
+| `DISK_MAX_UPLOAD_BYTES`, `DISK_MAX_IMAGE_BYTES`, `DISK_MAX_MEDIA_BYTES` | api | 8 GiB (≤ 16 GiB), 16 GiB (≤ 64 GiB), 2 TiB (≤ 16 TiB); upload ≤ set ≤ media is checked at start-up |
+| `ANALYSIS_DISK_TIMEOUT_S`, `DISK_INGEST_TIMEOUT_S` | api (sent in every disk job; the ingest hand-off) | 14 400 s (≤ 21 600), 1 800 s (below the job timeout) |
+| `DISK_MAX_ACTIVE_PER_ORG`, `DISK_MAX_ACTIVE_TOTAL` | api | 1 / 1 (the test profile raises them) |
+| `DISK_EXPORT_TTL_S` | api, ingest-beat | 7 days; unpromoted exports then expire |
+| `DISK_MAX_SEGMENTS`, `DISK_MAX_RESULT_BYTES`, `DISK_MAX_RESULT_DECOMPRESSED_BYTES`, `DISK_MAX_{PARTITIONS,FILESYSTEMS,FILES,STREAMS_PER_FILE,EVENTS,EVENTS_READ,FINDINGS,IOCS,TIMELINE}`, `DISK_EXPORT_MAX_BYTES`, `DISK_EXPORT_MAX_FILES` | api | 64, 256 MiB, 1.5 GiB, 128, 32, 500 000, 16, 250 000, 20 000 000, 5 000, 20 000, 5 000, 64 MiB, 20; compose does not pass them; each can only be lowered below its contract ceiling |
+| `DISK_WORK_MIN_FREE_BYTES` | disk-worker | 4 GiB (0..1 TiB); the watchdog floor |
+| `DISK_TIMELINE_ENGINE` | disk-worker | `plaso`; `none` skips the timeline; `replay` only with `TEST_PROFILE=1` |
+| `DISK_HASHSETS_DIR`, `DISK_RULES_DIR`, `DISK_TEST_RULES_DIR` | disk-worker | `/hashsets`, `/opt/rules/image`; the test rules only with `TEST_PROFILE=1` |
+
+### Known-file hash sets runbook
+
+Nothing is ever downloaded by the platform: you obtain the files yourself.
+
+1. **Obtain a set.** NSRL RDSv3 from NIST's download page (the `minimal` set: the full Modern set is hundreds of GB uncompressed); unzip it on the host to its SQLite database. Or any list with one md5, sha1 or sha256 per line (an md5sum-style ` name` / ` *name` suffix and `#` comments are allowed), for example your own known-bad list.
+2. **Place it** in `./.disk-import/` (gitignored, mounted read-only at `/import`).
+3. **Import:**
+
+   ```bash
+   pnpm disk:hashsets -- import-nsrl --file /import/RDS_<version>_modern_minimal.db --name nsrl-modern-min
+   pnpm disk:hashsets -- import-list --file /import/known_bad.sha256 --name ir-known-bad --kind known_bad --algo sha256
+   pnpm disk:hashsets -- import-list --file /import/watch.md5 --name ir-watch --kind notable --algo md5
+   pnpm disk:hashsets -- list                       # names, kinds, counts, import dates
+   pnpm disk:hashsets -- verify                     # re-hash every file against the manifest (exit 1 on a mismatch)
+   pnpm disk:hashsets -- remove --name ir-watch     # manifest first, then the files
+   pnpm disk:hashsets -- --store test <command>     # the test store
+   ```
+
+   Names match `^[a-z0-9][a-z0-9._-]{0,63}$`; at most 64 sets. `import-nsrl` defaults to `known_good`. A schema other than RDSv3 (`FILE` view with `sha256, sha1, md5, …`; `DISTINCT_HASH` used when present) is refused. Invalid digests are counted and skipped.
+4. **Temp space:** the external sort's chunks and the new set are written to a staging directory inside the store volume (`disk_hashsets`), so plan free space of about twice the set's final size there for the duration of the import; the set is re-read and verified, then moved into place with one rename, and leftovers of an interrupted import are removed by the next one. The final size is 32 + 20 + 16 bytes per distinct hash for sha256 + sha1 + md5, 68 bytes per distinct hash (use the `minimal` NSRL set: the full Modern set is not practical). An existing name is refused (`set_exists`: `remove` it first). Exit codes: 0 done, 1 refused or mismatch, 2 usage.
+5. **Cadence:** when NIST publishes a new RDS release (or your list changes), import a new release under a new name, check `list`, then `remove` the old one; running jobs keep the manifest they loaded, and each job's header records the manifest sha256 of every set it used.
+6. **After a restore** (the hash-set volume is not in the backup) or when in doubt: re-import, then `verify`. An invalid store disables all matching in jobs (reported in the job header), it never fails a job.
+
+### Recovery
+
+| Symptom | What to do |
+|---|---|
+| job `failed` / `insufficient_disk` before the download | free space on the Docker disk (old evidence past its lock, compaction) or lower the artifact budget by running `triage` instead of `full` |
+| a stage `truncated` (`write_budget` / `min_free`) or the job `insufficient_disk` mid-run | the write watchdog stopped a stage: same as above; the floor is `DISK_WORK_MIN_FREE_BYTES` |
+| stages `skipped` (`deadline`) | the deadline budget ran out (large image, many file systems): raise `ANALYSIS_DISK_TIMEOUT_S` (≤ 21 600 s) or run `triage` |
+| `unsupported_disk_format` | the reason names the refused format (compressed, VMDK, VHD(X), QCOW, AFF, Ex01, L01) or `media_size`; convert to raw or E01 with your own tools, or check the segment set (E01 order, all segments listed) |
+| `no_supported_filesystem` | the diagnostic page lists each partition's status (`encrypted`, `unsupported`, `undetermined`): out of scope by design |
+| `integrity_mismatch` | a segment no longer matches its evidence record: verify the evidence (Evidence page) |
+| `timed_out` on ingest | the disk ingest exceeded `DISK_INGEST_TIMEOUT_S` (a result at the caps on a slow host): raise it (below the job timeout) and re-run |
+
+### Operator smoke procedure for the first real image (manual, never automatic)
+
+CI never opens a real disk image (no third-party image or corpus is used; EVTX, Prefetch and LNK are replay-tested). Before relying on disk results, run this once on an image you are entitled to analyse, after phases 3, 4 and 10 have landed:
+
+1. Create a throwaway case with TLP:RED. Upload the segments with the disk image option (`?kind=disk`); check each shows "restricted" and that no analysis started.
+2. Run disk analysis with every segment in order, profile `triage`, `os_hint` `auto`.
+3. On success, check the job page: format, segment hashes and the worker-reported media hash status; every partition has a status and the expected file system; the file count and a few known paths match what you expect; every stage has a status; the audit-hook counts in the stage reports are zero.
+4. Compare a handful of files (hashes, times) and timeline events (an EVTX logon, a Prefetch entry, a registry Run key) against another tool you trust, for example `fls` / `mactime` on the body file or Autopsy on the downloaded segments. Report any parser or column mismatch as a bug (engine upgrades are deliberate, pinned changes).
+5. Export one benign file and add it to the case; check the trusted hash equals the worker's, the new evidence is restricted and its static job runs.
+6. Try `full` once and note the duration and the peak disk.
+7. Delete nothing by hand: retention and legal holds govern the case as usual.
