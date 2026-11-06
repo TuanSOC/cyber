@@ -86,7 +86,12 @@ def test_pe_full_replay(dirs: sandbox.JobDirs) -> None:
     assert "replay" in header.tool_versions and header.jvm_args
     assert program.format == "pe" and program.preferred_base == 0x140000000
     assert len(_kinds(lines, "function")) == 31
-    assert [d.function_entry for d in _kinds(lines, "decompiled")] == list(listed)
+    decompiled = _kinds(lines, "decompiled")
+    # Requested first and never cut (RT10); phase 5 may list more after them.
+    assert [d.function_entry for d in decompiled[: len(listed)]] == list(listed)
+    assert [d.status for d in decompiled[: len(listed)]] == [
+        "ok", "ok", "ok", "ok", "truncated", "timeout"
+    ]
     ranks = {f.entry: f.priority_rank for f in _kinds(lines, "function")}
     assert [ranks[e] for e in listed] == list(range(len(listed)))
     list_file = dirs.root / "stage" / DECOMPILE_LIST
@@ -130,6 +135,14 @@ def test_decompile_crash_is_a_partial_success(dirs: sandbox.JobDirs) -> None:
     assert lines[0].stages[1].status == "failed"
     statuses = [d.status for d in _kinds(lines, "decompiled")]
     assert statuses[:2] == ["ok", "ok"] and set(statuses[2:]) == {"failed"}
+    assert "function_not_found" not in lines[0].engine_errors
+
+
+def test_missing_requested_address_is_reported(dirs: sandbox.JobDirs) -> None:
+    listed = (0xDEAD0000, *decompiled_entries("pe_full"))
+    _, lines = _run(dirs, "pe_full", decompile=listed)
+    assert "function_not_found" in lines[0].engine_errors
+    assert 0xDEAD0000 not in {d.function_entry for d in _kinds(lines, "decompiled")}
 
 
 def test_unexpected_decompile_child_fails_the_job(dirs: sandbox.JobDirs) -> None:

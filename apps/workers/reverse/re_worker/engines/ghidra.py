@@ -1,7 +1,7 @@
 """The `full` profile: Ghidra `analyze`, root's priority list, Ghidra `decompile` (M10 phase 2).
 
     analyze stage (JVM 1) -> bounded rows -> contract validation, caps -> ReView
-      -> priority.rank (phase 5) -> stage/decompile_list.json (root-owned 0444, RT23)
+      -> priority.rank (phase 5; `listing.py`) -> stage/decompile_list.json (root 0444, RT23)
       -> decompile stage (JVM 2, smaller heap) -> bounded rows -> one record per listed entry
 
 `run_full(ws, job, budget, runner, config, sample)` is shared by the real engine
@@ -21,7 +21,6 @@ from collections import Counter
 from pathlib import PurePosixPath
 
 from cyberlab_jobs.reverse import (
-    CAP_FUNCTIONS,
     AnalysisStatus,
     CodeKind,
     ReDecompiledRecord,
@@ -33,9 +32,10 @@ from cyberlab_jobs.reverse import (
 from cyberlab_worker import sandbox
 from cyberlab_worker.errors import JobFailed
 
-from re_worker import jvm_args, priority
+from re_worker import jvm_args
 from re_worker.config import TOOL_AS_HEADROOM, Config
 from re_worker.engines import Budget, EngineOutput, Workspace, workspace
+from re_worker.engines.listing import decompile_list
 from re_worker.engines.magic import SampleFacts
 from re_worker.engines.outcome import Conclusion, conclude
 from re_worker.engines.spec import (
@@ -109,24 +109,6 @@ class Facts:
             self.error("analyze_rows_dropped")
         for kind in sorted(analysis.capped):
             self.cut(kind)
-
-
-def ranked_entries(view: ReView, job: ReJobV1) -> list[int]:
-    """Phase 5's order, filtered by root: known functions only, once each, never thunks,
-    externals or library functions (whatever `rank` returns)."""
-    seen: set[int] = set()
-    out: list[int] = []
-    for entry in priority.rank(view, job):
-        function = view.functions.get(entry)
-        if function is None or entry in seen:
-            continue
-        if function.is_thunk or function.is_external or function.is_library:
-            continue
-        seen.add(entry)
-        out.append(entry)
-        if len(out) == CAP_FUNCTIONS:
-            break
-    return out
 
 
 def _with_ranks(functions: list[ReFunctionRecord], ranked: list[int]) -> list[ReFunctionRecord]:
@@ -293,8 +275,10 @@ def run_full(
         analysis.strings,
         analysis.string_refs,
     )
-    ranked = ranked_entries(view, job)
-    listed = ranked[: job.limits.max_decompiled]
+    plan = decompile_list(view, job)
+    if plan.missing:
+        facts.error("function_not_found")
+    ranked = listed = plan.entries  # phase 5's length; never cut again (RT10)
     decompiled: list[ReDecompiledRecord] = []
     if listed:
         decompiled = decompile_stage(ws, job, budget, runner, config, listed, facts)
@@ -326,6 +310,5 @@ __all__ = [
     "Facts",
     "analyze_stage",
     "decompile_stage",
-    "ranked_entries",
     "run_full",
 ]
