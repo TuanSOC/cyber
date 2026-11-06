@@ -60,6 +60,8 @@ CitedKind = Literal[
     "string",
     "custody",
     "note",
+    # M10: a reverse-engineering function's facts (`re_functions`; never its code).
+    "function",
 ]
 RefId = Annotated[
     str, StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_.:-]+$")

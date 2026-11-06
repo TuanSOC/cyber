@@ -25,6 +25,12 @@ Citation rules (in this order; the first failing rule decides):
 Normalization (quotes, values, claims): `text.sanitize`, NFC, whitespace collapsed, URLs and
 domains refanged, IPs canonical, hex hashes lowercase; otherwise case-sensitive.
 
+M10 (`explain_function`): `G` / `Q` items are re-queried in `re_functions` /
+`re_decompilations` of the run's job, like every job row; a quote of `Q.code` follows the
+rules above (whitespace collapsing lets a quote span reformatted lines; an identifier of ≥ 4
+characters anchors as a word). Only the target function's code is ever sent, so a citation
+of another function's code is an unknown label. No new flag.
+
 Claim rules (`OutputVerification.claims`, keyed by the body's claim ids, `attack:<tid>` and
 `timeline:<i>`):
 - `observed`: supported iff ≥ 1 verified citation with a quote AND the claim contains a
@@ -291,6 +297,13 @@ ENUM_FIELDS = frozenset(
         "subsystem",
         "matches",
         "rev",
+        # M10: function / code enums and counts.
+        "name_source",
+        "flags",
+        "decompile_status",
+        "code_kind",
+        "lines",
+        "truncated",
     }
 )
 
@@ -378,6 +391,9 @@ _TABLES: dict[str, _Table] = {
     "investigations": _Table("investigation", "t.created_at"),
     # The TI cache is org-wide (a run reuses another run's rows): org-level scope only.
     "ti_results": _Table("org", "t.fetched_at"),
+    # M10: one function's facts (G) and code (Q) of the run's reverse-engineering job.
+    "re_functions": _Table("job", _JOB_TIME),
+    "re_decompilations": _Table("job", _JOB_TIME),
 }
 
 RowState = Literal["ok", "missing", "out_of_scope"]

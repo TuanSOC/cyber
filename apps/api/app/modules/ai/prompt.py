@@ -40,7 +40,9 @@ from app.modules.ai.contracts import (
 )
 from app.modules.ai.labels import is_label
 
-PROMPT_VERSION = "m5.1"
+# m10.1 (M10 phase 9): the `explain_function` template and the code-cut stats phrase. M8 and
+# M9 added no template, so m5.1 was the version before.
+PROMPT_VERSION = "m10.1"
 
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 DELIMITER_PATTERN = re.compile(r"[0-9a-f]{32}")
@@ -49,8 +51,12 @@ MAX_REPAIR_ERRORS = 12
 MAX_REPAIR_PATH = 96
 
 # The explain tasks name their target: the first item of this kind in the context (the
-# builder puts the target first, so it is F1 / A1, or J{n}:F1 in a reduce).
-_TARGET_KIND = {AiTask.EXPLAIN_FINDING: RefKind.FINDING, AiTask.EXPLAIN_ALERT: RefKind.ALERT}
+# builder puts the target first, so it is F1 / A1 / G1, or J{n}:F1 in a reduce).
+_TARGET_KIND = {
+    AiTask.EXPLAIN_FINDING: RefKind.FINDING,
+    AiTask.EXPLAIN_ALERT: RefKind.ALERT,
+    AiTask.EXPLAIN_FUNCTION: RefKind.FUNCTION,
+}
 
 # Fixed phrases of the stats section (part of the pinned prompt; see `templates_sha256`).
 STATS_PHRASES = {
@@ -63,6 +69,9 @@ STATS_PHRASES = {
     "neutralized": "- Pseudonym-like tokens found in raw text and neutralized: {n}.",
     "stripped": "- Invisible or control characters removed from the evidence: {n}.",
     "jobs_omitted": "- Jobs of this incident left out over the job limit: {n}.",
+    "code_cut": (
+        "- String literals and identifiers in the code cut to their length limit: {n}."
+    ),
     "pseudonym_note": (
         "- Tokens such as INT_IP_3, INT_HOST_1 or USER_2 are pseudonyms for internal values "
         "that were replaced before sending."
@@ -165,6 +174,9 @@ def _render_stats(stats: ContextStats) -> str:
         lines.append(STATS_PHRASES["stripped"].format(n=stripped))
     if stats.jobs_omitted:
         lines.append(STATS_PHRASES["jobs_omitted"].format(n=int(stats.jobs_omitted)))
+    code_cut = int(stats.code_literals_truncated) + int(stats.code_identifiers_truncated)
+    if code_cut:
+        lines.append(STATS_PHRASES["code_cut"].format(n=code_cut))
     lines.append(STATS_PHRASES["pseudonym_note"])
     return "\n".join(lines)
 

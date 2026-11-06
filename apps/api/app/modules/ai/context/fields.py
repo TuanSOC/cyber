@@ -97,6 +97,11 @@ ALLOWED: dict[RefKind, frozenset[str]] = {
             "top.dns",
             "top.http_host",
             "top.sni",
+            # M10: the program facts of a reverse-engineering job (`re_programs`).
+            "engine",
+            "code_kind",
+            "arch",
+            "bits",
         }
     ),
     RefKind.FINDING: frozenset(
@@ -216,16 +221,25 @@ ALLOWED: dict[RefKind, frozenset[str]] = {
     RefKind.DIGEST_CLAIM: frozenset(
         {"kind", "section", "text", "confidence", "citations", "untrusted", "flags"}
     ),
-    # M10: function facts (G) and decompiled code (Q). Empty until phase 9 writes their
-    # allowlists (nothing of these kinds can reach a context before then).
-    RefKind.FUNCTION: frozenset(),
-    RefKind.CODE: frozenset(),
+    # M10 phase 9: one function's facts (G; its lists come as indexed fields under
+    # `FUNCTION_LIST_PREFIXES`) and its decompiled code (Q, `explain_function` only).
+    RefKind.FUNCTION: frozenset(
+        {"name", "entry", "size", "signature", "name_source", "flags", "decompile_status"}
+        | {"code_note"}
+    ),
+    RefKind.CODE: frozenset({"code_kind", "status", "code", "lines", "truncated"}),
 }
 # Open-ended prefixes per kind (names under them are built from trusted enums or checked).
+# G lists: `callers.01` … (≤ 20 names), `callees.01` … (≤ 20), `imports_called.01` … (≤ 30
+# `library!name`), `strings.01` … (≤ 20 values, each cut to 128 characters before the
+# transforms) and `capabilities.01` … (linked capa rule names). One field per entry, so each
+# stays under the 256-character cap and can be cited on its own.
+FUNCTION_LIST_PREFIXES = ("callers.", "callees.", "imports_called.", "strings.", "capabilities.")
 ALLOWED_PREFIXES: dict[RefKind, tuple[str, ...]] = {
     RefKind.JOB: ("count.",),
     RefKind.FINDING: (ATTRIBUTE_PREFIX,),
     RefKind.EVIDENCE: ("custody.",),
+    RefKind.FUNCTION: FUNCTION_LIST_PREFIXES,
 }
 # Hostname-typed fields: a single-label name there is internal (pseudonymized).
 HOST_FIELDS: dict[RefKind, frozenset[str]] = {
@@ -260,8 +274,14 @@ STRUCTURAL: dict[RefKind, frozenset[str]] = {
     RefKind.EVIDENCE: frozenset({"size", "mime", "sha256", "uploaded_at", "status"}),
     RefKind.INVESTIGATION: frozenset({"case_ref", "severity", "status", "created_at"}),
     RefKind.DIGEST_CLAIM: ALLOWED[RefKind.DIGEST_CLAIM],
-    RefKind.FUNCTION: frozenset(),  # M10 phase 9
-    RefKind.CODE: frozenset(),  # M10 phase 9
+    # M10: the function's address, size, enums and the fixed "not decompiled" note; its
+    # name, signature and lists are attacker-influenced value text (pseudonymized).
+    RefKind.FUNCTION: frozenset(
+        {"entry", "size", "name_source", "flags", "decompile_status", "code_note"}
+    ),
+    # Q: `code` is handled by `transform.Transformer.code` (value transforms inside literals
+    # and comments only, the AI_MAX_CODE_CHARS cap); the rest are enums and counts.
+    RefKind.CODE: frozenset({"code_kind", "status", "lines", "truncated"}),
 }
 STRUCTURAL_PREFIXES: dict[RefKind, tuple[str, ...]] = {
     RefKind.JOB: ("count.",),
@@ -706,3 +726,107 @@ def digest_fields(
         "untrusted": "model_output",
         "flags": ", ".join(flags),
     }
+
+
+# --- M10: reverse engineering (explain_function) ---------------------------------------------
+
+MAX_FUNCTION_CALLERS = 20
+MAX_FUNCTION_CALLEES = 20
+MAX_FUNCTION_IMPORTS = 30
+MAX_FUNCTION_STRINGS = 20
+MAX_FUNCTION_STRING_CHARS = 128
+MAX_FUNCTION_CAPABILITIES = 20
+CODE_NOTE = (
+    'not decompiled ({reason}); "Decompile this function" (a new full run) can decompile it'
+)
+
+
+def hex_address(value: object) -> str | None:
+    """`0x…` lowercase hex of an unsigned address column (NUMERIC(20, 0) / int)."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = int(value)  # type: ignore[call-overload]
+    except (TypeError, ValueError):
+        return None
+    return f"0x{number:x}" if number >= 0 else None
+
+
+def program_fields(program: Any) -> dict[str, RawValue]:
+    """The J facts of a reverse-engineering job from its `re_programs` row (enums only)."""
+    if program is None:
+        return {}
+    return _clean(
+        {
+            "engine": program.engine,
+            "code_kind": program.code_kind,
+            "arch": program.arch,
+            "bits": _int(program.bits),
+            "file_format": program.format,
+        }
+    )
+
+
+def _indexed(prefix: str, values: Sequence[str], limit: int) -> dict[str, RawValue]:
+    return {f"{prefix}{n:02d}": v for n, v in enumerate(values[:limit], start=1) if v}
+
+
+def import_label(library: str | None, name: str | None, ordinal: int | None) -> str:
+    """`library!name` (or `library!#ordinal`) of one import."""
+    target = name if name else (f"#{ordinal}" if ordinal is not None else "?")
+    return f"{library or '?'}!{target}"
+
+
+def function_fields(
+    row: Any,
+    *,
+    callers: Sequence[str] = (),
+    callees: Sequence[str] = (),
+    imports: Sequence[str] = (),
+    strings: Sequence[str] = (),
+    capabilities: Sequence[str] = (),
+    code_note: str | None = None,
+) -> dict[str, RawValue]:
+    """A `G` item: one `re_functions` row and its bounded lists (already in priority order;
+    the selector caps them). Strings are cut to `MAX_FUNCTION_STRING_CHARS` here, before the
+    M5 transforms (which then cap every field at 256 characters)."""
+    flags = [
+        name
+        for name, on in (
+            ("thunk", row.is_thunk),
+            ("external", row.is_external),
+            ("library", row.is_library),
+        )
+        if on
+    ]
+    fields: dict[str, RawValue] = {
+        "name": row.name,
+        "entry": hex_address(row.entry),
+        "size": _int(row.size),
+        "signature": row.signature,
+        "name_source": row.name_source,
+        "flags": ", ".join(flags) or None,
+        "decompile_status": row.decompile_status,
+        "code_note": code_note,
+    }
+    fields |= _indexed("callers.", list(callers), MAX_FUNCTION_CALLERS)
+    fields |= _indexed("callees.", list(callees), MAX_FUNCTION_CALLEES)
+    fields |= _indexed("imports_called.", list(imports), MAX_FUNCTION_IMPORTS)
+    cut = [s[:MAX_FUNCTION_STRING_CHARS] for s in strings]
+    fields |= _indexed("strings.", cut, MAX_FUNCTION_STRINGS)
+    fields |= _indexed("capabilities.", list(capabilities), MAX_FUNCTION_CAPABILITIES)
+    return _clean(fields)
+
+
+def code_fields(row: Any) -> dict[str, RawValue]:
+    """A `Q` item: one `re_decompilations` row with code (status ok / truncated). Never
+    rendered for any task but `explain_function` (`test_ai_function_fields.py`)."""
+    return _clean(
+        {
+            "code_kind": row.code_kind,
+            "status": row.status,
+            "code": row.code,
+            "lines": _int(row.lines),
+            "truncated": bool(row.truncated_bytes) or row.status == "truncated",
+        }
+    )

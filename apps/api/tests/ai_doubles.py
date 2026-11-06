@@ -76,6 +76,8 @@ _TABLES = {
     RefKind.EVIDENCE: "evidence",
     RefKind.INVESTIGATION: "investigations",
     RefKind.DIGEST_CLAIM: "ai_outputs",
+    RefKind.FUNCTION: "re_functions",  # M10
+    RefKind.CODE: "re_decompilations",  # M10
 }
 
 DEFAULT_ITEMS: tuple[tuple[RefKind, dict[str, FieldValue]], ...] = (

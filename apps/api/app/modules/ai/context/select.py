@@ -9,6 +9,10 @@ Default caps (plan): F 40, A 30 (grouped by sid, with counts), I 50, T latest pe
 for the chosen I only, S 50, C 60, E 100, N named by the chosen F refs + top 10 by bytes,
 R records on those flows (+ top domains / hosts / SNI aggregated on the job item),
 X ≤ 30 FLOSS-decoded strings, P / M / J / K summaries.
+
+M10 (`explain_function`, `select_function_items`): the target G, its Q, J, C linked to it, F
+citing it, I from its strings, ≤ 10 callee G. Decompiled code is read here and nowhere else
+in the context package (`test_ai_function_fields.py` enumerates it).
 """
 
 import re
@@ -24,8 +28,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.ai.context import fields as F
 from app.modules.ai.context.assemble import Selection
 from app.modules.ai.context.fields import HostList, RawItem
-from app.modules.ai.contracts import RefKind
-from app.modules.analysis.models import AnalysisJob, AnalysisStatus
+from app.modules.ai.contracts import ContextBuildError, RefKind
+from app.modules.analysis.models import AnalysisJob, AnalysisStatus, Analyzer
 from app.modules.evidence.models import (
     CustodyAction,
     Evidence,
@@ -43,6 +47,17 @@ from app.modules.pcap_analysis.models import (
     NetworkFlow,
     NetworkRecord,
     TimelineEntry,
+)
+from app.modules.reverse_engineering.models import (
+    ReCallEdge,
+    ReDecompilation,
+    ReFunction,
+    ReFunctionCapability,
+    ReImport,
+    ReImportRef,
+    ReProgram,
+    ReString,
+    ReStringRef,
 )
 from app.modules.static_analysis.models import (
     MalwareCapability,
@@ -137,13 +152,22 @@ async def job_items(
         aggregates = (
             await record_aggregates(session, org_id, job.id) if job.analyzer == "pcap" else None
         )
+        fields = F.job_fields(job, aggregates)
+        if job.analyzer == Analyzer.REVERSE:
+            # M10: the program facts (engine, code kind, arch, bits, format); never code.
+            program = await session.scalar(
+                select(ReProgram).where(
+                    ReProgram.organization_id == org_id, ReProgram.job_id == job.id
+                )
+            )
+            fields = {**fields, **F.program_fields(program)}
         items.append(
             RawItem(
                 kind=RefKind.JOB,
                 ref_table="analysis_jobs",
                 ref_id=str(job.id),
                 job_id=job.id,
-                fields=F.job_fields(job, aggregates),
+                fields=fields,
             )
         )
     return Selection(RefKind.JOB, items, len(items))
@@ -793,12 +817,156 @@ async def latest_succeeded_jobs(
     return list(rows)
 
 
+CAP_CALLEE_ITEMS = 10
+
+
+def _fn_join(other: Any, entry_column: Any) -> Any:
+    """`re_functions` rows of the same org and job as `other` whose entry is `entry_column`."""
+    f = ReFunction
+    return (
+        (f.organization_id == other.organization_id)
+        & (f.job_id == other.job_id)
+        & (f.entry == entry_column)
+    )
+
+
+def function_item(row: ReFunction, **lists: Any) -> RawItem:
+    return RawItem(
+        RefKind.FUNCTION, "re_functions", str(row.id), row.job_id, F.function_fields(row, **lists)
+    )
+
+
+async def _calls(
+    session: AsyncSession, org_id: uuid.UUID, job_id: uuid.UUID, entry: Any, *, callers: bool
+) -> list[tuple[ReFunction, int]]:
+    """The function's callers (or callees) with their call-site counts: most sites first,
+    then by entry (deterministic); at most the G list cap."""
+    e = ReCallEdge
+    near, far = (e.callee_entry, e.caller_entry) if callers else (e.caller_entry, e.callee_entry)
+    rows = await session.execute(
+        select(ReFunction, e.sites)
+        .join(ReFunction, _fn_join(e, far))
+        .where(e.organization_id == org_id, e.job_id == job_id, near == entry)
+        .order_by(e.sites.desc(), ReFunction.entry, ReFunction.id)
+        .limit(F.MAX_FUNCTION_CALLERS if callers else F.MAX_FUNCTION_CALLEES)
+    )
+    return [(fn, int(sites)) for fn, sites in rows.all()]
+
+
+async def _imports_called(
+    session: AsyncSession, org_id: uuid.UUID, job_id: uuid.UUID, entry: Any
+) -> list[str]:
+    i, r = ReImport, ReImportRef
+    rows = await session.execute(
+        select(i.library, i.name, i.ordinal)
+        .join(r, (r.import_id == i.id) & (r.organization_id == i.organization_id))
+        .where(r.organization_id == org_id, r.job_id == job_id, r.function_entry == entry)
+        .order_by(r.count.desc(), i.library, i.name, i.ordinal, i.id)
+        .limit(F.MAX_FUNCTION_IMPORTS)
+    )
+    return [F.import_label(lib, name, ordinal) for lib, name, ordinal in rows.all()]
+
+
+async def _strings_referenced(
+    session: AsyncSession, org_id: uuid.UUID, job_id: uuid.UUID, entry: Any
+) -> list[str]:
+    st, r = ReString, ReStringRef
+    rows = await session.scalars(
+        select(st.value)
+        .join(r, (r.string_id == st.id) & (r.organization_id == st.organization_id))
+        .where(r.organization_id == org_id, r.job_id == job_id, r.function_entry == entry)
+        .order_by(r.count.desc(), st.address, st.id)
+        .limit(F.MAX_FUNCTION_STRINGS)
+    )
+    return list(rows)
+
+
+async def _linked_capabilities(
+    session: AsyncSession, org_id: uuid.UUID, job_id: uuid.UUID, entry: Any
+) -> list[MalwareCapability]:
+    """The capa capabilities of the source static job located in this function (RT8)."""
+    m, link = MalwareCapability, ReFunctionCapability
+    linked = select(link.capability_id).where(
+        link.organization_id == org_id, link.job_id == job_id, link.function_entry == entry
+    )
+    rows = await session.scalars(
+        select(m)
+        .where(m.organization_id == org_id, m.id.in_(linked))
+        .order_by(m.namespace, m.name, m.id)
+        .limit(CAP_CAPABILITIES)
+    )
+    return list(rows)
+
+
+def _capability_item(row: MalwareCapability) -> RawItem:
+    fields = F.capability_fields(row)
+    return RawItem(RefKind.CAPABILITY, "malware_capabilities", str(row.id), row.job_id, fields)
+
+
 async def select_function_items(
     session: AsyncSession, org_id: uuid.UUID, job: AnalysisJob, target_id: uuid.UUID
 ) -> list[Selection]:
-    """M10 phase 9 (`explain_function`; frozen entry point, stub until then): the target
-    function's facts (G), its code (Q, capped at AI_MAX_CODE_CHARS), the job (J), the capa
-    capabilities linked to it (C), the findings citing it (F), the IOCs from its strings (I)
-    and <= 10 callee facts (G), in that order. The plan's `(session, run, target)` is spelled
-    with the builder's own arguments (org, job, target id)."""
-    raise NotImplementedError("M10 phase 9")
+    """M10 phase 9 (`explain_function`): the target function's facts (G), its code (Q,
+    capped at AI_MAX_CODE_CHARS by the transforms), the job (J), the capa capabilities
+    linked to it (C, rows of the source static job), the findings citing it (F, by
+    `attributes.function_entry`), the IOCs from its strings (I) and <= 10 callee facts (G,
+    no code), in that order (Q second, so it is never the item the budget drops first). The
+    plan's `(session, run, target)` is spelled with the builder's own arguments (org, job,
+    target id). `target_not_found` when the target is not a function of this job."""
+    f = ReFunction
+    row = await session.scalar(
+        select(f).where(f.organization_id == org_id, f.job_id == job.id, f.id == target_id)
+    )
+    if row is None:
+        raise ContextBuildError("target_not_found")
+    entry = row.entry
+    callers = await _calls(session, org_id, job.id, entry, callers=True)
+    callees = await _calls(session, org_id, job.id, entry, callers=False)
+    imports = await _imports_called(session, org_id, job.id, entry)
+    strings = await _strings_referenced(session, org_id, job.id, entry)
+    capabilities = await _linked_capabilities(session, org_id, job.id, entry)
+    d = ReDecompilation
+    code_row = await session.scalar(
+        select(d).where(d.organization_id == org_id, d.job_id == job.id, d.function_entry == entry)
+    )
+    code: list[RawItem] = []
+    note = None
+    if code_row is not None and code_row.code is not None:
+        code.append(
+            RawItem(
+                RefKind.CODE,
+                "re_decompilations",
+                str(code_row.id),
+                job.id,
+                F.code_fields(code_row),
+            )
+        )
+    else:
+        reason = code_row.status if code_row is not None else row.decompile_status
+        note = F.CODE_NOTE.format(reason=reason or "not_selected")
+    target = function_item(
+        row,
+        callers=[fn.name for fn, _ in callers],
+        callees=[fn.name for fn, _ in callees],
+        imports=imports,
+        strings=strings,
+        capabilities=[c.name for c in capabilities],
+        code_note=note,
+    )
+    m = AnalysisFinding
+    where = [m.attributes["function_entry"].astext == F.hex_address(entry)]
+    found = await finding_rows(session, org_id, [job.id], limit=CAP_RELATED, where=where)
+    found_total = await _count(session, m, [*_job_scope(m, org_id, [job.id]), *where])
+    iocs = await iocs_mentioned(session, org_id, [job.id], "\n".join(strings))
+    callee_items = [function_item(fn) for fn, _ in callees if fn.id != row.id]
+    return [
+        Selection(RefKind.FUNCTION, [target], 1),
+        Selection(RefKind.CODE, code, len(code)),
+        await job_items(session, org_id, [job]),
+        Selection(
+            RefKind.CAPABILITY, [_capability_item(c) for c in capabilities], len(capabilities)
+        ),
+        Selection(RefKind.FINDING, [finding_item(r) for r in found], found_total),
+        iocs,
+        Selection(RefKind.FUNCTION, callee_items[:CAP_CALLEE_ITEMS], len(callee_items)),
+    ]

@@ -43,9 +43,12 @@ from app.modules.retention.holds import HoldSet, active_holds
 
 CATEGORIES = ("ti_results", "ai_runs", "closed_case")
 # The bulk derived rows of a closed case's jobs (plan Retention; the DELETE grants of 0014,
-# of 0016 for the four memory tables, M8, and of 0017 for the two disk tables, M9).
-# `memory_images`, `memory_sensitivity`, `disk_images`, `disk_partitions`, `disk_exports`,
-# `analysis_job_segments`, findings and IOCs are never purged.
+# of 0016 for the four memory tables, M8, of 0017 for the two disk tables, M9, and of 0018
+# for the eight reverse-engineering tables, M10). `memory_images`, `memory_sensitivity`,
+# `disk_images`, `disk_partitions`, `disk_exports`, `analysis_job_segments`, `re_programs`
+# (the RE job's record), findings and IOCs are never purged. The tuple is sorted, so a
+# reference table is purged before the table it references (`re_import_refs` before
+# `re_imports`, `re_string_refs` before `re_strings`; their FKs cascade anyway).
 BULK_TABLES = (
     "analysis_timeline",
     "disk_events",
@@ -61,6 +64,14 @@ BULK_TABLES = (
     "memory_processes",
     "network_flows",
     "network_records",
+    "re_call_edges",
+    "re_decompilations",
+    "re_function_capabilities",
+    "re_functions",
+    "re_import_refs",
+    "re_imports",
+    "re_string_refs",
+    "re_strings",
 )
 AI_FINAL = ("completed", "partial", "failed", "refused")
 AI_CITABLE = ("ai_runs", "ai_outputs", "ai_citations")

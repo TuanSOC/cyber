@@ -2,7 +2,7 @@
 phase 8; an RE request is validated by schema and refused before anything is created (the
 source resolution is phase 7's); `quick` is `422 profile_unavailable` while disabled; the
 platform-wide heavy-analysis cap (RT2) refuses a second memory / disk / reverse job without
-naming it; `explain_function` is a frozen task the run path refuses until phase 9; the
+naming it; `explain_function` reaches the run path (phase 9; the AI checks apply); the
 capabilities route serves `CapabilityLinkedOut` while the static report keeps `CapabilityOut`
 (RT6)."""
 
@@ -125,7 +125,8 @@ async def test_the_heavy_cap_refuses_a_second_heavy_job(
     assert str(busy_job) not in response.text and str(other.org_id) not in response.text
 
 
-async def test_explain_function_is_refused_until_phase_9() -> None:
+async def test_explain_function_reaches_the_run_path() -> None:
+    """Phase 9 removed the pending refusal: the normal AI checks answer (AI is off here)."""
     owner = await register(org_name="M10 AI Org")
     case_id = uuid.UUID(await new_case(owner))
     t = Tenant(owner.org_id, owner.user_id, case_id)
@@ -135,8 +136,8 @@ async def test_explain_function_is_refused_until_phase_9() -> None:
         json={"task": "explain_function", "job_id": str(job_id), "target_id": str(uuid.uuid4())},
         headers=csrf(owner.client),
     )
-    assert response.status_code == 422, response.text
-    assert response.json()["error"]["code"] == "task_not_applicable"
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "ai_disabled"
 
 
 async def test_capabilities_route_carries_locations_and_report_does_not() -> None:

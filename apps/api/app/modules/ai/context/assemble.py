@@ -19,7 +19,7 @@ from app.modules.ai.context.encode import (
 from app.modules.ai.context.estimate import chars_for_tokens, estimate_tokens
 from app.modules.ai.context.fields import RawItem
 from app.modules.ai.context.pseudonymize import Pseudonymizer, category_counts, used_pseudonyms
-from app.modules.ai.context.transform import Totals, Transformer
+from app.modules.ai.context.transform import MAX_CODE_CHARS, Totals, Transformer
 from app.modules.ai.contracts import (
     CONTEXT_VERSION,
     AiTask,
@@ -61,8 +61,9 @@ def assemble(
     *,
     budget_tokens: int,
     jobs_omitted: int = 0,
+    max_code_chars: int = MAX_CODE_CHARS,
 ) -> FrozenContext:
-    transformer = Transformer(pseudonymizer)
+    transformer = Transformer(pseudonymizer, max_code_chars=max_code_chars)
     out = Assembled()
     budget_chars = chars_for_tokens(budget_tokens)
     size = len(empty_context_json(task))
@@ -142,6 +143,8 @@ def finish(
         neutralized=t.neutralized,
         stripped={k: v for k, v in t.stripped.as_dict().items() if v},
         jobs_omitted=jobs_omitted,
+        code_literals_truncated=t.code_literals,
+        code_identifiers_truncated=t.code_identifiers,
     )
     return FrozenContext(
         task=task,

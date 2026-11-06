@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Ai explain function reports and retention integration"
-status: pending
+status: code-complete (untested in Docker)
 priority: P2
 effort: "16h"
 dependencies: [1]
@@ -52,3 +52,21 @@ Wire RE results into the M5 AI analyst, the M6 reports and the M7 retention, wit
 - **Larger attacker-controlled context:** the 12 000-character exception widens the injection surface; bounded by spotlighting, the random delimiter refusal, literal cuts, no tools and the verifier (THREAT_MODEL residual).
 - **Quote verification over code:** normalization collapses whitespace, so a quote spanning reformatted lines still matches; the anchoring heuristic may accept a real identifier in a wrong description (the M5 known limit).
 - **Prompt digest bump:** invalidates digest reuse for the new version only; documented.
+
+## Notes (as built, untested in Docker)
+
+Code-only; nothing ran in a container. Host-run with `pytest --noconftest` (Python 3.14, no DB): `tests/unit/test_ai_function_{literals,fields}.py`, `tests/unit/test_ai_prompt.py` and `tests/ai_eval/test_ai_eval_explain_function.py` pass (90 tests). `select.py` / `builder.py` need SQLAlchemy 2.1 (`distinct_on`) and were only `py_compile`d; the integration tests were not run.
+
+- **Selection** (`select.select_function_items(session, org_id, job, target_id)`): target G, Q (only when the decompilation has code), J (now carries the program facts `engine`, `code_kind`, `arch`, `bits`, `file_format` for every reverse job, also in incident roots), C (capabilities linked through `re_function_capabilities`), F (`attributes.function_entry == "0x…"`), I (`iocs_mentioned` over the function's strings), ≤ 10 callee G (no lists, no Q; the self-edge of a recursive function excluded). Callers / callees by call sites desc then entry; imports by ref count desc then library / name; strings by ref count desc then address.
+- **G fields:** `name`, `entry` (`0x…`), `size`, `signature`, `name_source`, `flags` (`thunk, external, library`), `decompile_status`, `code_note` (only when there is no Q: `not decompiled (<reason>); "Decompile this function" (a new full run) can decompile it`), and the lists as **one indexed field per entry** (`callers.01`…`20`, `callees.01`…, `imports_called.01`…`30` as `library!name` / `library!#ordinal`, `strings.01`…`20` cut to 128, `capabilities.01`…) so each stays under the 256 cap and is citable alone (deviation from "callees[]" as one field). **Q fields:** `code_kind`, `status`, `code`, `lines`, `truncated`.
+- **Transforms:** `c_literals.py` (linear scanner: code / identifier / string / char / comment spans, `L`/`u`/`U`/`u8` prefixes, unterminated literals end at the line break). `Transformer.code`: RT16 cuts first (literal content > 96, identifier > 64, marker `…[cut n]`), then sanitize + NFC + neutralize over every segment, URL-query redaction + pseudonyms + defang **only inside literals and comments** (so `kernel32.dll` / `local_10.field` / `cfg.local` outside literals are never rewritten), then the `AI_MAX_CODE_CHARS` cut at a line boundary with `…[truncated n]`. Counters: `ContextStats.code_literals_truncated` / `code_identifiers_truncated` (additive, default 0; parent to confirm the frozen-contract addition) and a stats phrase rendered only when non-zero.
+- **Builder:** `RE_TASKS`; `explain_function` needs a reverse job (`task_not_applicable`); its `RunScope.job_ids` = (RE job, source static job) so C citations verify; `Options.max_code_chars` from `AI_MAX_CODE_CHARS`. `_re_digest` = J (program facts) + findings + IOCs + TI, never functions or code.
+- **Prompt:** `PROMPT_VERSION = "m10.1"`, `PENDING_TASKS` empty, target kind G (`G1`), pins added in `test_ai_prompt.py` (m5.1 pins kept). Template wording as in the plan plus "labelled $target".
+- **Verifier:** `re_functions` / `re_decompilations` in `_TABLES` (job rule); `ENUM_FIELDS` += `name_source, flags, decompile_status, code_kind, lines, truncated`. No new flag.
+- **Deep links:** `DeepLinkTab` += `facts`, `code`; G → `facts`, Q → `code`, `ref` = the function's `0x…` entry looked up by `LinkContext.load` (`LinkContext(analyzers, record_kinds, entries=None)`). Web: `?fn=<entry>&tab=facts|code` (phase 10).
+- **Reports:** `KIND_TABLES` += `function` (`re_functions`: name, entry, size, signature, name_source, capabilities) and `code` (`re_decompilations`: `description` = "decompiled code of <name> (sha256 …)", function, entry, code_sha256, code_kind, status, lines; never the code). Paths `/o/{org}/reverse-engineering/{job}?fn=0x…&tab=facts|code`. `CitedKind` += `function` (draft selection; OpenAPI changes, regenerate contracts). Snapshot schema unchanged (existing golden test untouched).
+- **Retention:** the eight `re_*` bulk tables in `BULK_TABLES` (sorted, refs before their parents); `re_programs` kept.
+- **Eval (offline):** `tests/ai_eval/re_function.py` builds the context from the fixtures without a DB (same renderers / transforms / assemble); a hand-written honest cassette for `pe_full`/`inject_remote` in `tests/fixtures/ai_eval/re_cassettes/` (outside the M5 cassette dir, so the M5 replay test keeps skipping); hostile scripts (a) cite unsent code, (b) quote the injected literal as benign, (c) code + commands, (d) canary in an identifier, over four `hostile_ai` twins; `summary()` prints the block for phase 11.
+- **Frozen files touched (parent to confirm):** `ai/contracts.py` (`PENDING_TASKS`, two stats fields), `ai/schemas.py` (`DeepLinkTab`), `reports/schemas.py` (`CitedKind`), `tests/ai_doubles.py` (G / Q tables), `tests/integration/test_m10_foundation.py` (the "refused until phase 9" test now expects `409 ai_disabled`).
+
+**Remains (Docker):** `tests/integration/test_ai_explain_function.py`, `test_reports_re_citations.py`, `test_retention_re.py`, `test_m10_foundation.py`, the AI / report / retention suites (`test_ai_*`, `test_report_*`, `test_retention_*`, `test_ai_api_runs` for the stats shape), `ruff` / `mypy`, then `pnpm gen:contracts`.

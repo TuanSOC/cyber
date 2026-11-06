@@ -50,8 +50,7 @@ class AiTask(enum.StrEnum):
     ATTACK_MAPPING = "attack_mapping"
     INCIDENT_SUMMARY = "incident_summary"
     JOB_DIGEST = "job_digest"  # internal child of an incident; never requested directly
-    # M10: one function of a succeeded reverse-engineering job (target: an re_functions id);
-    # refused `422 task_not_applicable` until phase 9 (`PENDING_TASKS`).
+    # M10: one function of a succeeded reverse-engineering job (target: an re_functions id).
     EXPLAIN_FUNCTION = "explain_function"
 
 
@@ -71,9 +70,9 @@ JOB_ONLY_TASKS = frozenset(
     }
 )
 # Frozen values whose run path is not built yet: the run service refuses them with
-# `422 task_not_applicable` and the prompt pins leave their template out (M10 phase 9 removes
-# `explain_function` from here, bumps PROMPT_VERSION to m10.1 and pins the new hashes).
-PENDING_TASKS = frozenset({AiTask.EXPLAIN_FUNCTION})
+# `422 task_not_applicable` and the prompt pins leave their template out. Empty since M10
+# phase 9 (`explain_function` is live, PROMPT_VERSION m10.1).
+PENDING_TASKS: frozenset[AiTask] = frozenset()
 INVESTIGATION_ONLY_TASKS = frozenset({AiTask.INCIDENT_SUMMARY})
 
 
@@ -355,6 +354,10 @@ class ContextStats(BaseModel):
     # M6 (additive, approved by the parent): evidence items of the case skipped by the share
     # policy. Stored only, never rendered into the prompt (the prompt digests stay pinned).
     policy_excluded: int = Field(default=0, ge=0)
+    # M10 (additive): string literals / identifiers cut inside `Q.code` before the transforms
+    # (RT16). Zero for every other task.
+    code_literals_truncated: int = Field(default=0, ge=0)
+    code_identifiers_truncated: int = Field(default=0, ge=0)
 
 
 CONTEXT_VERSION = "ctx.v1"
