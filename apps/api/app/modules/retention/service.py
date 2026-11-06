@@ -399,13 +399,12 @@ def hold_out(
     until = protects_until(hold)
     active = until is None or at < until
     if until is not None:
+        # Released: synced once a pass after the delay completed (OFF, or nothing to do).
         synced = hold.s3_synced_at is not None and hold.s3_synced_at >= until
-    elif hold.scope == "org":
-        # The worker mirrors an org hold on every evidence version of the org, resumably:
-        # until its first full pass, `s3_synced_at` is a watermark below `placed_at` (RT5).
-        synced = hold.s3_synced_at is not None and hold.s3_synced_at >= hold.placed_at
     else:
-        synced = hold.s3_synced_at is not None
+        # Active: synced once the worker's first full ON pass (resumable, bounded per call)
+        # covered every version the hold protects (RT5, 0015).
+        synced = hold.s3_full_synced_at is not None
     return LegalHoldOut(
         id=hold.id,
         scope=hold.scope,

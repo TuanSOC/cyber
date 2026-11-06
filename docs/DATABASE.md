@@ -1,6 +1,6 @@
 # Database
 
-PostgreSQL 17. Schema owned by Alembic (`apps/api/alembic/versions`): `0001` is M1, `0002`–`0005` M2 (analysis jobs, pcap results), `0006`–`0008` M3 (static analyzer, malware results, storage quota), `0009`–`0010` M4 (threat intelligence), `0011` M5 (AI analyst), `0012` and `0013` M6 (reports and case management; `0013` adds same-org composite FKs, review L4), `0014` M7 (platform operations: retention, legal holds, correlation, job outcomes, search indexes; see [M7](#platform-operations-m7-migration-0014)).
+PostgreSQL 17. Schema owned by Alembic (`apps/api/alembic/versions`): `0001` is M1, `0002`–`0005` M2 (analysis jobs, pcap results), `0006`–`0008` M3 (static analyzer, malware results, storage quota), `0009`–`0010` M4 (threat intelligence), `0011` M5 (AI analyst), `0012` and `0013` M6 (reports and case management; `0013` adds same-org composite FKs, review L4), `0014` M7 (platform operations: retention, legal holds, correlation, job outcomes, search indexes; see [M7](#platform-operations-m7-migration-0014)), `0015` M7 review (resumable S3 legal-hold sync state on `legal_holds`).
 
 ## Roles
 
@@ -145,7 +145,7 @@ Threat intel (migrations 0009/0010; details in [THREAT_INTEL.md](THREAT_INTEL.md
 - `iocs` is unchanged: results join on `ioc_key`, computed in Python.
 - Rate-limited, quota and deadline outcomes are item states, never `ti_results` rows; the history shows only what a provider said.
 - A cache hit is the newest unexpired `ok` / `not_found` row of the same org (DB clock).
-- `ti_results` is append-only; since M7 only the retention worker may delete old answers, together with their run items, under an org policy (`ti_results_days`; see [M7](#platform-operations-m7-migration-0014)).
+- `ti_results` is append-only; since M7 only the retention worker may delete old answers, together with their run items, under an org policy (`ti_results_days`; see [M7](#platform-operations-m7-migration-0014)), `0015` M7 review (resumable S3 legal-hold sync state on `legal_holds`).
 
 AI analyst (migration 0011; details in [AI_ANALYST.md](AI_ANALYST.md)):
 - The API writes a run, its index row, its base input, its refs and the audit row in one transaction (incident children with them); the analyst-worker writes the output, the citations and the run's usage / cost / metrics in one transaction.
@@ -257,7 +257,7 @@ The enrich and analyst workers use the same `cyberlab_app` role as the API (no d
 |---|---|---|
 | `org_retention_policies` | tenant (PK org) | `ti_results_days`, `ai_runs_days`, `closed_case_days` (NULL = keep forever; checks: NULL or 30–36 500; the API also enforces closed cases ≥ `EVIDENCE_LOCK_DAYS`, `422 policy_floor`); `pending_*` + `effective_at` for a lowered value; `enforce`, `pending_enforce`, `enforce_effective_at` (turning enforce on waits for the delay, RT1); `updated_by/at` |
 | `retention_policy_index` | system lookup (PK org) | `updated_at`; upserted by the API in the same transaction as every policy PUT and every hold placement (an org with holds but no policy still gets its S3 hold sync); the sweep's org list (RT3) |
-| `legal_holds` | tenant | `scope` org / investigation (`investigation_id` NULL exactly for org scope, composite FK), `reason` 1–500, `placed_by/at`, `released_by/at` (set together), `release_reason`, `s3_synced_at` (retention worker); index on (org, released_at) for "active or released within the delay" |
+| `legal_holds` | tenant | `scope` org / investigation (`investigation_id` NULL exactly for org scope, composite FK), `reason` 1–500, `placed_by/at`, `released_by/at` (set together), `release_reason`, `s3_synced_at`, `s3_full_synced_at`, `s3_sync_cursor_at/_id`, `s3_sync_pass_at` (retention worker's S3 sync state, `0015`); index on (org, released_at) for "active or released within the delay" |
 | `retention_runs` | tenant | `mode` dry_run / enforce, `trigger` schedule / manual (manual ⇔ `requested_by`), `status` queued / running / completed / partial / failed, `policy` jsonb ≤ 4 KiB (the values used), `counts` jsonb ≤ 8 KiB, `sample` jsonb ≤ 64 KiB, `error` code, `started_at`, `finished_at` |
 | `retention_run_items` | tenant, append-only | `run_id`, `category` ti_results / ai_runs / closed_case, `ref_table`, `ref_id`, `job_id`, `rows`, `bytes`, `object_key` + `object_version_id` (set together), `outcome` purged / skipped_hold / skipped_locked / object_delete_failed / kept_cited |
 | `evidence_purges` | tenant, append-only (PK `evidence_id`, composite FK) | the tombstone: `run_id`, `object_version_id`, `sha256`, `purged_at`. The evidence row itself never changes; `EvidenceOut.purged_at` and the `410 evidence_purged` answers come from here. `reconcile_orphans.py` reports a tombstoned version still stored as `purged_pending_delete` and a pinned version missing **without** a tombstone as `missing_unexplained` |
@@ -277,7 +277,7 @@ The enrich and analyst workers use the same `cyberlab_app` role as the API (no d
 |---|---|---|
 | `org_retention_policies` | SELECT, INSERT; UPDATE on the values, `pending_*`, `effective_at`, `enforce`, `pending_enforce`, `enforce_effective_at`, `updated_by`, `updated_at` | SELECT |
 | `retention_policy_index` | SELECT, INSERT; UPDATE on `updated_at` | SELECT |
-| `legal_holds` | SELECT, INSERT; UPDATE on `released_by, released_at, release_reason` | SELECT; UPDATE on `s3_synced_at` |
+| `legal_holds` | SELECT, INSERT; UPDATE on `released_by, released_at, release_reason` | SELECT; UPDATE on `s3_synced_at` and (`0015`) `s3_full_synced_at, s3_sync_cursor_at, s3_sync_cursor_id, s3_sync_pass_at` |
 | `retention_runs` | SELECT, INSERT (a manual or preview run requested through the API) | SELECT, INSERT; UPDATE on `status, counts, sample, started_at, finished_at, error` |
 | `retention_run_items`, `evidence_purges` | SELECT | SELECT, INSERT |
 | `correlation_keys`, `correlation_job_state` | SELECT, INSERT | none (never purged, RT9) |

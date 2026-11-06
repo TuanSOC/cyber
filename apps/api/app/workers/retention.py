@@ -10,7 +10,9 @@
   delete the object version; a failed or interrupted delete is retried by the next run.
 - `sync_holds(org_id)`: mirror the org's legal holds as S3 legal holds (RT5): a case hold on
   the case's evidence versions and report snapshots, an org hold on every evidence version of
-  the org; bounded per call. Returns the number of object versions changed.
+  the org; bounded per call (an equal budget share per pass, ON passes first), resumable (a
+  keyset cursor per hold, 0015), under the org's advisory lock. Returns the number of object
+  versions changed.
 
 Every org id comes from `retention_policy_index` or must be listed there (a message org that
 is not is dropped). The process runs as `cyberlab_retention` (DELETE on the purgeable tables
@@ -21,14 +23,14 @@ import logging
 import time
 import uuid
 from collections import defaultdict
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from minio.error import S3Error
-from sqlalchemy import select, text
+from sqlalchemy import TextClause, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -235,60 +237,82 @@ async def sweep() -> int:
 
 # --- S3 legal-hold sync (RT5) ----------------------------------------------------------------
 
+# What a hold covers, in one keyset order `(ts, id)`, `ts` being the row's own time (an
+# evidence upload's `uploaded_at`, a report snapshot's `finalized_at`). A pass fetches at most
+# its share of the budget after its cursor; a pass that runs out stores its cursor (0015) and
+# the next sync resumes right after it, so no pass restarts or stalls, however many objects
+# there are or share one timestamp.
+#
+# A case hold: the case's evidence versions and report snapshots (`evidence = false`: the
+# snapshots only, for a released case hold while an org hold keeps the evidence ON).
 _CASE_OBJECTS = text(
     """
-SELECT storage_bucket, storage_key, storage_version_id FROM evidence
-WHERE organization_id = :org AND investigation_id = :case
-UNION ALL
-SELECT CAST(:reports AS text), v.object_key, v.object_version_id FROM report_versions v
-JOIN reports r ON r.id = v.report_id
-WHERE v.organization_id = :org AND r.investigation_id = :case
-ORDER BY 1, 2, 3
+SELECT bucket, key, version, ts, id FROM (
+  SELECT storage_bucket AS bucket, storage_key AS key, storage_version_id AS version,
+         uploaded_at AS ts, id
+  FROM evidence
+  WHERE organization_id = :org AND investigation_id = :case AND CAST(:evidence AS boolean)
+  UNION ALL
+  SELECT CAST(:reports AS text), v.object_key, v.object_version_id, v.finalized_at, v.id
+  FROM report_versions v JOIN reports r ON r.id = v.report_id
+  WHERE v.organization_id = :org AND r.investigation_id = :case
+) o
+WHERE (ts, id) > (CAST(:after_at AS timestamptz), CAST(:after_id AS uuid))
+ORDER BY ts, id
+LIMIT :limit
 """
 )
-_NEW_SINCE = text(
-    """
-SELECT EXISTS (SELECT 1 FROM evidence WHERE organization_id = :org AND investigation_id = :case
-               AND uploaded_at > :since)
-    OR EXISTS (SELECT 1 FROM report_versions v JOIN reports r ON r.id = v.report_id
-               WHERE v.organization_id = :org AND r.investigation_id = :case
-               AND v.finalized_at > :since)
-"""
-)
-
-
-# Every evidence version of the org, oldest first (their GOVERNANCE lock expires first): an
-# org hold mirrors these only. The api's expired-lock delete grant covers the evidence
-# buckets alone; report snapshots are undeletable by the api and the purge user; an org hold
-# skips every purge run. `since` makes the ON pass incremental (see `_org_since`).
+# An org hold: every evidence version of the org, oldest first (their GOVERNANCE lock expires
+# first), but the cases in `skip` (an OFF pass skips the cases a protecting case hold
+# covers). The api's expired-lock delete grant covers the evidence buckets alone; report
+# snapshots are undeletable by the api and the purge user; an org hold skips every purge run.
 _ORG_EVIDENCE = text(
     """
-SELECT storage_bucket, storage_key, storage_version_id, investigation_id, uploaded_at
-FROM evidence WHERE organization_id = :org AND uploaded_at > :since
+SELECT storage_bucket, storage_key, storage_version_id, uploaded_at, id
+FROM evidence
+WHERE organization_id = :org
+  AND (uploaded_at, id) > (CAST(:after_at AS timestamptz), CAST(:after_id AS uuid))
+  AND investigation_id <> ALL (CAST(:skip AS uuid[]))
 ORDER BY uploaded_at, id
+LIMIT :limit
 """
 )
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
-# An upload's `uploaded_at` is its transaction's start: a row committed after a sync's query
-# can carry an earlier time. An org-hold ON pass after a completed one re-inspects this
-# window before the stamp, so such a row is never skipped.
+# `(t, _MAX_ID)` as the keyset position: every object strictly after time `t`.
+_MAX_ID = uuid.UUID(int=(1 << 128) - 1)
+_Cursor = tuple[datetime, uuid.UUID]  # a keyset position: (ts, id)
+# An upload's `uploaded_at` is its transaction's start: a row committed after a pass passed
+# its time can carry an earlier one. A completed ON pass stores its START time and the next
+# (incremental) pass re-inspects SYNC_SKEW before it, so such a row is never skipped.
 SYNC_SKEW = timedelta(minutes=10)
-_TICK = timedelta(microseconds=1)
 
 
 @dataclass
 class _Budget:
+    inspect_max: int
+    changes_max: int
     changed: int = 0
     inspected: int = 0
 
     @property
     def spent(self) -> bool:
-        return self.changed >= SYNC_CHANGES_MAX or self.inspected >= SYNC_INSPECT_MAX
+        return self.changed >= self.changes_max or self.inspected >= self.inspect_max
+
+    def share(self, plans_left: int) -> "_Budget":
+        """An equal share of what is left, so every plan progresses on every sync (M1)."""
+        return _Budget(
+            max(1, (self.inspect_max - self.inspected) // plans_left),
+            max(1, (self.changes_max - self.changed) // plans_left),
+        )
+
+    def add(self, spent: "_Budget") -> None:
+        self.changed += spent.changed
+        self.inspected += spent.inspected
 
 
-async def _mirror(objs: Iterable[tuple[str, str, str]], on: bool, budget: _Budget) -> int:
+async def _mirror(objs: list[tuple[str, str, str]], on: bool, budget: _Budget) -> int:
     """Set every version's S3 legal hold to `on`, in order. Returns how many versions were
-    handled before the budget ran out or a call failed (the next sync continues)."""
+    handled before the budget ran out or a call failed (the next sync continues there)."""
     done = 0
     for bucket, key, version in objs:
         if budget.spent:
@@ -302,6 +326,10 @@ async def _mirror(objs: Iterable[tuple[str, str, str]], on: bool, budget: _Budge
         except S3Error as exc:
             log.warning("retention hold sync: %s on %s failed (%s)", on, bucket, exc.code)
             return done
+        except Exception as exc:  # noqa: BLE001 - a transport error: keep what is done
+            name = type(exc).__name__
+            log.warning("retention hold sync: %s on %s failed (%s)", on, bucket, name)
+            return done
         done += 1
     return done
 
@@ -310,9 +338,20 @@ async def _mirror(objs: Iterable[tuple[str, str, str]], on: bool, budget: _Budge
 class _Plan:
     hold: LegalHold
     on: bool
-    objs: list[tuple[str, str, str]]
-    # Org-hold ON pass only: the `uploaded_at` of each object (the resumable watermark).
-    uploaded: list[datetime] = field(default_factory=list)
+    query: TextClause
+    params: dict[str, Any]
+    # The stored cursor of this pass when it resumes one, and when the pass started.
+    cursor: _Cursor | None
+    pass_at: datetime
+    since: datetime  # a fresh pass: every object strictly after this time
+
+
+@dataclass(frozen=True)
+class _State:
+    synced: datetime | None
+    full: datetime | None
+    cursor: _Cursor | None
+    pass_at: datetime | None
 
 
 def _protecting(h: LegalHold, at: datetime) -> bool:
@@ -323,73 +362,148 @@ def _ended(h: LegalHold, at: datetime) -> datetime:
     return h.released_at + delay() if h.released_at else at
 
 
-async def _case_plan(
-    s: AsyncSession, org_id: uuid.UUID, h: LegalHold, on: bool, reports: str
-) -> _Plan:
-    rows = (
-        await s.execute(
-            _CASE_OBJECTS, {"org": org_id, "case": h.investigation_id, "reports": reports}
-        )
-    ).all()
-    return _Plan(h, on, [(str(b), str(k), str(v)) for b, k, v in rows])
+def _resume(h: LegalHold, on: bool, at: datetime) -> tuple[_Cursor | None, datetime]:
+    """The stored cursor and pass start when they belong to a pass in this direction, else a
+    fresh pass from `at`. A pass's direction follows from its start: ON passes start while
+    the hold protects (`at < released_at + delay`), OFF passes after; `pass_at` is that same
+    `at`, compared the same way, so the test is exact whatever the clocks."""
+    if h.s3_sync_cursor_at is None or h.s3_sync_cursor_id is None or h.s3_sync_pass_at is None:
+        return None, at
+    off_pass = h.released_at is not None and h.s3_sync_pass_at >= h.released_at + delay()
+    if off_pass == on:
+        return None, at  # e.g. an ON pass interrupted when the delay ended: OFF starts anew
+    return (h.s3_sync_cursor_at, h.s3_sync_cursor_id), h.s3_sync_pass_at
 
 
-async def _org_plan(
-    s: AsyncSession, org_id: uuid.UUID, h: LegalHold, on: bool, covered: set[uuid.UUID]
-) -> _Plan:
-    """ON: the org's evidence since the watermark (all of it on the first pass). OFF: all of
-    it but the cases another protecting hold covers."""
-    since = _org_since(h) if on else _EPOCH
-    rows = (await s.execute(_ORG_EVIDENCE, {"org": org_id, "since": since})).all()
-    if not on:
-        rows = [r for r in rows if r[3] not in covered]
-    return _Plan(
-        h,
-        on,
-        [(str(r[0]), str(r[1]), str(r[2])) for r in rows],
-        [r[4] for r in rows] if on else [],
-    )
-
-
-def _org_since(h: LegalHold) -> datetime:
-    """Where an org hold's ON pass starts. Nothing stamped: the first pass, from the start. A
-    stamp below `placed_at`: the resume watermark of an incomplete first pass (exact). A stamp
-    at or after it: a completed pass's time, or a later resume point; minus SYNC_SKEW."""
-    if h.s3_synced_at is None:
+def _on_since(h: LegalHold) -> datetime:
+    """Where a fresh ON pass starts: the beginning until the first full pass completed (M2),
+    then SYNC_SKEW before the last completed pass started (incremental)."""
+    if h.s3_full_synced_at is None or h.s3_synced_at is None:
         return _EPOCH
-    if h.s3_synced_at < h.placed_at:
-        return h.s3_synced_at
     return h.s3_synced_at - SYNC_SKEW
 
 
-def _stamp(plan: _Plan, done: int, at: datetime) -> datetime | None:
-    """The `s3_synced_at` to store after a pass that handled `done` of its objects, or None.
-    A complete pass stamps `at`. An incomplete org-hold ON pass stores a watermark (the last
-    handled upload) so the next sync resumes there; until its first pass completes, the
-    watermark stays below `placed_at`, so the hold reads `s3_sync: pending`. Any other
-    incomplete pass stores nothing (an OFF pass repeats: it fails closed, since the purge
-    skips a held version)."""
-    if done >= len(plan.objs):
-        return at
-    if not (plan.on and plan.hold.scope == "org" and done > 0):
-        return None
-    # Just below the last handled upload: the next pass re-inspects it and any upload with
-    # the same time that this pass did not reach.
-    mark = plan.uploaded[done - 1] - _TICK
-    previous = plan.hold.s3_synced_at
-    if previous is None or previous < plan.hold.placed_at:
-        mark = min(mark, plan.hold.placed_at - _TICK)
-    return mark if previous is None or mark > previous else None
+def _plan(
+    h: LegalHold, on: bool, at: datetime, query: TextClause, params: dict[str, Any]
+) -> _Plan:
+    cursor, pass_at = _resume(h, on, at)
+    return _Plan(h, on, query, params, cursor, pass_at, _on_since(h) if on else _EPOCH)
+
+
+def _case_plan(h: LegalHold, on: bool, at: datetime, reports: str, *, evidence: bool) -> _Plan:
+    params = {"case": h.investigation_id, "reports": reports, "evidence": evidence}
+    return _plan(h, on, at, _CASE_OBJECTS, params)
+
+
+def _org_plan(h: LegalHold, on: bool, at: datetime, skip: set[uuid.UUID]) -> _Plan:
+    return _plan(h, on, at, _ORG_EVIDENCE, {"skip": sorted(skip)})
+
+
+def _current(h: LegalHold) -> _State:
+    cursor = (
+        (h.s3_sync_cursor_at, h.s3_sync_cursor_id)
+        if h.s3_sync_cursor_at is not None and h.s3_sync_cursor_id is not None
+        else None
+    )
+    pass_at = h.s3_sync_pass_at if cursor else None
+    return _State(h.s3_synced_at, h.s3_full_synced_at, cursor, pass_at)
+
+
+def _after(plan: _Plan, rows: list[Any], done: int, limit: int, at: datetime) -> _State:
+    """The hold's sync state after a pass handled `done` of the `rows` it fetched (at most
+    `limit`). Complete (every remaining object handled): an ON pass stores its start time and
+    marks the first full pass; an OFF pass its end. Else the cursor of the last handled
+    object (or the one it resumed from), and the pass start."""
+    h = plan.hold
+    if done == len(rows) and len(rows) < limit:
+        if plan.on:
+            return _State(plan.pass_at, h.s3_full_synced_at or at, None, None)
+        return _State(at, h.s3_full_synced_at, None, None)
+    cursor = (rows[done - 1][3], rows[done - 1][4]) if done else plan.cursor
+    return _State(h.s3_synced_at, h.s3_full_synced_at, cursor, plan.pass_at if cursor else None)
+
+
+async def _execute(
+    s: AsyncSession, org_id: uuid.UUID, plan: _Plan, budget: _Budget, at: datetime
+) -> _State:
+    after_at, after_id = plan.cursor or (plan.since, _MAX_ID)
+    limit = budget.inspect_max
+    params = {**plan.params, "org": org_id, "after_at": after_at, "after_id": after_id}
+    rows = list((await s.execute(plan.query, {**params, "limit": limit})).all())
+    done = await _mirror([(str(r[0]), str(r[1]), str(r[2])) for r in rows], plan.on, budget)
+    return _after(plan, rows, done, limit, at)
+
+
+async def _store(s: AsyncSession, h: LegalHold, state: _State) -> None:
+    if state == _current(h):
+        return
+    await s.execute(
+        text(
+            "UPDATE legal_holds SET s3_synced_at = :synced, s3_full_synced_at = :full, "
+            "s3_sync_cursor_at = :cursor_at, s3_sync_cursor_id = :cursor_id, "
+            "s3_sync_pass_at = :pass_at WHERE id = :id"
+        ),
+        {
+            "synced": state.synced,
+            "full": state.full,
+            "cursor_at": state.cursor[0] if state.cursor else None,
+            "cursor_id": state.cursor[1] if state.cursor else None,
+            "pass_at": state.pass_at,
+            "id": h.id,
+        },
+    )
+
+
+def _plans(
+    holds: list[LegalHold], at: datetime, reports: str
+) -> tuple[list[_Plan], list[LegalHold]]:
+    """The passes this sync runs (ON before OFF, M1) and the released holds it only stamps.
+
+    A protecting hold (active, or released within the delay) keeps its objects ON. A release
+    turns them OFF only after the delay, and only where no other protecting hold covers them:
+    an org hold covers every evidence version (not the report snapshots), a case hold its
+    case's evidence and snapshots."""
+    protecting = [h for h in holds if _protecting(h, at)]
+    org_hold = any(h.scope == "org" for h in protecting)
+    covered = {h.investigation_id for h in protecting if h.investigation_id is not None}
+    on: list[_Plan] = []
+    off: list[_Plan] = []
+    stamp_only: list[LegalHold] = []
+    for h in holds:
+        if h.scope != "org" and h.investigation_id is None:
+            continue
+        if _protecting(h, at):
+            if h.scope == "org":
+                on.append(_org_plan(h, True, at, set()))
+            else:
+                on.append(_case_plan(h, True, at, reports, evidence=True))
+            continue
+        if h.s3_synced_at is not None and h.s3_synced_at >= _ended(h, at):
+            continue  # its OFF pass (or stamp) is done
+        if h.scope == "org":
+            if org_hold:
+                stamp_only.append(h)  # another org hold keeps everything ON
+            else:
+                off.append(_org_plan(h, False, at, covered))
+        elif h.investigation_id in covered:
+            stamp_only.append(h)  # another case hold keeps the case ON
+        else:
+            # Under an org hold the evidence stays ON, the case's snapshots go OFF (L1).
+            off.append(_case_plan(h, False, at, reports, evidence=not org_hold))
+    return on + off, stamp_only
 
 
 async def _sync(org_id: uuid.UUID, at: datetime) -> int:
-    """Legal holds -> S3 legal holds (RT5). A case hold covers the case's evidence versions
-    and report snapshots; an org hold every evidence version of the org (so the api's delete
-    grant on expired locks cannot reach org-held evidence). A protecting hold (active or
-    released within the delay) keeps them ON; a release turns them OFF only after the delay
-    and only when no other protecting hold (case or org) covers them."""
+    """Legal holds -> S3 legal holds (RT5), bounded per call (SYNC_INSPECT_MAX inspected,
+    SYNC_CHANGES_MAX changed, shared equally by the passes) and resumable (0015).
+
+    One transaction under the org's advisory lock (L2): two syncs of an org (the sweep, a
+    run, a placed hold's message) never interleave, so a pass never works from holds read
+    before another sync's writes; a waiting sync reads the holds after the lock."""
     reports = get_settings().reports_bucket
+    total = _Budget(SYNC_INSPECT_MAX, SYNC_CHANGES_MAX)
     async with _session(org_id) as s:
+        await _lock_org(s, org_id)
         holds = list(
             (
                 await s.execute(
@@ -399,57 +513,17 @@ async def _sync(org_id: uuid.UUID, at: datetime) -> int:
                 )
             ).scalars()
         )
-        protecting = [h for h in holds if _protecting(h, at)]
-        org_hold = any(h.scope == "org" for h in protecting)
-        covered = {h.investigation_id for h in protecting if h.investigation_id is not None}
-        plans: list[_Plan] = []
-        stamp_only: list[uuid.UUID] = []
-        for h in holds:
-            if h.scope == "org":
-                if _protecting(h, at):
-                    plans.append(await _org_plan(s, org_id, h, True, covered))
-                elif h.s3_synced_at is not None and h.s3_synced_at >= _ended(h, at):
-                    continue
-                elif org_hold:
-                    stamp_only.append(h.id)  # another org hold keeps everything ON
-                else:
-                    plans.append(await _org_plan(s, org_id, h, False, covered))
-                continue
-            if h.investigation_id is None:
-                continue
-            if _protecting(h, at):
-                since = h.s3_synced_at
-                stale = since is None or bool(
-                    (
-                        await s.execute(
-                            _NEW_SINCE, {"org": org_id, "case": h.investigation_id, "since": since}
-                        )
-                    ).scalar_one()
-                )
-                if stale:
-                    plans.append(await _case_plan(s, org_id, h, True, reports))
-            elif h.s3_synced_at is not None and h.s3_synced_at >= _ended(h, at):
-                continue
-            elif org_hold or h.investigation_id in covered:
-                stamp_only.append(h.id)  # another hold keeps the objects ON
-            else:
-                plans.append(await _case_plan(s, org_id, h, False, reports))
-    budget = _Budget()
-    stamps: dict[uuid.UUID, datetime] = dict.fromkeys(stamp_only, at)
-    for plan in plans:
-        mark = _stamp(plan, await _mirror(plan.objs, plan.on, budget), at)
-        if mark is not None:
-            stamps[plan.hold.id] = mark
-        if budget.spent:
-            break
-    if stamps:
-        async with _session(org_id) as s:
-            for hold_id, mark in stamps.items():
-                await s.execute(
-                    text("UPDATE legal_holds SET s3_synced_at = :at WHERE id = :id"),
-                    {"at": mark, "id": hold_id},
-                )
-    return budget.changed
+        plans, stamp_only = _plans(holds, at, reports)
+        for h in stamp_only:
+            await _store(s, h, _State(at, h.s3_full_synced_at, None, None))
+        for i, plan in enumerate(plans):
+            if total.spent:
+                break  # the rest keep their cursors; the next sync continues
+            share = total.share(len(plans) - i)
+            state = await _execute(s, org_id, plan, share, at)
+            total.add(share)
+            await _store(s, plan.hold, state)
+    return total.changed
 
 
 async def sync_holds(org_id: uuid.UUID) -> int:

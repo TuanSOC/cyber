@@ -134,6 +134,11 @@ class LegalHold(UUIDPk, Base):
             "release_reason IS NULL OR released_at IS NOT NULL",
             name="release_reason_when_released",
         ),
+        CheckConstraint(  # 0015
+            "(s3_sync_cursor_at IS NULL) = (s3_sync_cursor_id IS NULL) "
+            "AND (s3_sync_cursor_at IS NULL) = (s3_sync_pass_at IS NULL)",
+            name="s3_sync_cursor",
+        ),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
@@ -145,8 +150,17 @@ class LegalHold(UUIDPk, Base):
     released_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     released_at: Mapped[datetime | None]
     release_reason: Mapped[str | None] = mapped_column(Text)
-    # Last S3 legal-hold sync by the retention worker (RT5); the API never writes it.
+    # S3 legal-hold sync state, written by the retention worker only (RT5, 0015):
+    # - s3_synced_at: the last COMPLETED pass (an ON pass: its start, the next incremental
+    #   pass's lower bound; an OFF pass or a stamp-only release: its end);
+    # - s3_full_synced_at: the first complete ON pass from the beginning finished;
+    # - s3_sync_cursor_at / _id: the keyset cursor of the pass in progress, started at
+    #   s3_sync_pass_at (all three NULL together).
     s3_synced_at: Mapped[datetime | None]
+    s3_full_synced_at: Mapped[datetime | None]
+    s3_sync_cursor_at: Mapped[datetime | None]
+    s3_sync_cursor_id: Mapped[uuid.UUID | None]
+    s3_sync_pass_at: Mapped[datetime | None]
 
 
 class RetentionRun(UUIDPk, Base):

@@ -391,6 +391,31 @@ async def test_a_hold_is_released_once_and_its_identity_is_immutable() -> None:
         )
 
 
+async def test_the_hold_sync_state_is_the_retention_roles_only() -> None:
+    """0015: the resumable sync state (first full pass, keyset cursor, pass start) is written
+    by the retention role only, and the cursor's three columns are set together."""
+    t = await seed_tenant("alpha")
+    hold_id = await seed_hold(t)
+    state = (
+        "s3_full_synced_at = now(), s3_sync_cursor_at = now(), "
+        "s3_sync_cursor_id = gen_random_uuid(), s3_sync_pass_at = now()"
+    )
+    async with retention_session(t.org_id) as s:
+        await s.execute(text(f"UPDATE legal_holds SET {state} WHERE id = :h"), {"h": hold_id})
+    with pytest.raises(DBAPIError, match="permission denied"):
+        async with tenant_session(t.org_id, t.owner_id) as s:
+            await s.execute(
+                text("UPDATE legal_holds SET s3_full_synced_at = now() WHERE id = :h"),
+                {"h": hold_id},
+            )
+    with pytest.raises(IntegrityError, match="ck_legal_holds_s3_sync_cursor"):
+        async with retention_session(t.org_id) as s:
+            await s.execute(
+                text("UPDATE legal_holds SET s3_sync_pass_at = NULL WHERE id = :h"),
+                {"h": hold_id},
+            )
+
+
 async def test_a_scope_needs_its_target() -> None:
     t = await seed_tenant("alpha")
     with pytest.raises(IntegrityError, match="ck_legal_holds_scope_target"):
