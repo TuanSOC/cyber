@@ -1,5 +1,23 @@
-# Debian packages of the phase-4 synthetic disk image generator (dev / test target ONLY; the
-# prod target asserts none of them is present). PLACEHOLDER written by M9 phase 1: phase 4
-# (group A', merged before the disk image is built) owns this list. Expected content: dosfstools
-# mtools e2fsprogs exfatprogs ntfs-3g libntfs-3g* fdisk ewf-tools hivex python3-hivex util-linux.
+# Debian (trixie) packages of the phase-4 synthetic disk image generator, dev / test target ONLY:
+# the prod target asserts none of them is present (docker/finalize_image.py). GPL test tools,
+# run only at test time, never in prod. None of them is used with a mount, a loop device or
+# FUSE (parent decision, RT26): every image is written as a regular file.
+# FAT12/16/32, MBR / GPT, split raw and the registry base hive are written in pure Python
+# (samples/diskgen); the tools below build the other file systems and check the results.
 # One package per line; lines starting with # are ignored.
+# fsck.fat (checks the pure-Python FAT images)
+dosfstools
+# mkfs.exfat, fsck.exfat
+exfatprogs
+# mke2fs -d, debugfs -w, e2fsck
+e2fsprogs
+# mkntfs, ntfscp, ntfsinfo, ntfsfix, ntfscat; libntfs-3g is also used as a library (ctypes)
+ntfs-3g
+libntfs-3g89t64
+# sfdisk --json (checks the pure-Python partition tables)
+fdisk
+# ewfacquirestream, ewfverify
+ewf-tools
+# hivexregedit --merge (Perl) and hivexget
+libwin-hivex-perl
+libhivex-bin

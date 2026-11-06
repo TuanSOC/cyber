@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Synthetic disk image generator"
-status: pending
+status: completed (code)
 priority: P2
 effort: "14h"
 dependencies: []
@@ -90,3 +90,21 @@ The generator runs inside the dev / test target of the disk image, whose extra p
 
 ## Spike notes
 <!-- Filled by the phase-4 agent: NTFS directory approach, hive outcome, exFAT population method, determinism exceptions. -->
+
+**Status: code only, untested in Docker** (no container was run for this phase; the spike's tool steps are written but not exercised). Owner constraint applied: no privileged container, no loop device, no FUSE, no mount; images are regular files written in userspace.
+
+- **FAT12 / 16 / 32: pure Python** (`fs_fat.py`), not `mkfs.fat` + `mtools`: boot sector / BPB, FSInfo and the backup boot region, two FATs, VFAT long names with checksums, Windows-style `~N` aliases, 0xE5 deletion (chain freed, data kept), explicit times (mtime 2 s, crtime 10 ms, atime date). Deterministic byte for byte. Host-verified by an independent reader in `test_diskgen.py` and listed / tested cleanly by 7-Zip on the host; `fsck.fat -n` is pending Docker.
+- **MBR / GPT, split raw: pure Python** (`layouts.py`; CRC32 headers and arrays, backup GPT); `sfdisk --json` cross-check pending Docker.
+- **ext2 / 3 / 4:** `mke2fs -d` of a staged tree (hard link staged as a hard link: one inode, `links_count` 2), then `debugfs -w -f` sets uid / gid and every time (`@epoch`; `crtime` on ext4 only). Fixed `-U`, `-E hash_seed`, `E2FSPROGS_FAKE_TIME`: expected byte-exact (checked by the engine test).
+- **exFAT:** `mkfs.exfat` only, **empty file system** (exfatprogs has no userspace copy tool; the plan's fallback). The clock-derived volume serial is patched to a fixed value in both boot regions with the boot checksum recomputed (pure Python, unit-tested).
+- **NTFS directory decision:** route 1 (libntfs-3g through ctypes, `ntfs_mount` on the image file, `ntfs_create` / `ntfs_link`, always in a child process) is implemented and tried first by `--ntfs-route auto`, verified with `ntfsinfo -F`; any failure falls back to **route 3** (the Windows-shaped tree on FAT32 plus `ntfs_flat`, a flat NTFS image with the named streams, built by `mkntfs` + `ntfscp -N`). Route 2 (own MFT writer) not attempted. The route taken is in `ground_truth.json` (`ntfs_route`). Whether route 1 works on trixie's libntfs-3g 2022.10.3 is **pending Docker**. Gaps on route 3: named streams and the second name of `SAM` exist only on NTFS (`ntfs_flat` has the streams but no directories and no hard link); no deleted MFT entry anywhere (no userspace delete tool in the Debian package).
+- **Hive outcome:** our own base hive (`hives.py`: regf header with checksum, one hbin, root `nk`, `sk`, free cell; host-tested); `hivexregedit --merge` of our `.reg` text (Run key, `CyberLabUpdater` service with ImagePath in Temp, UserAssist, user Run key), then every `nk` / header / hbin time reset (`normalize`) for determinism. Without hivex the base hive is kept (`hive_outcome` per hive: `merged`, `base_no_hivex`, `base_hivex_failed`). The `.reg` inputs are generated in code (no `samples/hives/` files).
+- **EWF:** `ewfacquirestream -f encase6` (single: `-c empty-block`; multi: `-c none -S 4 MiB`), case data fixed; `ewf_bad_hash` from our own section patcher (MD5 in `hash` and `digest`, Adler-32 fixed; host-tested on a hand-built section chain).
+- **Determinism exceptions:** EWF header dates (acquiry / system); NTFS (`ntfscp` times and the `mkntfs` volume serial are the tools'; NTFS times are not in the ground truth). Everything else is expected byte-exact.
+- **Other deviations:** `__main__.py` also takes `--ntfs-route`, `--skip-missing`, `--list`; `images.py` (the per-id builders) and `tools.py` (subprocess wrapper) were added beside the planned modules; wtmp is written by our own `struct utmp` packer (no `utmpdump`); `pnpm disk:gen` now runs `scripts/disk-gen.mjs`, which writes the set into the `cyberlab_e2e_samples` volume under `disk/` (the e2e convention; `pnpm e2e` clears that volume). Hostile output goes to `<out>/hostile/<nn>_<name>/` with `mutation.json` (never `ground_truth.json`, so phase 2's engine test ignores it).
+
+## As built (untested in Docker)
+
+Code-only commit `feat(disk): synthetic disk image generator (M9 phase 4, untested in Docker)`. Host-only checks: ruff (check + format), the pure unit tests `tests/unit/test_diskgen.py` (33 pass; the three cross-checks with the contract package also pass with py-jobs on the path), a host smoke run of the CLI (pure ids + the 7 pure mutations in ~1 s) and 7-Zip listing / testing of the FAT images. mypy was not available on the host.
+
+**Remains to run (Docker, dev / test image):** build the image with the new `docker/diskgen-packages.txt` (package names for trixie, incl. `libntfs-3g89t64`, `libwin-hivex-perl`); `DISKGEN_ENGINE=1 pytest tests/engine/test_diskgen_images.py` (fsck.fat / fsck.exfat / e2fsck / ntfsfix / ntfscat / ewfverify / sfdisk / hivexget, determinism of the tool images, all 15 mutations); `pnpm disk:gen` then phase 2's `test_tsk_images.py` with `DISK_ENGINE_IMAGES=/samples/disk` (the TSK display name of the deleted FAT entry is assumed to be `_ELETED.TXT`); the libntfs route outcome (update the NTFS decision above); the tool flags used (`mkntfs -T -p`, `ntfscp -f -N`, `ewfacquirestream -c empty-block -d sha1`, `debugfs set_inode_field ... @epoch`, `mke2fs -E hash_seed=,root_owner=`); ruff / mypy in the image.
