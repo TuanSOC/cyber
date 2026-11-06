@@ -1,7 +1,8 @@
 """M9 phase 1 plumbing: the frozen disk routes exist, check membership and answer 501 until their
-phase lands; a disk analysis request is validated by schema (segments required) and answers 501
-until phase 7; the generic evidence sensitivity routes (RT2) serve every source, with the
-`disk` / `derived` codes and audit actions, while M8's memory routes keep theirs."""
+phase lands; a disk analysis request is validated by schema (segments required; the request
+itself is phase 7's, `test_disk_request.py`); the generic evidence sensitivity routes (RT2)
+serve every source, with the `disk` / `derived` codes and audit actions, while M8's memory
+routes keep theirs."""
 
 import uuid
 
@@ -64,7 +65,8 @@ async def test_m9_routes_answer_501_to_members_and_404_to_outsiders() -> None:
         assert foreign.status_code in (403, 404), (url, foreign.status_code)
 
 
-async def test_a_disk_request_needs_segments_and_answers_501_until_phase_7() -> None:
+async def test_a_disk_request_needs_segments() -> None:
+    """Schema-level refusals (phase 7's request itself: `test_disk_request.py`)."""
     owner = await register(org_name="M9 Run Org")
     case_id = await new_case(owner)
     evidence = await upload(owner.client, owner.org_id, case_id, b"\0" * 4096, "disk.raw")
@@ -77,10 +79,6 @@ async def test_a_disk_request_needs_segments_and_answers_501_until_phase_7() -> 
     ):
         response = await owner.client.post(url, json=bad, headers=csrf(owner.client))
         assert response.status_code == 422, (bad, response.text)
-    response = await owner.client.post(
-        url, json={"analyzer": "disk", "segments": [evidence["id"]]}, headers=csrf(owner.client)
-    )
-    assert response.status_code == 501, response.text
     jobs = await owner.client.get(f"/api/v1/orgs/{owner.org_id}/evidence/{evidence['id']}/analyses")
     assert all(j["analyzer"] != "disk" for j in jobs.json()["items"])
 

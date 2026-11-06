@@ -5,6 +5,10 @@ A mismatch is a flag for the analyst (and the audit `evidence.type_mismatch`), n
 reason to reject: an evidence platform must accept whatever an analyst collected, disguised
 malware included. Routing to the analyzers is unchanged (it reads the content only).
 
+M9 phase 7: the family `disk` (a disk image segment), declared by a `kind=disk` upload or an
+EWF extension; `disk_description` labels the segment's content for `detected_description`
+(EWF signature or not; a label only, the disk worker decides the format).
+
 M8 phase 6: the family `memory` (a memory image). It is declared by a `kind=memory` upload
 or by the image extensions below. A raw image has no magic, so `memory` + unknown content is
 not a mismatch; the analyzers' routing never sends anything to the memory analyzer (a memory
@@ -18,9 +22,24 @@ from typing import Final, Literal
 from cyberlab_jobs.capture import capture_format, executable_format
 
 Family = Literal[
-    "pcap", "pe", "elf", "pdf", "zip", "office_legacy", "image", "text", "archive", "memory"
+    "pcap",
+    "pe",
+    "elf",
+    "pdf",
+    "zip",
+    "office_legacy",
+    "image",
+    "text",
+    "archive",
+    "memory",
+    "disk",
 ]
 MEMORY: Final = "memory"
+DISK: Final = "disk"
+# EWF segment file signatures: EWF-E01 (EnCase 1-7, FTK) and EWF2-Ex01 (EnCase 7+).
+EWF_SIGNATURES: Final = (b"EVF\x09\x0d\x0a\xff\x00", b"EVF2\x0d\x0a\x81\x00")
+EWF_LABEL: Final = "EWF (E01) segment"
+RAW_DISK_LABEL: Final = "raw disk image (unrecognised)"
 
 _EXTENSIONS: Final[dict[str, Family]] = {
     **dict.fromkeys(("pcap", "pcapng", "cap"), "pcap"),
@@ -36,6 +55,8 @@ _EXTENSIONS: Final[dict[str, Family]] = {
     **dict.fromkeys(("7z", "rar", "gz", "tar"), "archive"),
     # M8: raw / padded, LiME, VMware, Windows crash dump and ELF core images.
     **dict.fromkeys(("raw", "mem", "vmem", "lime", "dmp", "core"), "memory"),
+    # M9: EWF segments (a raw disk image has no extension of its own: `raw` stays memory).
+    **dict.fromkeys(("e01", "ex01"), "disk"),
 }
 
 # libmagic MIME types (lower case, parameters stripped) -> family. `image/*` and `text/*` are
@@ -102,6 +123,8 @@ def declared_family(filename: str, *, kind: str | None = None) -> str | None:
     """
     if kind == MEMORY:
         return MEMORY
+    if kind == DISK:
+        return DISK
     name = filename.rstrip(" .").replace("\\", "/").rsplit("/", 1)[-1]
     stem, dot, ext = name.rpartition(".")
     if not dot or not stem or not 0 < len(ext) <= MAX_EXTENSION:
@@ -131,6 +154,17 @@ def magic_route(head: bytes) -> str | None:
     """The analyzers' content routing of the first bytes (pcap / pcapng / pe / elf)."""
     found = capture_format(head) or executable_format(head)
     return found.value if found is not None else None
+
+
+def disk_description(head: bytes, magic_text: str) -> str:
+    """`detected_description` of a `kind=disk` upload: the EWF label for an EWF segment, else
+    libmagic's text, or the raw-image label when libmagic recognised nothing (`data`)."""
+    if head.startswith(EWF_SIGNATURES):
+        return EWF_LABEL
+    text = (magic_text or "").strip()
+    if text.lower() in {"", "data", "unknown", "empty"}:
+        return RAW_DISK_LABEL
+    return text[:512]
 
 
 def type_mismatch(declared: str | None, detected: str | None) -> bool:

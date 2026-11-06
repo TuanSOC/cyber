@@ -6,7 +6,8 @@ internal MinIO endpoint and expire with the job's queue TTL.
 
 Each analyzer has its own message schema, Celery task and queue (and its own broker ACL
 user): `pcap.v1` on `pcap`, `static.v1` on `static`, `memory.v1` on `memory` (M8; the message
-is built by `memory_analysis.dispatch.build_memory_message`).
+is built by `memory_analysis.dispatch.build_memory_message`), `disk.v1` on `disk` (M9; one GET
+per segment, `disk_forensics.dispatch.build_disk_message`).
 """
 
 import uuid
@@ -53,7 +54,10 @@ class DispatchInput:
     ingest_token: str
     analyzer: Analyzer = Analyzer.PCAP
     profile: JobProfile | None = None  # static and memory
-    os_hint: OsHint | None = None  # memory only (M8)
+    os_hint: OsHint | None = None  # memory and disk (M8 / M9)
+    # Disk only (M9 phase 7): the ordered segment set (`disk_forensics.segments.Segment`),
+    # ordinal 0 being the evidence above.
+    segments: tuple[Any, ...] = ()
 
 
 def result_key(organization_id: uuid.UUID, job_id: uuid.UUID) -> str:
@@ -141,10 +145,10 @@ def build_message(item: DispatchInput) -> JobMessage:
 
         return build_memory_message(item, settings)
     if item.analyzer == Analyzer.DISK:
-        # M9 phase 7 owns the body (segment set, presigned GETs, limits, deadline).
+        # M9 phase 7: one presigned GET per segment, `DiskLimits`, the deadline (RT5).
         from app.modules.disk_forensics.dispatch import build_disk_message
 
-        return build_disk_message(item, [], settings)
+        return build_disk_message(item, list(item.segments), settings)
     ttl = timedelta(seconds=settings.analysis_queue_ttl_s)
     common = presigned_common(item, settings, get_expires=ttl)
     if item.analyzer == Analyzer.STATIC:

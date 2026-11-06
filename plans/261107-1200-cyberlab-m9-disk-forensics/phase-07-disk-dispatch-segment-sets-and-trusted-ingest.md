@@ -91,3 +91,19 @@ The trusted API and ingest side of a disk job:
 - **Ingest duration:** isolated on the `disk-ingest-worker` (RT9); staged ingest was rejected (RT36: partial state, no app DELETE grant, redelivery duplicates). Two disk results ingest one after the other (one job at a time anyway).
 - **The known-hash join on large org IOC tables:** indexed on (org, type, value); bounded by the statement timeout; skippable without failing.
 - **Segment order mistakes by analysts:** for EWF, libewf validates the set itself (wrong order or a foreign segment → `unsupported_disk_format` with its reason); for split raw, order is the analyst's responsibility, stated in the run dialog (phase 11), and the media sha256 lets them compare against their acquisition notes.
+
+## As built (untested in Docker)
+
+Code-only commit `feat(disk): request, segment sets, dispatch and trusted ingest (M9 phase 7, untested in Docker)`. Host-only checks: py_compile of every changed module, the pure unit tests (`test_disk_stream.py`, `test_disk_segments.py`, `test_disk_settings.py`) through a throwaway shim (stubbed `minio`; host SQLAlchemy lacks `distinct_on`), an unused-import / line-length scan. Not run: ruff, mypy, any integration test.
+
+**Seams:** `segments.check_shape` / `check_rows` (pure) / `load` / `of_job`, `Segment`; `DispatchInput.segments`; `dispatch.disk_limits(settings, profile)`; `handoff.publish` / `move_deadline` / `HandOffBusy` (a ConnectionError: `ingest.event` retries it); `stream.Caps` / `diagnostic_caps` / `JobFacts` / `file_ref` / `event_ordinal` / `finding_id`; `ingest.Resolver`, `known_hash_join`, `KNOWN_HASH_*`. Stored refs: `file:<disk_files.id>`, `event:<disk_events.id>`, `finding:<uuid>`; timeline refs the same (a bare finding uuid kept); known-hash findings cite `file:`, `ioc:<id>` / `correlation_key:<id>` and `job:<id>`. Test helper `tests/disk_results.py` (fixtures `sent`, `handoffs`; `deliver` runs hand-off + disk ingest in-process).
+
+**Deviations (parent to confirm):**
+- No `COPY`: Postgres refuses COPY into RLS tables (the M2 note), so rows go in as batched INSERTs of 10 000 lines / 16 MiB; file and event ids are generated in Python, so `file_id` and finding refs resolve from the cited refs pass 1 kept (no temp table).
+- The job row is locked only at the end of the write (its rows' FKs hold KEY SHARE meanwhile). The hand-off and the reaper take disk job rows with `SKIP LOCKED` (the shared solo worker never waits on a disk ingest); the ingest itself rolls back and fails `timed_out` when it finishes past its deadline.
+- `deadline_at` = message time + `ANALYSIS_DISK_TIMEOUT_S` (never past the reaper's started deadline).
+- Extra refusal reason `archived`; `ordinal` beside `reason` in the error body; analysis-busy code stays M8's `analysis_queue_full`.
+- `kind=disk` uploads also get M8's spool free-space check; `.e01` / `.ex01` declare the `disk` family; `UploadKind` gains `disk` (OpenAPI change: `pnpm gen:contracts` must be re-run).
+- `volume_system` is stored NULL (not in the frozen header).
+
+**Remains to run (Docker):** ruff / mypy; lane 6 `tests/unit/test_disk_{stream,segments}.py`, `tests/integration/test_disk_{upload,request,segments,dispatch,handoff,ingest,known_hash_join,diagnostic,reaper}.py`, `test_m9_foundation.py`; `DISK_INGEST_CAPS=1 … test_disk_ingest_caps.py` alone (time, RSS, Postgres size); `pnpm gen:contracts`.

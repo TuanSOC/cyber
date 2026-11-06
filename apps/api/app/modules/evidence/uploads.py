@@ -7,6 +7,13 @@ M8: `kind=memory` declares a memory image. It has its own size limit (`MEMORY_MA
 early on the declared length and again while spooling), a free-space check of the spool dir,
 the declared type `memory`, the TLP:RED default in the upload transaction and no automatic
 analysis of any kind (RT3).
+
+M9 phase 7: `kind=disk` declares a disk image segment, the same way: `DISK_MAX_UPLOAD_BYTES`
+(`413 disk_image_too_large`, declared length and while spooling), an empty body refused
+(`422 disk_image_empty`), the spool free-space check, the declared type `disk`, the
+`detected_description` label (EWF segment or raw image), the restricted default (source
+`disk`, AI and TI excluded) in the upload transaction and no automatic analysis (no static
+`av`: the M8 RT3 rule). A disk analysis is always an explicit request over a segment set.
 """
 
 import contextlib
@@ -28,7 +35,9 @@ from app.core.rbac import OrgContext, Permission, org_session
 from app.core.upload_slots import slot
 from app.modules.analysis import service as analysis_service
 from app.modules.audit import service as audit
+from app.modules.disk_forensics.errors import DiskImageEmpty, DiskImageTooLarge
 from app.modules.evidence import repository as repo
+from app.modules.evidence import sensitivity as evidence_sensitivity
 from app.modules.evidence.locking import discard_version, lock_version
 from app.modules.evidence.models import CustodyAction, Evidence, EvidenceHash, HashAlgorithm
 from app.modules.evidence.schemas import EvidenceOut, UploadKind
@@ -40,6 +49,9 @@ from app.modules.organizations import storage as quota
 log = logging.getLogger(__name__)
 
 MEMORY: UploadKind = "memory"
+DISK: UploadKind = "disk"
+# Image kinds: spooled whole after a free-space check, restricted at upload, never automatic.
+IMAGE_KINDS: frozenset[UploadKind] = frozenset({MEMORY, DISK})
 # Free space the spool dir must keep beyond a memory image (M8; checked before spooling).
 MEMORY_SPOOL_RESERVE_BYTES = 1024**3
 
@@ -86,13 +98,22 @@ def _type_check(
 
 
 def max_upload_bytes(kind: UploadKind | None) -> int:
-    """The size limit of one upload: memory images have their own (M8, RT14)."""
+    """The size limit of one upload: memory images (M8, RT14) and disk image segments (M9)
+    have their own."""
     settings = get_settings()
-    return settings.memory_max_bytes if kind == MEMORY else settings.max_evidence_bytes
+    if kind == MEMORY:
+        return settings.memory_max_bytes
+    if kind == DISK:
+        return settings.disk_max_upload_bytes
+    return settings.max_evidence_bytes
 
 
 def _too_large(kind: UploadKind | None) -> AppError:
-    return MemoryImageTooLarge() if kind == MEMORY else PayloadTooLarge()
+    if kind == MEMORY:
+        return MemoryImageTooLarge()
+    if kind == DISK:
+        return DiskImageTooLarge()
+    return PayloadTooLarge()
 
 
 def _check_request(request: Request, kind: UploadKind | None = None) -> int:
@@ -153,6 +174,8 @@ async def _insert_records(
     # its audit row (KEY SHARE on the org) can then never wait in a cycle with this upload.
     await quota.reserve(ctx, spooled.size)
     mime, magic_text = _sniff(spooled.head)
+    if kind == DISK:
+        magic_text = filetypes.disk_description(spooled.head, magic_text)
     stored_name = sanitize_filename(filename)
     declared, detected, mismatch = _type_check(stored_name, mime, spooled.head, kind)
     evidence = Evidence(
@@ -187,6 +210,12 @@ async def _insert_records(
         # nothing ever reads the image unrestricted (phase-8 entry point; idempotent).
         await memory_sensitivity.apply_memory_default(
             ctx.session, ctx.org_id, evidence.id, ctx.user.id
+        )
+    elif kind == DISK:
+        # M9 phase 7: restricted (source `disk`, AI and TI excluded) in the upload's own
+        # transaction, before anything can read the segment (idempotent).
+        await evidence_sensitivity.apply_restricted_default(
+            ctx.session, ctx.org_id, evidence.id, ctx.user.id, "disk"
         )
     sha256 = spooled.hashes["sha256"]
     record_event(
@@ -242,7 +271,7 @@ async def upload(
             slot("upload", user.id, settings.max_concurrent_uploads_per_user)
         )
         cap = max_upload_bytes(kind)
-        if kind == MEMORY:
+        if kind in IMAGE_KINDS:
             # The reservation is also the spool cap (a body never outgrows what it reserved).
             cap = spool_reservation(kind, declared)
             stack.enter_context(_reserve_spool(settings.upload_tmp_dir, cap))
@@ -252,6 +281,9 @@ async def upload(
             raise _too_large(kind) from exc
         except ClientDisconnect as exc:
             raise ClientGone() from exc
+        if kind == DISK and spooled.size == 0:
+            spooled.path.unlink(missing_ok=True)
+            raise DiskImageEmpty()
         try:
             key = f"{org_id}/{uuid.uuid4()}"
             version_id = await storage.put_file(key, spooled.path)
@@ -287,8 +319,9 @@ async def upload(
             spooled.path.unlink(missing_ok=True)
     # Best effort, after commit: uploads are analyzed automatically (never fails the upload).
     # M8 RT3: never a memory image (an automatic static `av` run would read its contents
-    # before the TLP:RED default applies); a memory run is always an explicit request.
-    if kind != MEMORY:
+    # before the TLP:RED default applies); a memory run is always an explicit request. M9:
+    # never a disk image segment either.
+    if kind not in IMAGE_KINDS:
         await analysis_service.auto_request(
             org_id, user, out.id, spooled.head, spooled.size, request
         )

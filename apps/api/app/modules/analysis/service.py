@@ -17,13 +17,13 @@ from app.core.deps import CurrentUser
 from app.core.errors import AppError, Conflict, NotFound, TooManyRequests
 from app.core.pagination import PageParams
 from app.core.rbac import OrgContext, Permission, org_session
-from app.core.stubs import not_implemented
 from app.core.tenancy import tenant_session
 from app.modules.analysis import analyzers, dispatch, lifecycle
 from app.modules.analysis import repository as repo
 from app.modules.analysis.models import (
     ACTIVE,
     PROFILES,
+    REQUESTABLE_PROFILES,
     AnalysisJob,
     AnalysisJobIndex,
     AnalysisStatus,
@@ -32,9 +32,12 @@ from app.modules.analysis.models import (
 )
 from app.modules.analysis.schemas import AnalysisJobOut, AnalysisJobPage
 from app.modules.audit import service as audit
-from app.modules.evidence import service as evidence_service
-from app.modules.evidence.models import CustodyAction, EvidenceStatus
+from app.modules.disk_forensics import segments as disk_segments
 from app.modules.disk_forensics.errors import DiskImageTooLarge
+from app.modules.disk_forensics.models import AnalysisJobSegment
+from app.modules.evidence import sensitivity as evidence_sensitivity
+from app.modules.evidence import service as evidence_service
+from app.modules.evidence.models import CustodyAction, EvidenceCustodyEvent, EvidenceStatus
 from app.modules.memory_analysis import sensitivity as memory_sensitivity
 from app.modules.memory_analysis.errors import MemoryImageEmpty, MemoryImageTooLarge
 
@@ -126,6 +129,7 @@ async def _create(
     os_hint: OsHint | None,
     auto: bool,
     token: str,
+    segments: list[uuid.UUID] | None = None,
 ) -> dispatch.DispatchInput:
     settings = get_settings()
     row = await evidence_service.get_row(ctx, evidence_id, for_update=True)
@@ -138,6 +142,12 @@ async def _create(
         raise TOO_LARGE[analyzer]()
     if analyzer == Analyzer.MEMORY and evidence.size_bytes == 0:
         raise MemoryImageEmpty()
+    disk_set: list[disk_segments.Segment] = []
+    if analyzer == Analyzer.DISK:
+        # M9 phase 7: every segment is active evidence of this case and the set fits.
+        disk_set = await disk_segments.load(
+            ctx.session, ctx.org_id, evidence.investigation_id, segments or [], settings
+        )
 
     await repo.lock_org_queue(ctx.session, ctx.org_id)
     active = await ctx.session.execute(
@@ -180,6 +190,9 @@ async def _create(
         details["profile"] = profile.value
     if os_hint is not None:
         details["os_hint"] = os_hint.value
+    if analyzer == Analyzer.DISK:
+        details["segments"] = [str(s.evidence_id) for s in disk_set]
+        await _record_disk_segments(ctx, job, disk_set)
     if analyzer == Analyzer.MEMORY:
         # TLP:RED by default (RT3), in this transaction; idempotent (phase-8 entry point).
         await memory_sensitivity.apply_memory_default(
@@ -207,7 +220,48 @@ async def _create(
         analyzer=analyzer,
         profile=profile,
         os_hint=os_hint,
+        segments=tuple(disk_set),
     )
+
+
+async def _record_disk_segments(
+    ctx: OrgContext,
+    job: AnalysisJob,
+    disk_set: list[disk_segments.Segment],
+) -> None:
+    """M9 phase 7, in the job's transaction: the ordered `analysis_job_segments` (the trigger
+    re-checks the investigation), the restricted default of EVERY segment (source `disk`;
+    idempotent, RT2) and a custody entry on each segment after the first (the first gets the
+    request's own custody and audit entry)."""
+    ctx.session.add_all(
+        AnalysisJobSegment(
+            job_id=job.id,
+            ordinal=s.ordinal,
+            organization_id=ctx.org_id,
+            evidence_id=s.evidence_id,
+        )
+        for s in disk_set
+    )
+    await ctx.session.flush()
+    for s in disk_set:
+        await evidence_sensitivity.apply_restricted_default(
+            ctx.session, ctx.org_id, s.evidence_id, ctx.user.id, "disk"
+        )
+    for s in disk_set[1:]:
+        ctx.session.add(
+            EvidenceCustodyEvent(
+                organization_id=ctx.org_id,
+                evidence_id=s.evidence_id,
+                action=CustodyAction.ANALYSIS_REQUESTED,
+                actor_id=ctx.user.id,
+                details={
+                    "job_id": str(job.id),
+                    "analyzer": Analyzer.DISK.value,
+                    "ordinal": s.ordinal,
+                    "segments": len(disk_set),
+                },
+            )
+        )
 
 
 async def _mark_enqueue_failed(org_id: uuid.UUID, user: CurrentUser, job_id: uuid.UUID) -> None:
@@ -245,7 +299,8 @@ async def request_analysis(
 ) -> AnalysisJobOut:
     """Create the job (committed first), then enqueue it. A lost enqueue is a failed job.
 
-    `segments` (disk only, M9): the ordered segment set (phase 7 validates and stores it)."""
+    `segments` (disk only, M9): the ordered segment set, validated and stored with the job
+    (`disk_forensics.segments`); every segment gets the restricted default."""
     allowed = PROFILES[analyzer]
     if (profile is None) != (not allowed) or (profile is not None and profile not in allowed):
         raise ValueError(f"{analyzer} jobs take a profile of {sorted(allowed)}")
@@ -256,10 +311,10 @@ async def request_analysis(
     if (segments is not None) != (analyzer == Analyzer.DISK):
         raise ValueError("disk jobs name their segments; other analyzers take none")
     if analyzer == Analyzer.DISK:
-        # M9 phase 1: the request is accepted by schema; the segment set, the sensitivity
-        # default of every segment and the dispatch land with phase 7 (`disk_forensics.
-        # segments` / `dispatch`). Until then nothing is created.
-        raise not_implemented()
+        if profile not in REQUESTABLE_PROFILES[Analyzer.DISK]:
+            raise ValueError("an extract job is created by a file export, never requested")
+        # The rules that need no database (order, count, duplicates; M9 phase 7).
+        disk_segments.check_shape(evidence_id, segments or [], get_settings())
     if await _global_queue_full(analyzer):
         raise AnalysisQueueFull()
     token = secrets.token_urlsafe(32)
@@ -273,6 +328,7 @@ async def request_analysis(
             os_hint=os_hint,
             auto=auto,
             token=token,
+            segments=segments,
         )
     # The job is committed: nothing below may turn this request into an error.
     try:

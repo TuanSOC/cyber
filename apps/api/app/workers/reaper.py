@@ -1,5 +1,9 @@
 """Fail jobs whose deadline passed: never started (queue TTL) or ran too long.
 
+M9 disk jobs: the queue TTL while queued, `ANALYSIS_DISK_TIMEOUT_S` + the M2 grace once started,
+the hand-off time + `DISK_INGEST_TIMEOUT_S` once the result is handed to the disk ingest worker
+(RT9). A disk job whose row its ingest holds is skipped (SKIP LOCKED), never waited for.
+
 Also the threat-intel fallback reaper (`reap_ti_runs`, M4 RT9), the AI analyst one
 (`reap_ai_runs`, M5) and the report renders (`reap_report_renders`, M6).
 """
@@ -17,7 +21,13 @@ from app.modules.ai.contracts import AiErrorCode, AiRunStatus
 from app.modules.ai.models import AiRun, AiRunIndex
 from app.modules.analysis import lifecycle
 from app.modules.analysis import repository as repo
-from app.modules.analysis.models import ACTIVE, AnalysisJobIndex, AnalysisStatus, Analyzer
+from app.modules.analysis.models import (
+    ACTIVE,
+    AnalysisJob,
+    AnalysisJobIndex,
+    AnalysisStatus,
+    Analyzer,
+)
 from app.modules.audit import service as audit
 from app.modules.disk_forensics import export_service as disk_exports
 from app.modules.reports import dispatch as render_dispatch
@@ -36,7 +46,11 @@ async def reap() -> int:
     async with tenant_session(None, None) as session:
         stale = (
             await session.execute(
-                select(AnalysisJobIndex.job_id, AnalysisJobIndex.organization_id)
+                select(
+                    AnalysisJobIndex.job_id,
+                    AnalysisJobIndex.organization_id,
+                    AnalysisJobIndex.analyzer,
+                )
                 .where(
                     AnalysisJobIndex.status.in_(ACTIVE),
                     AnalysisJobIndex.deadline_at < lifecycle.now(),
@@ -47,10 +61,22 @@ async def reap() -> int:
         ).all()
 
     reaped = 0
-    for job_id, org_id in stale:
+    for job_id, org_id, analyzer in stale:
         # Org taken from the index row (system data), not from any request or message.
         async with tenant_session(org_id, None) as session:
-            job = await repo.get_for_update(session, org_id, job_id)
+            if analyzer == Analyzer.DISK:
+                # M9 (RT9): a disk ingest in progress holds the job row (its rows' foreign
+                # keys); this solo worker must never wait for it. The ingest fails the job
+                # `timed_out` itself when it finishes past this deadline.
+                job = await session.scalar(
+                    select(AnalysisJob)
+                    .where(AnalysisJob.id == job_id, AnalysisJob.organization_id == org_id)
+                    .with_for_update(skip_locked=True)
+                )
+                if job is None:
+                    continue
+            else:
+                job = await repo.get_for_update(session, org_id, job_id)
             index = await session.get(AnalysisJobIndex, job_id, with_for_update=True)
             # Re-check under the lock: a `started` report may have moved the deadline since.
             if (

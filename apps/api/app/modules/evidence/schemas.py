@@ -83,8 +83,10 @@ class EvidenceOut(BaseModel):
 
 
 # `?kind=` of the upload route (M8): `memory` declares a memory image (its own size limit,
-# restricted from the upload transaction, never analyzed automatically; RT3).
-UploadKind = Literal["memory"]
+# restricted from the upload transaction, never analyzed automatically; RT3). M9 phase 7:
+# `disk` declares a disk image segment (DISK_MAX_UPLOAD_BYTES, restricted with source `disk`
+# in the upload transaction, never analyzed automatically).
+UploadKind = Literal["memory", "disk"]
 
 
 class EvidencePage(Page[EvidenceOut]):
