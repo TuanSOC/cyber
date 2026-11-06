@@ -25,6 +25,7 @@
     "memory:metrics": "node -e \"console.error('memory:metrics lands in M8 phase 11 (not implemented)'); process.exit(2)\"",
     "disk:hashsets": "node scripts/disk-hashsets.mjs",
     "disk:gen": "node scripts/disk-gen.mjs",
-    "disk:metrics": "node -e \"console.error('disk:metrics lands in M9 phase 13 (not implemented)'); process.exit(2)\""
+    "disk:fuzz": "docker compose --profile test run --rm --no-deps -e DISK_FUZZ=1 -v cyberlab_e2e_samples:/samples:ro -e DISK_ENGINE_IMAGES=/samples/disk disk-worker-test pytest -q -p no:cacheprovider tests/fuzz tests/engine/test_stage_proofs.py",
+    "disk:metrics": "python scripts/disk_metrics.py"
   }
 }
