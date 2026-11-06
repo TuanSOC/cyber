@@ -82,15 +82,15 @@ def no_sandbox(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(pipeline.sandbox, "cleanup", lambda dirs: None)
 
 
-def test_a_disk_job_is_started_then_failed_not_implemented(no_sandbox: None) -> None:
+def test_a_disk_job_without_its_segments_is_started_then_failed(no_sandbox: None) -> None:
+    # Phase 2 implemented the analysis (its own tests: test_pipeline.py); an unreachable
+    # segment (or a too small /tmp) still never gives `succeeded`.
     sent: list[IngestMessageV1] = []
     config = load({"BROKER_URL": "redis://disk:x@redis-broker:6379/0", "WORK_DIR": "/tmp"})
-    pipeline.run_job(
-        _job(profile="triage", os_hint="auto", result_post=POST), config, sent.append
-    )
+    pipeline.run_job(_job(profile="triage", os_hint="auto", result_post=POST), config, sent.append)
     assert [m.event.value for m in sent] == ["started", "finished"]
     assert sent[1].outcome is not None and sent[1].outcome.value == "failed"
-    assert sent[1].error_code == "not_implemented"
+    assert sent[1].error_code in {"insufficient_disk", "evidence_unavailable", "url_expired"}
     assert sent[1].result_version_id is None
 
 

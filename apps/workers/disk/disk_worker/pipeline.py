@@ -1,13 +1,16 @@
-"""One job: validate -> started -> analyze / export -> upload -> finished (M9 phase 1 skeleton;
-the calls `run_job(message, config, send)` and `run_export_job(message, config, send)` from
-`celery_app.py` are frozen, phase 2 / phase 10 own the bodies they reach).
+"""One job: validate -> started -> analyze / export -> upload -> finished (M9 phases 1-2; the
+calls `run_job(message, config, send)` and `run_export_job(message, config, send)` from
+`celery_app.py` are frozen; `analyzer.analyze` (phase 2) and `export.handle_export` (phase 10)
+are the bodies they reach).
 
 - A full result is uploaded and reported `succeeded` with its version id.
 - A diagnostic stream (`no_supported_filesystem`, `unsupported_disk_format`: header and at most
   the partitions) is uploaded and reported `failed` with that code WITH its version id.
-- Any other failure is `failed` with its code and no upload (phase 1: always
-  `not_implemented`). `sandbox.prepare` runs once per job (it resets the whole work dir: no image
-  cache, RT1); `sandbox.cleanup` kills every tool process and removes the job dir.
+- Any other failure is `failed` with its code and no upload. `sandbox.prepare` runs once per
+  job (it resets the whole work dir: no image cache, RT1); every stage then gets a fresh out
+  dir (`stage.fresh`, never `prepare` again); `sandbox.cleanup` kills every tool process and
+  removes the job dir. A `SandboxCompromised` from a stage has already stopped the container
+  (fail closed) and is reported `analyzer_error`.
 """
 
 import logging
