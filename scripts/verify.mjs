@@ -134,6 +134,10 @@ async function verifyProd() {
     "Report-worker envs: BROKER_URL only (+ENV=prod), analysis only, signing key on api only, no dev kid in prod",
     "node scripts/check-report-worker-env.mjs",
   );
+  run(
+    "Retention-worker envs: retention role, broker user and purge keys only, backend only; no api policy legal hold; prod secrets not dev",
+    "node scripts/check-retention-worker-env.mjs",
+  );
   run("Prod stack up", `${COMPOSE_PROD} up -d --build --wait --wait-timeout 400`);
   await probe("Prod enrich-worker: running, never restarted, ENV=prod, no mock", () =>
     workerProblems(
@@ -148,6 +152,10 @@ async function verifyProd() {
       { ENV: "prod", PROCESS_ROLE: "analyst", AI_MOCK_ENABLED: "false", AI_PLATFORM_PROVIDER: "" },
       "cyberlab/api:prod",
     ),
+  );
+  // M7: the least-privilege purge worker runs the prod image with ENV=prod.
+  await probe("Prod retention-worker: running, never restarted, ENV=prod, PROCESS_ROLE=retention", () =>
+    workerProblems("retention-worker", { ENV: "prod", PROCESS_ROLE: "retention" }, "cyberlab/api:prod"),
   );
   // The untrusted renderer has no mock: the prod e2e renders a real PDF through it (M6).
   await probe("Prod report-worker: running, never restarted, ENV=prod, prod image", () =>
@@ -192,7 +200,7 @@ try {
   // Celery workers do not hot-reload: recreate them so the gate tests the current code.
   run(
     "Workers: reload code",
-    "docker compose --profile test up -d --force-recreate --no-deps pcap-worker pcap-worker-test static-worker static-worker-test ingest-worker ingest-beat enrich-worker enrich-worker-test ti-mock analyst-worker analyst-worker-test ai-mock report-worker report-worker-test",
+    "docker compose --profile test up -d --force-recreate --no-deps pcap-worker pcap-worker-test static-worker static-worker-test ingest-worker ingest-beat enrich-worker enrich-worker-test ti-mock analyst-worker analyst-worker-test ai-mock report-worker report-worker-test retention-worker retention-worker-test",
   );
   run(
     "API: ruff, format, mypy --strict, pytest",

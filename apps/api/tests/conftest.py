@@ -1,6 +1,6 @@
 import os
 import subprocess
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -16,7 +16,7 @@ from app.core.config import RETENTION_SYSTEM_USER_EMAIL, RETENTION_SYSTEM_USER_I
 from app.core.db import get_engine
 from app.models import Base
 from tests.analysis_helpers import purge_test_queues
-from tests.storage_helpers import purge_test_bucket
+from tests.storage_helpers import forget_owned_orgs, purge_owned
 
 API_ROOT = Path(__file__).resolve().parents[1]
 
@@ -87,15 +87,26 @@ async def _reset(owner_engine: AsyncEngine) -> None:
 async def _session_state(
     _migrated_test_database: None, owner_engine: AsyncEngine
 ) -> AsyncIterator[None]:
-    # Start clean even if a previous run was interrupted before its teardown.
+    # Start clean even if a previous run was interrupted before its teardown. The MinIO test
+    # buckets are shared by every lane: only this process's objects are ever removed (M7
+    # phase 11, tests/storage_helpers.py), never a whole bucket.
     await _reset(owner_engine)
-    purge_test_bucket()
+    purge_owned()
     yield
-    purge_test_bucket()
+    purge_owned()
+    forget_owned_orgs()
     # Uploads queue analyses for real (only test_analysis.py captures dispatch); drop the
     # ones no test worker consumed so the broker does not grow across runs.
     purge_test_queues()
     await get_engine().dispose()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _owned_objects(_session_state: None) -> Iterator[None]:
+    """After each module: remove the objects of the orgs it created (lane-safe)."""
+    yield
+    purge_owned()
+    forget_owned_orgs()
 
 
 @pytest_asyncio.fixture(autouse=True, loop_scope="session")

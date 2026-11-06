@@ -35,7 +35,7 @@ export function HoldList({
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={state === "released" ? "outline" : "secondary"}>{HOLD_STATE_LABELS[state]}</Badge>
               {showScope && <span className="text-sm font-medium">{labelText(holdScopeLabel(hold), 40)}</span>}
-              {sync && state !== "released" && (
+              {state === "active" && (
                 <span className="text-xs text-muted-foreground" title="Set by the retention worker shortly after the hold is placed.">
                   {sync}
                 </span>

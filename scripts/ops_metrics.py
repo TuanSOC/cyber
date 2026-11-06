@@ -145,6 +145,11 @@ class Client:
             status, payload, headers = self.request(method, path, **kw)
             if status in ok:
                 return payload
+            # A long back-off can outlive the access token: refresh once, then retry.
+            if status == 401 and path != "/api/v1/auth/refresh":
+                refreshed, _, _ = self.request("POST", "/api/v1/auth/refresh")
+                if refreshed in (200, 204):
+                    continue
             if status in (429, 409, 503):
                 wait = int(headers.get("Retry-After") or 15)
                 print(f"  {method} {path}: {status}, retrying in {wait} s", flush=True)

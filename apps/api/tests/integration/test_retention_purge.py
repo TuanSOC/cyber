@@ -58,7 +58,12 @@ from tests.report_helpers import (
     reports_test_bucket,
     seed_render,
 )
-from tests.storage_helpers import evidence_test_bucket, purge_test_bucket, root_minio
+from tests.storage_helpers import (
+    evidence_test_bucket,
+    purge_test_bucket,
+    release_owned_holds,
+    root_minio,
+)
 
 API = "/api/v1/orgs"
 ALL = EffectivePolicy(ti_results_days=30, ai_runs_days=30, closed_case_days=30, enforce=True)
@@ -75,15 +80,9 @@ class Captured:
 
 
 def clear_legal_holds() -> None:
-    """Root: turn every S3 legal hold off in the test buckets (a held version cannot be
-    removed, even with governance bypass)."""
-    client = root_minio()
-    for bucket in (evidence_test_bucket(), reports_test_bucket()):
-        for o in client.list_objects(bucket, recursive=True, include_version=True):
-            if o.is_delete_marker or not o.object_name:
-                continue
-            if client.is_object_legal_hold_enabled(bucket, o.object_name, o.version_id):
-                client.disable_object_legal_hold(bucket, o.object_name, o.version_id)
+    """Root: turn this process's S3 legal holds off in the test buckets (a held version
+    cannot be removed, even with governance bypass); another lane's holds are untouched."""
+    release_owned_holds([evidence_test_bucket(), reports_test_bucket()])
 
 
 @pytest.fixture

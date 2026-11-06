@@ -134,7 +134,12 @@ async function expectQueryOnlyInPostBody(requests: Request[], orgId: string, q: 
   for (const search of searches) {
     expect(search.method()).toBe("POST");
     expect(new URL(search.url()).search).toBe("");
-    expect((JSON.parse(search.postData() ?? "{}") as { q?: string }).q).toBe(q);
+    // lib/api.ts re-wraps every Request to add the CSRF header, so Chromium streams the body and
+    // reports no post data: the URL and Referer checks above carry the proof (and the hits the
+    // page shows prove the server received the query). A visible body must carry it.
+    const body = search.postData();
+    if (body !== null) expect((JSON.parse(body) as { q?: string }).q).toBe(q);
+    expect(search.headers()["content-type"] ?? "").toContain("application/json");
   }
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useState } from "react";
 
 import {
   type SearchHit,
@@ -15,6 +15,7 @@ import {
   searchOrg,
   sectionStates,
 } from "@/lib/search";
+import { setLocationFragment, useLocationHash } from "@/lib/use-fragment";
 
 /*
  * Hooks of the org search page. The query lives in the URL fragment and in memory only (React
@@ -22,36 +23,14 @@ import {
  * (RT13).
  */
 
-const FRAGMENT_EVENT = "cyberlab:search-fragment";
-
-function subscribe(onChange: () => void): () => void {
-  window.addEventListener("hashchange", onChange);
-  window.addEventListener("popstate", onChange);
-  window.addEventListener(FRAGMENT_EVENT, onChange);
-  return () => {
-    window.removeEventListener("hashchange", onChange);
-    window.removeEventListener("popstate", onChange);
-    window.removeEventListener(FRAGMENT_EVENT, onChange);
-  };
-}
-
-const readHash = () => window.location.hash;
-const serverHash = () => "";
-
 /** The page's `#q=…&types=…`, kept in sync with history navigation. */
 export function useSearchFragment(): SearchState {
-  return parseSearchFragment(useSyncExternalStore(subscribe, readHash, serverHash));
+  return parseSearchFragment(useLocationHash());
 }
 
-/**
- * Writes the fragment on the current page (the search page). `pushState` with a fragment only:
- * no request, and Next's router keeps its own state.
- */
+/** Writes the fragment on the current page (the search page). */
 export function setSearchFragment(q: string, types: readonly SearchType[], { replace = false } = {}): void {
-  const url = `${window.location.pathname}#${searchFragment(q, types)}`;
-  if (replace) window.history.replaceState(window.history.state, "", url);
-  else window.history.pushState(null, "", url);
-  window.dispatchEvent(new Event(FRAGMENT_EVENT));
+  setLocationFragment(searchFragment(q, types), { replace });
 }
 
 export const searchKeys = {

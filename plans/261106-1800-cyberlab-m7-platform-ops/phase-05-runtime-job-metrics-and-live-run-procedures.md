@@ -75,13 +75,59 @@ The design is in plan.md "Runtime metrics".
 6. `live_run.mjs` and its template. Run it only if the user supplies keys; otherwise commit the "not run" report.
 
 ## Success Criteria
-- [ ] Every terminal job, run and render, including the reaper paths, produces exactly one tenant-free `job_outcomes` row, and the trigger never blocks a transition.
-- [ ] `/internal/metrics` serves valid Prometheus text with fixed labels only to a bearer on the backend network, and is unreachable through the gateway.
-- [ ] The org metrics route reports the org's own failure rate, latency and parse success, IDOR-clean.
-- [ ] `plans/reports/ops-metric-YYMMDD.md` records the replay over real workers.
-- [ ] The live-run wrapper is guarded and documented, and its report says run or "not run".
+- [x] Every terminal job, run and render, including the reaper paths, produces exactly one tenant-free `job_outcomes` row, and the trigger never blocks a transition. — `test_job_outcomes_triggers.py::test_analysis_lifecycle_writes_one_row_per_terminal_transition`, `test_the_analysis_reaper_fail_paths_write_one_row_each`, `test_ti_runs_write_one_row_per_final_status`, `test_ai_runs_write_one_row_per_final_status`, `test_renders_write_one_row_per_final_status_and_none_on_purge`, `test_rows_hold_no_tenant_data`, `test_the_app_role_cannot_write_job_outcomes`, `test_the_trigger_never_blocks_the_transition`, `test_bulk_reaper_fail_cost_of_the_trigger` (+2.8 %, the limit is 20 %) (9316433).
+- [x] `/internal/metrics` serves valid Prometheus text with fixed labels only to a bearer on the backend network, and is unreachable through the gateway. — `test_internal_metrics.py::test_off_without_a_token`, `test_the_bearer_token_is_required`, `test_a_proxied_request_is_refused`, `test_rate_limited_in_one_global_window`, `test_serves_valid_prometheus_text_with_fixed_labels`, `test_not_in_the_api_schema_and_outside_api`, `test_the_gateway_never_routes_internal`; `unit/test_prometheus_render.py` (5, a strict regex validator) (9316433).
+- [x] The org metrics route reports the org's own failure rate, latency and parse success, IDOR-clean. — `test_ops_metrics.py::test_the_numbers_equal_a_hand_count_and_other_orgs_are_absent`, `test_only_audit_readers_see_the_metrics`, `test_the_five_most_recent_failures_of_the_org_only`; `idor_cases_ops.py` (`PENDING_ROUTES` empty) (9316433).
+- [ ] `plans/reports/ops-metric-YYMMDD.md` records the replay over real workers. — **Pending gate:** `scripts/ops_metrics.py` is implemented (+441), but the replay is a heavy step that phase 11 runs alone. No report exists yet.
+- [ ] The live-run wrapper is guarded and documented, and its report says run or "not run". — The guard and docs are done: `scripts/live_run.mjs` (+341) refuses without `CYBERLAB_LIVE=1`, `.secrets/live.env`, `--max-calls` and `--max-usd`, and it is documented in its header and in TESTING. **Not done:** no `plans/reports/live-run-YYMMDD.md` was written (not run: there are no keys and no budget, a user decision).
 
 ## Risk Assessment
 - **Percentiles on large windows:** the 7 d window over `job_outcomes` uses the `(kind, finished_at)` index. At this scale it is fine; measured in step 2.
 - **Live tests' container:** the existing live tests may assume egress. Resolve it before writing the wrapper, and never add egress to `api-test`.
 - **Replay memory:** pcap-worker plus static-worker plus the stack is about 6 GB. Run the pcap round and the static round sequentially, stopping the other analyzer.
+
+## Implementation Notes (2026-11-07)
+- **Commit:** 9316433 (phases 2–10 together). The 0014 triggers and the `error_classes.py` map are from 980386a and were not edited here.
+- **Lane 5:** `scripts/lane-test.sh 5 …` on its own files, plus ruff, format and mypy. The replay was not run (heavy step).
+- **Trigger verification** (`test_job_outcomes_triggers.py`, 11 tests):
+  - one row per terminal transition, through the lifecycle and the reaper fail paths (pcap and static failed / timeout, TI `expired`, AI `policy_blocked`);
+  - renders write a row on `succeeded` / `failed` and none on `purged`;
+  - a multi-provider TI run is recorded as `multi`;
+  - bad codes and subkinds are sanitized to `other`;
+  - no phase-1 bug was found.
+- **Trigger cost:** a bulk reaper fail of 500 jobs takes **+2.8 %** with the trigger (the limit is 20 %; interleaved runs, minimum of each), measured by `test_bulk_reaper_fail_cost_of_the_trigger`.
+- **Aggregation** (`ops/metrics.py`, +330):
+  - windows 1 h, 24 h and 7 d;
+  - per (`kind`, `subkind`): counts by status, the failure ratio, `percentile_cont` p50 / p95 / p99 of `run_ms` and `queue_ms`, and parse success through `classify()`;
+  - failures by class;
+  - active gauges from the `*_index` tables;
+  - one statement per window under `SET LOCAL statement_timeout = '2s'`.
+- **`render_prometheus`:**
+  - exposition format 0.0.4 with HELP and TYPE lines;
+  - the label values come from fixed enums only, and error codes are never labels;
+  - `prometheus_client` is not in the lock, so `unit/test_prometheus_render.py` uses a strict regex validator.
+- **`/internal/metrics`** (`ops/internal.py`), checked in this order:
+  1. 404 when no token is configured;
+  2. 403 on `X-Forwarded-For` / `Forwarded`;
+  3. 60 requests per minute in one global bucket;
+  4. 401 without the bearer token (constant-time compare).
+
+  It answers `no-store` and is never routed by the gateway.
+- **Group-B review, Low (fixed in 9316433):**
+  - The rate limit was keyed per peer, and the peer is what uvicorn derives from the forwarded headers, so a caller could rotate it at will.
+  - It is now one global bucket (`metrics:`), and the 403 on forwarded headers comes before the limit, so a proxied request never takes a slot.
+  - Tested by `test_rate_limited_in_one_global_window` and `test_a_proxied_request_is_refused`.
+- **Org metrics** (`GET /orgs/{org}/ops/metrics?window=`, `audit.read`):
+  - the numbers come from the org's tenant tables, never from `job_outcomes`;
+  - it lists the five most recent failures with error code, class and deep link (a contract gap field added in 9316433).
+- **`scripts/ops_metrics.py`** (standard library only):
+  - the datasets are generated into the Docker volume `cyberlab_ops_samples`, never the host disk (host AV);
+  - `--manage-workers` runs pcap, then static, one analyzer at a time;
+  - the driver is a one-off `api-test` container;
+  - it reads the org metrics and `/internal/metrics` inside the api container, so the token never leaves it.
+- **`scripts/live_run.mjs`** (network choice, as Step 6 asked):
+  - The live tests need egress, and `api-test` has none. So the TI smoke test runs in a one-off `enrich-worker-test` and the AI tests in `analyst-worker-test` (both on `egress`), with `--noconftest`. Egress is never added to `api-test`.
+  - The calls are budgeted before anything runs.
+  - The report never holds a key or raw provider output.
+- **Pending gate:** the replay and its report `plans/reports/ops-metric-YYMMDD.md` (phase 11, run alone).
+- **Not done:** the live run and its `live-run-YYMMDD.md`. There are no provider keys or budget: a user decision.

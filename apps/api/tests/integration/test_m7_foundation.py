@@ -39,7 +39,7 @@ from tests.ops_helpers import (
 )
 from tests.report_helpers import purge_reports_test_bucket, reports_test_bucket
 from tests.security import idor_cases_correlation, idor_cases_ops, idor_cases_retention
-from tests.storage_helpers import evidence_test_bucket, purge_test_bucket, root_minio
+from tests.storage_helpers import evidence_test_bucket, lane_key, purge_test_bucket, root_minio
 
 M7_MODULES = (idor_cases_retention, idor_cases_correlation, idor_cases_ops)
 ORG = "/api/v1/orgs/{org_id}"
@@ -193,11 +193,11 @@ def test_worker_registrations() -> None:
 def test_purge_user_policy() -> None:
     bucket = evidence_test_bucket()
     purge = purge_minio()
-    key = f"purge-probe/{uuid.uuid4()}"
+    key = lane_key(f"purge-probe/{uuid.uuid4()}")
     stored = root_minio().put_object(bucket, key, io.BytesIO(b"probe"), 5)
     try:
         with pytest.raises(S3Error, match="AccessDenied|Access Denied"):
-            purge.put_object(bucket, f"purge-probe/{uuid.uuid4()}", io.BytesIO(b"x"), 1)
+            purge.put_object(bucket, lane_key(f"purge-probe/{uuid.uuid4()}"), io.BytesIO(b"x"), 1)
         with pytest.raises(S3Error, match="AccessDenied|Access Denied"):
             purge.set_object_retention(
                 bucket,
@@ -236,7 +236,7 @@ def test_purge_user_policy() -> None:
 
 def test_purge_user_cannot_delete_a_report_snapshot() -> None:
     bucket = reports_test_bucket()
-    key = f"{uuid.uuid4()}/{uuid.uuid4()}/1/snapshot.json"
+    key = lane_key(f"{uuid.uuid4()}/{uuid.uuid4()}/1/snapshot.json")
     stored = root_minio().put_object(bucket, key, io.BytesIO(b"{}"), 2)
     rendition = root_minio().put_object(bucket, f"{key}.pdf", io.BytesIO(b"%PDF"), 4)
     try:

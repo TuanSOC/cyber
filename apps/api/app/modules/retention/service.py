@@ -398,11 +398,12 @@ def hold_out(
 ) -> LegalHoldOut:
     until = protects_until(hold)
     active = until is None or at < until
-    if hold.scope == "org":
-        # No S3 calls for an org hold (it would touch every object): nothing to mirror.
-        synced = True
-    elif until is not None:
+    if until is not None:
         synced = hold.s3_synced_at is not None and hold.s3_synced_at >= until
+    elif hold.scope == "org":
+        # The worker mirrors an org hold on every evidence version of the org, resumably:
+        # until its first full pass, `s3_synced_at` is a watermark below `placed_at` (RT5).
+        synced = hold.s3_synced_at is not None and hold.s3_synced_at >= hold.placed_at
     else:
         synced = hold.s3_synced_at is not None
     return LegalHoldOut(
@@ -482,9 +483,9 @@ async def place_hold(
     )
     out = hold_out(hold, ctx.user.display_name, number, now())
     await ctx.session.commit()
-    if hold.scope == "investigation":
-        # The retention worker mirrors it as S3 legal holds (RT5); `s3_sync: pending` until.
-        await publish(RETENTION_SYNC_HOLDS, {"org_id": str(ctx.org_id)})
+    # The retention worker mirrors it as S3 legal holds (RT5), an org hold included (the
+    # api's expired-lock delete grant must not reach org-held evidence); `pending` until.
+    await publish(RETENTION_SYNC_HOLDS, {"org_id": str(ctx.org_id)})
     return out
 
 

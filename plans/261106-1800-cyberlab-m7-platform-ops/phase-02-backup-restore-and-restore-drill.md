@@ -121,19 +121,62 @@ The design is in plan.md "Backup and restore".
 7. If phase 6 has produced a candidate image tag by then, run the drill with `--target-minio-image` and record the result for the parent.
 
 ## Success Criteria
-- [ ] A backup drains first and contains the dump, the globals, the fingerprint, the row counts, `objects.json`, the MinIO tar and a hashed manifest, and no plaintext secret. The stack always restarts, even on failure.
-- [ ] A restore refuses non-empty volumes, tampered files and newer backups, and rebuilds an empty stack whose `restore_verify` is clean.
-- [ ] The drill passes end to end in `cyberlab-drill`:
+- [ ] A backup drains first and contains the dump, the globals, the fingerprint, the row counts, `objects.json`, the MinIO tar and a hashed manifest, and no plaintext secret. The stack always restarts, even on failure. — Built and unit-tested in 9316433: `unit/test_backup_manifest.py::test_manifest_holds_every_fact_and_no_key`, `test_fingerprint_ignores_surrounding_whitespace_only`; `stack.test.mjs` "HostDir writes, reads and hashes every backup file, manifest included", "the KMS fingerprint is the sha256 of the trimmed key file, never the key", "the backup dir is created owner-only (0700)…". **Pending gate:** no real `pnpm backup` has run yet. The drill's backup step is the first one.
+- [ ] A restore refuses non-empty volumes, tampered files and newer backups, and rebuilds an empty stack whose `restore_verify` is clean. — The refusals are unit-tested: `test_backup_manifest.py::test_tampered_file_is_detected`, `test_truncated_and_missing_files_are_detected`, `test_newer_backup_than_the_image_is_refused`, `test_kms_fingerprint_mismatch_is_refused`, `test_unknown_tool_version_is_refused`; `stack.test.mjs` "restore checks manifest authenticity at a host dir". The verifier passes on seeded data: `integration/test_restore_verify_db.py` (9316433). **Pending gate:** the empty-volume check and a clean rebuild run only in the drill.
+- [ ] The drill passes end to end in `cyberlab-drill` (**pending gate**: phase 11 runs the drill alone, as the last gate step; the guard test is already green: `stack.test.mjs` "downVolumes refuses the main project and any other name", "…a polluted COMPOSE_PROJECT_NAME", "…a volume without the drill project label"):
   - fingerprints and row counts are equal before anything writes;
   - every version of `objects.json` is present with equal size, etag, retention and legal hold, and every evidence version re-hashes;
   - report signatures are valid;
   - the RLS probe is clean;
   - login after the session revocation, the download and the 410 for purged evidence work;
   - `down -v` cleans up, and only the drill project's volumes (the guard test passes).
-- [ ] The drill's peak memory and duration are recorded, and it never runs alongside lanes.
+- [ ] The drill's peak memory and duration are recorded, and it never runs alongside lanes. — `lockAllSlots()` is tested ("lockAllSlots takes every slot under lane-test.sh's lock root and releases them"). **Pending gate:** `infra/backup/last-drill.json` does not exist yet.
 
 ## Risk Assessment
 - **Windows paths and tar ownership:** use named volumes only (no bind-mounted data; the drill's backups too), helper containers for tar, and `--numeric-owner`. Test on Docker Desktop / WSL2 first. A real `pnpm backup` to `./backups/` writes through Docker Desktop file sharing: slow for large volumes, and host AV may scan it (RT6).
 - **pg_restore and object ownership:** the init script creates `cyberlab` owned by `cyberlab_owner`. Restore with the default owner handling (the roles exist), and check `\dp` equality through the fingerprint.
 - **Restoring the MinIO internal config (`.minio.sys`)** restores users and policies with the old secrets, encrypted with the KMS key (RT7). `minio-init` re-applies the current `.env` keys idempotently (`mc admin user add` updates the secret). With a different KMS key MinIO cannot read them at all: the fingerprint check refuses that restore up front. Document it.
 - **Drill time and RAM:** seed small (a few MiB of evidence). The drill must finish in under 5 minutes on the host.
+
+## Implementation Notes (2026-11-07)
+- **Commit:** 9316433 (phases 2–10 together). Phase 1 shipped the stubs in 980386a.
+- **Lane 2:** `scripts/lane-test.sh 2 …` on its own files, plus ruff, format and mypy. The drill was **not** run: it is a heavy step, and phase 11 runs it alone, as the last gate step.
+- **`scripts/lib/stack.mjs`** (+611):
+  - the compose runner, `stopWriters` / `startAll` and `volumeName`;
+  - `downVolumes`, which accepts the literal `cyberlab-drill` only, strips `COMPOSE_*` from the child env and checks the volume labels first (RT2);
+  - `lockAllSlots` under `LANE_LOCK_ROOT` (RT25);
+  - `runHelper` with argument arrays only;
+  - `HostDir` / `DockerVolume` backup locations, `sha256File`, `kmsFingerprint` and the manifest HMAC.
+
+  Tested by `scripts/lib/stack.test.mjs` (18 tests).
+- **`pnpm backup` / `pnpm restore` / `pnpm restore:drill`:**
+  - **Backup:** drain the `*_index` tables, then stop the writers. `pg_dump -Fc` and the globals run as superuser. `security.sql` → `security.json`, `tables.sql` → `tables.json` (exact counts, RT4). `objects.json` comes from `mc ls --versions`. The MinIO volume is tarred relative to `MINIO_DATA_DIR`. The manifest records the KMS key name and its fingerprint, never the key. A `finally` block restarts the stack.
+  - **Restore:** empty volumes only (otherwise exit 3, and it prints the `down -v` command). Then `db-bootstrap` → `pg_restore --single-transaction` → `restore_verify --db` → untar → `minio-init` → `--objects` → `migrate` → refresh-token revocation → `--rls` → the `JWT_SECRET` rotation note (RT26).
+  - **Drill:** the backups stay in the Docker volume `cyberlab-drill_backups` (RT6). `docker-compose.drill-dev.yml` pins the committed dev key material without `--prod`. `--target-minio-image` / `--target-minio-data-dir` restore into another image.
+- **`app/scripts/restore_verify.py`** (+1195) has three phases, each runnable alone:
+  - `--db`: the fingerprint and row-count diff;
+  - `--objects`: every version's size, etag, retention and legal hold, plus the evidence re-hash, the report snapshot re-hash and signature, the render artifacts and the job result versions. A tombstoned version still present is the warning `purged_pending_delete` (RT22);
+  - `--rls`: the probe as `cyberlab_app`.
+
+  `--sample N` bounds the re-hash.
+- **`app/scripts/drill_seed.py`** (+496):
+  - two orgs, three users, two cases and three evidence uploads per org;
+  - a note, a collection, a case hold, a dry-run policy and a finalized report;
+  - synthetic `drill` TI and AI rows;
+  - a tombstone whose version is deleted with root and governance bypass (RT17).
+- **Group-B review, phase-2 findings (all fixed in 9316433):**
+  - **Medium:** the `HostDir` regex broke host backups. Fixed and covered by `stack.test.mjs` "HostDir writes, reads and hashes every backup file…" and "backup file names are one safe path segment".
+  - **Low:** the RLS probe accepted any exception as a refusal. It now passes only on SQLSTATE `42501` (`test_restore_verify.py::test_rls_write_probe_passes_only_on_insufficient_privilege`, `test_rls_write_probe_fails_on_any_other_error`, `test_sqlstate_follows_orig_and_the_cause_chain`).
+  - **Low:** the manifest was unsigned. With `BACKUP_MANIFEST_KEY` set, the backup now writes `manifest.json.hmac` (HMAC-SHA256), and the restore checks it ("the manifest HMAC: sign, verify, refuse a short key", "restore checks manifest authenticity at a host dir"). It is optional: someone who can rewrite the backup can rewrite an unkeyed hash.
+  - **Low:** the backup files were readable by other host users. The backup dir is now 0700 (an existing one is tightened), the helpers run under umask 077 and the files are 0600. On a non-root POSIX host the helpers' output is chowned to the host user ("backup helpers run with umask 077 and chown their output", "HostDir hands root-helper output to the host user only on a non-root POSIX host").
+  - **Low:** `drill_seed` had no guard. It now refuses unless `CYBERLAB_DRILL=1` and `CYBERLAB_DRILL_PROJECT=cyberlab-drill` (`unit/test_drill_seed.py::test_require_drill_accepts_only_the_drill`, `test_main_refuses_outside_the_drill`, `test_owner_rows_refuse_outside_the_drill`).
+- **Tests:**
+  - `unit/test_backup_manifest.py` (13);
+  - `unit/test_restore_verify.py` (17: a missing or extra policy, a changed grant, lost FORCE RLS, row counts, a changed version attribute, a shortened retain-until, a lost legal hold);
+  - `integration/test_restore_verify_db.py` (10: a dropped policy, a new version under a key, a pinned version deleted without a tombstone, a bad signature, a clean RLS probe, the seeder's owner rows and tombstone).
+- **Pending gate:**
+  - the full drill, twice (idempotence and cleanup);
+  - `last-drill.json` (timings, peak RAM);
+  - a real `pnpm backup` on the dev stack;
+  - a restore into a candidate MinIO image, blocked on the phase-6 decision.
+- **Not done:** no backup has been taken of the shared dev stack (no `backups/` dir), on instruction (no docker for heavy steps).

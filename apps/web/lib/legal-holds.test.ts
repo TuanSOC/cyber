@@ -53,10 +53,14 @@ describe("legal holds", () => {
     expect(releaseProtectsUntil(NOW, 7).toISOString()).toBe("2026-11-13T12:00:00.000Z");
   });
 
-  it("shows the object-store sync for case holds only (RT5)", () => {
+  it("shows the object-store sync of case and org holds from s3_sync (RT5)", () => {
     expect(s3SyncLabel(hold())).toBe("Object-store hold: pending");
     expect(s3SyncLabel(hold({ s3_synced_at: "2026-11-06T12:01:00Z", s3_sync: "synced" }))).toBe("Object-store hold: synced");
-    expect(s3SyncLabel(hold({ scope: "org", investigation_id: null }))).toBeNull();
+    const org = { scope: "org" as const, investigation_id: null };
+    expect(s3SyncLabel(hold({ ...org, s3_synced_at: "2026-11-01T00:00:00Z" }))).toBe("Object-store hold: pending");
+    expect(s3SyncLabel(hold({ ...org, s3_synced_at: "2026-11-06T12:01:00Z", s3_sync: "synced" }))).toBe(
+      "Object-store hold: synced",
+    );
   });
 
   it("labels the scope", () => {

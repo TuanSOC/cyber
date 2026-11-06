@@ -6793,6 +6793,43 @@
         "title": "HealthOut",
         "type": "object"
       },
+      "HistoryLookupIn": {
+        "additionalProperties": false,
+        "description": "`POST /ti/results/lookup` (M7 phase 11): the indicator travels in the JSON body only,\nnever in a URL, where it would land in the uvicorn and gateway access logs and the browser\nhistory (as the search query and the correlation lookup, RT13). Never logged or audited.",
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProviderName"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LookupType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "value": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "HistoryLookupIn",
+        "type": "object"
+      },
       "HistoryOut": {
         "description": "Every stored answer for one normalized indicator (all providers, newest first).",
         "properties": {
@@ -25237,10 +25274,10 @@
         ]
       }
     },
-    "/api/v1/orgs/{org_id}/ti/results": {
-      "get": {
-        "description": "Every stored answer for the normalized indicator, newest first (400 `invalid_ioc`\nwhen the value cannot be normalized; `skipped` says why no provider would receive it).",
-        "operationId": "get_history_api_v1_orgs__org_id__ti_results_get",
+    "/api/v1/orgs/{org_id}/ti/results/lookup": {
+      "post": {
+        "description": "Every stored answer for the normalized indicator, newest first (400 `invalid_ioc`\nwhen the value cannot be normalized; `skipped` says why no provider would receive it).\nA POST so the indicator stays out of every URL and access log; a read: it writes\nnothing and is not audited.",
+        "operationId": "lookup_history_api_v1_orgs__org_id__ti_results_lookup_post",
         "parameters": [
           {
             "in": "path",
@@ -25250,49 +25287,6 @@
               "format": "uuid",
               "title": "Org Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "value",
-            "required": true,
-            "schema": {
-              "maxLength": 2048,
-              "minLength": 1,
-              "title": "Value",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "type",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/LookupType"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Type"
-            }
-          },
-          {
-            "in": "query",
-            "name": "provider",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/ProviderName"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Provider"
             }
           },
           {
@@ -25320,6 +25314,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HistoryLookupIn"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
@@ -25342,7 +25346,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Get History",
+        "summary": "Lookup History",
         "tags": [
           "threat-intel"
         ]

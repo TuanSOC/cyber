@@ -249,6 +249,17 @@ class LookupType(enum.StrEnum):
     SHA256 = "sha256"
 
 
+class HistoryLookupIn(_In):
+    """`POST /ti/results/lookup` (M7 phase 11): the indicator travels in the JSON body only,
+    never in a URL, where it would land in the uvicorn and gateway access logs and the browser
+    history (as the search query and the correlation lookup, RT13). Never logged or audited."""
+
+    value: Annotated[str, StringConstraints(min_length=1, max_length=MAX_VALUE_CHARS)]
+    # Detected from the value when omitted.
+    type: LookupType | None = None
+    provider: ProviderName | None = None
+
+
 class EnrichmentCreate(_In):
     # Defaults to every enabled (and available) provider.
     providers: Annotated[list[ProviderName], Field(min_length=1, max_length=16)] | None = None

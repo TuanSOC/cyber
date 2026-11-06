@@ -31,6 +31,7 @@ from tests.security import (
     idor_cases_renders,
     idor_cases_reports,
 )
+from tests.storage_helpers import lane_key
 
 # --- snapshot reads -------------------------------------------------------------------------
 
@@ -195,16 +196,15 @@ def test_reports_test_bucket_is_locked_and_the_api_user_cannot_delete() -> None:
     assert get_settings().reports_bucket == "reports-test"
     bucket = reports_test_bucket()
     client = get_minio()
+    probe = lane_key("probe/snapshot.json")  # lane-safe cleanup (M7 phase 11)
     try:
         assert client.get_object_lock_config(bucket) is not None
-        put = client.put_object(bucket, "probe/snapshot.json", io.BytesIO(b"{}"), 2)
+        put = client.put_object(bucket, probe, io.BytesIO(b"{}"), 2)
         with pytest.raises(S3Error, match="AccessDenied|Access Denied"):
-            client.remove_object(bucket, "probe/snapshot.json", version_id=put.version_id)
+            client.remove_object(bucket, probe, version_id=put.version_id)
         retention = Retention(GOVERNANCE, datetime.now(UTC) + timedelta(days=1))
-        client.set_object_retention(
-            bucket, "probe/snapshot.json", retention, version_id=put.version_id
-        )
-        got = client.get_object_retention(bucket, "probe/snapshot.json", version_id=put.version_id)
+        client.set_object_retention(bucket, probe, retention, version_id=put.version_id)
+        got = client.get_object_retention(bucket, probe, version_id=put.version_id)
         assert got is not None and got.mode == GOVERNANCE
     finally:
         purge_reports_test_bucket()

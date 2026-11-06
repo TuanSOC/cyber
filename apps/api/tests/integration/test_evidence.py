@@ -15,12 +15,14 @@ from sqlalchemy import select
 from app.core import storage
 from app.core.clients import get_redis
 from app.core.config import get_settings
+from app.core.deps import CurrentUser
 from app.core.tenancy import tenant_session
 from app.core.upload_slots import slot_key
 from app.main import app
 from app.modules.audit.models import AuditLog
-from app.modules.evidence import uploads
+from app.modules.evidence import locking, uploads
 from app.modules.evidence.models import Evidence, EvidenceHash, HashAlgorithm
+from app.modules.retention.models import LegalHold
 from tests.factories import Registered, csrf, register
 from tests.integration.test_orgs_members import org_with_roles
 from tests.storage_helpers import all_entries, overwrite, versions
@@ -144,6 +146,61 @@ async def test_db_failure_after_store_deletes_the_version(monkeypatch: pytest.Mo
     # Exact version removed, not merely hidden behind a delete marker.
     assert all_entries(prefix=f"{reg.org_id}/") == []
     assert _tmp_files() == []
+
+
+@pytest.mark.parametrize("scope", ["investigation", "org"])
+async def test_db_failure_under_a_legal_hold_keeps_the_version(
+    monkeypatch: pytest.MonkeyPatch, scope: str
+) -> None:
+    """M7 phase 11 (RT5): the api's only evidence delete (failed-upload cleanup) checks the
+    legal holds first and keeps the version under a case or an org hold."""
+    reg = await register()
+    case_id = await _new_case(reg)
+    async with tenant_session(reg.org_id, reg.user_id) as s:
+        s.add(
+            LegalHold(
+                organization_id=reg.org_id,
+                scope=scope,
+                investigation_id=uuid.UUID(case_id) if scope == "investigation" else None,
+                reason="Preservation",
+                placed_by=reg.user_id,
+            )
+        )
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("simulated database failure")
+
+    monkeypatch.setattr(uploads, "record_event", boom)
+    client = AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False, client=("10.0.0.1", 40000)),
+        base_url=str(reg.client.base_url),
+        cookies=reg.client.cookies,
+    )
+    response = await _upload(client, reg.org_id, case_id, b"held evidence bytes")
+    assert response.status_code == 500
+    assert await _evidence_rows(reg.org_id) == []
+    # Kept (an orphan `reconcile_orphans.py` reports), never deleted under a hold.
+    assert [marker for _, _, marker in all_entries(prefix=f"{reg.org_id}/")] == [False]
+
+
+async def test_discard_never_removes_a_recorded_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(get_settings(), "evidence_lock_days", 0)  # no GOVERNANCE lock at all
+    reg = await register()
+    case_id = await _new_case(reg)
+    assert (await _upload(reg.client, reg.org_id, case_id, b"committed")).status_code == 201
+    [row] = await _evidence_rows(reg.org_id)
+    user = CurrentUser(
+        id=reg.user_id,
+        email="x@example.com",
+        display_name="x",
+        jti="t",
+        family_id=uuid.uuid4(),
+        token_expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    await locking.discard_version(
+        reg.org_id, user, uuid.UUID(case_id), row.storage_key, row.storage_version_id
+    )
+    assert versions(row.storage_key) == [(row.storage_key, row.storage_version_id)]
 
 
 async def test_concurrent_upload_slots_are_bounded() -> None:

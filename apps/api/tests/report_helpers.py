@@ -6,20 +6,19 @@
   replaced top-level sections.
 - `seed_report`, `seed_version` (the snapshot object put in `reports-test`, a signed
   manifest), `seed_render` (with its token and index row).
-- `purge_reports_test_bucket()`: removes every object version of `reports-test` with the
-  root credentials (governance bypass); call it from a test's teardown.
+- `purge_reports_test_bucket()`: removes this process's object versions of `reports-test`
+  (its orgs' keys and its lane prefix, never another lane's, M7 phase 11) with the root
+  credentials (governance bypass); call it from a test's teardown.
 """
 
 import base64
 import hashlib
 import io
 import json
-import os
 import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -35,8 +34,6 @@ from cyberlab_jobs.report import (
     manifest_bytes,
     section_counts,
 )
-from minio import Minio
-from minio.deleteobjects import DeleteObject
 from sqlalchemy import update
 
 from app.core.clients import get_minio
@@ -51,6 +48,7 @@ from app.modules.reports.models import (
     ReportVersion,
 )
 from tests.integration.seed import Tenant
+from tests.storage_helpers import purge_owned
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "report"
 REPORTS_TEST_BUCKET = "reports-test"
@@ -125,28 +123,8 @@ def reports_test_bucket() -> str:
     return bucket
 
 
-@lru_cache
-def _root_minio() -> Minio:
-    s = get_settings()
-    return Minio(
-        s.need("minio_endpoint"),
-        access_key=os.environ["TEST_MINIO_ROOT_USER"],
-        secret_key=os.environ["TEST_MINIO_ROOT_PASSWORD"],
-        secure=s.minio_secure,
-    )
-
-
 def purge_reports_test_bucket() -> None:
-    bucket = reports_test_bucket()
-    client = _root_minio()
-    targets = [
-        DeleteObject(o.object_name, o.version_id)
-        for o in client.list_objects(bucket, recursive=True, include_version=True)
-    ]
-    if targets:
-        errors = list(client.remove_objects(bucket, targets, bypass_governance_mode=True))
-        if errors:
-            raise RuntimeError(f"could not purge {bucket}: {errors[:3]}")
+    purge_owned([reports_test_bucket()])
 
 
 async def seed_report(

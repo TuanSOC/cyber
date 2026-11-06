@@ -1,6 +1,6 @@
 import type { Schemas } from "@cyberlab/contracts";
 
-import { ApiError, errorMessage } from "@/lib/api";
+import { ApiError, api, errorMessage, unwrap } from "@/lib/api";
 import { policyBlockedReason, shareReasonText } from "@/lib/case";
 import { formatDate } from "@/lib/format";
 
@@ -315,12 +315,58 @@ export function lookupTypeForIoc(type: string): LookupType | null {
   }
 }
 
-/** Link to the per-IOC history page. */
-export function historyHref(orgId: string, type: string | null, value: string): string {
+// The per-IOC history page keeps the indicator in the URL fragment (`#type=…&value=…`), never in
+// a query string, and asks `POST /ti/results/lookup` with it in the JSON body (M7 phase 11, as
+// the search query, RT13): an IOC value never reaches a request URL, an access log or a referrer.
+
+export const HISTORY_LOOKUP_TYPES: LookupType[] = ["ip", "ipv4", "ipv6", "domain", "url", "email", "md5", "sha1", "sha256"];
+const MAX_HISTORY_VALUE = 2048;
+
+export type HistoryState = { value: string; type: LookupType | undefined };
+
+export function historyPagePath(orgId: string): string {
+  return `/o/${encodeURIComponent(orgId)}/intel/ioc`;
+}
+
+/** Fragment text without the leading `#`. */
+export function historyFragment(type: string | null | undefined, value: string): string {
   const params = new URLSearchParams();
   if (type) params.set("type", type);
   params.set("value", value);
-  return `/o/${orgId}/intel/ioc?${params.toString()}`;
+  return params.toString();
+}
+
+/** Reads `#type=…&value=…`; an unknown type is ignored, an absent value is "". */
+export function parseHistoryFragment(hash: string): HistoryState {
+  const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+  const value = (params.get("value") ?? "").slice(0, MAX_HISTORY_VALUE);
+  const raw = params.get("type");
+  const type = raw && (HISTORY_LOOKUP_TYPES as string[]).includes(raw) ? (raw as LookupType) : undefined;
+  return { value, type };
+}
+
+/** Link to the per-IOC history page, the indicator in the fragment only. */
+export function historyHref(orgId: string, type: string | null, value: string): string {
+  return `${historyPagePath(orgId)}#${historyFragment(type, value)}`;
+}
+
+export type HistoryLookupIn = Schemas["HistoryLookupIn"];
+export type TiHistory = Schemas["HistoryOut"];
+type HistoryClient = Pick<typeof api, "POST">;
+
+/** `POST /orgs/{org}/ti/results/lookup`: the indicator in the JSON body; paging in the query. */
+export async function lookupHistory(
+  orgId: string,
+  body: HistoryLookupIn,
+  page: { limit: number; offset: number },
+  client: HistoryClient = api,
+): Promise<TiHistory> {
+  return unwrap(
+    await client.POST("/api/v1/orgs/{org_id}/ti/results/lookup", {
+      params: { path: { org_id: orgId }, query: page },
+      body,
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------------------------

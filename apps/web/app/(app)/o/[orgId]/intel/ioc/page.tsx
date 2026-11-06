@@ -3,8 +3,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { useState } from "react";
 
 import { ALL, FilterSelect, usePageOffset } from "@/components/analysis/result-parts";
 import { PageHeader } from "@/components/page-header";
@@ -14,32 +13,34 @@ import { MitreNoticeFooter } from "@/components/ti/attack-chips";
 import { ResultPanel } from "@/components/ti/result-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api, unwrap } from "@/lib/api";
 import { orgPath } from "@/lib/nav";
 import { useOrg } from "@/lib/org-context";
 import {
+  HISTORY_LOOKUP_TYPES,
   type LookupType,
   PROVIDERS,
   type ProviderName,
   historyDeltas,
-  historyHref,
+  historyFragment,
+  lookupHistory,
   noteText,
+  parseHistoryFragment,
   providerLabel,
   skipReasonText,
   tiIocTypeLabel,
 } from "@/lib/ti";
+import { setLocationFragment, useLocationHash } from "@/lib/use-fragment";
 import { tiKeys } from "@/lib/use-ti";
 
-const LOOKUP_TYPES: LookupType[] = ["ip", "ipv4", "ipv6", "domain", "url", "email", "md5", "sha1", "sha256"];
-const TYPE_OPTIONS = LOOKUP_TYPES.map((t) => [t, t === "ip" ? "IP" : tiIocTypeLabel(t)] as const);
+const TYPE_OPTIONS = HISTORY_LOOKUP_TYPES.map((t) => [t, t === "ip" ? "IP" : tiIocTypeLabel(t)] as const);
 const PROVIDER_OPTIONS = PROVIDERS.map((p) => [p, providerLabel(p)] as const);
 const AUTO = "auto";
 
-function asLookupType(value: string | null): LookupType | undefined {
-  return value && (LOOKUP_TYPES as string[]).includes(value) ? (value as LookupType) : undefined;
-}
-
-/** Every stored provider answer for one indicator, newest first (the per-IOC history). */
+/**
+ * Every stored provider answer for one indicator, newest first (the per-IOC history). The
+ * indicator is kept in the URL fragment (`#type=…&value=…`) and sent in a POST body only: never
+ * in a request URL, an access log or a referrer (M7 phase 11, RT13).
+ */
 export default function IocHistoryPage() {
   const { orgId } = useOrg();
   return (
@@ -54,17 +55,13 @@ export default function IocHistoryPage() {
         title="Indicator history"
         description="Every answer stored for this indicator, across providers and runs. Each entry is the provider's own statement on that date."
       />
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
-        <History />
-      </Suspense>
+      <History />
       <MitreNoticeFooter className="mt-8" />
     </>
   );
 }
 
 function SearchForm({ initialValue, initialType }: { initialValue: string; initialType?: LookupType }) {
-  const { orgId } = useOrg();
-  const router = useRouter();
   const [value, setValue] = useState(initialValue);
   const [type, setType] = useState<LookupType | typeof AUTO>(initialType ?? AUTO);
   return (
@@ -73,7 +70,7 @@ function SearchForm({ initialValue, initialType }: { initialValue: string; initi
       onSubmit={(event) => {
         event.preventDefault();
         const v = value.trim();
-        if (v) router.push(historyHref(orgId, type === AUTO ? null : type, v));
+        if (v) setLocationFragment(historyFragment(type === AUTO ? null : type, v));
       }}
     >
       <Input
@@ -101,21 +98,14 @@ function SearchForm({ initialValue, initialType }: { initialValue: string; initi
 
 function History() {
   const { orgId } = useOrg();
-  const searchParams = useSearchParams();
-  const value = (searchParams.get("value") ?? "").slice(0, 2048);
-  const type = asLookupType(searchParams.get("type"));
+  const { value, type } = parseHistoryFragment(useLocationHash());
   const [provider, setProvider] = useState<ProviderName | typeof ALL>(ALL);
   const filters = { value, type, provider: provider === ALL ? undefined : provider };
   const [offset, setOffset] = usePageOffset(JSON.stringify(filters));
 
   const history = useQuery({
     queryKey: [...tiKeys.history(orgId), { ...filters, offset }],
-    queryFn: async () =>
-      unwrap(
-        await api.GET("/api/v1/orgs/{org_id}/ti/results", {
-          params: { path: { org_id: orgId }, query: { ...filters, limit: PAGE_SIZE, offset } },
-        }),
-      ),
+    queryFn: () => lookupHistory(orgId, filters, { limit: PAGE_SIZE, offset }),
     enabled: value !== "",
     placeholderData: keepPreviousData,
   });

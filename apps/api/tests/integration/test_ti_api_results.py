@@ -3,6 +3,7 @@ single results, cached items in run details, and tenant isolation of all of it."
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from sqlalchemy import text
@@ -140,8 +141,13 @@ async def test_history_lists_every_answer_newest_first(sent: Sent) -> None:
     )
     await add_result(owner.org_id, second, ioc_type="ipv4", value_norm="8.8.8.8")
 
-    url = f"{API}/{owner.org_id}/ti/results"
-    body = (await owner.client.get(url, params={"value": "HIT.example.COM."})).json()
+    url = f"{API}/{owner.org_id}/ti/results/lookup"
+    client = owner.client
+
+    async def history(page: dict[str, int] | None = None, **body: str) -> Any:
+        return await client.post(url, json=body, params=page, headers=csrf(client))
+
+    body = (await history(value="HIT.example.COM.")).json()
     assert body["ioc_type"] == "domain" and body["value_norm"] == "hit.example.com"
     assert body["ioc_key"] == key_of("domain", "hit.example.com")
     assert body["skipped"] == "special_use_name" and body["total"] == 3
@@ -157,28 +163,28 @@ async def test_history_lists_every_answer_newest_first(sent: Sent) -> None:
         "hits": 3,
         "tags": [],
     }
-    only_mock = (
-        await owner.client.get(url, params={"value": "hit.example.com", "provider": "mock"})
-    ).json()
+    only_mock = (await history(value="hit.example.com", provider="mock")).json()
     assert only_mock["total"] == 2
-    paged = (
-        await owner.client.get(url, params={"value": "hit.example.com", "limit": 1, "offset": 1})
-    ).json()
+    paged = (await history({"limit": 1, "offset": 1}, value="hit.example.com")).json()
     assert [i["id"] for i in paged["items"]] == [str(b)] and paged["total"] == 3
 
-    ip = (await owner.client.get(url, params={"value": "8.8.8.8", "type": "ipv4"})).json()
+    ip = (await history(value="8.8.8.8", type="ipv4")).json()
     assert ip["skipped"] is None and ip["total"] == 1
-    private = (await owner.client.get(url, params={"value": "10.0.0.1"})).json()
+    private = (await history(value="10.0.0.1")).json()
     assert private["skipped"] == "not_global_ip" and private["items"] == []
-    url_query = (
-        await owner.client.get(url, params={"value": "https://acme-corp.net/a?token=1"})
-    ).json()
+    url_query = (await history(value="https://acme-corp.net/a?token=1")).json()
     assert url_query["notes"] == ["query_removed"]
     assert url_query["value_norm"] == "https://acme-corp.net/a"
     for bad in ({"value": "not a domain!!"}, {"value": "xyz", "type": "sha256"}):
-        invalid = await owner.client.get(url, params=bad)
+        invalid = await history(**bad)
         assert invalid.status_code == 400 and invalid.json()["error"]["code"] == "invalid_ioc"
-    assert (await owner.client.get(url)).status_code == 422  # value is required
+    assert (await history()).status_code == 422  # value is required
+    extra = await client.post(url, json={"value": "x.example", "q": 1}, headers=csrf(client))
+    assert extra.status_code == 422  # extra fields refused
+    # M7 phase 11: the M4 query-string form is gone (an IOC value never goes in a URL).
+    gone = await client.get(f"{API}/{owner.org_id}/ti/results", params={"value": "hit.example.com"})
+    assert gone.status_code in (404, 405)
+    assert (await client.post(url, json={"value": "hit.example.com"})).status_code == 403  # CSRF
 
 
 async def test_single_result(sent: Sent) -> None:
@@ -239,7 +245,9 @@ async def test_another_org_sees_nothing(sent: Sent) -> None:
         f"/analyses/{job_id}/iocs?include=enrichment",
     ):
         assert (await a.get(f"{foreign}{path}")).status_code == 404, path
-    history = await a.get(f"{foreign}/ti/results", params={"value": "hit.example.com"})
+    history = await a.post(
+        f"{foreign}/ti/results/lookup", json={"value": "hit.example.com"}, headers=csrf(a)
+    )
     assert history.status_code == 404
     # Own org path with the victim's ids: 404; own listings: empty.
     assert (await a.get(f"{own}/ti/runs/{run}")).status_code == 404
@@ -247,7 +255,9 @@ async def test_another_org_sees_nothing(sent: Sent) -> None:
     assert (await a.get(f"{own}/analyses/{job_id}/iocs")).status_code == 404
     assert (await enrich_job(a, attacker.org_id, job_id)).status_code == 404
     assert (await a.get(f"{own}/ti/runs")).json()["total"] == 0
-    mine = (await a.get(f"{own}/ti/results", params={"value": "hit.example.com"})).json()
+    mine = (
+        await a.post(f"{own}/ti/results/lookup", json={"value": "hit.example.com"}, headers=csrf(a))
+    ).json()
     assert mine["total"] == 0 and mine["items"] == []
     assert (await a.get(f"{own}/ti/settings")).json()["excluded_suffixes"] == []
     integrations = (await a.get(f"{own}/integrations")).json()["items"]

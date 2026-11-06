@@ -5,7 +5,7 @@
 // cleared first; that is the only state this touches besides the data the test itself creates.
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readdirSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 
 const PROD = process.argv.includes("--prod");
@@ -62,6 +62,52 @@ docker([
 // the mocks are refused there. ai-mock is recreated so it forgets the markers it has seen.
 if (!PROD) sh(`${COMPOSE} --profile e2e up -d --wait --no-deps --force-recreate ti-mock ai-mock`);
 
+// M7 phase 11: the purged-evidence state of retention.spec.ts, dev only (the prod overlay's api
+// env makes the seeder refuse: ENV=prod, secure cookies). A one-off container of the dev `api`
+// service (app/scripts/e2e_seed.py) registers a seed user with its own org, a case and a text
+// upload through the API, then writes as the owner a completed retention run, the purge
+// tombstone and the custody `purged` event. The seed password is generated here and passed to
+// both containers through the environment only (`-e NAME` without a value): it is never part
+// of a printed command or of any output.
+function envFileValue(name) {
+  if (process.env[name]) return process.env[name];
+  const line = readFileSync(resolve(".env"), "utf8")
+    .split(/\r?\n/)
+    .find((l) => l.startsWith(`${name}=`));
+  return line ? line.slice(name.length + 1) : "";
+}
+
+function seedPurgedEvidence() {
+  if (PROD) {
+    console.log("  (prod: no purged-evidence seed; retention.spec.ts skips its seeded steps)");
+    return "";
+  }
+  const ownerUrl = envFileValue("MIGRATION_DATABASE_URL");
+  if (!ownerUrl) {
+    console.error("e2e seed: MIGRATION_DATABASE_URL is not set in .env");
+    process.exit(1);
+  }
+  process.env.E2E_SEED_PASSWORD = randomBytes(18).toString("base64url");
+  const args = [
+    "compose", "run", "--rm", "--no-deps", "-T",
+    "-e", "CYBERLAB_E2E_SEED=1", "-e", "E2E_SEED_PASSWORD", "-e", "E2E_OWNER_DATABASE_URL",
+    "api", "uv", "run", "python", "-m", "app.scripts.e2e_seed",
+  ];
+  console.log(`  $ docker ${args.join(" ")}`);
+  const result = spawnSync("docker", args, {
+    env: { ...process.env, E2E_OWNER_DATABASE_URL: ownerUrl, MSYS_NO_PATHCONV: "1" },
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  if (result.status !== 0) process.exit(result.status ?? 1);
+  const seed = JSON.parse(result.stdout.trim().split(/\r?\n/).pop());
+  process.env.E2E_SEED_EMAIL = seed.email;
+  process.env.E2E_SEED_PURGED_EVIDENCE = `${seed.org_id}/${seed.evidence_id}`;
+  console.log(`  e2e seed: ${seed.email}, purged evidence ${process.env.E2E_SEED_PURGED_EVIDENCE}`);
+  return "-e E2E_SEED_EMAIL -e E2E_SEED_PASSWORD -e E2E_SEED_PURGED_EVIDENCE";
+}
+const SEED = seedPurgedEvidence();
+
 // Every spec registers one fresh user, and registration is limited to 5 per 10 minutes per IP:
 // the specs run in batches of at most five, with the register keys cleared before each.
 // A Lua one-liner avoids shell pipes, so it behaves the same under cmd.exe and sh.
@@ -84,5 +130,5 @@ const BATCH = 5;
 for (let i = 0; i < specs.length; i += BATCH) {
   clearRegisterLimit();
   const files = specs.slice(i, i + BATCH).map((name) => `e2e/${name}`).join(" ");
-  sh(`${COMPOSE} --profile e2e run --rm ${i === 0 ? "--build" : ""} ${TARGET} e2e pnpm exec playwright test ${files}`);
+  sh(`${COMPOSE} --profile e2e run --rm ${i === 0 ? "--build" : ""} ${TARGET} ${SEED} e2e pnpm exec playwright test ${files}`);
 }

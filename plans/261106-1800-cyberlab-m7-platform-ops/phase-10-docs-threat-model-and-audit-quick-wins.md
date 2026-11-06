@@ -81,11 +81,54 @@ Document M7, close the documentation gaps and overclaims from `plans/reports/req
 5. Reconcile THREAT_INTEL, AI_ANALYST, REPORTS and SANDBOX_SECURITY with the code. Remove `scripts;C/`.
 
 ## Success Criteria
-- [ ] Every audit quick win (1–9) and every listed overclaim is fixed or recorded as already fixed.
-- [ ] The §11 mapping and the OpenSearch decision are documented, and the correlation module is described.
-- [ ] DEPLOYMENT has tested-as-written backup, restore and retention runbooks and every new secret. THREAT_MODEL has the M7 section and the updated known gaps.
-- [ ] ROADMAP, PRD, TESTING and README describe the current scope without overclaims.
+- [ ] Every audit quick win (1–9) and every listed overclaim is fixed or recorded as already fixed. — Quick wins 1–6, 8 and 9 and every listed overclaim are fixed (9316433; see the notes). **Quick win 7 is open:** the M5 `plan.md` is `completed`, but the M6 phase files still say `status: pending` and `plans/reports/report-metric-*.md` does not exist. ROADMAP records it ("its gate-run metric report `report-metric-*.md` is not written yet"). Both are outside this phase's files.
+- [x] The §11 mapping and the OpenSearch decision are documented, and the correlation module is described. — `docs/DATABASE.md` §11 mapping table (`analysis_results`, `threat_intelligence`, `attack_techniques`, `investigation_timeline`, `api_keys`, `forensic_artifacts` / `memory_findings`, `malware_findings`); `docs/ARCHITECTURE.md` "Platform operations (M7)" → "Correlation", "Search", "OpenSearch decision" (deferred, with the revisit criteria) (9316433).
+- [ ] DEPLOYMENT has tested-as-written backup, restore and retention runbooks and every new secret. THREAT_MODEL has the M7 section and the updated known gaps. — Written: DEPLOYMENT "Backup and restore (M7)" (what a backup is (TLP:RED), take, restore, drill), "SSE-S3 and the KMS key", "Object-store image", "Retention operations", the Prometheus scrape example, and the env table rows for every new secret; THREAT_MODEL "M7: platform operations" and the updated "Known gaps" (backups, view audit, rate limit, MinIO image) (9316433). **Pending gate:** "tested as written". Phase 11 runs the runbook commands during the drill.
+- [x] ROADMAP, PRD, TESTING and README describe the current scope without overclaims. — ROADMAP M7 row ("done, pending its gate"), "Later" additions and the "Gated" link; PRD retitled ("Product Requirements", current scope M1–M7) with "Non-goals (current scope)"; TESTING rows (0.978, the parser posture row, ASR 0.290, the M7 suites and §13 / §14 rows); README (synthetic, TShark, no live model run, veraPDF not gated) (9316433). The M7 metric tables stay for phase 11 (pending gate).
 
 ## Risk Assessment
 - **The runbooks drift from the scripts:** phase 11 runs the restore runbook commands as written during the drill review.
 - **Doc size:** keep the M7 additions concise and link REPORTS / SANDBOX_SECURITY instead of duplicating them.
+
+## Implementation Notes (2026-11-07)
+- **Commit:** 9316433 (phases 2–10 together). The docs were written against the merged group-B code.
+- **Re-check first (step 1):** every quick win of `plans/reports/requirements-coverage-261106.md` was checked against the current files:
+  - quick win 2 was already done by phase 7 (`SANDBOX_SECURITY.md`, now linked);
+  - the M5 part of quick win 7 was already done (`plan.md` is `completed`);
+  - `scripts;C/` is gone from the repo root (quick win 8).
+- **Quick wins fixed:**
+  - 1: the DATABASE §11 table;
+  - 3: TESTING shows the IOC enrichment ✅ 0.978 (synthetic faults), the parser row rewritten as a posture row (isolation + fuzz-lite) and ASR **0.290** next to "0 floor violations";
+  - 4: the PRD title and non-goals;
+  - 5: ROADMAP "Later" gains Autopsy, platform API keys / service accounts, TCP stream reassembly / file carving, OpenSearch with criteria, and online backup / PITR;
+  - 6: the ARCHITECTURE OpenSearch decision and the correlation module;
+  - 9: PCAP_ANALYSIS (TShark covers the protocol hierarchy only; flows are Zeek conn-level).
+- **Overclaims fixed:**
+  - ROADMAP M6 notes the missing gate metric report;
+  - README: PDF/A-3a "veraPDF runs locally only and does not gate", "No live model run has been recorded", precision / recall "synthetic", TShark limited to the protocol hierarchy;
+  - TESTING HostileProvider: detected, not prevented.
+- **ARCHITECTURE "Platform operations (M7)":**
+  - retention-worker, db-bootstrap, the indexer and the metrics path;
+  - backup and restore (offline, volume-level MinIO and why);
+  - retention, correlation and search, including **indexes vs RLS**: a per-org scan, accepted pending the perf numbers, with the 0015 options;
+  - the OpenSearch decision, runtime metrics and security hardening.
+- **DATABASE:** the 0014 tables, grants, triggers, the retention role, the append-only exception and the search indexes, with the note that RLS keeps them unused.
+- **API:** the new routes, including `POST /correlations/lookup` (moved from GET by the security review), `410 evidence_purged`, the global rate limit (600 per minute, `/auth/me` exempt, 503 fail closed) and `/internal/metrics` for operators.
+- **DEPLOYMENT:**
+  - the upgrade note for an existing checkout (back up first, then the KMS key encrypts IAM from then on);
+  - the M7 prod secrets and the env rows;
+  - the backup / restore / drill runbook (TLP:RED contents, AV-excluded encrypted storage, the age example, the three verify phases, session revocation, the `JWT_SECRET` rotation after an incident (RT26));
+  - **gap:** the optional manifest HMAC (`BACKUP_MANIFEST_KEY`, phase-2 review fix) is documented only in `scripts/backup.mjs` and `lib/stack.mjs`, not in DEPLOYMENT;
+  - SSE-S3 and the KMS key, retention operations and the Prometheus scrape example.
+- **KMS shared-volume caveat for `verify:prod`:** recorded in TESTING and DEPLOYMENT. Until phase 11 settles key sharing, run the prod gate on a fresh project (`COMPOSE_PROJECT_NAME=cyberlab-clean`).
+- **Object-store image:** DEPLOYMENT and THREAT_MODEL say upstream was archived on **2026-04-25** and that the bitnami image is unpatched (CVE-2025-62506; SN-2026-015/016, a GOVERNANCE bypass). They give the **recommended `pgsty/silo` pinned by digest, pending the user's decision**, and the switch procedure (backup, conformance against the candidate, the drill with `--target-minio-image`, then `MINIO_IMAGE` / `MINIO_DATA_DIR=/data`).
+- **THREAT_MODEL, M7 section and known gaps:**
+  - residuals: backups hold everything, the KMS key is on the host, the query is never in a URL or a log, the S3 hold sync windows, the api delete grant (RT5), a compromised retention worker, no anonymous flood limit (RT14), search under RLS, and the MinIO image;
+  - closed in M7: no backups (closed, offline) and metadata views not logged (closed, deduplicated audit);
+  - updated: the rate limit (per user; the anonymous limit stays a residual);
+  - still open: the MinIO image.
+- **Reconciled:** THREAT_INTEL and AI_ANALYST (retention of `ti_results` / `ai_*` through the delete exception), REPORTS (renditions purgeable, snapshots never; legal hold on snapshots) and SANDBOX_SECURITY against the code.
+- **Not done:**
+  - quick win 7's M6 bookkeeping: the M6 phase statuses and `report-metric-*.md` are outside this phase's files;
+  - the M7 metric tables in TESTING, filled by phase 11.
+- **Pending gate:** running the runbooks as written (the phase-11 drill review), and the ROADMAP M7 row moving from "done, pending its gate".

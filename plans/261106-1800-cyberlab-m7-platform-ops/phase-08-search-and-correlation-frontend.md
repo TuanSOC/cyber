@@ -60,11 +60,50 @@ It builds against the phase-1 contracts with mocked fetch. No containers.
 5. `pnpm --filter web lint typecheck test` on the owned files.
 
 ## Success Criteria
-- [ ] Global search works from the header, with typed sections, per-type timeouts, deep links and inert text rendering.
-- [ ] IOC tabs show "also seen in" chips and a key drawer, and the case page shows related cases, all in neutral wording.
-- [ ] The query never reaches browser storage or logs.
-- [ ] Web tests, typecheck and lint pass on the owned files.
+- [x] Global search works from the header, with typed sections, per-type timeouts, deep links and inert text rendering. — `components/search/search-results.test.tsx` ("renders hostile snippet text as text with marks built from ranges", "makes bidi overrides visible (M6 vis rule)", "a timed-out type shows its notice and no hits", "a hit links internally and shows the case number", "shows the case TLP and marks the server's snippet ranges"); `lib/search.test.ts` ("marks at the start and the end of the text", "never splits a surrogate pair", "isolates a timed-out type…", "refuses external, scheme, other-org and unknown p[aths]") (9316433). The browser run (`e2e/search-correlation.spec.ts`) is pending gate.
+- [x] IOC tabs show "also seen in" chips and a key drawer, and the case page shows related cases, all in neutral wording. — `components/correlation/correlation-parts.test.tsx` ("one chip per key, the value defanged text and never a link", "ranks as given, labels archived cases and shows the kinds", "marks the keys carried by the visible IOC rows"); `lib/correlation.test.ts` ("maps the visible rows to their keys, by id only", "keeps generated texts neutral", "POSTs the key lookup with the value in the JSON body only") (9316433).
+- [x] The query never reaches browser storage or logs. — `lib/search.test.ts` ("puts the query after # and never in a query string", "POSTs the query in the JSON body only, never in the URL or storage", "scans the search box, page and hooks"); `lib/correlation.test.ts` ("scans the correlation and search sources") (9316433). The server side is phase 4 (`test_a_timeout_is_isolated_per_type_and_nothing_logs_the_query`).
+- [x] Web tests, typecheck and lint pass on the owned files. — `pnpm --filter web lint typecheck test` on the host (web lane), green before 9316433. The full `pnpm verify` re-run is pending gate.
 
 ## Risk Assessment
 - **IOC tab components belong to M2–M4 code:** untouched by this phase; the phase-1 slot receives `{jobId, rows}` props, frozen in phase 1.
 - **Large IOC tabs:** fetch the correlations once per tab and join in memory. No per-row request.
+
+## Implementation Notes (2026-11-07)
+- **Commit:** 9316433 (phases 2–10 together). The slots `search-box.tsx`, `ioc-seen-in.tsx` and `related-cases-card.tsx` were mounted in 980386a, so this phase edited only its owned files (RT16).
+- **Web lane on the host:** `pnpm --filter web lint typecheck test`. No containers, and fetch is mocked against the phase-1 contracts plus the 9316433 gap fields.
+- **Typed clients:**
+  - `lib/search.ts` (+292): `checkQuery` (2–256 code points), `searchFragment` / `parseSearchFragment`, `searchBody`, `normalizeRanges` / `markSegments` / `snippetSegments`, `sectionStates`, `hitHref` and `slowDownText`;
+  - `lib/use-search.ts` (+126): the page hook, per-type "load more" through the cursor, and 429 with `Retry-After`.
+- **Search box** (`components/search/search-box.tsx`, `search-form.tsx`):
+  - `/` outside a text field focuses the box;
+  - Enter opens `/o/{org}/search#q=…`: the fragment never reaches a server or a log (RT13);
+  - the page sends `POST /search` with the query in the body.
+- **Search page** (`app/(app)/o/[orgId]/search/page.tsx`, `search-results.tsx`):
+  - type chips with `aria-pressed` and sections with counts in an `aria-live="polite"` status;
+  - a per-type timeout notice;
+  - snippets are rendered from the server's `snippet_ranges` as `<mark>` segments, never as HTML, with the M6 `vis` rule;
+  - a TLP badge and the case number on each hit;
+  - deep links pass an internal-path check, which refuses external, scheme and other-org paths.
+- **"Also seen in"** (`ioc-seen-in.tsx`, +106):
+  - one `GET /analyses/{job}/correlations` per tab;
+  - keys join the visible rows by the IOC row ids in `source_ids`, never by re-normalizing values in the browser (RT8);
+  - a `common` badge;
+  - clicking opens the key drawer.
+- **Key drawer** (`key-drawer.tsx`, +146):
+  - `POST /correlations/lookup`, the POST route from phase 4's security review, with the value in the JSON body;
+  - jobs and cases with links, first and last seen;
+  - the TI answer count, linked to the existing IOC history;
+  - the collections holding the key;
+  - neutral wording ("also observed in").
+- **Related cases card** (`related-cases-card.tsx`):
+  - ranked cases with shared-key counts;
+  - `sample_keys` as defanged text, never links;
+  - archived cases are labelled;
+  - empty state "no shared observables".
+- **Contract gap fields used:** search TLP and `snippet_ranges`, correlation `source_ids`, `sample_keys` and the TI count. The tests marked "(M7 follow-up)" cover them.
+- **Tests** (9316433):
+  - `lib/search.test.ts` and `lib/correlation.test.ts`;
+  - `components/search/search-results.test.tsx` (7) and `components/correlation/correlation-parts.test.tsx` (6);
+  - `apps/web/e2e/search-correlation.spec.ts`: header search, "also seen in" and related cases across two cases.
+- **Pending gate:** the e2e spec (phase 11) and the `pnpm verify` re-run on the final tree.

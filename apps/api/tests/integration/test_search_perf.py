@@ -262,7 +262,14 @@ async def test_search_p95_on_the_seeded_volume(
 
     # The plans at volume (recorded, not asserted: under RLS the non-LEAKPROOF `@@`, `%`
     # and ILIKE cannot be index quals, see test_search.py's xfail).
-    params = {"org": a.org_id, "q": "beacon", "like": "%perf-example%", "limit": 21, "offset": 0}
+    params = {
+        "org": a.org_id,
+        "q": "beacon",
+        "like": "%perf-example%",
+        "number_like": "%4242%",
+        "limit": 21,
+        "offset": 0,
+    }
     index_used: dict[str, bool] = {}
     async with tenant_session(a.org_id, None) as s:
         for index, stmt in RLS_PLANS.items():

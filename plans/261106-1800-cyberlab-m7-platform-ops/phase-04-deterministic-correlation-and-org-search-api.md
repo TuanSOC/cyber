@@ -83,13 +83,61 @@ Deterministic, without AI or scores. The design is in plan.md "Correlation and s
 7. `idor_cases_correlation.py` with an empty `PENDING_ROUTES`, and `backfill_correlation.py`.
 
 ## Success Criteria
-- [ ] Keys equal the M4 `ioc_key` for IOC kinds, so the TI history and collections join without new code.
-- [ ] Every succeeded job is indexed within one beat interval, idempotently, with a per-job cap.
-- [ ] "Also seen in", key lookup and related cases work across cases inside one org, never across orgs, with common keys flagged and excluded from the ranking.
-- [ ] Search answers each type within its timeout, uses the phase-1 indexes, never logs the query, and is IDOR-clean.
-- [ ] The perf numbers are recorded (p95 per type) and support the OpenSearch decision.
+- [x] Keys equal the M4 `ioc_key` for IOC kinds, so the TI history and collections join without new code. — `unit/test_correlation_normalize.py::test_ti_eligible_values_equal_the_m4_ti_result_key`, `test_private_values_are_kept_with_the_collection_key`, `test_ja3_keeps_its_case_and_uses_the_opaque_key`; `test_correlation_reads.py::test_keys_join_the_m6_collection_items`, `test_the_lookup_counts_ti_answers_and_lists_collections_of_the_org_only` (9316433).
+- [x] Every succeeded job is indexed within one beat interval, idempotently, with a per-job cap. — `test_correlation_indexer.py::test_every_succeeded_job_is_indexed_with_m6_keys`, `test_indexing_is_idempotent_and_restart_safe`, `test_the_per_job_cap_keeps_hashes_and_ja3_first`, `test_failed_and_running_jobs_are_not_indexed`, `test_a_tick_is_bounded_by_the_limit_and_the_budget`, `test_the_beat_task_runs_the_indexer_with_the_batch_setting` (beat every 60 s, ≤ 5 jobs per tick) (9316433).
+- [x] "Also seen in", key lookup and related cases work across cases inside one org, never across orgs, with common keys flagged and excluded from the ranking. — `test_correlation_reads.py::test_the_job_pivot_lists_other_cases_of_the_org_only`, `test_the_pivot_of_another_orgs_job_is_404`, `test_common_keys_are_flagged`, `test_the_lookup_normalizes_and_lists_occurrences`; `test_correlation_indexer.py::test_keys_stay_inside_their_org`; `test_correlation_related.py::test_cases_are_ranked_by_shared_keys`, `test_common_keys_are_excluded_from_the_ranking`, `test_archived_cases_are_included_and_labelled`; `idor_cases_correlation.py` (`PENDING_ROUTES` empty) (9316433).
+- [ ] Search answers each type within its timeout, uses the phase-1 indexes, never logs the query, and is IDOR-clean. — Met except index use: `test_search.py::test_every_type_finds_its_row_and_never_another_orgs`, `test_a_timeout_is_isolated_per_type_and_nothing_logs_the_query`, `test_an_invalid_query_is_422_without_echo`, `test_hostile_queries_never_fail`, `test_get_is_405_and_csrf_applies`, `test_the_rate_limit_answers_429`, `test_the_query_fragments_match_the_phase_1_index_expressions` (9316433). **Not met:** under RLS the trigram and FTS indexes are not used (`test_the_queries_use_the_phase_1_indexes_under_rls` is a strict xfail), so search is a per-org scan. Accepted pending the perf numbers (notes).
+- [ ] The perf numbers are recorded (p95 per type) and support the OpenSearch decision. — **Pending gate:** `test_search_perf.py::test_search_p95_on_the_seeded_volume` exists (about 200 k keys, 50 k findings and alerts, 5 k cases; asserts p95 < 1 s per type and < 3 s overall), but phase 11 runs it alone and no numbers are recorded yet. The OpenSearch decision (deferred, with revisit criteria) is in ARCHITECTURE.
 
 ## Risk Assessment
 - **Normalizer drift:** correlation follows `normalize_item`; a later change there changes keys for new jobs only. The equality tests against `ti_results` and collection items are the guard.
 - **Trigram on short strings:** the minimum length and limits; `pg_trgm.similarity_threshold` set per transaction.
 - **Index expression drift** between the migration and the queries silently drops to sequential scans. The EXPLAIN test is the guard.
+
+## Implementation Notes (2026-11-07)
+- **Commit:** 9316433 (phases 2–10 together). The schemas, indexes and stubs come from 980386a.
+- **Lane 4:** `scripts/lane-test.sh 4 …` on its own files, plus ruff, format and mypy. `test_search_perf.py` was **not** run in the lane: it is a heavy-lite step, and phase 11 runs it alone.
+- **`normalize.py`:**
+  - `correlation_key` delegates to M6 `normalize_item` with no extra rule (RT8);
+  - JA3 keeps its case and uses `opaque_key`;
+  - private values are kept with the collection key;
+  - `registry_key`, `file_path` and invalid values give `None`;
+  - `candidate_keys` detects the type for search and lookup, then adds the pcap-only types.
+- **Indexer** (`indexer.py` +272, beat `correlation.index_pending` every 60 s on ingest):
+  - it reads the system `analysis_job_index`, then works per org inside `tenant_session`;
+  - its sources are `iocs` (every type), `malware_samples` (md5, sha1, sha256) and `evidence_hashes`;
+  - inserts use `ON CONFLICT DO NOTHING`, and the `correlation_job_state` row is written in the same transaction;
+  - the cap is 20 000 keys, hashes and JA3 first, recorded as `truncated`;
+  - a tick is bounded by the 5-job limit and the 10 s budget (RT19).
+
+  `app/scripts/backfill_correlation.py` loops it as a one-off `compose run`.
+- **Correlation lookup moved to POST** (security review):
+  - `GET /correlations?kind=&value=` became `POST /orgs/{org}/correlations/lookup {kind, value}`, so an IOC value never travels in a URL or an access log (RT13). The GET routes carry ids and filters only.
+  - Tests: `test_correlation_reads.py::test_the_lookup_is_a_post_and_the_value_never_travels_in_a_url`, `test_the_lookup_value_is_absent_from_the_logs`, and `test_a_value_that_does_not_normalize_is_422_without_echo`.
+- **Contract gap fields** (9316433):
+  - the job pivot carries the `source_ids` of this job's IOC rows (the UI joins by id, RT8);
+  - the lookup carries the TI answer count (`ti_results`) and the collections (`collections`, `collections_total`);
+  - related cases carry `sample_keys` (≤ 5);
+  - search carries the TLP, `snippet_ranges` and the per-type `error`.
+- **Search** (`search/service.py` +439, `queries.py` +173; `POST /search`):
+  - `q` is 2–256 characters with no control characters (`422 search_query_invalid`, never echoed);
+  - 30 requests per minute per user;
+  - one tenant transaction with `SET LOCAL statement_timeout` (3 s), and each type in its own SAVEPOINT, so a type that times out answers `error: "timeout"` and `partial`;
+  - ≤ 20 hits per type, with cursors;
+  - plain-text titles and snippets, with UTF-16 `snippet_ranges`;
+  - **the query is never logged or audited**: a DB error is logged by type and SQLSTATE only.
+- **Search under RLS does not use the trigram / FTS indexes:**
+  - `@@`, `%` and `ILIKE` are not `LEAKPROOF`, so the planner cannot push them below the `tenant_isolation` qual.
+  - The query fragments equal the 0014 expressions (`test_the_query_fragments_match_the_phase_1_index_expressions`), but `test_the_queries_use_the_phase_1_indexes_under_rls` is a **strict xfail**.
+  - Search is a per-org scan over the `organization_id` btree. The exact observable match uses `(organization_id, kind, key)`.
+  - This is accepted for M7 pending the perf numbers. The fix (LEAKPROOF wrappers or a `SECURITY DEFINER` search function) is a migration-0015 decision. Recorded in ARCHITECTURE, DATABASE, THREAT_MODEL and ROADMAP.
+- **Tests** (9316433):
+  - `unit/test_correlation_normalize.py`: 6;
+  - `test_correlation_indexer.py`: 8;
+  - `test_correlation_reads.py`: 15;
+  - `test_correlation_related.py`: 6;
+  - `test_search.py`: 12, one of them the strict xfail;
+  - `test_search_perf.py`: 1 (heavy-lite);
+  - `idor_cases_correlation.py`, with `PENDING_ROUTES` empty.
+- **Purged jobs keep their keys** (RT9): `test_keys_survive_a_purge_of_the_job_results`.
+- **Pending gate:** the search p95 per type (`test_search_perf.py`, run alone), the TESTING.md perf table, and with them the decision whether the per-org scan holds.

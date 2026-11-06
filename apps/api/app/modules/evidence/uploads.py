@@ -204,7 +204,7 @@ async def upload(
                 await lock_version(org_id, user, out.id, key, version_id, request)
             except BaseException:
                 if not committed:
-                    await discard_version(key, version_id)
+                    await discard_version(org_id, user, investigation_id, key, version_id)
                 raise
         finally:
             spooled.path.unlink(missing_ok=True)

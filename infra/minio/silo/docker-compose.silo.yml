@@ -1,0 +1,47 @@
+# Silo overlay for the main stack (M7 phase 6 switch, prepared; activated only once
+# `node scripts/minio-switch.mjs run` has passed):
+#   docker compose -f docker-compose.yml -f infra/minio/silo/docker-compose.silo.yml config
+#   docker compose -f docker-compose.yml -f infra/minio/silo/docker-compose.silo.yml build minio
+#
+# Image. The local wrapper infra/minio/silo/Dockerfile builds FROM
+# pgsty/silo:RELEASE.2026-10-26T00-00-00Z@sha256:7bb2aff6... (the multi-arch index; its linux/amd64
+# manifest is sha256:003925ec...). The base is pinned by digest and its SLSA provenance is
+# verified with `gh attestation verify` (runbook). Upstream ships no plain `cosign sign` signature.
+#
+# Every script that builds its own compose model (backup, restore, restore drill) ignores this
+# file. Set the same MINIO_IMAGE / MINIO_DATA_DIR in .env (infra/minio/silo/.env.silo, written
+# by the switch script) so that those scripts start the same wrapper. The wrapper carries its
+# CMD and user, so this overlay adds only the build, the hardening and the fixed data dir.
+services:
+  minio:
+    # A literal, never ${MINIO_IMAGE}: a bitnami value in .env must never become the tag of
+    # this build.
+    image: localhost/cyberlab/silo:RELEASE.2026-10-26T00-00-00Z
+    build:
+      context: ./infra/minio/silo
+      args:
+        SILO_BASE: pgsty/silo:RELEASE.2026-10-26T00-00-00Z@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7
+    # A missing image is built (`up` / `build`) and never pulled: `localhost/` cannot resolve
+    # to Docker Hub.
+    pull_policy: never
+    # The same as the wrapper's CMD and USER, stated here so `config` shows them.
+    command: ["server", "/data", "--console-address", ":9001", "--certs-dir", "/tmp/minio-certs"]
+    user: "1001:1001"
+    environment:
+      HOME: /tmp
+    volumes: !override
+      - miniodata:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 512
+    # The standard (ubi-micro) image ships curl, so the probe stays as it is. The distroless
+    # variant would need ["CMD", "silo", "healthcheck", "ready"].
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 30s

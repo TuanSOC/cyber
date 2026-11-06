@@ -35,7 +35,9 @@ def _routes() -> list[tuple[str, str, Call]]:
         (
             READ,
             "history",
-            lambda c, b, ids: c.get(f"{b}/ti/results", params={"value": "hit.example.com"}),
+            lambda c, b, ids: c.post(
+                f"{b}/ti/results/lookup", json={"value": "hit.example.com"}, headers=csrf(c)
+            ),
         ),
         (READ, "get result", lambda c, b, ids: c.get(f"{b}/ti/results/{ids['result']}")),
         (

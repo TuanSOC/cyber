@@ -19,7 +19,8 @@ import { type Page, expect, test } from "@playwright/test";
  *  6. The owner releases the hold (protected for the delay); Operations lists the e2e job.
  *  No console errors on the owner's page.
  *
- * Seed contract (scripts/e2e.mjs, the e2e-only owner step; never a production API path):
+ * Seed contract (scripts/e2e.mjs + app/scripts/e2e_seed.py, the e2e-only owner step; never a
+ * production API path; dev only, so the prod e2e skips steps 4 and 5):
  *  - E2E_SEED_EMAIL / E2E_SEED_PASSWORD: an active user that can sign in. The owner adds it to
  *    this run's organization as a viewer, so this spec needs only one registration (the
  *    register limit is 5 per 10 minutes per IP).
@@ -99,11 +100,16 @@ test("retention policy, preview, dry run, legal hold, purged evidence, viewer an
 }) => {
   test.setTimeout(14 * 60_000);
   const seed = seedFromEnv();
-  expect(
-    seed,
-    "scripts/e2e.mjs passes E2E_SEED_EMAIL, E2E_SEED_PASSWORD and E2E_SEED_PURGED_EVIDENCE (the purged-evidence seed step)",
-  ).not.toBeNull();
-  const { email: viewerEmail, password: viewerPassword, orgId: seedOrgId, evidenceId: purgedId } = seed as Seed;
+  // The seed is a dev-only owner step (scripts/e2e.mjs; the seeder refuses a prod api env):
+  // on the prod stack steps 4 and 5 are skipped and annotated, everything else runs.
+  if (seed === null && process.env.E2E_PROD === "1") {
+    test.info().annotations.push({ type: "skipped-steps", description: "4-5: no purged-evidence seed in prod" });
+  } else {
+    expect(
+      seed,
+      "scripts/e2e.mjs passes E2E_SEED_EMAIL, E2E_SEED_PASSWORD and E2E_SEED_PURGED_EVIDENCE (the purged-evidence seed step)",
+    ).not.toBeNull();
+  }
   const errors = collectConsoleErrors(page);
   const orgName = `E2E Retention Team ${randomBytes(3).toString("hex")}`;
   const orgId = await register(page, orgName);
@@ -227,51 +233,54 @@ test("retention policy, preview, dry run, legal hold, purged evidence, viewer an
   await expect(page.locator('[data-slot="retention-preview"]').getByText(/1 legal hold active/)).toBeVisible();
 
   // 4 + 5. The seed user: a viewer of this organization (added through the members API).
-  const added = await page.request.post(`/api/v1/orgs/${orgId}/members`, {
-    headers: await csrfHeaders(page),
-    data: { email: viewerEmail, role: "viewer" },
-  });
-  expect(added.status(), await added.text()).toBe(201);
-  const viewerContext = await browser.newContext({
-    baseURL,
-    ignoreHTTPSErrors: process.env.E2E_IGNORE_HTTPS_ERRORS === "1",
-  });
-  try {
-    const viewer = await viewerContext.newPage();
-    await login(viewer, viewerEmail, viewerPassword);
+  if (seed) {
+    const { email: viewerEmail, password: viewerPassword, orgId: seedOrgId, evidenceId: purgedId } = seed;
+    const added = await page.request.post(`/api/v1/orgs/${orgId}/members`, {
+      headers: await csrfHeaders(page),
+      data: { email: viewerEmail, role: "viewer" },
+    });
+    expect(added.status(), await added.text()).toBe(201);
+    const viewerContext = await browser.newContext({
+      baseURL,
+      ignoreHTTPSErrors: process.env.E2E_IGNORE_HTTPS_ERRORS === "1",
+    });
+    try {
+      const viewer = await viewerContext.newPage();
+      await login(viewer, viewerEmail, viewerPassword);
 
-    // 4. The seeded purged evidence: the strip, Download disabled, the hashes page still there.
-    await viewer.goto(`/o/${seedOrgId}/evidence/${purgedId}`);
-    const strip = viewer.locator('[data-slot="evidence-integrity-strip"]');
-    await expect(strip.getByText(/^Bytes purged on .+ by a retention run; hashes and custody retained\.$/)).toBeVisible();
-    await expect(strip.getByText(/Download, verification and new analyses are unavailable\./)).toBeVisible();
-    await expect(viewer.getByRole("button", { name: "Download" })).toBeDisabled();
-    await expect(viewer.getByText("Bytes purged by the retention policy").first()).toBeVisible();
+      // 4. The seeded purged evidence: the strip, Download disabled, the hashes page still there.
+      await viewer.goto(`/o/${seedOrgId}/evidence/${purgedId}`);
+      const strip = viewer.locator('[data-slot="evidence-integrity-strip"]');
+      await expect(strip.getByText(/^Bytes purged on .+ by a retention run; hashes and custody retained\.$/)).toBeVisible();
+      await expect(strip.getByText(/Download, verification and new analyses are unavailable\./)).toBeVisible();
+      await expect(viewer.getByRole("button", { name: "Download" })).toBeDisabled();
+      await expect(viewer.getByText("Bytes purged by the retention policy").first()).toBeVisible();
 
-    // 5. The viewer: the hold and the badge are visible, no action is offered.
-    await viewer.goto(caseUrl);
-    await expect(viewer.getByRole("heading", { name: CASE_TITLE })).toBeVisible();
-    await expect(viewer.getByTitle("A legal hold protects this case's data from retention purges.")).toBeVisible();
-    const viewerHoldCard = viewer.locator('[data-slot="case-hold-card"]');
-    await expect(viewerHoldCard.getByText(holdReason)).toBeVisible();
-    await expect(viewerHoldCard.getByRole("button")).toHaveCount(0);
+      // 5. The viewer: the hold and the badge are visible, no action is offered.
+      await viewer.goto(caseUrl);
+      await expect(viewer.getByRole("heading", { name: CASE_TITLE })).toBeVisible();
+      await expect(viewer.getByTitle("A legal hold protects this case's data from retention purges.")).toBeVisible();
+      const viewerHoldCard = viewer.locator('[data-slot="case-hold-card"]');
+      await expect(viewerHoldCard.getByText(holdReason)).toBeVisible();
+      await expect(viewerHoldCard.getByRole("button")).toHaveCount(0);
 
-    await openRetention(viewer, orgId);
-    await expect(viewer.getByText("Only owners and admins can change the retention policy.")).toBeVisible();
-    await expect(viewer.getByRole("group", { name: "Closed cases" }).getByText(/^3,650 days/)).toBeVisible();
-    await expect(viewer.getByRole("switch", { name: /Enforce retention/ })).toBeDisabled();
-    await expect(card(viewer, "Legal holds").getByText(holdReason)).toBeVisible();
-    for (const action of ["Save values", "Preview", "Start a dry run", "Place organization hold", "Release"]) {
-      await expect(viewer.getByRole("button", { name: action })).toHaveCount(0);
+      await openRetention(viewer, orgId);
+      await expect(viewer.getByText("Only owners and admins can change the retention policy.")).toBeVisible();
+      await expect(viewer.getByRole("group", { name: "Closed cases" }).getByText(/^3,650 days/)).toBeVisible();
+      await expect(viewer.getByRole("switch", { name: /Enforce retention/ })).toBeDisabled();
+      await expect(card(viewer, "Legal holds").getByText(holdReason)).toBeVisible();
+      for (const action of ["Save values", "Preview", "Start a dry run", "Place organization hold", "Release"]) {
+        await expect(viewer.getByRole("button", { name: action })).toHaveCount(0);
+      }
+      await expect(viewer.getByRole("spinbutton")).toHaveCount(0);
+      const viewerTabs = viewer.getByRole("navigation", { name: "Settings sections" });
+      await expect(viewerTabs.getByRole("link", { name: "Retention" })).toBeVisible();
+      await expect(viewerTabs.getByRole("link", { name: "Operations" })).toHaveCount(0);
+      await viewer.goto(`/o/${orgId}/settings/operations`);
+      await expect(viewer.getByText("Only owners and admins can view operations metrics.")).toBeVisible();
+    } finally {
+      await viewerContext.close();
     }
-    await expect(viewer.getByRole("spinbutton")).toHaveCount(0);
-    const viewerTabs = viewer.getByRole("navigation", { name: "Settings sections" });
-    await expect(viewerTabs.getByRole("link", { name: "Retention" })).toBeVisible();
-    await expect(viewerTabs.getByRole("link", { name: "Operations" })).toHaveCount(0);
-    await viewer.goto(`/o/${orgId}/settings/operations`);
-    await expect(viewer.getByText("Only owners and admins can view operations metrics.")).toBeVisible();
-  } finally {
-    await viewerContext.close();
   }
 
   // 6. The owner releases the hold: the data stays protected for the delay.

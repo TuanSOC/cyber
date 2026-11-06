@@ -1,8 +1,8 @@
 /**
  * Legal holds (M7). Placing or releasing a hold needs `org.update`; the API enforces it, the UI
  * only hides the actions. A released hold keeps protecting its data until `protects_until`
- * (`released_at + RETENTION_POLICY_DELAY_DAYS`, RT1). The object-store mirror of a case hold is
- * set by the retention worker, so a new hold shows "pending" until `s3_synced_at` (RT5).
+ * (`released_at + RETENTION_POLICY_DELAY_DAYS`, RT1). The object-store mirror of a hold (case or org) is
+ * set by the retention worker, so a new hold shows "pending" until its `s3_sync` is `synced` (RT5).
  */
 import type { Schemas } from "@cyberlab/contracts";
 
@@ -44,10 +44,12 @@ export const HOLD_STATE_LABELS: Record<HoldState, string> = {
   released: "Released",
 };
 
-/** The object-store mirror (case holds only): "pending" until the worker syncs it. */
-export function s3SyncLabel(hold: Pick<LegalHold, "scope" | "s3_synced_at">): string | null {
-  if (hold.scope !== "investigation") return null;
-  return hold.s3_synced_at ? "Object-store hold: synced" : "Object-store hold: pending";
+/**
+ * The object-store mirror (case and org holds, RT5): "pending" until the worker's sync covered
+ * it. The API's `s3_sync` decides: an org hold's `s3_synced_at` can be a resume watermark.
+ */
+export function s3SyncLabel(hold: Pick<LegalHold, "s3_sync">): string {
+  return hold.s3_sync === "synced" ? "Object-store hold: synced" : "Object-store hold: pending";
 }
 
 /** When the data stops being protected if the hold is released now (shown before confirming). */

@@ -139,13 +139,13 @@ After this phase the stack runs as before:
 9. Rebuild `cyberlab/api:dev`, then commit.
 
 ## Success Criteria
-- [ ] 0014 upgrades and downgrades cleanly (enum values excepted). The system user exists and cannot log in; a purged render no longer blocks its re-render index slot. Every new tenant table is FORCE RLS and covered. The strict append-only tables refuse DELETE even for `cyberlab_retention`, and the exception tables allow it only for that role.
-- [ ] `db-bootstrap` creates the role idempotently on fresh and existing volumes, and 0014 fails clearly without it.
-- [ ] The retention worker starts with least-privilege env (the settings matrix passes), and its broker ACL is confined.
-- [ ] SSE-S3 is on for every bucket, and the existing presigned upload paths (pcap, static, report) still pass.
-- [ ] Every new route exists as a 501 stub with frozen schemas, the contracts are regenerated, and the IDOR enumerator lists the new routes as pending.
-- [ ] `error_classes` covers every emitted error code (test).
-- [ ] The full existing API suite and the worker suites are green.
+- [x] 0014 upgrades and downgrades cleanly (enum values excepted). The system user exists and cannot log in; a purged render no longer blocks its re-render index slot. Every new tenant table is FORCE RLS and covered. The strict append-only tables refuse DELETE even for `cyberlab_retention`, and the exception tables allow it only for that role. — `integration/test_migrations.py::test_downgrade_0006_then_fresh_upgrade_head` (0014 down / up); `test_m7_schema.py::test_the_system_user_exists_and_cannot_log_in`, `test_only_retention_purges_a_render_and_it_frees_the_slot`, `test_tenant_tables_are_isolated`; `test_rls_coverage.py::test_every_tenant_table_has_forced_rls`, `test_system_visible_retention_policy_index_holds_no_tenant_data`, `test_job_outcomes_is_a_system_table_without_tenant_data`; `test_append_only.py::test_retention_role_cannot_mutate_strict_append_only_tables`, `test_exception_tables_allow_delete_for_the_retention_role_only`, `test_exception_tables_refuse_update_for_everyone` (980386a).
+- [ ] `db-bootstrap` creates the role idempotently on fresh and existing volumes, and 0014 fails clearly without it. — Existing volumes done: the dev volume, `cyberlab_test` and a lane DB were bootstrapped and migrated to 0014, and `test_m7_schema.py::test_the_migration_refuses_to_run_without_the_role` covers the clear failure (980386a). **Pending gate:** the fresh-volume path (`init/02-m7-roles.sh`) runs first in the restore drill and in `verify:prod` on a clean project.
+- [x] The retention worker starts with least-privilege env (the settings matrix passes), and its broker ACL is confined. — `unit/test_config.py::test_retention_role_runs_with_its_least_privilege_env`, `test_retention_role_refuses_every_other_secret`, `test_retention_role_needs_the_retention_db_role`, `test_other_roles_refuse_the_purge_user`, `test_other_roles_refuse_the_retention_db_role`, `test_no_role_holds_the_minio_kms_key`; `test_retention_acl.py::test_retention_user_is_confined`, `test_other_workers_cannot_touch_retention`, `test_api_and_ingest_users_can_publish_to_retention`. On the dev stack the worker connected as broker user `retention` and handled a published `retention.sweep` (0 runs) (980386a).
+- [x] SSE-S3 is on for every bucket, and the existing presigned upload paths (pcap, static, report) still pass. — `test_m7_foundation.py::test_every_bucket_has_sse_s3`; `test_analysis_pipeline` (4), `test_analysis_static_pipeline` (2) and `REPORT_E2E=1 test_report_pipeline` (1) against SSE buckets (980386a); phase 6 `test_storage_sse.py` re-proves every presigned path (9316433).
+- [x] Every new route exists as a 501 stub with frozen schemas, the contracts are regenerated, and the IDOR enumerator lists the new routes as pending. — At 980386a: 14 org routes + `/internal/metrics` as stubs, `PENDING_ROUTES` 9 + 4 + 1, contracts regenerated (30 new schemas, 12 new paths, nothing removed). By 9316433 every stub is implemented: `test_m7_foundation.py::test_every_m7_route_exists_and_none_is_pending`, `test_no_route_still_raises_the_501_stub`.
+- [x] `error_classes` covers every emitted error code (test). — `unit/test_error_classes.py::test_every_contract_code_is_classified`, `test_every_literal_code_of_the_api_is_classified`, `test_analyzer_codes_match_the_worker_sources` (980386a).
+- [ ] The full existing API suite and the worker suites are green. — **Pending gate** (phase 11 is running the full suite). The phase-1 run (lane 2) had only `test_idor_routes.py::test_owner_request_succeeds[route60]` / `[route63]` failing, which fail the same way on 1692756 (an M6 fixture bug). 9316433 fixes them (see the notes). `test:workers` was not run in phase 1.
 
 ## Risk Assessment
 - **SSE-S3 on the frozen bitnami MinIO** could reject presigned POSTs or need extra env. Test the three upload paths in step 8 before committing. If SSE breaks a path, keep the SSE code behind `MINIO_SSE_ENABLED` (default off) and tell the parent.
@@ -222,3 +222,56 @@ Built on `feat/m7-platform-ops` from 1692756 (M6 code-complete; alembic head was
 - `pnpm verify:prod` on the shared dev volumes would start MinIO with `.secrets/minio_kms_key`, a different key from the dev key that now encrypts that volume's IAM, and MinIO could not read its users (RT7). Run the prod gate on a fresh project (`COMPOSE_PROJECT_NAME=cyberlab-clean`) or decide how the gate shares keys (phase 11).
 - `scripts/check-retention-worker-env.mjs` (phase 11) must allow `minio-init`, which holds the purge keys to create the user.
 - Not run here: `verify:prod`, `test:workers`, e2e (instructions), and the worktree / lane setup (parent).
+
+## Implementation Notes (2026-11-07)
+- **Commits:**
+  - 980386a: phase 1 (102 files, +16 032 / −6 230; most of the churn is the regenerated `openapi.json`).
+  - 9316433: phases 2–10, the group-B review fixes and the contract gap fields (160 files, +25 890). It also touched these phase-1 files: `ops/internal.py`, `retention/{holds,select,router,schemas}.py`, the IDOR modules and `lane-test.sh`.
+- **As built:** the signatures and deviations are under "Frozen interfaces (as built)". The main deviations:
+  - no `RETENTION_DATABASE_URL`: the worker's `DATABASE_URL` is the retention role's;
+  - the path params are `{retention_run_id}` and `{hold_id}`;
+  - `RetentionRunCreate{dry_run?}`: the mode is never in the body;
+  - the tasks take one `message`;
+  - `retention_runs` UPDATE also covers `sample` and `started_at`;
+  - the downgrade keeps the system user;
+  - the case-number trigram index is on the number.
+- **The purge policy needs `s3:DeleteObject`:** this bitnami MinIO build also uses it to authorize a versioned delete. Without it, every purge delete was `AccessDenied`. A delete without a version id only adds a delete marker. The `snapshot.json` Deny covers both actions (`test_m7_foundation.py::test_purge_user_policy`, `test_purge_user_cannot_delete_a_report_snapshot`; phase 6 `test_snapshot_json_explicit_deny_applies_to_versioned_deletes`).
+- **SSE-S3 / KMS rehearsal on a volume copy (RT7):**
+  - The 2.3 GB `miniodata` volume was copied into a throwaway project.
+  - The bitnami image reads `MINIO_KMS_SECRET_KEY_FILE` natively, so no entrypoint wrapper is needed.
+  - Users, policies and a pre-KMS object survived two restarts, and new objects report SSE-S3.
+  - `ENV=prod` with the dev key name exits 1.
+  - The dev stack was switched only after that.
+  - Old objects stay plaintext until they are rewritten.
+- **KMS shared-volume caveat for `verify:prod`:**
+  - Dev and prod-like runs share one compose project, so they share one MinIO volume.
+  - That volume's IAM is encrypted with the dev key, and the prod overlay's `.secrets/minio_kms_key` cannot read it.
+  - Until phase 11 settles how the gate shares keys, run the gate on a fresh project (`COMPOSE_PROJECT_NAME=cyberlab-clean`). This is recorded in TESTING.md and DEPLOYMENT (SSE-S3 and the KMS key).
+- **Contract gap fields** (9316433; the frozen schemas only grew, nothing was removed):
+  - search: TLP, snippet ranges and the per-type `error`;
+  - correlation: `source_ids`, sample keys and TI counts;
+  - ops: recent failures;
+  - retention: run-item paging and `purged_by_run_id`.
+
+  Contracts were regenerated (`openapi.json` +504, `schema.d.ts` +187).
+- **Search indexes:** the exact expressions are listed above for phase 4. Under RLS the planner does not use them (phase-4 notes).
+- **Verification (phase 1, lane 2):**
+  - ruff, format and `mypy app` clean;
+  - the M7 unit, config and guard tests: 134 passed, 1 skipped;
+  - the schema, RLS, ACL, append-only, foundation, migration and IDOR enumeration tests passed;
+  - the SSE upload paths passed (pcap 4, static 2, report 1);
+  - web: typecheck, eslint and vitest 449 passed.
+- **The M6 IDOR fixture fix:**
+  - `route60` and `route63` failed the same way on unmodified 1692756. The victim's report version was signed with `new_signing_keys()`, but `verify_stored` checks `REPORT_SIGNING_PUBLIC_KEYS`.
+  - 9316433 adds `idor_cases_reports._publish_seed_key`, which publishes the test key's public half and fixes `route60`, `route63` and `route65`.
+  - The re-run is in the full suite (pending gate).
+- **Parallel lanes:**
+  - group B ran in lanes through `scripts/lane-test.sh`;
+  - lane 8 is new: 9316433 widened the range from 2..7 to 2..8;
+  - each lane has its own `cyberlab_b<N>_test`, Redis and broker db N, and the rewritten `RETENTION_TEST_DATABASE_URL`;
+  - the slots are shared through `LANE_LOCK_ROOT`, with `LANE_SLOTS=3`.
+- **Lane MinIO bucket flake:** the lanes share the MinIO test buckets, and a flake was seen there. Phase 11 is fixing it.
+- **Still pending for phase 11:**
+  - `test_tenant_session_guard.PENDING_ALLOWED` still lists `workers/retention.py` and `correlation/indexer.py`;
+  - `scripts/check-retention-worker-env.mjs` is still the exit-2 stub, and it must allow `minio-init`, which holds the purge keys.
+- **Not done here:** `verify:prod`, `test:workers`, the e2e and the full API suite on the final tree. All are pending gate.

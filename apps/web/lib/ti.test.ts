@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -15,9 +19,11 @@ import {
   historyHref,
   httpsPermalink,
   integrationState,
+  lookupHistory,
   lookupTypeForIoc,
   mispUrlHint,
   noteText,
+  parseHistoryFragment,
   parseLimit,
   parseLookupInput,
   parseSuffixes,
@@ -139,9 +145,39 @@ describe("skip reasons and notes", () => {
     expect(lookupTypeForIoc("ip")).toBe("ip");
     expect(lookupTypeForIoc("ja3")).toBeNull();
     expect(lookupTypeForIoc("registry_key")).toBeNull();
+    // The indicator rides in the fragment only (M7 phase 11): never a query string.
     expect(historyHref("o1", "url", "https://x.example.org/?a=b&c")).toBe(
-      "/o/o1/intel/ioc?type=url&value=https%3A%2F%2Fx.example.org%2F%3Fa%3Db%26c",
+      "/o/o1/intel/ioc#type=url&value=https%3A%2F%2Fx.example.org%2F%3Fa%3Db%26c",
     );
+    expect(historyHref("o1", null, "evil.example")).toBe("/o/o1/intel/ioc#value=evil.example");
+  });
+
+  it("parses the history fragment", () => {
+    expect(parseHistoryFragment("#type=url&value=https%3A%2F%2Fx.example.org%2F%3Fa%3Db%26c")).toEqual({
+      type: "url",
+      value: "https://x.example.org/?a=b&c",
+    });
+    expect(parseHistoryFragment("type=bogus&value=a.example")).toEqual({ type: undefined, value: "a.example" });
+    expect(parseHistoryFragment("")).toEqual({ type: undefined, value: "" });
+    expect(parseHistoryFragment(`#value=${"a".repeat(5000)}`).value).toHaveLength(2048);
+  });
+
+  it("sends the history lookup with the indicator in the body, never in the URL", async () => {
+    const calls: { path: string; init: unknown }[] = [];
+    const client = {
+      POST: async (path: string, init: unknown) => {
+        calls.push({ path, init });
+        return { data: { items: [], total: 0 }, error: undefined, response: new Response() };
+      },
+    } as unknown as Parameters<typeof lookupHistory>[3];
+    await lookupHistory("o1", { value: "evil.example", type: "domain" }, { limit: 25, offset: 0 }, client);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].path).toBe("/api/v1/orgs/{org_id}/ti/results/lookup");
+    expect(calls[0].init).toEqual({
+      params: { path: { org_id: "o1" }, query: { limit: 25, offset: 0 } },
+      body: { value: "evil.example", type: "domain" },
+    });
+    expect(JSON.stringify((calls[0].init as { params: unknown }).params)).not.toContain("evil.example");
   });
 });
 
@@ -331,5 +367,16 @@ describe("ATT&CK", () => {
     expect(unknown).toMatchObject({ text: "T9999", title: "T9999: not in ATT&CK v20.0", href: null });
 
     expect(attackChip("T1055", label({ url: "http://attack.mitre.org/x" }), undefined).href).toBeNull();
+  });
+});
+
+describe("no indicator in a request URL (M7 phase 11)", () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  it.each(["lib/ti.ts", "lib/use-ti.ts", "app/(app)/o/[orgId]/intel/ioc/page.tsx"])("%s", (file) => {
+    const code = readFileSync(path.join(root, file), "utf8");
+    // No `?value=` link, no M4 `GET /ti/results?value=` history, no query-string state.
+    expect(code).not.toMatch(/\?(?:[\w-]+=[^&#\s]*&)*value=/);
+    expect(code).not.toMatch(/GET\("\/api\/v1\/orgs\/\{org_id\}\/ti\/results",/);
+    expect(code).not.toMatch(/useSearchParams|query:\s*\{[^}]*\bvalue\b/);
   });
 });

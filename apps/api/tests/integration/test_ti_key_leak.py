@@ -22,6 +22,8 @@ from sqlalchemy import select, update
 from app.core.config import get_settings
 from app.core.tenancy import tenant_session
 from app.main import app
+from app.modules.reports import dispatch
+from app.modules.reports import signing as report_signing
 from app.modules.threat_intel import runs
 from app.modules.threat_intel.models import TiProviderConfig, TiRunItem
 from app.modules.threat_intel.ratelimit import Limiter, broker_redis
@@ -71,6 +73,19 @@ def test_the_crawl_covers_every_route_outside_an_org() -> None:
     assert gets == set(GLOBAL_GETS)
 
 
+@pytest.fixture(autouse=True)
+def _restore_report_stand_ins(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`_victim` (the IDOR enumerator's) installs the M6 report stand-ins by plain assignment
+    (the signing key loader, the render dispatch, the published key); registering the real
+    objects first restores them after each test, as `test_idor_routes._no_publish` does, so
+    no stand-in outlives this module (it broke `unit/test_signing.py` later in the run)."""
+    settings = get_settings()
+    monkeypatch.setattr(settings, "report_signing_public_keys", settings.report_signing_public_keys)
+    monkeypatch.setattr(report_signing, "_private_keys", report_signing._private_keys)
+    monkeypatch.setattr(dispatch, "create_render", dispatch.create_render)
+    monkeypatch.setattr(dispatch, "dispatch_render", dispatch.dispatch_render)
+
+
 async def test_no_api_response_carries_the_key() -> None:
     owner, victim = await _victim()  # mock enabled with SENTINEL_KEY, a run and a result
     c = owner.client
@@ -98,16 +113,17 @@ async def test_no_api_response_carries_the_key() -> None:
             method, _url(template, owner.org_id, victim), ROUTE_CASES[(method, template)](victim)
         )
     base = f"{API}/{owner.org_id}"
-    extra: list[tuple[str, dict[str, Any]]] = [
-        (f"{base}/analyses/{victim.job_id}/iocs", {"params": {"include": "enrichment"}}),
-        (f"{base}/ti/results", {"params": {"value": "example.com"}}),
-        (f"{base}/ti/results", {"params": {"value": "hit.example.com", "provider": "mock"}}),
-        (f"{base}/ti/runs/{victim.run_id}", {}),
-        (f"{base}/integrations", {}),
-        (f"{base}/audit-logs", {"params": {"limit": 100}}),
+    history = f"{base}/ti/results/lookup"
+    extra: list[tuple[str, str, dict[str, Any]]] = [
+        ("GET", f"{base}/analyses/{victim.job_id}/iocs", {"params": {"include": "enrichment"}}),
+        ("POST", history, {"json": {"value": "example.com"}}),
+        ("POST", history, {"json": {"value": "hit.example.com", "provider": "mock"}}),
+        ("GET", f"{base}/ti/runs/{victim.run_id}", {}),
+        ("GET", f"{base}/integrations", {}),
+        ("GET", f"{base}/audit-logs", {"params": {"limit": 100}}),
     ]
-    for url, request in extra:
-        await call("GET", url, request)
+    for method, url, request in extra:
+        await call(method, url, request)
     for url in GLOBAL_GETS:
         await call("GET", url, {})
 

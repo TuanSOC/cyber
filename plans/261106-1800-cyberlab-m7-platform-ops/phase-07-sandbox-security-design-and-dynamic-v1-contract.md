@@ -109,10 +109,49 @@ Dynamic analysis stays disabled.
 5. Run the lane-7 unit tests and `ruff` / `mypy` on the new files.
 
 ## Success Criteria
-- [ ] `docs/SANDBOX_SECURITY.md` exists, maps every §7 requirement to a control, and has the topology, threat model, integration pattern and gating checklist.
-- [ ] `dynamic.v1` is frozen with fixtures; hostile input (internet route, oversize, extra fields) is refused.
-- [ ] The gate test proves dynamic analysis is not wired into the enum, queues, broker, compose or routes.
+- [x] `docs/SANDBOX_SECURITY.md` exists, maps every §7 requirement to a control, and has the topology, threat model, integration pattern and gating checklist. — `docs/SANDBOX_SECURITY.md` (+215): §1 status "not enabled", §3 topology with a Mermaid diagram, §4 the §7 requirement → control table, §5 integration, §6 threat model, §9 gating checklist, §10 traceability (9316433).
+- [x] `dynamic.v1` is frozen with fixtures; hostile input (internet route, oversize, extra fields) is refused. — `packages/py-jobs/src/cyberlab_jobs/dynamic.py` (+319); `tests/fixtures/dynamic/{benign_run,hostile_run}.jsonl` (14 / 12 lines); `unit/test_dynamic_contract.py::test_every_hostile_line_is_refused`, `test_hostile_fixture_covers_the_required_cases`, `test_no_route_but_none_and_sinkhole_exists`, `test_process_text_and_numbers_are_bounded`, `test_record_cap_is_200k_and_enforced`, `test_benign_fixture_round_trips_line_by_line` (9316433).
+- [x] The gate test proves dynamic analysis is not wired into the enum, queues, broker, compose or routes. — `unit/test_dynamic_gate.py::test_analyzer_has_no_dynamic_value`, `test_no_shared_queue_or_task_name_is_dynamic`, `test_broker_defines_no_dynamic_or_sandbox_user`, `test_rendered_compose_has_no_dynamic_or_sandbox_service`, `test_no_route_path_contains_dynamic`, `test_dynamic_is_not_enabled`, `test_cyberlab_jobs_does_not_export_the_module`, `test_importing_the_api_and_every_worker_app_never_loads_the_module` (9316433).
 
 ## Risk Assessment
 - **Design drift from CAPE reality:** keep the contract engine-neutral (CAPE specifics live only in the future bridge) and mark v1 as "subject to one revision when a bridge is built".
 - **Over-design:** no VM, bridge or CAPE code in M7. Anything executable is out of scope.
+
+## Implementation Notes (2026-11-07)
+- **Commit:** 9316433 (phases 2–10 together). The empty `tests/fixtures/dynamic/` came from 980386a.
+- **Lane 7 (unit only):** `scripts/lane-test.sh 7 …` on the two unit files, plus ruff and mypy on the new files. No container, VM, bridge or CAPE code (out of scope).
+- **`docs/SANDBOX_SECURITY.md`** (+215), the ten sections of the plan:
+  - status "Designed in M7, not enabled";
+  - CAPE v2 scope and non-goals;
+  - the KVM topology with management, analysis and sinkhole networks (Mermaid);
+  - the §7 table;
+  - the `sandbox-bridge` integration pattern (no DB or MinIO credentials; the API never talks to CAPE);
+  - the threat model, data handling and operations (including the kill switch);
+  - the gating checklist and the traceability to `requirement.txt` §7 / §13.
+
+  ROADMAP "Gated" links it (phase 10).
+- **`dynamic.py`** (Pydantic v2, on the py-jobs `Strict` base, so unknown fields are refused):
+  - `DYNAMIC_SCHEMA = "dynamic.v1"`, `DYNAMIC_ENABLED: Final = False` and `RouteMode = Literal["none", "sinkhole"]`;
+  - `DynamicJobV1` (`timeout_s ≤ 300`, presigned GET / POST, token, deadline);
+  - a result header, the record union (process, file, registry, network, signature, dropped) and `DynamicSummaryV1` (`revert_verified`, `vm_image_digest`, counts);
+  - `MAX_RECORD_LINES = 200 000`.
+- **Deviation, additive:** `DynamicStreamCheck` / `DynamicStreamError` frame a whole stream the way the `static.v1` ingest does:
+  - the stream must name this job and route;
+  - the summary counts must match and nothing may follow the summary;
+  - a spliced stream fails.
+
+  It is still never imported by the API or the workers.
+- **Integrity:** a hash mismatch is a failed run with code `integrity` (`test_integrity_failure_is_a_failed_run_with_code_integrity`).
+- **Fixtures:**
+  - `benign_run.jsonl` (14 lines) round-trips and passes the framing;
+  - `hostile_run.jsonl` (12 lines) carries a route `internet`, an oversized cmdline, control characters (tab is the only one allowed) and an extra field, and every line is refused.
+- **Gate test** (`test_dynamic_gate.py`, 11 tests):
+  - no `Analyzer.dynamic`;
+  - no shared queue, task or Celery route named `dynamic`;
+  - no broker user and no compose service (source files and the rendered dev and prod configs) named `dynamic` or `sandbox`;
+  - no route path contains `dynamic`;
+  - `DYNAMIC_ENABLED is False`;
+  - `cyberlab_jobs.__init__` does not export the module, and importing the API and every worker app never loads it.
+- **Tests:** `unit/test_dynamic_contract.py` (17) and `unit/test_dynamic_gate.py` (11).
+- **Contract stability:** v1 is engine-neutral and marked "subject to one revision when a bridge is built" (risk 1).
+- **Gate:** nothing in this phase depends on a heavy step. The phase-11 full suite only re-runs these unit tests (pending gate).

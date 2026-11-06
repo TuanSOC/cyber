@@ -1908,21 +1908,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/orgs/{org_id}/ti/results": {
+    "/api/v1/orgs/{org_id}/ti/results/lookup": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
+        get?: never;
+        put?: never;
         /**
-         * Get History
+         * Lookup History
          * @description Every stored answer for the normalized indicator, newest first (400 `invalid_ioc`
          *     when the value cannot be normalized; `skipped` says why no provider would receive it).
+         *     A POST so the indicator stays out of every URL and access log; a read: it writes
+         *     nothing and is not audited.
          */
-        get: operations["get_history_api_v1_orgs__org_id__ti_results_get"];
-        put?: never;
-        post?: never;
+        post: operations["lookup_history_api_v1_orgs__org_id__ti_results_lookup_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4475,6 +4477,18 @@ export interface components {
              * @enum {string}
              */
             redis: "ok" | "error";
+        };
+        /**
+         * HistoryLookupIn
+         * @description `POST /ti/results/lookup` (M7 phase 11): the indicator travels in the JSON body only,
+         *     never in a URL, where it would land in the uvicorn and gateway access logs and the browser
+         *     history (as the search query and the correlation lookup, RT13). Never logged or audited.
+         */
+        HistoryLookupIn: {
+            provider?: components["schemas"]["ProviderName"] | null;
+            type?: components["schemas"]["LookupType"] | null;
+            /** Value */
+            value: string;
         };
         /**
          * HistoryOut
@@ -12333,12 +12347,9 @@ export interface operations {
             };
         };
     };
-    get_history_api_v1_orgs__org_id__ti_results_get: {
+    lookup_history_api_v1_orgs__org_id__ti_results_lookup_post: {
         parameters: {
-            query: {
-                value: string;
-                type?: components["schemas"]["LookupType"] | null;
-                provider?: components["schemas"]["ProviderName"] | null;
+            query?: {
                 limit?: number;
                 offset?: number;
             };
@@ -12348,7 +12359,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HistoryLookupIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -104,16 +104,57 @@ The §13 data retention: per-org policies (three knobs), a dry-run preview, lega
 7. `idor_cases_retention.py` with an empty `PENDING_ROUTES`, and the `reconcile_orphans` tombstone awareness test.
 
 ## Success Criteria
-- [ ] With no policy, nothing is selected or purged.
-- [ ] Lowered values, turning `enforce` on and hold releases wait for the delay, and floors and the destruction acknowledgement are enforced and audited.
-- [ ] The dry-run equals enforce on the same seed. Enforce purges only expired, unheld, uncited candidates, tombstone first, with custody, audit and run items. Purged evidence answers 410 while its hashes and custody stay.
-- [ ] Case and org holds exclude data at the DB level, and case holds also at the S3 level (synced by the worker; the api has no S3 hold action). The purge user can never delete a snapshot, a locked version or a legal-held version.
-- [ ] TI and AI purges respect `ti_run_items` and run trees without FK errors; correlation keys survive.
-- [ ] The append-only exception allows DELETE only for `cyberlab_retention` on the five tables, and the strict tables stay immutable.
-- [ ] IDOR cases are complete and the lane passes.
+- [x] With no policy, nothing is selected or purged. — `test_retention_policy.py::test_no_policy_keeps_everything`; `test_retention_purge.py::test_no_policy_selects_and_purges_nothing`; `unit/test_retention_select.py::test_holds_and_the_empty_policy` (9316433).
+- [x] Lowered values, turning `enforce` on and hold releases wait for the delay, and floors and the destruction acknowledgement are enforced and audited. — `test_retention_policy.py::test_values_below_the_floor_are_refused`, `test_the_closed_case_floor_follows_the_evidence_lock`, `test_lowering_waits_for_the_delay_and_raising_applies_at_once`, `test_enforce_needs_the_acknowledgement_and_waits_for_the_delay`, `test_every_put_upserts_the_policy_index`; `test_retention_holds.py::test_release_once_keeps_protecting_for_the_delay`; `test_retention_purge.py::test_manual_enforce_before_the_delay_runs_dry`; `unit/test_retention_select.py::test_matured_pending_values_are_in_force`, `test_put_rules` (9316433).
+- [x] The dry-run equals enforce on the same seed. Enforce purges only expired, unheld, uncited candidates, tombstone first, with custody, audit and run items. Purged evidence answers 410 while its hashes and custody stay. — `test_retention_purge.py::test_dry_run_equals_enforce`, `test_enforce_purges_bytes_and_keeps_the_record`, `test_purged_evidence_refuses_an_analysis`, `test_a_failed_delete_is_retried_by_the_next_run`, `test_a_governance_locked_version_is_skipped`; `test_retention_runs.py::test_cited_bulk_rows_survive_an_enforce_run` (9316433). The real-worker pipeline is phase 11 (pending gate).
+- [ ] Case and org holds exclude data at the DB level, and case holds also at the S3 level (synced by the worker; the api has no S3 hold action). The purge user can never delete a snapshot, a locked version or a legal-held version. — Covered: `test_retention_preview.py::test_holds_exclude_cases_including_during_the_release_delay`; `test_retention_holds.py::test_an_org_hold_covers_every_case_without_s3_calls`; `test_retention_objects.py::test_a_case_hold_is_mirrored_and_kept_during_the_delay`, `test_off_after_the_delay_unless_another_hold_covers`, `test_the_purge_user_cannot_delete_a_snapshot_or_set_retention`, `test_the_api_user_has_no_legal_hold_action_and_no_report_delete`; phase 6 `test_legal_hold_by_purge_user_only_and_blocks_every_delete` (9316433). **Open:** the org-hold residual from review is being fixed in phase 11 (pending gate).
+- [x] TI and AI purges respect `ti_run_items` and run trees without FK errors; correlation keys survive. — `test_retention_preview.py::test_cited_rows_reuse_and_run_trees_are_kept`; `unit/test_retention_select.py::test_run_trees_are_connected_components`, `test_batches_never_split_a_tree`; `test_retention_purge.py::test_enforce_purges_bytes_and_keeps_the_record` (the correlation keys stay); `test_correlation_reads.py::test_keys_survive_a_purge_of_the_job_results` (9316433).
+- [x] The append-only exception allows DELETE only for `cyberlab_retention` on the five tables, and the strict tables stay immutable. — `test_retention_append_only_exception.py::test_the_retention_role_deletes_exception_rows`, `test_the_retention_role_cannot_delete_strict_tables`, `test_nobody_updates_an_exception_table`, `test_the_owner_cannot_update_an_exception_table`, `test_the_app_role_cannot_delete`, `test_the_owner_cannot_delete_an_exception_row` (9316433); `test_append_only.py` (980386a).
+- [x] IDOR cases are complete and the lane passes. — `security/idor_cases_retention.py` (`PENDING_ROUTES` empty); `test_m7_foundation.py::test_every_m7_route_exists_and_none_is_pending`; lane 3 green on its own files (9316433). The full-suite re-run is pending gate.
 
 ## Risk Assessment
 - **Destructive bugs.** Every delete path is gated by the selector and re-checked in the purge transaction, and the dry-run ≡ enforce test is mandatory. The default is dry-run.
 - **FK order** when deleting AI runs (children, then `ai_run_index`, then the run) and bulk rows referenced elsewhere. Phase 1's grants list exactly what may be deleted, and an FK error fails the batch (it is rolled back) and is recorded.
 - **S3 legal hold on many objects:** bounded per task plus the sync in runs. An org hold avoids S3 calls by design. Residual: a compromised retention worker could clear a hold and then delete (recorded in THREAT_MODEL, RT5).
 - **Clock and `retain_until`:** always ask MinIO at purge time, never the DB's estimate.
+
+## Implementation Notes (2026-11-07)
+- **Commit:** 9316433 (phases 2–10 together). The models, grants, stubs and helpers come from 980386a.
+- **Lane 3:** `scripts/lane-test.sh 3 …` on its own files, plus ruff, format and mypy. The purge tests run in process with `retention_session()` and the purge MinIO keys on the test buckets.
+- **Policy** (`retention/policy.py`, `service.py`, `repository.py`):
+  - floors: 30, and max(30, `EVIDENCE_LOCK_DAYS`) for closed cases (`422 policy_floor`);
+  - lowering a value stores `pending_*` with `effective_at = now + 7 d`; raising a value or setting it to null applies at once and cancels the pending one;
+  - `enforce` needs `acknowledge_destruction` and is pending until `enforce_effective_at` (RT1); turning it off applies at once;
+  - every PUT upserts `retention_policy_index` in the same transaction (RT3);
+  - audits: `retention.policy_changed` and `retention.enforce_changed`.
+- **Legal holds** (`holds.py`, `objects.py`):
+  - a case hold publishes `retention.sync_holds` after the commit and answers `s3_sync: pending`;
+  - the worker, as the purge user, sets the S3 legal hold on the case's evidence versions and report snapshots, at most `SYNC_CHANGES_MAX = 500` changes per call;
+  - a release keeps protecting for the delay, and the hold goes OFF only when no other hold covers the case;
+  - an org hold makes no S3 call, and the run ends with `skipped_hold`.
+- **Selector** (`select.py`, +429; the preview and the worker share it):
+  - `ti` follows the `ti_run_items` FK rule (RT10);
+  - `ai` takes whole run trees as connected components, uncited only;
+  - `closed_case` skips a case with no status event or with a running job (RT24), and keeps cited bulk rows as `kept_cited` (RT23);
+  - counts are complete, and the sample is bounded (≤ 50 per category).
+- **Worker** (`workers/retention.py`, +1040):
+  - `sweep` reads `retention_policy_index` and takes a per-org advisory lock;
+  - `run_org` loads the effective policy and holds from the DB and downgrades an unauthorized enforce run to a dry run (`enforce_not_effective`);
+  - evidence is purged tombstone first (custody `purged`, actor the system user, audit `evidence.purged`), then `DeleteObjectVersion`;
+  - `object_delete_failed` and crash leftovers are retried by the next run (RT22);
+  - renders go `succeeded → purged` and can re-render from the snapshot (RT11);
+  - run statuses are `completed`, `partial` or `failed` (the plan's `succeeded` is `completed`, the 0014 check).
+- **Settings as built:**
+  - `RETENTION_RUN_SLICE_S` defaults to **120 s**, not the plan's 300 s, and a run stops after `MAX_SLICES = 50` with `partial` / `slice_limit`;
+  - batches are 5 000 rows or 200 objects.
+- **The purge user needs `s3:DeleteObject`** for its versioned deletes on this MinIO build. This is a phase-1 deviation (phase-1 notes). The `snapshot.json` Deny covers both actions.
+- **Evidence after a purge:**
+  - download and verify answer `410 evidence_purged` after the org check (another org's evidence still answers 404), and so does an analysis request;
+  - `EvidenceOut.purged_at`, `legal_hold` and the contract gap field `purged_by_run_id` are read from the tombstone and the holds.
+- **`reconcile_orphans.py`:** reports a tombstoned version as `purged_pending_delete`, and a pinned version missing without a tombstone as `missing_unexplained` (`test_retention_purge.py::test_a_pinned_version_missing_without_a_tombstone_is_unexplained`).
+- **Tests** (9316433):
+  - `test_retention_{policy,holds,objects,preview,purge,append_only_exception,runs}.py`: 7 + 6 + 5 + 4 + 9 + 6 + 4;
+  - `unit/test_retention_select.py`: 6;
+  - `security/idor_cases_retention.py`, with `PENDING_ROUTES` empty.
+- **Org-hold residual:** found in review, and phase 11 is fixing it. It stays open until then (pending gate).
+- **Pending gate:** `test_retention_pipeline.py` through the real `retention-worker-test` (phase 11), and the full-suite re-run.

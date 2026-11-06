@@ -1,5 +1,5 @@
-"""Legal hold routes (M7 phase 3): place (case or org scope), release once, list, audit; the
-case hold is published to the retention worker (`s3_sync: pending`, RT5); a released hold keeps
+"""Legal hold routes (M7 phase 3): place (case or org scope), release once, list, audit; every
+hold is published to the retention worker (`s3_sync: pending`, RT5); a released hold keeps
 protecting for the delay (RT1); `legal_hold` on case and evidence reads."""
 
 import uuid
@@ -67,7 +67,7 @@ async def test_a_case_hold_is_placed_published_and_flagged(captured: Captured) -
     assert (await c.get(f"{API}/{t.org_id}/investigations/{other}")).json()["legal_hold"] is False
 
 
-async def test_an_org_hold_covers_every_case_without_s3_calls(captured: Captured) -> None:
+async def test_an_org_hold_covers_every_case_and_is_published(captured: Captured) -> None:
     reg, t = await owner_tenant()
     c = reg.client
     response = await c.post(
@@ -76,8 +76,9 @@ async def test_an_org_hold_covers_every_case_without_s3_calls(captured: Captured
         headers=csrf(c),
     )
     assert response.status_code == 201, response.text
-    assert response.json()["s3_sync"] == "synced"  # nothing to mirror for an org hold
-    assert captured.published == []
+    # Mirrored on every evidence version of the org by the worker (RT5, phase 11).
+    assert response.json()["s3_sync"] == "pending"
+    assert captured.published == [("retention.sync_holds", {"org_id": str(t.org_id)})]
     other = await seed_case(t, title="Any case")
     assert (await c.get(f"{API}/{t.org_id}/investigations/{other}")).json()["legal_hold"] is True
 

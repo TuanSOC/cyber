@@ -58,7 +58,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.core import signing
+from app.core.signing import load_public_keys, verify
 
 TOOL_VERSION = 1
 CHUNK = 1024 * 1024
@@ -769,7 +769,7 @@ def signature_ok(
         return False
     if parsed.kid != kid or parsed.snapshot_sha256 != snapshot_sha256:
         return False
-    return signing.verify(manifest_bytes(parsed), signature_b64, kid, public_keys)
+    return verify(manifest_bytes(parsed), signature_b64, kid, public_keys)
 
 
 async def check_reports(
@@ -1061,7 +1061,7 @@ async def _run_db(baseline: Mapping[str, Any]) -> dict[str, Any]:
 async def _run_objects(baseline: Mapping[str, Any], sample: int | None) -> dict[str, Any]:
     if not isinstance(baseline.get("objects"), list):
         raise UsageError("--objects needs the baseline {objects} on stdin")
-    public_keys = signing.load_public_keys(_env("REPORT_SIGNING_PUBLIC_KEYS"))
+    public_keys = load_public_keys(_env("REPORT_SIGNING_PUBLIC_KEYS"))
     engine = _superuser_engine()
     try:
         async with engine.connect() as conn:

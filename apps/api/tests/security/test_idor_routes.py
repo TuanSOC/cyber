@@ -146,7 +146,9 @@ ROUTE_CASES: RouteCases = {
     },
     ("GET", "/api/v1/orgs/{org_id}/ti/runs"): lambda v: {"params": {"status": "queued"}},
     ("GET", "/api/v1/orgs/{org_id}/ti/runs/{run_id}"): lambda v: {},
-    ("GET", "/api/v1/orgs/{org_id}/ti/results"): lambda v: {"params": {"value": "hit.example.com"}},
+    ("POST", "/api/v1/orgs/{org_id}/ti/results/lookup"): lambda v: {
+        "json": {"value": "hit.example.com"}
+    },
     ("GET", "/api/v1/orgs/{org_id}/ti/results/{result_id}"): lambda v: {},
 }
 # Routes of static jobs only: replayed against the victim's static job.

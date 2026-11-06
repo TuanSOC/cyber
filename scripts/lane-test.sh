@@ -7,6 +7,9 @@
 # `--print-lock-root` prints the slot lock root and exits (M7 restore drill, RT25).
 # Lane N uses database cyberlab_bN_test, app Redis db N and broker db N, so lanes never
 # truncate or purge each other's state. The default lane (cyberlab_test, db 1) is untouched.
+# The MinIO test buckets are shared: TEST_LANE gives the lane its own key prefix (`lane-N/`)
+# for the objects tests write, and cleanup removes only the keys of the orgs that process
+# created plus that prefix, never a whole bucket (M7 phase 11, apps/api/tests/storage_helpers.py).
 # Every service takes a slot from the same lock (host memory). A service other than
 # api-test gets only the lane's broker db (TEST_BROKER_DB): it has no database or app Redis.
 # Never `up`/`down`/`build` from a lane: compose project `cyberlab` is shared.
@@ -67,6 +70,7 @@ if [ "$service" = "api-test" ]; then
     -e TEST_MIGRATION_DATABASE_URL="$owner_url" \
     -e REDIS_URL="$redis_url" \
     -e RETENTION_TEST_DATABASE_URL="$retention_url" \
+    -e TEST_LANE="$lane" \
     api-test "$@"
 else
   # The renderer holds no DB or app Redis settings: only the lane's broker db, which

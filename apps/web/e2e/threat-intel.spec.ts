@@ -198,11 +198,21 @@ test("dev: the mock provider enriches a capture's IOCs, caches them and answers 
   await expect(resultRow("notfound.example.com").getByText("Test not found")).toBeVisible();
 
   // The indicator history.
+  // The indicator stays in the URL fragment and the POST body (M7 phase 11): no request URL
+  // carries it, and the page URL has no query string.
   await resultRow("hit.example.com").getByRole("button", { name: "Show details" }).click();
+  const requestUrls: string[] = [];
+  const onRequest = (request: { url(): string }) => requestUrls.push(request.url());
+  page.on("request", onRequest);
   await results.getByRole("link", { name: "View history" }).click();
   await expect(page.getByRole("heading", { name: "Indicator history" })).toBeVisible();
   await expect(page.getByText(/^\d+ answers?$/)).toBeVisible();
   await expect(page.getByText(/^Reported by Test provider on .+: listed$/).first()).toBeVisible();
+  page.off("request", onRequest);
+  await expect(page).toHaveURL(/\/intel\/ioc#(?:type=[a-z0-9]+&)?value=hit\.example\.com$/);
+  expect(new URL(page.url()).search).toBe("");
+  expect(requestUrls.some((url) => url.includes("/ti/results/lookup"))).toBe(true);
+  expect(requestUrls.filter((url) => url.includes("hit.example.com"))).toEqual([]);
 
   // 4. Manual lookup: a private address (never sent), a URL (query removed), a name (answered).
   await page.getByRole("link", { name: "Threat Intel" }).first().click();
