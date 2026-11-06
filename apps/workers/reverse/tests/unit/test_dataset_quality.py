@@ -66,7 +66,8 @@ def test_the_harness_reports_a_table_and_writes_quality_json(report: evaluate.Re
     data = evaluate.as_json(report)
     target = Path(os.environ.get("RE_QUALITY_DIR", str(DATASET))) / "quality.json"
     try:
-        target.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        text = json.dumps(data, indent=2, sort_keys=True) + "\n"
+        target.write_text(text, encoding="utf-8", newline="\n")
     except OSError:
         pytest.skip(f"read-only {target.parent}: table not written")
     assert json.loads(target.read_text(encoding="utf-8"))["scenarios"] == len(SCENARIOS)
