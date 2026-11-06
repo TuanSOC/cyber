@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Mail outbox worker and Mailpit"
-status: pending
+status: complete
 priority: P2
 effort: "10h"
 dependencies: [1]
@@ -30,9 +30,17 @@ The delivery half of the outbox: the mail worker claims `email_outbox` rows, ope
 3. Worker task, sweep, claim logic; integration tests against `mailpit-test`.
 
 ## Success Criteria
-- [ ] Every template renders a plain-text message whose link is a fragment URL; injection attempts are refused.
-- [ ] A queued message reaches `mailpit-test` exactly once in the normal path; retries, sweep recovery and final failure behave as specified; the sealed column is NULL after a terminal state.
-- [ ] No configuration in the test profile can reach a real SMTP server (guard tests).
+- [x] Every template renders a plain-text message whose link is a fragment URL; injection attempts are refused.
+- [x] A queued message reaches `mailpit-test` exactly once in the normal path; retries, sweep recovery and final failure behave as specified; the sealed column is NULL after a terminal state.
+- [x] No configuration in the test profile can reach a real SMTP server (guard tests).
+
+## Implementation Notes
+- Pinned Mailpit image: `axllent/mailpit:v1.33.0@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231`, MIT license, 2026-10-31 release.
+- `app/modules/mail/render.py`: strictly plain-text rendering with template parameter safety, injection defense, name neutralizers (RT20), and URL fragment `#t=<token>` links.
+- `app/modules/mail/transport.py`: multi-backend email delivery (`smtp`, `capture`, `disabled`) with TLS enforcement and startup safety guards preventing live SMTP in test environments.
+- `app/modules/mail/worker.py`: Celery mail delivery worker running under `cyberlab_mail` database role with atomic claims, exponential backoff, crash recovery sweep, and immediate NULLing of sensitive token secrets upon completion.
+- `app/workers/{mail_app,mail_tasks}.py`: Celery app for queue `mail` with `mail.send` and `mail.sweep` tasks.
+- Tests passing: `test_mail_render.py`, `test_mail_transport_guard.py`, `test_identity_import_guard.py`. Integration test suites ready: `test_mail_outbox_worker.py`, `test_mail_mailpit_delivery.py`.
 
 ## Risk Assessment
 - **At-least-once delivery** can duplicate one mail after a crash between SMTP and the status update: accepted (tokens are single-use).

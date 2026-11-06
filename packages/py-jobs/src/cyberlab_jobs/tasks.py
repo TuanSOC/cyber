@@ -36,6 +36,9 @@ RETENTION_SWEEP = "retention.sweep"
 RETENTION_RUN_ORG = "retention.run_org"
 RETENTION_SYNC_HOLDS = "retention.sync_holds"
 CORRELATION_INDEX_PENDING = "correlation.index_pending"
+# Identity and access (M11): the mail worker (queue `mail`) consumes `mail.send` and runs `mail.sweep`.
+MAIL_SEND = "mail.send"
+MAIL_SWEEP = "mail.sweep"
 
 
 @dataclass(frozen=True)
@@ -89,3 +92,7 @@ class Queues:
     @property
     def retention(self) -> str:
         return f"{self.prefix}retention"
+
+    @property
+    def mail(self) -> str:
+        return f"{self.prefix}mail"

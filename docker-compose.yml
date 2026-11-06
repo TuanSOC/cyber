@@ -1017,13 +1017,13 @@ services:
       migrate:
         condition: service_completed_successfully
       redis-broker:
-        condition: service_healthy
+        condition: service_healthy  
       mailpit:
         condition: service_started
 
-  # M11 dev mail sink (MIT). Phase 2 pins the image by digest. UI and REST on loopback only.
+  # M11 dev mail sink (MIT). Pinned by tag and digest in phase 2. UI and REST on loopback only.
   mailpit:
-    image: axllent/mailpit:v1.33.0  # TODO(M11 phase 2): pin @sha256 digest
+    image: axllent/mailpit:v1.33.0@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
@@ -1566,7 +1566,7 @@ services:
 
   mailpit-test:
     profiles: ["test"]
-    image: axllent/mailpit:v1.33.0  # TODO(M11 phase 2): pin @sha256 digest
+    image: axllent/mailpit:v1.33.0@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
@@ -1580,7 +1580,7 @@ services:
 
   mailpit-e2e:
     profiles: ["e2e"]
-    image: axllent/mailpit:v1.33.0  # TODO(M11 phase 2): pin @sha256 digest
+    image: axllent/mailpit:v1.33.0@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
