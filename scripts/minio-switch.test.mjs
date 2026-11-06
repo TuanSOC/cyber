@@ -10,20 +10,25 @@ import {
   SILO,
   SILO_OVERLAY,
   WRAPPER_IMAGE,
+  WRAPPER_USER,
   activationSteps,
   attestationCommand,
   backupVolumeName,
   candidateComposeArgs,
   candidateEnv,
   candidateRef,
+  canCreateIn,
   checkBackupVolumeName,
   checkCurrentStack,
+  checkDataDirLayout,
+  dataDirStat,
   checkProjectEnv,
   downCandidate,
   envSuggestion,
   isBitnamiMinio,
   laneUrls,
   parsePinnedRef,
+  parseStat,
   planSequence,
   rollbackSteps,
 } from "./minio-switch.mjs";
@@ -55,11 +60,33 @@ test("the Dockerfile and the overlay pin the same base as the script", () => {
   const dockerfile = readFileSync(resolve(REPO_ROOT, "infra/minio/silo/Dockerfile"), "utf8");
   const overlay = readFileSync(resolve(REPO_ROOT, SILO_OVERLAY), "utf8");
   assert.ok(dockerfile.includes(`ARG SILO_BASE=${base}`));
-  assert.match(dockerfile, /^USER 1001:1001$/m);
+  assert.equal(WRAPPER_USER, "1001:0");
+  assert.match(dockerfile, /^USER 1001:0$/m);
+  assert.match(dockerfile, /chown 1001:0 \/data/);
+  assert.ok(overlay.includes(`user: "${WRAPPER_USER}"`));
   assert.match(dockerfile, /^CMD \["server", "\/data"/m);
   assert.ok(overlay.includes(`SILO_BASE: ${base}`));
   assert.ok(overlay.includes(`image: ${WRAPPER_IMAGE}`));
   assert.ok(!/image:\s*\$\{MINIO_IMAGE/.test(overlay), "the overlay must not tag its build with ${MINIO_IMAGE}");
+  assert.ok(overlay.includes(`TARGET_IMAGE: ${WRAPPER_IMAGE}`));
+});
+
+test("docker-compose.yml defaults to the wrapper, built from the same pin, never pulled", () => {
+  const base = `${SILO.repository}:${SILO.tag}@${SILO.indexDigest}`;
+  const compose = readFileSync(resolve(REPO_ROOT, "docker-compose.yml"), "utf8");
+  const minio = compose.slice(compose.indexOf("\n  minio:\n"), compose.indexOf("\n  minio-init:\n"));
+  assert.ok(minio.includes(`image: \${MINIO_IMAGE:-${WRAPPER_IMAGE}}`));
+  assert.ok(minio.includes("context: ./infra/minio/silo"));
+  assert.ok(minio.includes(`SILO_BASE: ${base}`));
+  // The build's tag guard sees the same value compose tags the build with.
+  assert.ok(minio.includes(`TARGET_IMAGE: \${MINIO_IMAGE:-${WRAPPER_IMAGE}}`));
+  assert.match(minio, /^ {4}pull_policy: never$/m);
+  assert.ok(minio.includes(`user: "${WRAPPER_USER}"`));
+  assert.ok(minio.includes("miniodata:${MINIO_DATA_DIR:-/data}"));
+  assert.ok(minio.includes("read_only: ${MINIO_READ_ONLY:-true}"));
+  const dockerfile = readFileSync(resolve(REPO_ROOT, "infra/minio/silo/Dockerfile"), "utf8");
+  assert.ok(dockerfile.includes(`ARG TARGET_IMAGE=${WRAPPER_IMAGE}`));
+  assert.ok(dockerfile.includes(`localhost/cyberlab/silo:*) ;;`) && /exit 1/.test(dockerfile));
 });
 
 test("isBitnamiMinio / checkCurrentStack", () => {
@@ -145,6 +172,9 @@ test("activation uses the overlay; rollback restores the backup onto bitnami", (
   assert.ok(rollback.some((s) => s.includes("rollback --backup-volume cyberlab-switch_pre-silo-20261107t080910z")));
   const down = rollback.find((s) => s.includes("down -v"));
   assert.ok(down.startsWith("docker compose -p cyberlab ") && !down.includes(SILO_OVERLAY));
+  const env = rollback.find((s) => s.startsWith("set MINIO_IMAGE="));
+  assert.ok(env.includes("MINIO_IMAGE=bitnamilegacy/minio:2025.5.24") && env.includes(`MINIO_DATA_DIR=${BITNAMI_DATA_DIR}`) && env.includes("MINIO_READ_ONLY=false"));
+  assert.ok(rollback.indexOf(env) < rollback.indexOf(down));
 });
 
 test("planSequence orders backup, conformance, drill, then the suggestion", () => {
@@ -182,4 +212,55 @@ test("downCandidate removes only the candidate project's volumes", () => {
   const foreign = fakeRunner({ name: CANDIDATE_PROJECT, volumes: { x: { name: "cyberlab_miniodata" } } });
   assert.throws(() => downCandidate({ env: {}, runner: foreign.runner }), /not a cyberlab-objstore volume/);
   assert.ok(!foreign.calls.some((a) => a.includes("down")));
+});
+
+// The 2026-11-06 failure: the live bitnami volume root is root:root 0775 (bitnami runs as
+// 1001:0); a 1001:1001 wrapper read every existing bucket but could not create a new one.
+const BITNAMI_ROOT = { uid: 0, gid: 0, mode: 0o775 };
+
+test("parseStat reads `stat -c '%u %g %a'`", () => {
+  assert.deepEqual(parseStat("0 0 775\n"), BITNAMI_ROOT);
+  assert.deepEqual(parseStat("1001 0 770"), { uid: 1001, gid: 0, mode: 0o770 });
+  for (const bad of ["", "0 0", "root root 775", "0 0 999", undefined]) assert.throws(() => parseStat(bad), /stat output/);
+});
+
+test("canCreateIn follows the POSIX owner / group / other order", () => {
+  assert.equal(canCreateIn(BITNAMI_ROOT, "1001:1001"), false, "the failed wrapper user");
+  assert.equal(canCreateIn(BITNAMI_ROOT, WRAPPER_USER), true, "gid 0 uses the group write bit");
+  assert.equal(canCreateIn({ uid: 1001, gid: 1001, mode: 0o750 }, WRAPPER_USER), true, "a fresh 1001-owned volume");
+  assert.equal(canCreateIn({ uid: 1001, gid: 0, mode: 0o770 }, WRAPPER_USER), true, "a fresh wrapper volume");
+  assert.equal(canCreateIn({ uid: 1001, gid: 0, mode: 0o570 }, WRAPPER_USER), false, "owner bits win over group bits");
+  assert.equal(canCreateIn({ uid: 0, gid: 0, mode: 0o755 }, WRAPPER_USER), false);
+  assert.equal(canCreateIn({ uid: 0, gid: 0, mode: 0o777 }, "1001:1001"), true);
+  assert.equal(canCreateIn({ uid: 0, gid: 0, mode: 0o773 }, "1001:1001"), true);
+  assert.equal(canCreateIn({ uid: 0, gid: 0, mode: 0o700 }, "0:0"), true);
+  assert.throws(() => canCreateIn(BITNAMI_ROOT, "minio"), /uid:gid/);
+});
+
+test("checkDataDirLayout names the layout it refuses", () => {
+  assert.deepEqual(checkDataDirLayout(BITNAMI_ROOT), []);
+  const [error] = checkDataDirLayout(BITNAMI_ROOT, "1001:1001");
+  assert.match(error, /0:0 0775: 1001:1001 cannot create a bucket/);
+});
+
+test("dataDirStat reads the volume root read-only, with no network", () => {
+  const calls = [];
+  const stat = dataDirStat("cyberlab_miniodata", {
+    runner: (cmd, args) => {
+      calls.push([cmd, args]);
+      return { status: 0, stdout: Buffer.from("0 0 775\n") };
+    },
+  });
+  assert.deepEqual(stat, BITNAMI_ROOT);
+  const [[cmd, args]] = calls;
+  assert.equal(cmd, "docker");
+  assert.deepEqual(args.slice(0, 4), ["run", "--rm", "--network", "none"]);
+  assert.ok(args.includes("type=volume,source=cyberlab_miniodata,target=/data,readonly"));
+  assert.deepEqual(args.slice(-4), ["stat", "-c", "%u %g %a", "/data"]);
+});
+
+test("planSequence checks the live layout and the drill probes bucket creation", () => {
+  const plan = planSequence();
+  assert.match(plan[0], new RegExp(`cyberlab_miniodata root writable by ${WRAPPER_USER}`));
+  assert.ok(plan.some((s) => s.includes("restore:drill") && s.includes("bucket_create")));
 });

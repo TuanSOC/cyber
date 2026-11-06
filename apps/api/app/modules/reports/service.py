@@ -563,6 +563,30 @@ def _budget(snapshot: ReportSnapshot) -> tuple[bytes, int, dict[str, int]]:
     return canonical_json(snapshot), render_units(snapshot), section_units(snapshot)
 
 
+async def build_redacted(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    user_id: uuid.UUID,
+    report: Report,
+    case: Investigation,
+    now: datetime,
+    change_note: str | None = None,
+) -> tuple[BuiltSnapshot, ReportSnapshot]:
+    """The snapshot as signed for the report's profile: built from the live rows, then
+    redacted. The one code path for preview, finalize and the §14 metric's re-resolution of
+    external citations (whose `fields_sha256` is the hash of the redacted copy)."""
+    built = await build_snapshot(session, org_id, user_id, report, now=now)
+    snapshot = built.snapshot
+    if change_note:
+        # Part of the signed document (RT23), and redacted with the rest of it.
+        dumped = snapshot.model_dump(mode="json")
+        dumped["report"]["change_note"] = change_note
+        snapshot = ReportSnapshot.model_validate(dumped)
+    scope = await CaseScope.load(session, org_id, case)
+    redacted = await redact.redact(session, scope, snapshot, built.run_originals)
+    return built, redacted
+
+
 async def _build_redacted(
     session: AsyncSession,
     ctx: OrgContext,
@@ -571,16 +595,7 @@ async def _build_redacted(
     now: datetime,
     change_note: str | None = None,
 ) -> tuple[BuiltSnapshot, ReportSnapshot]:
-    built = await build_snapshot(session, ctx.org_id, ctx.user.id, report, now=now)
-    snapshot = built.snapshot
-    if change_note:
-        # Part of the signed document (RT23), and redacted with the rest of it.
-        dumped = snapshot.model_dump(mode="json")
-        dumped["report"]["change_note"] = change_note
-        snapshot = ReportSnapshot.model_validate(dumped)
-    scope = await CaseScope.load(session, ctx.org_id, case)
-    redacted = await redact.redact(session, scope, snapshot, built.run_originals)
-    return built, redacted
+    return await build_redacted(session, ctx.org_id, ctx.user.id, report, case, now, change_note)
 
 
 @asynccontextmanager

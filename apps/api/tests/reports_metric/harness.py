@@ -25,8 +25,14 @@ Measurements:
 - **citation resolution accuracy**: right after finalize, every `report_citations` row is
   re-resolved (`citations.resolve`, the requester's tenant session and case scope) and must
   give the same table and `fields_sha256`; its snapshot item (same `cite_no`) must name the
-  same row and hash to its `fields_sha256` (internal: the same hash as the row; external:
-  the redacted copy's own hash). Also recorded: selected rows present in the snapshot and
+  same row, hash to its `fields_sha256` and carry the row's hash. An `external` row records
+  the hash of the **redacted** copy (what the report shows: pseudonymized hosts, IPs and
+  users), so it is compared with the live row **under the same projection**: the report is
+  rebuilt from the live rows and redacted again (`service.build_redacted`, the finalize
+  code path; the pseudonym map is deterministic and the per-build `ioc_key` HMAC never
+  reaches a citation copy), and the item of the same `cite_no` must name the same row with
+  the same hash. External rows whose redacted copy differs from the live one are counted
+  (`redacted`). Also recorded: selected rows present in the snapshot and
   `dropped_out_of_scope` (expected 0 on this dataset);
 - **render success** per format and group (non-hostile / hostile; a hostile failure must be
   a typed `error_code`), **latency** from the request (or the finalize response for the
@@ -98,11 +104,13 @@ from app.modules.reports import citations as cites
 from app.modules.reports import dispatch, render_ingest
 from app.modules.reports import storage as report_storage
 from app.modules.reports.models import (
+    Report,
     ReportCitation,
     ReportRender,
     ReportRenderIndex,
     ReportVersion,
 )
+from app.modules.reports.service import build_redacted
 from tests import pcap_results
 from tests.analysis_helpers import drain_ingest
 from tests.factories import Registered, csrf
@@ -110,6 +118,7 @@ from tests.integration.seed import Tenant
 from tests.integration.test_report_pipeline import _flip_embedded_snapshot
 from tests.report_helpers import (
     FIXTURES,
+    SeededVersion,
     SigningKeys,
     new_signing_keys,
     seed_report,
@@ -348,6 +357,7 @@ class VersionSample:
     resolved_equal: int = 0
     consistent: int = 0
     accurate: int = 0
+    redacted: int = 0  # external: rows whose shown (redacted) copy differs from the live one
     selected: int = 0
     covered: int = 0
     dropped: int = 0
@@ -773,6 +783,15 @@ def render_table(metric: Metric) -> str:
         )
     all_accurate = _rate(sum(v.accurate for v in finalized), total)
     lines.append(f"| all | {len(finalized)} | {total} | | | {all_accurate} | | |")
+    external = [v for v in finalized if v.profile == "external"]
+    lines += [
+        "",
+        "- `external` rows record the hash of the redacted copy the report shows; they are "
+        "re-resolved under the same projection (the live rows rebuilt and redacted again by "
+        "`service.build_redacted`). Rows whose redacted copy differs from the live, "
+        f"unredacted one: {sum(v.redacted for v in external)} of "
+        f"{sum(v.citations for v in external)}.",
+    ]
 
     lines += [
         "",
@@ -883,6 +902,30 @@ _INCREMENTAL = (
 )
 
 
+async def seed_fixture_version(
+    t: Tenant, keys: SigningKeys, name: str
+) -> tuple[SeededVersion, ReportSnapshot]:
+    """A committed fixture snapshot (`golden` / `hostile`) as v1 of a new seeded report: its
+    ids rewritten to the report's, signed with the manifest's report id, version, TLP,
+    profile **and `finalized_at`** equal to the snapshot's, as finalize signs them
+    (`verify_report.py` refuses a snapshot whose `finalized_at` differs from the manifest)."""
+    base = parse_snapshot((FIXTURES / f"{name}_snapshot.json").read_bytes())
+    tlp, profile = str(base.report.tlp), str(base.report.profile)
+    report_id = await seed_report(t, title=f"Metric fixture {name}", tlp=tlp, profile=profile)
+    info = base.report.model_copy(update={"report_id": report_id, "version": 1})
+    snapshot = base.model_copy(update={"report": info})
+    seeded = await seed_version(
+        t,
+        report_id,
+        keys,
+        snapshot=snapshot,
+        tlp=tlp,
+        profile=profile,
+        finalized_at=info.finalized_at,
+    )
+    return seeded, snapshot
+
+
 class Runner:
     def __init__(
         self, keys: SigningKeys, work: Path, script: Path, cases: int = DEFAULT_CASES
@@ -952,15 +995,10 @@ class Runner:
         name = "golden" if plan.kind == "fixture_golden" else "hostile"
         reg, t = await owner_case(org_name=f"Metric org {plan.index}", title=f"Metric {name}")
         ctx = _Case(plan, reg, t)
-        base = parse_snapshot((FIXTURES / f"{name}_snapshot.json").read_bytes())
-        tlp, profile = str(base.report.tlp), str(base.report.profile)
-        report_id = await seed_report(t, title=f"Metric fixture {name}", tlp=tlp, profile=profile)
-        info = base.report.model_copy(update={"report_id": report_id, "version": 1})
-        snapshot = base.model_copy(update={"report": info})
-        seeded = await seed_version(
-            t, report_id, self.keys, snapshot=snapshot, tlp=tlp, profile=profile
-        )
-        version = _Version(seeded.version_id, report_id, 1, profile, base.report.base_url)
+        seeded, snapshot = await seed_fixture_version(t, self.keys, name)
+        report = snapshot.report
+        profile = str(report.profile)
+        version = _Version(seeded.version_id, report.report_id, 1, profile, report.base_url)
         sample = VersionSample(plan.index, plan.kind, profile)
         self.metric.versions.append(sample)
         await self._render_all(ctx, version, sample, pdf=None)
@@ -1098,7 +1136,7 @@ class Runner:
         number = int(body["version"])
         version_id = uuid.UUID(body["id"])
         version = _Version(version_id, report_id, number, profile, snapshot.report.base_url)
-        await self._citations(ctx, version, snapshot, sample, selected)
+        await self._citations(ctx, version, snapshot, sample, selected, f"Metric {profile}")
         renders = (await self._get(ctx, f"{url}/renders")).json()["items"]
         pdf = [r for r in renders if r["format"] == "pdf"]
         assert len(pdf) == 1, renders
@@ -1114,8 +1152,10 @@ class Runner:
         snapshot: ReportSnapshot,
         sample: VersionSample,
         selected: list[tuple[str, str]],
+        change_note: str,
     ) -> None:
         t = ctx.t
+        projected: dict[int, Any] = {}
         async with tenant_session(t.org_id, t.owner_id) as session:
             rows = list(
                 await session.scalars(
@@ -1134,22 +1174,45 @@ class Runner:
                 for r in rows
             ]
             resolved = await cites.resolve(session, scope, requests, with_paths=False)
+            if version.profile == "external":
+                # The external projection of the live rows: the finalize code path again, at
+                # the version's own finalize time and change note.
+                report = await session.get(Report, version.report_id)
+                assert report is not None
+                _, rebuilt = await build_redacted(
+                    session,
+                    t.org_id,
+                    t.owner_id,
+                    report,
+                    case,
+                    snapshot.report.finalized_at,
+                    change_note,
+                )
+                projected = {c.cite_no: c for c in rebuilt.citations.items}
         items = {c.cite_no: c for c in snapshot.citations.items}
         sample.citations = max(len(rows), len(items))
         for row in rows:
             hit = resolved.get(cites.cite_key(row.kind, row.ref_id, row.job_id))
-            equal = (
-                hit is not None
-                and hit.ref_table == row.ref_table
-                and hit.fields_sha256 == row.fields_sha256
-            )
-            item = items.get(row.cite_no)
             same_row = (row.kind, row.ref_table, row.ref_id)
+            equal = hit is not None and hit.ref_table == row.ref_table
+            if version.profile == "external":
+                again = projected.get(row.cite_no)
+                equal = (
+                    equal
+                    and again is not None
+                    and (again.kind, again.ref_table, again.ref_id) == same_row
+                    and again.fields_sha256 == row.fields_sha256
+                )
+                sample.redacted += hit is not None and hit.fields_sha256 != row.fields_sha256
+            else:
+                equal = equal and hit is not None and hit.fields_sha256 == row.fields_sha256
+            item = items.get(row.cite_no)
             consistent = (
                 item is not None
                 and (item.kind, item.ref_table, item.ref_id) == same_row
                 and cites.fields_sha256(item.fields) == item.fields_sha256
-                and (version.profile == "external" or item.fields_sha256 == row.fields_sha256)
+                # Both profiles: the row records the hash of the copy the snapshot shows.
+                and item.fields_sha256 == row.fields_sha256
             )
             sample.resolved_equal += equal
             sample.consistent += consistent

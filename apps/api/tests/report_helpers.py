@@ -175,10 +175,16 @@ async def seed_version(
     profile: str = "internal",
     store: bool = True,
     change_note: str | None = None,
+    finalized_at: datetime | None = None,
 ) -> SeededVersion:
     """The next version of a report: canonical bytes in `reports-test` (unless
     `store=False`, then a fake version id), a signed manifest, the `report_versions` row
-    and `reports.latest_version` bumped (with the +1 revision the guard requires)."""
+    and `reports.latest_version` bumped (with the +1 revision the guard requires).
+
+    The manifest's `finalized_at` is now unless given. `scripts/verify_report.py` requires
+    the snapshot's `report.finalized_at` (and report id, version, TLP, profile) to equal the
+    manifest's: a caller whose version must verify offline passes
+    `finalized_at=snapshot.report.finalized_at`."""
     snapshot = snapshot or fake_snapshot()
     data = canonical_json(snapshot)
     sha = hashlib.sha256(data).hexdigest()
@@ -198,7 +204,7 @@ async def seed_version(
             object_version = str(put.version_id)
         else:
             object_version = f"fake-{secrets.token_hex(8)}"
-        finalized_at = datetime.now(UTC)
+        finalized_at = finalized_at or datetime.now(UTC)
         manifest = Manifest(
             report_id=report_id,
             version=number,

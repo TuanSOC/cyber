@@ -313,11 +313,30 @@ services:
       retries: 20
 
   minio:
-    # Upstream MinIO stopped publishing community images; frozen bitnami build (2025-05-24).
-    # Dev/learning only: no further security patches (see docs/THREAT_MODEL.md). M7: the image
-    # and its data dir are parameters (MINIO_IMAGE / MINIO_DATA_DIR; bitnami uses
-    # /bitnami/minio/data, upstream-compatible images /data); phase 6 picks a successor.
-    image: ${MINIO_IMAGE:-bitnamilegacy/minio:2025.5.24}
+    # M7 phase 6 (switched 2026-11-06): pgsty/silo, the maintained on-disk-compatible MinIO fork,
+    # through the local wrapper infra/minio/silo/Dockerfile, built FROM the digest-pinned
+    # multi-arch index (SLSA provenance: gh attestation verify, see the Dockerfile). The wrapper
+    # adds only USER 1001:0 (bitnami's user: the old volume root is root:root 0775) and the server
+    # CMD. A fresh clone builds it on the first `up` / `build`: `localhost/` is never pulled
+    # (pull_policy never). MINIO_IMAGE / MINIO_DATA_DIR stay parameters for the restore drill's
+    # --target-minio-image and the bitnami rollback (plans/reports/minio-switch-runbook-261107.md;
+    # bitnami also needs MINIO_READ_ONLY=false). The build refuses to tag any other MINIO_IMAGE
+    # (TARGET_IMAGE), so a bitnami value can never become the tag of a Silo build.
+    image: ${MINIO_IMAGE:-localhost/cyberlab/silo:RELEASE.2026-10-26T00-00-00Z}
+    build:
+      context: ./infra/minio/silo
+      args:
+        SILO_BASE: pgsty/silo:RELEASE.2026-10-26T00-00-00Z@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7
+        TARGET_IMAGE: ${MINIO_IMAGE:-localhost/cyberlab/silo:RELEASE.2026-10-26T00-00-00Z}
+    pull_policy: never
+    # The wrapper's USER, stated so `config` shows it (also bitnami's own user).
+    user: "1001:0"
+    read_only: ${MINIO_READ_ONLY:-true}
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 512
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
@@ -328,7 +347,7 @@ services:
       MINIO_KMS_SECRET_KEY_FILE: /run/secrets/minio_kms_key
     secrets: [minio_kms_key]
     volumes:
-      - miniodata:${MINIO_DATA_DIR:-/bitnami/minio/data}
+      - miniodata:${MINIO_DATA_DIR:-/data}
     # No console port: MinIO sits on internal networks only, which cannot publish ports.
     # Use `docker compose exec minio mc ...` instead (docs/DEPLOYMENT.md).
     # On `analysis` so the parser can use its presigned URLs (it holds no MinIO credentials).
