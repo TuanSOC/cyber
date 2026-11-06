@@ -9,6 +9,13 @@ sha256 + size verified, root-owned 0444), reads the first 16 bytes for the compr
 archive refusal (RT19), and reads only bounded probe output. `sandbox.prepare` ran once
 for the job (pipeline); every probe gets a fresh out dir (`Workspace.fresh`, RT26).
 
+Review fixes: the job budget starts before the download; a probe without a status (killed
+on timeout) is not offline-verified, so its rows are dropped; after every probe the work
+volume's free space and the job's probe output are checked (`insufficient_disk`); the ISF
+files the probes report are re-hashed against the manifest after the run, and an ISF from
+outside the store and Volatility's own symbol dirs, or one the manifest does not vouch for,
+fails the job `symbols_corrupt`; the seeded identifier cache must match the manifest.
+
 Success rule: identify and the process list (`PROCESS_LIST_PLUGIN[os]`) are `ok`, else
 `memory_parse_failed`. Every other plugin is best effort and reported in the header with
 its status (`ok`, `failed`, `timeout`, `skipped`: no time left in the job budget,
@@ -54,11 +61,18 @@ from memory_worker.result import (
     image_record,
     write_diagnostic,
 )
+from memory_worker.symbols.manifest import StoreError, sha256_file
 from memory_worker.symbols.store import SymbolHit, SymbolsCorrupt, SymbolStore
 
 GIB = 1024**3
 DISK_HEADROOM = GIB  # free space on /work beyond the image (plan: size + 1 GiB)
 TEST_DISK_HEADROOM = 16 * 1024**2  # the test profile's 512 MiB tmpfs /work (RT6)
+# Of the 1 GiB headroom: what every probe's out dir of one job may use together, and the free
+# space that must stay for the result stream (<= max_result_bytes, 256 MiB) after any probe.
+PROBE_OUTPUT_BUDGET = 768 * 1024**2
+MIN_FREE_AFTER_PROBE = 256 * 1024**2
+TEST_PROBE_OUTPUT_BUDGET = 8 * 1024**2
+TEST_MIN_FREE_AFTER_PROBE = 4 * 1024**2
 ENGINE_MISSING = frozenset({"ModuleNotFoundError", "ImportError", "ProbeSetupError"})
 RESULT = "result.ndjson.gz"
 
@@ -91,12 +105,36 @@ def check_disk(work_dir: Path, size: int) -> None:
         raise JobFailed("insufficient_disk")
 
 
+def _test_profile() -> bool:
+    return os.environ.get("TEST_PROFILE") == "1"
+
+
+def probe_output_budget() -> int:
+    return TEST_PROBE_OUTPUT_BUDGET if _test_profile() else PROBE_OUTPUT_BUDGET
+
+
+def min_free_after_probe() -> int:
+    return TEST_MIN_FREE_AFTER_PROBE if _test_profile() else MIN_FREE_AFTER_PROBE
+
+
+def check_probe_disk(ws: Workspace) -> None:
+    """After every probe: a probe (bounded per file by RLIMIT_FSIZE only) must not fill the
+    work volume. Over the job's output budget, or too little space left for the result, the
+    job fails `insufficient_disk` before the next probe can write more."""
+    if ws.output_bytes() > probe_output_budget():
+        raise JobFailed("insufficient_disk", "probe output over the job's budget")
+    if shutil.disk_usage(ws.dirs.root).free < min_free_after_probe():
+        raise JobFailed("insufficient_disk", "the work volume is nearly full")
+
+
 def analyze(job: MemoryJobV1, dirs: sandbox.JobDirs, config: Config) -> Path:
     if job.size_bytes == 0:
         raise JobFailed("memory_image_empty")
     if job.size_bytes > job.limits.max_bytes:
         raise JobFailed("memory_image_too_large")
     check_disk(config.work_dir, job.size_bytes)
+    # The job's wall clock starts now: the download of a large image counts against it.
+    budget = Budget(job.limits)
     ws = Workspace(dirs, config.symbols_dir)
     download(
         job.evidence_url,
@@ -111,6 +149,7 @@ def analyze(job: MemoryJobV1, dirs: sandbox.JobDirs, config: Config) -> Path:
         job,
         engine_for(config),
         SymbolStore(config.symbols_dir),
+        budget,
     )
 
 
@@ -129,6 +168,7 @@ def _identify(
     if seconds is None:
         raise JobFailed("identify_timeout")
     run = engine.identify(ws, job.os_hint, seconds)
+    check_probe_disk(ws)
     if run.end == "timeout":
         raise JobFailed("identify_timeout")
     status = _status(run)
@@ -178,38 +218,90 @@ def _outcome(
     return outcome
 
 
-def _isf_sha256(store: Symbols, hit: SymbolHit, reported: list[str], facts: RunFacts) -> str:
-    """The sha256 of the ISF the run actually loaded (resolved through the manifest)."""
+def _uri_path(uri: str) -> Path | None:
+    """The local file behind an ISF URI (`file:` or a `jar:file:...!` archive member's
+    archive), resolved (symlinks followed), or None for any other scheme."""
+    if uri.startswith("jar:"):
+        uri = uri[4:].split("!", 1)[0]
+    parsed = urllib.parse.urlparse(uri)
+    if parsed.scheme != "file" or parsed.netloc not in ("", "localhost"):
+        return None
+    return Path(urllib.parse.unquote(parsed.path)).resolve()
+
+
+def _inside(path: Path, base: Path) -> bool:
+    return path == base or base in path.parents
+
+
+def _isf_sha256(
+    store: Symbols,
+    hit: SymbolHit,
+    reported: list[str],
+    builtin: set[str],
+    facts: RunFacts,
+) -> str:
+    """The sha256 of the kernel ISF the run actually loaded, re-hashed now against the
+    manifest (the lookup's hash was taken before the probes ran).
+
+    Every reported ISF must be a store file the manifest lists with that hash, or lie in
+    Volatility's own symbol dirs (`builtin`, from the offline-verified statuses); anything
+    else (another location, another scheme, an unlisted or changed store file) fails the job
+    `symbols_corrupt`. No store ISF reported: `isf_unreported` (the lookup's hash stands); a
+    store ISF other than the one looked up: `isf_mismatch` and that file's hash."""
     root = store.root.resolve()
-    paths = []
-    for uri in reported:
-        parsed = urllib.parse.urlparse(uri)
-        if parsed.scheme != "file":
-            continue
-        try:
-            paths.append(Path(urllib.parse.unquote(parsed.path)).resolve().relative_to(root))
-        except ValueError:
-            continue
-    if not paths:
-        facts.error("isf_unreported")
-        return hit.sha256
-    expected = hit.path.resolve().relative_to(root)
-    if paths[0] == expected:
-        return hit.sha256
-    facts.error("isf_mismatch")
+    builtin_dirs = [Path(d).resolve() for d in builtin]
     try:
-        files = {f.path: f.sha256 for f in store.manifest().files}
+        listed = {f.path: f.sha256 for f in store.manifest().files}
     except SymbolsCorrupt as exc:
         raise JobFailed("symbols_corrupt") from exc
-    return files.get(paths[0].as_posix(), hit.sha256)
+    loaded: list[tuple[Path, str]] = []
+    for uri in reported:
+        path = _uri_path(uri)
+        if path is None:
+            raise JobFailed("symbols_corrupt", "an ISF from a non-file location")
+        if _inside(path, root):
+            rel = path.relative_to(root).as_posix()
+            expected = listed.get(rel)
+            if expected is None:
+                raise JobFailed("symbols_corrupt", "an ISF the manifest does not list")
+            try:
+                actual = sha256_file(path)
+            except (OSError, StoreError) as exc:
+                raise JobFailed("symbols_corrupt", "an ISF is unreadable") from exc
+            if actual != expected:
+                raise JobFailed("symbols_corrupt", "an ISF does not match the manifest")
+            loaded.append((path, actual))
+        elif not any(_inside(path, d) for d in builtin_dirs):
+            raise JobFailed("symbols_corrupt", "an ISF from outside the symbol store")
+    if not loaded:
+        facts.error("isf_unreported")
+        return hit.sha256
+    expected_path = hit.path.resolve()
+    for path, digest in loaded:
+        if path == expected_path:
+            return digest
+    facts.error("isf_mismatch")
+    return loaded[0][1]
 
 
-def analyze_image(ws: Workspace, job: MemoryJobV1, engine: Engine, store: Symbols) -> Path:
-    """Everything after the download (the image is at `ws.image`, hash-verified)."""
+def analyze_image(
+    ws: Workspace,
+    job: MemoryJobV1,
+    engine: Engine,
+    store: Symbols,
+    budget: Budget | None = None,
+) -> Path:
+    """Everything after the download (the image is at `ws.image`, hash-verified). `budget`
+    started before the download (`analyze`); tests may leave it to start here."""
     limits: MemoryLimits = job.limits
     if image_format(ws.image) is not None:
         raise JobFailed("unsupported_memory_format", "compressed or archived file")
-    budget = Budget(limits)
+    budget = budget or Budget(limits)
+    try:
+        # Probes seed their identifier cache only from a file with the manifest's hash.
+        ws.cache_sha256 = store.manifest().identifier_cache_sha256
+    except SymbolsCorrupt as exc:
+        raise JobFailed("symbols_corrupt") from exc
     audit: Counter[str] = Counter()
     identified = _identify(ws, job, engine, budget, audit)
     facts = RunFacts(
@@ -229,6 +321,7 @@ def analyze_image(ws: Workspace, job: MemoryJobV1, engine: Engine, store: Symbol
     outcomes: list[PluginOutcome] = []
     rows: dict[MemoryPlugin, Any] = {}
     reported_isf: list[str] = []
+    builtin_dirs: set[str] = set()
     for plugin in PLUGINS_BY_PROFILE[(identified.os, MemoryProfile(job.profile))]:
         seconds = budget.plugin()
         if seconds is None:
@@ -237,6 +330,7 @@ def analyze_image(ws: Workspace, job: MemoryJobV1, engine: Engine, store: Symbol
         spec = PLUGINS[plugin]
         cap = max_rows(spec, limits)
         run = engine.run(ws, plugin, seconds, cap)
+        check_probe_disk(ws)
         status = _status(run)
         if status is not None:
             add_audit(facts.audit, status.audit)
@@ -244,19 +338,22 @@ def analyze_image(ws: Workspace, job: MemoryJobV1, engine: Engine, store: Symbol
         outcomes.append(outcome)
         if plugin == PROCESS_LIST_PLUGIN[identified.os] and outcome.status != "ok":
             raise JobFailed("memory_parse_failed", f"{plugin.value} {outcome.status}")
-        verified = status is None or status.offline_verified(str(ws.symbols_dir))
+        # No status (a probe killed on timeout) proves nothing about how it ran: its rows
+        # are dropped like those of any probe that did not provably run offline.
+        verified = status is not None and status.offline_verified(str(ws.symbols_dir))
         if not verified:
             facts.error("probe_offline_unverified")
-        if outcome.status in ("ok", "failed", "timeout") and verified:
-            if status is not None:
-                reported_isf += [u for u in status.isf if u not in reported_isf]
+            outcome.truncated = outcome.truncated or outcome.status in ("failed", "timeout")
+        if outcome.status in ("ok", "failed", "timeout") and status is not None and verified:
+            reported_isf += [u for u in status.isf if u not in reported_isf]
+            builtin_dirs.update(status.symbol_paths[1:])
             # A failed or killed run keeps its rows, flagged as partial (never "complete").
             outcome.truncated = outcome.truncated or outcome.status != "ok"
             opener = functools.partial(sandbox.open_output, run.dirs, ROWS)
             rows[plugin] = RowSource(opener, cap, outcome.counted)
     sandbox.kill_tool_processes()
-    facts.isf_sha256 = _isf_sha256(store, hit, reported_isf, facts)
+    facts.isf_sha256 = _isf_sha256(store, hit, reported_isf, builtin_dirs, facts)
     return assemble(ws.dirs.root / RESULT, facts, outcomes, rows, limits)
 
 
-__all__ = ["DiagnosticResult", "analyze", "analyze_image", "check_disk"]
+__all__ = ["DiagnosticResult", "analyze", "analyze_image", "check_disk", "check_probe_disk"]

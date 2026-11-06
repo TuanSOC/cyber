@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Isolated report renderer worker"
-status: pending
+status: completed
 priority: P1
 effort: "16h"
 dependencies: [1]
@@ -209,3 +209,4 @@ This phase also owns the trusted side of the pipeline:
 - **Not done:**
   - veraPDF validation (local only, not run);
   - CJK glyphs: `fonts-noto-core` has no CJK coverage; documented in REPORTS.md.
+- **Closure (2026-11-06):** `test_report_pipeline.py` under `REPORT_E2E=1` ran in gate run vp8 (API 4915 passed), and the renderer suite in `test:workers`; the gate passed in segments, not in one `pnpm verify:prod` run (see the plan's Closure).

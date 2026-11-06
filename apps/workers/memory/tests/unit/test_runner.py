@@ -3,12 +3,14 @@ sandbox, a tmpfs /work): every root-side step of the real engine (fresh sealed o
 bounded reads through `open_output`, status validation, offline check, symbol lookup,
 normalizers, detections, writer), the success rule, the diagnostic stream, per-plugin
 statuses, hostile out-dir files (symlink, FIFO, missing rows), and the Volatility engine's
-sandbox arguments.
+sandbox arguments. Review fixes: the ISF re-hash against the manifest, the verified identifier
+cache seed, rows of a probe without a status dropped, the probe output budget.
 
     scripts/lane-test.sh 2 --service memory-worker-test pytest -q tests/unit/test_runner.py
 """
 
 import gzip
+import hashlib
 import json
 import os
 import shutil
@@ -25,8 +27,10 @@ from cyberlab_jobs.memory import (  # noqa: E402
     KernelIdentity,
     MemoryJobV1,
     MemoryPlugin,
+    SymbolFile,
     SymbolManifestV1,
     check_diagnostic_kinds,
+    identity_os,
 )
 from cyberlab_worker import sandbox  # noqa: E402
 from cyberlab_worker.errors import JobFailed  # noqa: E402
@@ -47,25 +51,49 @@ from tests.replay_helpers import (  # noqa: E402
 )
 
 P = MemoryPlugin
-ISF_SHA = "c" * 64
+ISF_BYTES = b"replay ISF stand-in"
+ISF_SHA = hashlib.sha256(ISF_BYTES).hexdigest()
 TEST_ENV = {"TEST_PROFILE": "1"}
 
 
 class FakeStore:
-    """A store that resolves every identity (or none): phase 5 owns the real lookup."""
+    """A store that resolves every identity (or none) to one real file it lists in its
+    manifest (the analyzer re-hashes the ISF a run reports): phase 5 owns the real lookup."""
 
-    def __init__(self, root: Path, resolves: bool = True) -> None:
+    def __init__(self, root: Path, resolves: bool = True, cache_sha256: str | None = None) -> None:
         self.root = root
         self.resolves = resolves
+        self.cache_sha256 = cache_sha256
+        self.files: list[SymbolFile] = []
 
     def lookup(self, identity: KernelIdentity) -> SymbolHit | None:
         if not self.resolves:
             return None
-        path = self.root / "windows" / "ntkrnlmp.pdb" / "0123456789ABCDEF0123456789ABCDEF-1.json.xz"
+        rel = "windows/ntkrnlmp.pdb/0123456789ABCDEF0123456789ABCDEF-1.json.xz"
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(ISF_BYTES)
+        self.files = [
+            SymbolFile.model_validate(
+                {
+                    "path": rel,
+                    "sha256": ISF_SHA,
+                    "os": identity_os(identity),
+                    "identity": identity,
+                    "source": "operator",
+                    "imported_at": "2026-11-01T00:00:00Z",
+                    "tool_version": "memory-symbols/0.1.0",
+                }
+            )
+        ]
         return SymbolHit(path=path, sha256=ISF_SHA, identity=identity)
 
     def manifest(self) -> SymbolManifestV1:
-        return SymbolManifestV1(volatility_version="2.28.2")
+        return SymbolManifestV1(
+            volatility_version="2.28.2",
+            files=self.files,
+            identifier_cache_sha256=self.cache_sha256,
+        )
 
 
 def _job(profile: str = "full", os_hint: str = "auto") -> MemoryJobV1:
@@ -311,6 +339,7 @@ def test_the_volatility_engine_sandbox_arguments(
     monkeypatch.setattr(sandbox, "run_tool", fake_run_tool)
     config = load({"BROKER_URL": "redis://x", "MEMORY_SYMBOLS_DIR": str(store)})
     ws = _workspace(dirs, store, b"\x00" * 64)
+    ws.cache_sha256 = hashlib.sha256(b"SQLite format 3\x00").hexdigest()
     run = VolatilityEngine(config).run(ws, P.WINDOWS_PSLIST, 30.0, 20_000)
     argv = seen["argv"]
     assert argv[1:6] == ["-I", "-s", "-B", "-m", "memory_worker.probe"]
@@ -324,3 +353,161 @@ def test_the_volatility_engine_sandbox_arguments(
     assert env["XDG_CACHE_HOME"] == str(run.dirs.out / "cache")
     assert seen["cache"] == (b"SQLite format 3\x00", sandbox.TOOL_UID)
     assert run.dirs.out.stat().st_uid == 0  # sealed after the run
+
+
+# --- review fixes ---------------------------------------------------------------------------
+
+
+def _cache_store(store: Path) -> bytes:
+    data = b"SQLite format 3\x00cache"
+    (store / ".cache" / "volatility3").mkdir(parents=True)
+    (store / ".cache" / "volatility3" / "identifier.cache").write_bytes(data)
+    return data
+
+
+def test_an_unvouched_identifier_cache_is_not_seeded(dirs: sandbox.JobDirs, store: Path) -> None:
+    _cache_store(store)
+    ws = _workspace(dirs, store, b"\x00" * 64)
+    out = ws.fresh("probe")
+    assert not (out.out / "cache" / "volatility3" / "identifier.cache").exists()
+
+
+def test_a_changed_identifier_cache_fails_the_job(dirs: sandbox.JobDirs, store: Path) -> None:
+    _cache_store(store)
+    ws = _workspace(dirs, store, b"\x00" * 64)
+    ws.cache_sha256 = "0" * 64
+    with pytest.raises(JobFailed) as caught:
+        ws.fresh("probe")
+    assert caught.value.code == "symbols_corrupt"
+    assert not (dirs.root / "probe-out" / "cache" / "volatility3" / "identifier.cache").exists()
+
+
+def test_the_manifest_cache_hash_reaches_the_probes(dirs: sandbox.JobDirs, store: Path) -> None:
+    data = _cache_store(store)
+    ws = _workspace(dirs, store, b"CYBERLAB-REPLAY windows\n")
+    fake = FakeStore(store, cache_sha256=hashlib.sha256(data).hexdigest())
+    analyzer.analyze_image(ws, _job(), ReplayEngine(env=TEST_ENV), fake)
+    seeded = dirs.root / "windows.pslist-out" / "cache" / "volatility3" / "identifier.cache"
+    assert seeded.read_bytes() == data
+
+
+class Reporting(ReplayEngine):
+    """Reports another ISF location for every plugin (`isf` in status.json)."""
+
+    def __init__(self, isf: str) -> None:
+        super().__init__(env=TEST_ENV)
+        self.isf = isf
+
+    def run(self, ws: Workspace, plugin: MemoryPlugin, seconds: float, max_rows: int) -> ProbeRun:  # noqa: E501
+        saved, ws.isf_uri = ws.isf_uri, self.isf
+        try:
+            return super().run(ws, plugin, seconds, max_rows)
+        finally:
+            ws.isf_uri = saved
+
+
+@pytest.mark.parametrize(
+    "isf",
+    [
+        "file:///tmp/evil/ntkrnlmp.json.xz",
+        "https://example.invalid/x.json",
+        "jar:file:///tmp/x.zip!/a.json",
+    ],
+)
+def test_an_isf_outside_the_store_fails_the_job(
+    dirs: sandbox.JobDirs, store: Path, isf: str
+) -> None:  # noqa: E501
+    ws = _workspace(dirs, store, b"CYBERLAB-REPLAY windows\n")
+    with pytest.raises(JobFailed) as caught:
+        analyzer.analyze_image(ws, _job(), Reporting(isf), FakeStore(store))
+    assert caught.value.code == "symbols_corrupt"
+
+
+def test_an_unlisted_store_isf_fails_the_job(dirs: sandbox.JobDirs, store: Path) -> None:
+    other = store / "windows" / "other.json.xz"
+    other.parent.mkdir(parents=True, exist_ok=True)
+    other.write_bytes(b"not listed")
+    ws = _workspace(dirs, store, b"CYBERLAB-REPLAY windows\n")
+    with pytest.raises(JobFailed) as caught:
+        analyzer.analyze_image(ws, _job(), Reporting(other.resolve().as_uri()), FakeStore(store))
+    assert caught.value.code == "symbols_corrupt"
+
+
+class Swapping(ReplayEngine):
+    """Changes the looked-up ISF on disk during the run (after the lookup hashed it)."""
+
+    def run(self, ws: Workspace, plugin: MemoryPlugin, seconds: float, max_rows: int) -> ProbeRun:  # noqa: E501
+        if ws.isf_uri:
+            Path(analyzer._uri_path(ws.isf_uri) or "/nonexistent").write_bytes(b"swapped")
+        return super().run(ws, plugin, seconds, max_rows)
+
+
+def test_an_isf_changed_after_the_lookup_fails_the_job(dirs: sandbox.JobDirs, store: Path) -> None:
+    ws = _workspace(dirs, store, b"CYBERLAB-REPLAY windows\n")
+    with pytest.raises(JobFailed) as caught:
+        analyzer.analyze_image(ws, _job(), Swapping(env=TEST_ENV), FakeStore(store))
+    assert caught.value.code == "symbols_corrupt"
+
+
+class StatusLost(ReplayEngine):
+    """A probe killed on timeout before it wrote status.json (its rows stay on disk)."""
+
+    def run(self, ws: Workspace, plugin: MemoryPlugin, seconds: float, max_rows: int) -> ProbeRun:  # noqa: E501
+        done = super().run(ws, plugin, seconds, max_rows)
+        if plugin is P.WINDOWS_NETSCAN:
+            (done.dirs.out / "status.json").unlink()
+            return ProbeRun(dirs=done.dirs, end="timeout", duration_ms=done.duration_ms)
+        return done
+
+
+def test_rows_of_a_probe_without_status_are_dropped(dirs: sandbox.JobDirs, store: Path) -> None:
+    ws = _workspace(dirs, store, b"CYBERLAB-REPLAY windows\n")
+    lines = _lines(analyzer.analyze_image(ws, _job(), StatusLost(env=TEST_ENV), FakeStore(store)))
+    header = lines[0]
+    status = {p.plugin: p for p in header.plugins}
+    assert status[P.WINDOWS_NETSCAN].status == "timeout" and status[P.WINDOWS_NETSCAN].truncated
+    assert "probe_offline_unverified" in header.engine_errors
+    assert kinds(lines)["connection"] == 0
+
+
+def test_probe_output_over_the_budget_fails_the_job(
+    dirs: sandbox.JobDirs, store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:  # noqa: E501
+    monkeypatch.setattr(analyzer, "probe_output_budget", lambda: 0)
+    ws = _workspace(dirs, store, b"CYBERLAB-REPLAY windows\n")
+    with pytest.raises(JobFailed) as caught:
+        analyzer.analyze_image(ws, _job(), ReplayEngine(env=TEST_ENV), FakeStore(store))
+    assert caught.value.code == "insufficient_disk"
+
+
+def test_a_nearly_full_work_volume_fails_the_job(
+    dirs: sandbox.JobDirs, store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:  # noqa: E501
+    monkeypatch.setattr(analyzer, "min_free_after_probe", lambda: 2**62)
+    ws = _workspace(dirs, store, b"CYBERLAB-REPLAY windows\n")
+    with pytest.raises(JobFailed) as caught:
+        analyzer.analyze_image(ws, _job(), ReplayEngine(env=TEST_ENV), FakeStore(store))
+    assert caught.value.code == "insufficient_disk"
+
+
+def test_the_budget_starts_before_the_download(
+    dirs: sandbox.JobDirs, monkeypatch: pytest.MonkeyPatch
+) -> None:  # noqa: E501
+    order: list[str] = []
+    real_budget = analyzer.Budget
+
+    def budget(limits: Any) -> Any:
+        order.append("budget")
+        return real_budget(limits)
+
+    def download(*_: object, **__: object) -> None:
+        order.append("download")
+        raise JobFailed("url_expired")
+
+    monkeypatch.setattr(analyzer, "Budget", budget)
+    monkeypatch.setattr(analyzer, "download", download)
+    monkeypatch.setattr(analyzer, "check_disk", lambda *_: None)
+    config = load({"BROKER_URL": "redis://x", "MEMORY_SYMBOLS_DIR": str(dirs.root)})
+    with pytest.raises(JobFailed):
+        analyzer.analyze(_job(), dirs, config)
+    assert order == ["budget", "download"]

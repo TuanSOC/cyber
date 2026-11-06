@@ -1,3 +1,4 @@
+import asyncio
 import os
 import subprocess
 from collections.abc import AsyncIterator, Iterator
@@ -8,6 +9,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -72,14 +74,29 @@ _SYSTEM_USER = text(
 )
 
 
+def _is_deadlock(error: DBAPIError) -> bool:
+    return getattr(error.orig, "sqlstate", None) == "40P01" or "deadlock detected" in str(error)
+
+
 async def _reset(owner_engine: AsyncEngine) -> None:
     tables = ", ".join(Base.metadata.tables)
-    async with owner_engine.begin() as conn:
-        # TRUNCATE bypasses row-level append-only triggers: test database only.
-        await conn.execute(text(f"TRUNCATE TABLE {tables} CASCADE"))
-        await conn.execute(
-            _SYSTEM_USER, {"id": RETENTION_SYSTEM_USER_ID, "email": RETENTION_SYSTEM_USER_EMAIL}
-        )
+    # A test worker (e.g. retention-worker-test syncing a hold a test queued) may still read a
+    # table when the TRUNCATE takes its locks: Postgres then aborts one side as a deadlock.
+    # The worker's read finishes on its own, so the truncation is simply retried.
+    for attempt in range(5):
+        try:
+            async with owner_engine.begin() as conn:
+                # TRUNCATE bypasses row-level append-only triggers: test database only.
+                await conn.execute(text(f"TRUNCATE TABLE {tables} CASCADE"))
+                await conn.execute(
+                    _SYSTEM_USER,
+                    {"id": RETENTION_SYSTEM_USER_ID, "email": RETENTION_SYSTEM_USER_EMAIL},
+                )
+            break
+        except DBAPIError as error:
+            if attempt == 4 or not _is_deadlock(error):
+                raise
+            await asyncio.sleep(0.5 * (attempt + 1))
     await get_redis().flushdb()
 
 

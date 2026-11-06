@@ -240,7 +240,7 @@ async def test_process_list_filters_and_pages() -> None:
     pids = [p["pid"] for p in first["items"] + second["items"]]
     assert pids == sorted(pids) and len(set(pids)) == 10
     system = first["items"][0]
-    assert system["name"] == "System" and system["offset"] == 18446639134773608448
+    assert system["name"] == "System" and system["offset"] == hex(18446639134773608448)
     assert system["sources"] == ["pslist", "psscan"] and system["children"] == 2
 
     hidden = await _get(c, f"{base}/processes", hidden="true")
@@ -284,7 +284,7 @@ async def test_process_detail_with_its_references() -> None:
         "ESTABLISHED",
     )
     [region] = body["injections"]
-    assert (region["start"], region["end"], region["has_pe"]) == (4194304, 4259839, True)
+    assert (region["start"], region["end"], region["has_pe"]) == (hex(4194304), hex(4259839), True)
     assert region["head_hex"].startswith("4d5a9000")  # hex text, never bytes
     assert region["disasm"] == "0x400000: dec ebp\n0x400001: pop edx"
     assert [a["type"] for a in body["artifacts"]] == ["ldr_unlinked"]
@@ -348,7 +348,7 @@ async def test_artifact_filters() -> None:
     assert (await _get(c, f"{base}/artifacts", type="bash"))["total"] == 0
     assert (await c.get(f"{base}/artifacts", params={"type": "yara"})).status_code == 422
     module = (await _get(c, f"{base}/artifacts", type="module"))["items"][0]
-    assert module["attributes"]["base"] == 140715161255936  # scalars as stored
+    assert module["attributes"]["base"] == hex(140715161255936)  # address keys as hex text
 
 
 async def test_linux_bash_history_is_raw_on_the_job_page() -> None:

@@ -193,6 +193,8 @@ class StoreWriter:
     log: Logger = no_log
     changes: list[Change] = field(default_factory=list)
     _files: dict[str, SymbolFile] = field(default_factory=dict)
+    # The installed identifier cache's sha256 (kept across manifest writes; `install_cache`).
+    _cache_sha256: str | None = None
     _staging: Path | None = None
     _lock_fd: int | None = None
     _pending: list[tuple[Path, Path, bool]] = field(default_factory=list)
@@ -206,6 +208,7 @@ class StoreWriter:
         if (self.root / MANIFEST).exists():
             manifest = read_manifest(self.root)
             self._files = {f.path: f for f in manifest.files}
+            self._cache_sha256 = manifest.identifier_cache_sha256
         staging = self.root / STAGING
         if staging.exists():  # a crashed earlier run (we hold the lock): never reuse it
             shutil.rmtree(staging, onexc=_force_remove)
@@ -260,6 +263,28 @@ class StoreWriter:
         path = self.staging / name
         path.mkdir(mode=0o700)
         return path
+
+    def adopt(self, produced: Path, child_dir: Path, name: str) -> Path:
+        """Copy a child's produced file (in its temp dir OUTSIDE the store) into this
+        session's staging dir. `produced` must be a regular file directly in `child_dir`
+        (no symlink, no other dir: the name came from the child). `stage` re-hashes the copy
+        against the child's report before anything moves into the store."""
+        child_dir = Path(os.path.abspath(child_dir))
+        produced = Path(os.path.abspath(produced))
+        if produced.parent != child_dir:
+            raise StoreError("a produced file must lie in the child's work dir")
+        target_dir = self.staging / name
+        if not target_dir.exists():
+            target_dir.mkdir(mode=0o700)
+        target = target_dir / produced.name
+        fd = os.open(produced, os.O_RDONLY | _NOFOLLOW | _BINARY)
+        with os.fdopen(fd, "rb") as src:
+            if not stat.S_ISREG(os.fstat(src.fileno()).st_mode):
+                raise StoreError(f"{produced.name}: not a regular file")
+            out = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW | _BINARY, 0o600)
+            with os.fdopen(out, "wb") as dst:
+                shutil.copyfileobj(src, dst, 1024 * 1024)
+        return target
 
     @property
     def files(self) -> dict[str, SymbolFile]:
@@ -323,10 +348,7 @@ class StoreWriter:
     def commit(self) -> list[Change]:
         """Move every staged file into place (O_EXCL placeholder, then rename; a replacement
         renames over the old file), then write the manifest atomically and log the changes."""
-        manifest = SymbolManifestV1(
-            volatility_version=volatility_version(),
-            files=sorted(self._files.values(), key=lambda f: f.path),
-        )
+        manifest = self._manifest()
         placed: list[Path] = []
         try:
             for staged, final, replace_it in self._pending:
@@ -355,11 +377,29 @@ class StoreWriter:
             self.log("manifest_change", **change.record())
         return list(self.changes)
 
+    def _manifest(self) -> SymbolManifestV1:
+        return SymbolManifestV1(
+            volatility_version=volatility_version(),
+            files=sorted(self._files.values(), key=lambda f: f.path),
+            identifier_cache_sha256=self._cache_sha256,
+        )
+
     def install_cache(self, built: Path) -> None:
+        """Swap in a rebuilt identifier cache and record its sha256 in the manifest (the
+        worker seeds a probe only from a cache with that hash). Refused while store files
+        are staged: the manifest written here must list only committed files."""
+        if self._pending:
+            raise StoreError("commit the staged symbol files before installing a cache")
         cache_dir = self.root / CACHE_DIR
         self._ensure_dirs(cache_dir)
+        digest = sha256_file(built)
         _chmod(built, FILE_MODE)
-        _replace(built, self.root / CACHE_FILE)
+        final = self.root / CACHE_FILE
+        _replace(built, final)
+        if sha256_file(final) != digest:
+            raise StoreError("the identifier cache changed while it was installed")
+        self._cache_sha256 = digest
+        self._write_manifest(self._manifest())
 
     def _ensure_dirs(self, directory: Path) -> None:
         rel = directory.relative_to(self.root)

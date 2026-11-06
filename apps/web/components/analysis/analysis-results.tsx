@@ -14,6 +14,8 @@ import { NoResults } from "@/components/analysis/result-parts";
 import { TimelineTab } from "@/components/analysis/timeline-tab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AnalysisJob } from "@/lib/analysis";
+import { evidenceEnrichDisabledReason } from "@/lib/memory-sensitivity";
+import { useEvidenceRecord } from "@/lib/use-memory-job";
 import { type FlowLink, REF_TABS, RESULT_TABS, parseOverview, parseTab, withParams } from "@/lib/pcap-results";
 
 // Flow filters live in the URL only while the Flows tab is open; a cited row (`ref`) only on
@@ -34,6 +36,8 @@ export function AnalysisResults({ orgId, job }: { orgId: string; job: AnalysisJo
   const [linkCount, setLinkCount] = useState(0);
   const ready = job.status === "succeeded";
   const suricataMissing = parseOverview(job.summary).engineErrors.some((code) => code.startsWith("suricata_"));
+  // Enrich is hidden on restricted evidence (a memory image's other analyses, RT3/RT16).
+  const evidence = useEvidenceRecord(orgId, job.evidence_id);
 
   const go = (updates: Record<string, string | number | undefined>, mode: "push" | "replace") => {
     const href = `${pathname}${withParams(window.location.search, updates)}`;
@@ -88,7 +92,12 @@ export function AnalysisResults({ orgId, job }: { orgId: string; job: AnalysisJo
           ) : value === "dns" || value === "http" || value === "tls" ? (
             <RecordsTab {...props} {...cited} kind={value} />
           ) : value === "iocs" ? (
-            <IocsTab orgId={orgId} jobId={job.id} {...cited} />
+            <IocsTab
+              orgId={orgId}
+              jobId={job.id}
+              {...cited}
+              enrichDisabledReason={evidenceEnrichDisabledReason(evidence.data)}
+            />
           ) : value === "ai" ? (
             <AiAnalystTab orgId={orgId} job={job} />
           ) : (

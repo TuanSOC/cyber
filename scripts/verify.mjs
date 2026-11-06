@@ -3,8 +3,12 @@
 // run the M7 restore drill as its last, exclusive step). Runs on the host with Node 22 +
 // Docker; every tool runs inside containers, except the host-side dynamic gate checks (Python
 // 3 with pytest and PyYAML). `pnpm ops:metrics` (the heavy replay) is never part of the gate.
-// Set COMPOSE_PROJECT_NAME to run against a separate project with fresh volumes.
+// Set COMPOSE_PROJECT_NAME to run against a separate project with fresh volumes. The prod
+// phase always runs in its own project, `<dev project>-prod` (scripts/lib/gate.mjs): dev MinIO
+// writes its IAM with the dev KMS key, which the prod key cannot read.
 import { spawnSync } from "node:child_process";
+
+import { composeCommand, gateProjects, prodE2eEnv, withoutComposeEnv } from "./lib/gate.mjs";
 
 const PROD = process.argv.includes("--prod");
 // Live threat-intel tests (real providers, real keys) are never part of the gate: they are
@@ -12,7 +16,9 @@ const PROD = process.argv.includes("--prod");
 delete process.env.CYBERLAB_LIVE_TI;
 // Nor are live AI tests or the live AI evaluation (M5): real keys, real money.
 delete process.env.AI_EVAL_LIVE;
-const COMPOSE_PROD = "docker compose -f docker-compose.yml -f docker-compose.prod.yml";
+const PROJECTS = gateProjects();
+const COMPOSE_DEV = composeCommand(PROJECTS.dev);
+const COMPOSE_PROD = composeCommand(PROJECTS.prod, { prod: true });
 // The committed dev report signing public key (kid dev-report-1, refused in prod).
 const DEV_REPORT_PUBLIC = "zS2iP9napZDeshJwfCiTwYl8amzPuWJEJwHK8CpnF2k=";
 const started = Date.now();
@@ -24,12 +30,13 @@ function fail(step, detail = "") {
 }
 
 // `env`: extra variables for this step only (set here, not as a `NAME=value cmd` prefix,
-// which cmd.exe does not understand). Returns the step's duration in seconds.
-function run(step, command, env = {}) {
+// which cmd.exe does not understand). `base`: the env they are added to (default: this
+// process's). Returns the step's duration in seconds.
+function run(step, command, env = {}, base = process.env) {
   const shown = Object.entries(env).map(([k, v]) => `${k}=${v} `).join("");
   console.log(`\n▶ ${step}\n  $ ${shown}${command}`);
   const begun = Date.now();
-  const result = spawnSync(command, { shell: true, stdio: "inherit", env: { ...process.env, ...env } });
+  const result = spawnSync(command, { shell: true, stdio: "inherit", env: { ...base, ...env } });
   if (result.status !== 0) fail(step, `exit ${result.status}`);
   const seconds = Math.round((Date.now() - begun) / 1000);
   console.log(`✔ ${step} (${seconds} s)`);
@@ -138,7 +145,13 @@ async function verifyProd() {
     "Retention-worker envs: retention role, broker user and purge keys only, backend only; no api policy legal hold; prod secrets not dev",
     "node scripts/check-retention-worker-env.mjs",
   );
-  run("Prod stack up", `${COMPOSE_PROD} up -d --build --wait --wait-timeout 400`);
+  // The dev stack stops first (host memory; containers and volumes kept): the prod stack runs
+  // in its own project with its own volumes, and `restoreDev()` starts the dev stack again.
+  run(
+    `Dev stack stopped (project ${PROJECTS.dev}, containers and volumes kept)`,
+    `${COMPOSE_DEV} --profile test --profile e2e stop`,
+  );
+  run(`Prod stack up (project ${PROJECTS.prod}, its own volumes)`, `${COMPOSE_PROD} up -d --build --wait --wait-timeout 400`);
   await probe("Prod enrich-worker: running, never restarted, ENV=prod, no mock", () =>
     workerProblems(
       "enrich-worker",
@@ -170,25 +183,36 @@ async function verifyProd() {
   await probe("Prod gateway: security headers, HSTS, 413", () =>
     headerProblems("https://localhost:8443", { hsts: true }),
   );
-  run("Prod E2E: Playwright smoke over TLS (incl. the report flow on the real renderer)", "node scripts/e2e.mjs --prod");
+  // COMPOSE_PROJECT_NAME is the prod project here, so the e2e runner reaches its gateway.
+  run(
+    "Prod E2E: Playwright smoke over TLS (incl. the report flow on the real renderer)",
+    "node scripts/e2e.mjs --prod",
+    { COMPOSE_PROJECT_NAME: PROJECTS.prod },
+    prodE2eEnv(PROJECTS.prod),
+  );
   // M7 phase 11: the restore drill is the LAST step, alone. It takes every lane slot and
   // refuses while the main project's heavy services run, so stop the prod stack first
-  // (never `-v`: the dev volumes stay); `restoreDev()` brings the dev stack back afterwards.
-  run("Prod stack down (volumes kept) before the restore drill", `${COMPOSE_PROD} down`);
+  // (never `-v`: the prod project's volumes stay); `restoreDev()` brings the dev stack back
+  // afterwards. The drill names its own project and its down -v guard refuses any other
+  // COMPOSE_PROJECT_NAME: it runs with no COMPOSE_* variable at all.
+  run(`Prod stack down (project ${PROJECTS.prod}, volumes kept) before the restore drill`, `${COMPOSE_PROD} down`);
   const drill = run(
     "Restore drill (--prod): seed, backup, destroy, restore, verify, download; 0 mismatches",
     "pnpm -s restore:drill --prod",
+    {},
+    withoutComposeEnv(),
   );
   console.log(`  restore drill: ${drill} s (record it in the M7 gate addendum)`);
 }
 
-// Always put the dev stack back, even when a prod step failed (both share one compose project).
+// Always put the dev stack back, even when a prod step failed: the prod project's containers
+// go (never its volumes), the dev project starts (explicit -p, so COMPOSE_PROJECT_NAME works).
 function restoreDev() {
-  console.log("\n▶ Prod stack down, dev stack back");
+  console.log(`\n▶ Prod stack down (project ${PROJECTS.prod}), dev stack back (project ${PROJECTS.dev})`);
   const down = spawnSync(`${COMPOSE_PROD} down`, { shell: true, stdio: "inherit" });
-  const up = spawnSync("docker compose up -d --wait --wait-timeout 300", { shell: true, stdio: "inherit" });
+  const up = spawnSync(`${COMPOSE_DEV} up -d --wait --wait-timeout 300`, { shell: true, stdio: "inherit" });
   if (down.status !== 0 || up.status !== 0) {
-    console.error("✖ Could not restore the dev stack: run `pnpm prod:down` then `pnpm dev`");
+    console.error(`✖ Could not restore the dev stack: run \`${COMPOSE_PROD} down\` then \`${COMPOSE_DEV} up -d --wait\``);
     process.exitCode = 1;
   } else {
     console.log("✔ Dev stack restored");

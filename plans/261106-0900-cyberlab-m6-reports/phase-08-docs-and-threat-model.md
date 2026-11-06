@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Docs and threat model"
-status: pending
+status: completed
 priority: P1
 effort: "6h"
 dependencies: [2, 3, 4, 5, 6, 7]
@@ -140,3 +140,4 @@ Document M6 as built after the group-B merge: the new `docs/REPORTS.md`, plus th
   - the veraPDF result (not run);
   - the reviewer pass;
   - the final numbers from `pnpm verify:prod` (pending gate).
+- **Closure (2026-11-06):** The gate numbers are in the plan's Closure; the gate passed in segments, not in one `pnpm verify:prod` run (see the plan's Closure).

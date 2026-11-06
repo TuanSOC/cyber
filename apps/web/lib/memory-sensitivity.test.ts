@@ -4,6 +4,7 @@ import {
   RELEASE_REASON_MAX,
   RELEASE_REASON_MIN,
   enrichDisabledReason,
+  evidenceEnrichDisabledReason,
   releaseReady,
   restrictionOf,
 } from "@/lib/memory-sensitivity";
@@ -41,5 +42,15 @@ describe("Enrich on a memory job (RT16)", () => {
   it("shows only once released and the TI flag is cleared", () => {
     expect(enrichDisabledReason("released", false)).toBeUndefined();
     expect(enrichDisabledReason("none", false)).toBeUndefined();
+  });
+});
+
+describe("Enrich on the other analyses of the evidence", () => {
+  it("hides it on restricted or TI-excluded evidence and while the record loads", () => {
+    expect(evidenceEnrichDisabledReason(undefined)).toBeDefined();
+    expect(evidenceEnrichDisabledReason({ memory_sensitivity: "restricted", ti_excluded: false })).toMatch(/restricted/);
+    expect(evidenceEnrichDisabledReason({ memory_sensitivity: null, ti_excluded: true })).toMatch(/excludes/);
+    expect(evidenceEnrichDisabledReason({ memory_sensitivity: "released", ti_excluded: false })).toBeUndefined();
+    expect(evidenceEnrichDisabledReason({ memory_sensitivity: null, ti_excluded: false })).toBeUndefined();
   });
 });

@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Runtime job metrics and live run procedures"
-status: pending
+status: completed
 priority: P1
 effort: "10h"
 dependencies: [1]
@@ -78,8 +78,8 @@ The design is in plan.md "Runtime metrics".
 - [x] Every terminal job, run and render, including the reaper paths, produces exactly one tenant-free `job_outcomes` row, and the trigger never blocks a transition. — `test_job_outcomes_triggers.py::test_analysis_lifecycle_writes_one_row_per_terminal_transition`, `test_the_analysis_reaper_fail_paths_write_one_row_each`, `test_ti_runs_write_one_row_per_final_status`, `test_ai_runs_write_one_row_per_final_status`, `test_renders_write_one_row_per_final_status_and_none_on_purge`, `test_rows_hold_no_tenant_data`, `test_the_app_role_cannot_write_job_outcomes`, `test_the_trigger_never_blocks_the_transition`, `test_bulk_reaper_fail_cost_of_the_trigger` (+2.8 %, the limit is 20 %) (9316433).
 - [x] `/internal/metrics` serves valid Prometheus text with fixed labels only to a bearer on the backend network, and is unreachable through the gateway. — `test_internal_metrics.py::test_off_without_a_token`, `test_the_bearer_token_is_required`, `test_a_proxied_request_is_refused`, `test_rate_limited_in_one_global_window`, `test_serves_valid_prometheus_text_with_fixed_labels`, `test_not_in_the_api_schema_and_outside_api`, `test_the_gateway_never_routes_internal`; `unit/test_prometheus_render.py` (5, a strict regex validator) (9316433).
 - [x] The org metrics route reports the org's own failure rate, latency and parse success, IDOR-clean. — `test_ops_metrics.py::test_the_numbers_equal_a_hand_count_and_other_orgs_are_absent`, `test_only_audit_readers_see_the_metrics`, `test_the_five_most_recent_failures_of_the_org_only`; `idor_cases_ops.py` (`PENDING_ROUTES` empty) (9316433).
-- [ ] `plans/reports/ops-metric-YYMMDD.md` records the replay over real workers. — **Pending gate:** `scripts/ops_metrics.py` is implemented (+441), but the replay is a heavy step that phase 11 runs alone. No report exists yet.
-- [ ] The live-run wrapper is guarded and documented, and its report says run or "not run". — The guard and docs are done: `scripts/live_run.mjs` (+341) refuses without `CYBERLAB_LIVE=1`, `.secrets/live.env`, `--max-calls` and `--max-usd`, and it is documented in its header and in TESTING. **Not done:** no `plans/reports/live-run-YYMMDD.md` was written (not run: there are no keys and no budget, a user decision).
+- [x] `plans/reports/ops-metric-YYMMDD.md` records the replay over real workers. — Recorded in `plans/reports/ops-metric-261106.md` (`ops_metrics.py --manage-workers`, run alone, 3 rounds, 102 min): pcap 24 jobs and static (`full`) 90 jobs, 0 % failure, 100 % parse success, with queue and run p50 / p95.
+- [x] The live-run wrapper is guarded and documented, and its report says run or "not run". — The guard and docs are done: `scripts/live_run.mjs` (+341) refuses without `CYBERLAB_LIVE=1`, `.secrets/live.env`, `--max-calls` and `--max-usd`, and it is documented in its header and in TESTING. Recorded as **not run** in `plans/reports/m7-heavy-steps-261106.md` (no keys and no budget, a user decision). The wrapper was not invoked, so no `live-run-YYMMDD.md` exists.
 
 ## Risk Assessment
 - **Percentiles on large windows:** the 7 d window over `job_outcomes` uses the `(kind, finished_at)` index. At this scale it is fine; measured in step 2.
@@ -131,3 +131,4 @@ The design is in plan.md "Runtime metrics".
   - The report never holds a key or raw provider output.
 - **Pending gate:** the replay and its report `plans/reports/ops-metric-YYMMDD.md` (phase 11, run alone).
 - **Not done:** the live run and its `live-run-YYMMDD.md`. There are no provider keys or budget: a user decision.
+- **Closure (2026-11-06):** The replay ran and is recorded in `plans/reports/ops-metric-261106.md` (0 % failure, 100 % parse success).

@@ -147,6 +147,11 @@ def verapdf(pdf: Path, image: str = VERAPDF_IMAGE) -> str:
 
 
 def main() -> int:
+    # The test output and the table carry non-ASCII text (arrows, check marks): a Windows
+    # console defaults to cp1252 and would raise UnicodeEncodeError on print.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--write", nargs="?", const="", default=None, metavar="PATH")
     parser.add_argument("--cases", type=int, default=20)

@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Backup restore and restore drill"
-status: pending
+status: completed
 priority: P1
 effort: "17h"
 dependencies: [1]
@@ -121,16 +121,16 @@ The design is in plan.md "Backup and restore".
 7. If phase 6 has produced a candidate image tag by then, run the drill with `--target-minio-image` and record the result for the parent.
 
 ## Success Criteria
-- [ ] A backup drains first and contains the dump, the globals, the fingerprint, the row counts, `objects.json`, the MinIO tar and a hashed manifest, and no plaintext secret. The stack always restarts, even on failure. — Built and unit-tested in 9316433: `unit/test_backup_manifest.py::test_manifest_holds_every_fact_and_no_key`, `test_fingerprint_ignores_surrounding_whitespace_only`; `stack.test.mjs` "HostDir writes, reads and hashes every backup file, manifest included", "the KMS fingerprint is the sha256 of the trimmed key file, never the key", "the backup dir is created owner-only (0700)…". **Pending gate:** no real `pnpm backup` has run yet. The drill's backup step is the first one.
-- [ ] A restore refuses non-empty volumes, tampered files and newer backups, and rebuilds an empty stack whose `restore_verify` is clean. — The refusals are unit-tested: `test_backup_manifest.py::test_tampered_file_is_detected`, `test_truncated_and_missing_files_are_detected`, `test_newer_backup_than_the_image_is_refused`, `test_kms_fingerprint_mismatch_is_refused`, `test_unknown_tool_version_is_refused`; `stack.test.mjs` "restore checks manifest authenticity at a host dir". The verifier passes on seeded data: `integration/test_restore_verify_db.py` (9316433). **Pending gate:** the empty-volume check and a clean rebuild run only in the drill.
-- [ ] The drill passes end to end in `cyberlab-drill` (**pending gate**: phase 11 runs the drill alone, as the last gate step; the guard test is already green: `stack.test.mjs` "downVolumes refuses the main project and any other name", "…a polluted COMPOSE_PROJECT_NAME", "…a volume without the drill project label"):
+- [x] A backup drains first and contains the dump, the globals, the fingerprint, the row counts, `objects.json`, the MinIO tar and a hashed manifest, and no plaintext secret. The stack always restarts, even on failure. — Built and unit-tested in 9316433: `unit/test_backup_manifest.py::test_manifest_holds_every_fact_and_no_key`, `test_fingerprint_ignores_surrounding_whitespace_only`; `stack.test.mjs` "HostDir writes, reads and hashes every backup file, manifest included", "the KMS fingerprint is the sha256 of the trimmed key file, never the key", "the backup dir is created owner-only (0700)…". Ran for real as the first step of every restore drill (backup with drain 25.9 s in the gate's prod-phase drill, `infra/backup/last-drill.json`; 21.9 s in the dev drill, `plans/reports/m7-heavy-steps-261106.md`), and as the pre-switch backup of the MinIO switch (`plans/reports/minio-switch-runbook-261107.md`).
+- [x] A restore refuses non-empty volumes, tampered files and newer backups, and rebuilds an empty stack whose `restore_verify` is clean. — The refusals are unit-tested: `test_backup_manifest.py::test_tampered_file_is_detected`, `test_truncated_and_missing_files_are_detected`, `test_newer_backup_than_the_image_is_refused`, `test_kms_fingerprint_mismatch_is_refused`, `test_unknown_tool_version_is_refused`; `stack.test.mjs` "restore checks manifest authenticity at a host dir". The verifier passes on seeded data: `integration/test_restore_verify_db.py` (9316433). The drills rebuilt the empty `cyberlab-drill` stack with `restore_verify` clean: `--db` 62 tables / 118 rows, `--objects` 6 evidence versions (5 re-hashed, 1 tombstoned) and 1 signed report version, `--rls` 20 tables probed; 0 mismatches, no warnings.
+- [x] The drill passes end to end in `cyberlab-drill` (passed several times, 0 mismatches each: the dev drill 146 s, and the gate's prod-phase drill as its last exclusive step, 144 s; checks `old_session_revoked`, `analyst_login`, `evidence_download_sha256`, `report_signature_valid`, `report_content`, `purged_evidence_410`, `viewer_write_forbidden`, `bucket_create`; the guard tests are green: `stack.test.mjs` "downVolumes refuses the main project and any other name", "…a polluted COMPOSE_PROJECT_NAME", "…a volume without the drill project label"):
   - fingerprints and row counts are equal before anything writes;
   - every version of `objects.json` is present with equal size, etag, retention and legal hold, and every evidence version re-hashes;
   - report signatures are valid;
   - the RLS probe is clean;
   - login after the session revocation, the download and the 410 for purged evidence work;
   - `down -v` cleans up, and only the drill project's volumes (the guard test passes).
-- [ ] The drill's peak memory and duration are recorded, and it never runs alongside lanes. — `lockAllSlots()` is tested ("lockAllSlots takes every slot under lane-test.sh's lock root and releases them"). **Pending gate:** `infra/backup/last-drill.json` does not exist yet.
+- [x] The drill's peak memory and duration are recorded, and it never runs alongside lanes. — `lockAllSlots()` is tested ("lockAllSlots takes every slot under lane-test.sh's lock root and releases them"). Recorded: `infra/backup/last-drill.json` (the gate's prod-phase drill: `total_s` 143, about 144 s as a gate step, peak 630 MiB) and `plans/reports/m7-heavy-steps-261106.md` (dev drill 146 s, peak 796 MiB). Every drill ran alone.
 
 ## Risk Assessment
 - **Windows paths and tar ownership:** use named volumes only (no bind-mounted data; the drill's backups too), helper containers for tar, and `--numeric-owner`. Test on Docker Desktop / WSL2 first. A real `pnpm backup` to `./backups/` writes through Docker Desktop file sharing: slow for large volumes, and host AV may scan it (RT6).
@@ -180,3 +180,4 @@ The design is in plan.md "Backup and restore".
   - a real `pnpm backup` on the dev stack;
   - a restore into a candidate MinIO image, blocked on the phase-6 decision.
 - **Not done:** no backup has been taken of the shared dev stack (no `backups/` dir), on instruction (no docker for heavy steps).
+- **Closure (2026-11-06):** Every item under "Pending gate" above is done: several drills with 0 mismatches (dev 146 s / 796 MiB; the gate's prod-phase drill 144 s / 630 MiB, `infra/backup/last-drill.json`), real backups as the drills' first step, and a backup plus a drill into `pgsty/silo` before the MinIO switch (`plans/reports/minio-switch-runbook-261107.md`).

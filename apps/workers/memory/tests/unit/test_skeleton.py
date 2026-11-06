@@ -138,3 +138,15 @@ def test_detections_on_an_image_only_view() -> None:
     # Phase 3: no record, no finding or IOC; the image's system time is one timeline event.
     assert out.findings == [] and out.iocs == [] and out.truncated == {}
     assert [(e.event, e.ts) for e in out.timeline] == [("system_time", image.system_time)]
+
+
+def test_the_worker_sets_task_time_limits() -> None:
+    """Review fix: the soft limit (the `timed_out` report) is live even for a message that
+    carries no per-task limits; both sit just above the contract's 6 h job cap."""
+    pytest.importorskip("celery")
+    from memory_worker import config
+    from memory_worker.celery_app import celery_app
+
+    conf = celery_app.conf
+    assert conf.task_soft_time_limit == config.TASK_SOFT_TIME_LIMIT_S > 6 * 3600
+    assert conf.task_time_limit == config.TASK_TIME_LIMIT_S > conf.task_soft_time_limit

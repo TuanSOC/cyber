@@ -17,6 +17,7 @@ import hashlib
 import importlib.util
 import os
 import stat
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -121,8 +122,13 @@ def import_file(
     source = f"zip:{digest}" if is_zip else "operator"
     result = ImportResult(source=source)
     log("import_input", file=file.name, sha256=digest, kind="zip" if is_zip else "isf")
-    with StoreWriter(root, log=log) as writer:
-        work = writer.work_dir("import")
+    # The child works in a temp dir outside the store (review fix); `adopt` copies what it
+    # produced into the store's staging dir, `stage` re-hashes it.
+    with (
+        StoreWriter(root, log=log) as writer,
+        tempfile.TemporaryDirectory(prefix="memory-symbols-") as tmp,
+    ):
+        work = Path(tmp)
         try:
             if is_zip:
                 out = isolate.run_child(
@@ -158,9 +164,8 @@ def import_file(
                 result.skipped.append({"member": label, "reason": "not a kernel ISF"})
                 continue
             try:
-                writer.stage(
-                    work / member["file"], identity, member["sha256"], source, replace=replace
-                )
+                staged = writer.adopt(work / str(member["file"]), work, "import")
+                writer.stage(staged, identity, member["sha256"], source, replace=replace)
             except StoreError as exc:
                 hint = "" if replace else " (re-run with --replace to replace it)"
                 raise ImportRefused(f"{exc}{hint}") from exc

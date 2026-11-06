@@ -17,6 +17,7 @@ import {
   memoryJobFacts,
   memoryRunErrorText,
   memoryTabs,
+  memoryUploadErrorText,
   otherAttributes,
   parseMemoryTab,
   processFlags,
@@ -119,6 +120,8 @@ describe("symbols-missing command (RT12)", () => {
 
 describe("addresses and hex", () => {
   it("formats safe, unsafe and text addresses", () => {
+    expect(formatAddress("0x400000")).toBe("0x400000");
+    expect(formatAddress("0xfffff80012345678")).toBe("0xfffff80012345678");
     expect(formatAddress(4194304)).toBe("0x400000");
     expect(formatAddress(18446639134773608448)).toMatch(/^≈0xffffa/);
     expect(formatAddress("0xFFFFA0000000")).toBe("0xffffa0000000");
@@ -226,7 +229,13 @@ describe("artifacts", () => {
       ["order", "3"],
     ]);
     expect(attributeValue({ base: 4194304 }, { key: "base", label: "Base", format: "address" })).toBe("0x400000");
+    expect(attributeValue({ base: "0xFFFFF80012345678" }, { key: "base", label: "Base", format: "address" })).toBe("0xfffff80012345678");
     expect(attributeValue({ in_load: false }, { key: "in_load", label: "x", format: "bool" })).toBe("no");
+    // Numbers above 2^53 lost precision in JSON.parse: marked approximate, service.start included.
+    expect(attributeValue({ start: 2 ** 60 }, ARTIFACT_FIELDS.service[2])).toBe(`≈${2 ** 60}`);
+    expect(attributeValue({ size: 2 ** 60 }, { key: "size", label: "Size", format: "bytes" })).toMatch(/^≈/);
+    expect(attributeValue({ order: 3 }, { key: "order", label: "x" })).toBe("3");
+    expect(otherAttributes("service", { order: 2 ** 55 })).toEqual([["order", `≈${2 ** 55}`]]);
     expect(attributeValue({ nested: { a: 1 } }, { key: "nested", label: "x" })).toBeNull();
   });
 });
@@ -250,5 +259,15 @@ describe("list facts and errors", () => {
     expect(memoryRunErrorText(new ApiError(413, "memory_image_too_large", "x"))).toMatch(/larger/);
     expect(memoryRunErrorText(new ApiError(429, "analysis_queue_full", "x"))).toMatch(/busy/);
     expect(memoryRunErrorText(new ApiError(410, "evidence_purged", "x"))).toMatch(/retention/);
+  });
+});
+
+describe("memory upload errors", () => {
+  it("explains 413 and 507 for memory images only", () => {
+    expect(memoryUploadErrorText(new ApiError(413, "upload_failed", "Upload failed (413)"))).toMatch(/larger than this platform accepts/);
+    expect(memoryUploadErrorText(new ApiError(413, "memory_image_too_large", "x"))).toMatch(/MEMORY_MAX_BYTES/);
+    expect(memoryUploadErrorText(new ApiError(507, "insufficient_storage", "x"))).toMatch(/free disk space/);
+    expect(memoryUploadErrorText(new ApiError(409, "conflict", "x"))).toBeNull();
+    expect(memoryUploadErrorText(new Error("x"))).toBeNull();
   });
 });

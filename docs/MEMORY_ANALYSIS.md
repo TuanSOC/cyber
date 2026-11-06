@@ -169,11 +169,13 @@ The named volume `memory_symbols`, written only by `memory-symbols` (uid 10005) 
   linux/<sha256>.json.xz
   manifest.json                          SymbolManifestV1: per file its sha256, OS, identity,
                                          source (msdl | operator | zip:<sha256>), tool version,
-                                         imported_at
+                                         imported_at; `identifier_cache_sha256` of the cache
   .cache/volatility3/identifier.cache    prebuilt by `reindex` (file:///symbols/... locations)
 ```
 
-Before using a file, the worker re-checks its sha256 against the manifest (`symbols_corrupt` on a mismatch). The result header records the sha256 of the ISF the run actually loaded, the Volatility version and the engine, so a run can be reproduced.
+Before using a file, the worker re-checks its sha256 against the manifest (`symbols_corrupt` on a mismatch). After the probes it re-hashes every store ISF they report loading: a file the manifest does not list, a changed file, or an ISF from anywhere but the store and Volatility's own symbol dirs fails the job `symbols_corrupt`. A probe's identifier cache is seeded only when the manifest records its sha256 and the copy hashes to it (else no cache: Volatility indexes the store itself; a mismatch is `symbols_corrupt`). The result header records the sha256 of the ISF the run actually loaded, the Volatility version and the engine, so a run can be reproduced.
+
+Every probe's output counts against a per-job budget (768 MiB of the 1 GiB headroom) and must leave 256 MiB free on `/work` for the result; otherwise the job fails `insufficient_disk` before the next probe. A probe that leaves no `status.json` (killed on timeout) is not offline-verified: its rows are dropped and the plugin is shown partial. The job's time budget starts before the image download.
 
 ### Missing symbols: a diagnostic result
 

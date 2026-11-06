@@ -9,12 +9,31 @@ come from the image: inert text.
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from app.core.pagination import Page
 
+
+
+def _to_decimal_text(value: object) -> object:
+    """An unsigned 64-bit number (NUMERIC(20,0) in the database) as decimal text: a JSON number
+    above 2**53 loses its low bits in the browser (the M8 review lesson for addresses)."""
+    if isinstance(value, Decimal):
+        value = int(value)
+    if isinstance(value, int) and not isinstance(value, bool):
+        if not 0 <= value < 2**64:
+            raise ValueError("value outside the unsigned 64-bit range")
+        return str(value)
+    return value
+
+
+# Inode numbers (`meta_addr`, `parent_addr`) and sector numbers are sent as decimal strings.
+U64Text = Annotated[
+    str, BeforeValidator(_to_decimal_text), Field(pattern=r"^[0-9]{1,20}$", examples=["1234"])
+]
 MediaHashStatus = Literal["matched", "mismatch", "absent", "not_verified"]
 FsStatus = Literal["ok", "unsupported", "encrypted", "undetermined", "error", "truncated"]
 ExportState = Literal["pending", "ready", "failed", "promoted", "expired"]
@@ -62,7 +81,7 @@ class DiskSummaryOut(BaseModel):
     profile: Literal["triage", "full"]
     format: Literal["raw", "split_raw", "ewf"]
     segments: list[DiskSegmentOut]
-    media_size: int
+    media_size: U64Text
     sector_size: int
     media_sha256: str | None = None  # worker-reported
     ewf_md5: str | None = None
@@ -83,8 +102,8 @@ class DiskSummaryOut(BaseModel):
 class PartitionOut(BaseModel):
     id: uuid.UUID
     index: int
-    start_sector: int
-    length_sectors: int
+    start_sector: U64Text
+    length_sectors: U64Text
     description: str | None = None
     vs_flags: str
     fs_type: str | None = None
@@ -105,11 +124,11 @@ class PartitionPage(Page[PartitionOut]):
 class FileOut(BaseModel):
     id: uuid.UUID
     partition_index: int
-    meta_addr: int
+    meta_addr: U64Text
     meta_seq: int | None = None
     stream: str | None = None
     path: str
-    parent_addr: int | None = None
+    parent_addr: U64Text | None = None
     name: str
     ext: str | None = None
     type: Literal["reg", "dir", "lnk", "other"]
@@ -151,7 +170,7 @@ class DirPage(Page[FileOut]):
     """`GET …/disk/dirs?partition=&parent=`: the entries listed in one directory."""
 
     partition_index: int | None = None
-    parent_addr: int | None = None
+    parent_addr: U64Text | None = None
 
 
 class EventOut(BaseModel):
@@ -216,6 +235,7 @@ class DiskExportList(BaseModel):
 
 
 __all__ = [
+    "U64Text",
     "DirPage",
     "DiskExportList",
     "DiskExportOut",

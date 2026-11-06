@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Report snapshot versioning citations and signing"
-status: pending
+status: completed
 priority: P1
 effort: "15h"
 dependencies: [1]
@@ -212,3 +212,4 @@ This phase never renders. Finalize calls the frozen `dispatch.create_render` / `
   - Snapshots go to `reports` / `reports-test` with per-object GOVERNANCE retention.
   - The content and download routes re-hash the object before serving and refuse a mismatch with `409 integrity_failed` (audited).
 - **Deferred:** the web "Cited by" panel (the route exists; REPORTS.md, ROADMAP). The real-renderer pipeline run under `REPORT_E2E=1` is pending gate.
+- **Closure (2026-11-06):** The `REPORT_E2E=1` pipeline ran in the API suite of gate run vp8 (4915 passed); the gate passed in segments, not in one `pnpm verify:prod` run (see the plan's Closure).

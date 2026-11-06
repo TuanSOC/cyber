@@ -23,12 +23,17 @@ MinIO root and governance bypass, which must never reach the main project.
 `check` (stdin: the seed JSON; stdout: a JSON report, exit 1 on a failed check) runs after the
 restore: the owner's pre-backup refresh token is refused (sessions revoked), the analyst logs in
 again, downloads an evidence item with the seeded sha256, reads the report version with a
-valid signature and its content, gets `410 evidence_purged` on the tombstoned evidence, and
-the viewer gets 403 on a write.
+valid signature and its content, gets `410 evidence_purged` on the tombstoned evidence, the
+viewer gets 403 on a write, and the drill root creates, writes, reads and removes a NEW bucket
+(`bucket_create`): the restored volume keeps the original root's owner and mode (tar
+`--numeric-owner` of `.`), so this is the probe of a target image's user against the original
+layout (M7 phase 6: a 1001:1001 Silo wrapper read every restored bucket but got AccessDenied on
+a new one, since the bitnami volume root is root:root 0775).
 """
 
 import asyncio
 import hashlib
+import io
 import json
 import os
 import secrets
@@ -42,6 +47,7 @@ from typing import Any
 import httpx
 from minio import Minio
 from minio.deleteobjects import DeleteObject
+from minio.error import S3Error
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
@@ -389,20 +395,56 @@ async def _seed_owner_rows(seed: dict[str, Any]) -> None:
     }
 
 
-def _delete_locked_version(bucket: str, key: str, version_id: str) -> None:
-    """The drill's only governance bypass (RT17): the tombstoned version, with the drill root."""
+def _root_client() -> Minio:
     user, password = (
         os.environ.get("DRILL_MINIO_ROOT_USER"),
         os.environ.get("DRILL_MINIO_ROOT_PASSWORD"),
     )
     if not user or not password:
         raise DrillError("DRILL_MINIO_ROOT_USER / DRILL_MINIO_ROOT_PASSWORD are not set")
-    client = Minio(os.environ["MINIO_ENDPOINT"], access_key=user, secret_key=password, secure=False)
+    return Minio(os.environ["MINIO_ENDPOINT"], access_key=user, secret_key=password, secure=False)
+
+
+def _delete_locked_version(bucket: str, key: str, version_id: str) -> None:
+    """The drill's only governance bypass (RT17): the tombstoned version, with the drill root."""
+    client = _root_client()
     errors = list(
         client.remove_objects(bucket, [DeleteObject(key, version_id)], bypass_governance_mode=True)
     )
     if errors:
         raise DrillError(f"could not delete the tombstoned version: {errors[0].code}")
+
+
+def bucket_probe(client: Minio, suffix: str | None = None) -> dict[str, Any]:
+    """Create a NEW bucket in the restored store, write, read and remove an object, then remove
+    the bucket. Returns the check record (an S3 error is a failed check, not an exception)."""
+    bucket = f"drill-probe-{suffix or secrets.token_hex(4)}"
+    body = b"drill bucket probe"
+    created = False
+    try:
+        client.make_bucket(bucket)
+        created = True
+        client.put_object(bucket, "probe", io.BytesIO(body), len(body))
+        response = client.get_object(bucket, "probe")
+        try:
+            read = response.read()
+        finally:
+            response.close()
+            response.release_conn()
+        client.remove_object(bucket, "probe")
+        client.remove_bucket(bucket)
+        created = False
+        return {"check": "bucket_create", "ok": read == body, "bucket": bucket}
+    except S3Error as exc:
+        return {"check": "bucket_create", "ok": False, "bucket": bucket, "code": exc.code}
+    finally:
+        if created:
+            try:
+                for obj in client.list_objects(bucket, include_version=True):
+                    client.remove_object(bucket, obj.object_name, version_id=obj.version_id)
+                client.remove_bucket(bucket)
+            except S3Error:
+                pass
 
 
 def seed() -> dict[str, Any]:
@@ -472,6 +514,7 @@ def check(seed_data: Mapping[str, Any]) -> dict[str, Any]:
         json={"title": "viewer write", "severity": "low"},
     )
     record("viewer_write_forbidden", write.status_code == 403, status=write.status_code)
+    results.append(bucket_probe(_root_client()))
     return {"ok": all(r["ok"] for r in results), "checks": results}
 
 

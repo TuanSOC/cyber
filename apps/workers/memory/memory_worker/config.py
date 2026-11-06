@@ -19,6 +19,11 @@ from typing import Literal
 WORKER_VERSION = "memory-worker/0.1.0"
 VERSIONS_FILE = Path("/etc/cyberlab/versions.json")
 DEFAULT_PLUGIN_RLIMIT_AS = 2560 * 1024**2
+# Worker-wide task time limits (review fix): the API sends per-task limits (job timeout + 60 /
+# + 90 s); these defaults keep `SoftTimeLimitExceeded` live for a message without them. The
+# contract caps a memory job at 6 h (`MemoryLimits.timeout_s`), so they sit just above it.
+TASK_SOFT_TIME_LIMIT_S = 6 * 3600 + 60
+TASK_TIME_LIMIT_S = 6 * 3600 + 90
 Engine = Literal["volatility3", "replay"]
 
 

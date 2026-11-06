@@ -33,6 +33,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import SchemaItem
 
 from alembic import op
 
@@ -228,7 +229,7 @@ def _hex(table: str, column: str, n: int) -> sa.CheckConstraint:
     return _ck(table, column, f"{column} IS NULL OR {column} ~ '^[0-9a-f]{{{n}}}$'")
 
 
-def _bulk(table: str) -> list[sa.SchemaItem]:
+def _bulk(table: str) -> list[SchemaItem]:
     return [
         sa.Column("id", sa.Uuid(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("organization_id", sa.Uuid(), nullable=False),

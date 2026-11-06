@@ -305,3 +305,44 @@ def test_the_real_volatility_schema_refuses_a_broken_isf(tmp_path: Path) -> None
             tmp_path / "w",
             timeout_s=120,
         )
+
+
+def test_the_child_may_write_only_in_its_work_dir(tmp_path: Path) -> None:
+    """Review fix: the child never has the store writable (its work dir is outside it and
+    every other write, change or link is refused)."""
+    work, store = tmp_path / "work", tmp_path / "symbols"
+    roots = isolate.write_roots({"out": str(work / "isf.json.xz")}, work)
+    hook = isolate.write_guard(roots)
+    hook("open", (str(work / "isf.json.xz"), "wb", 0))
+    hook("open", (str(store / "manifest.json"), "rb", os.O_RDONLY))  # reads are fine
+    hook("os.mkdir", (str(work / ".child-cache"), 0o700, -1))
+    hook("open", (7, "wb", 0))  # an fd opened (and checked) earlier
+    for event, args in (
+        ("open", (str(store / "windows" / "x.json.xz"), "wb", 0)),
+        ("open", (str(store / "manifest.json"), None, os.O_WRONLY | os.O_TRUNC)),
+        ("open", (str(work / ".." / "symbols" / "x"), "ab", 0)),
+        ("os.rename", (str(work / "a"), str(store / "a"), -1, -1)),
+        ("os.chmod", (str(store), 0o755, -1)),
+        ("os.remove", (str(store / "manifest.json"), -1)),
+        ("shutil.copyfile", (str(work / "a"), str(store / "a"))),
+        ("os.symlink", (str(store), str(work / "link"), -1)),
+    ):
+        with pytest.raises(PermissionError):
+            hook(event, args)
+
+
+def test_import_stages_through_a_temp_dir_outside_the_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[Path] = []
+    real = isolate.run_child
+
+    def spy(task: str, params: dict[str, Any], work: Path, **kw: Any) -> dict[str, Any]:
+        seen.append(work)
+        return real(task, params, work, **kw)
+
+    monkeypatch.setattr(isolate, "run_child", spy)
+    result = _import(tmp_path, "kernel.json", dumps(windows_isf()))
+    assert result.changes and seen
+    store = (tmp_path / "symbols").resolve()
+    assert all(store not in w.resolve().parents for w in seen)

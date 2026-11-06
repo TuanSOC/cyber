@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Search and correlation frontend"
-status: pending
+status: completed
 priority: P1
 effort: "9h"
 dependencies: [1]
@@ -107,3 +107,4 @@ It builds against the phase-1 contracts with mocked fetch. No containers.
   - `components/search/search-results.test.tsx` (7) and `components/correlation/correlation-parts.test.tsx` (6);
   - `apps/web/e2e/search-correlation.spec.ts`: header search, "also seen in" and related cases across two cases.
 - **Pending gate:** the e2e spec (phase 11) and the `pnpm verify` re-run on the final tree.
+- **Closure (2026-11-06):** `search-correlation.spec.ts` passed in the dev e2e (vp8) and the prod e2e; the gate passed in segments, not in one `pnpm verify:prod` run (see the plan's Closure).

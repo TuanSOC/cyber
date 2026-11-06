@@ -540,6 +540,9 @@ class SymbolManifestV1(Strict):
     version: Literal[1] = 1
     volatility_version: ShortText
     files: Annotated[list[SymbolFile], Field(max_length=100_000)] = []
+    # sha256 of `.cache/volatility3/identifier.cache` as `reindex` installed it (review fix):
+    # the worker seeds a probe's cache only from a file with this hash; None = no cache seeded.
+    identifier_cache_sha256: Sha256 | None = None
 
     @model_validator(mode="after")
     def _unique_paths(self) -> Self:
