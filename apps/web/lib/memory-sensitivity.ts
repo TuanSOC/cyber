@@ -49,3 +49,19 @@ export function enrichDisabledReason(
     return "Threat-intel enrichment is unavailable until the sensitivity of this memory image is known.";
   return undefined;
 }
+
+/**
+ * Why "Enrich" is hidden on a PCAP or static job's IOC tab of the same evidence (review fix:
+ * a restricted memory image's other analyses are restricted too, RT3), or undefined when it
+ * may show. Most evidence is never marked, so only a known restriction or TI flag hides it;
+ * while the record loads the button waits (the API refuses a restricted lookup either way).
+ */
+export function evidenceEnrichDisabledReason(
+  evidence: { memory_sensitivity?: string | null; ti_excluded?: boolean | null } | null | undefined,
+): string | undefined {
+  if (!evidence) return "Checking the evidence's share policy…";
+  if (evidence.memory_sensitivity === "restricted")
+    return "Threat-intel enrichment is off: this evidence is restricted (a memory image, TLP:RED by default). An admin must release it, then the evidence's threat-intel flag must be cleared.";
+  if (evidence.ti_excluded === true) return "Threat-intel enrichment is off: the evidence's share policy excludes it from threat-intel lookups.";
+  return undefined;
+}

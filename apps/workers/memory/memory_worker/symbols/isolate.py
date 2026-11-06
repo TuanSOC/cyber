@@ -8,9 +8,12 @@ interpreter:
   inputs are paths the parent created and a params JSON file the parent wrote; no shell, no
   operator or image text is ever interpolated into a command;
 - `RLIMIT_AS` 2 GiB, `RLIMIT_FSIZE`, no core dumps, a wall-clock timeout (the child is killed);
-- a PEP 578 audit hook refuses sockets, subprocesses and `exec` inside the child;
-- outputs land in the parent's temp dir only (`result.json` + produced files); the parent
-  re-hashes and validates everything before an atomic move into the store.
+- a PEP 578 audit hook refuses sockets, subprocesses and `exec` inside the child, and any
+  write, rename, removal, permission change or link outside its own work dir and the output
+  paths the parent named (review fix: the child never has the store writable);
+- the work dir is a temp dir OUTSIDE the store (`/tmp`, review fix): the parent re-hashes
+  every produced file while copying it into the store's staging dir (`StoreWriter.adopt`),
+  then validates it again before the atomic move into the store.
 
 This module is stdlib-only at import time (the child imports it first); `jsonschema` and
 Volatility are imported inside the tasks that need them.
@@ -107,13 +110,15 @@ def _child_env(work: Path) -> dict[str, str]:
         "HOME": "/nonexistent",
         "XDG_CONFIG_HOME": "/nonexistent",
         "XDG_CACHE_HOME": str(work / ".child-cache"),
+        "TMPDIR": str(work),
         "LANG": "C.UTF-8",
         "PYTHONDONTWRITEBYTECODE": "1",
     }
     if os.name == "nt":  # host test runs only: the interpreter needs these to start
-        for key in ("SYSTEMROOT", "PATH", "TEMP", "TMP"):
+        for key in ("SYSTEMROOT", "PATH"):
             if key in os.environ:
                 env[key] = os.environ[key]
+        env["TEMP"] = env["TMP"] = str(work)
     return env
 
 
@@ -195,6 +200,84 @@ _DENIED_EVENTS = (
 def _deny_hook(event: str, _args: tuple[object, ...]) -> None:
     if event.startswith(_DENIED_EVENTS):
         raise PermissionError(f"memory-symbols child: {event} is not allowed")
+
+
+# Filesystem mutations (PEP 578 events) and which arguments are the paths they change.
+_MUTATING_EVENTS: dict[str, tuple[int, ...]] = {
+    "os.chmod": (0,),
+    "os.chown": (0,),
+    "os.chflags": (0,),
+    "os.lchflags": (0,),
+    "os.mkdir": (0,),
+    "os.remove": (0,),
+    "os.rmdir": (0,),
+    "os.rename": (0, 1),
+    "os.truncate": (0,),
+    "os.utime": (0,),
+    "os.setxattr": (0,),
+    "os.removexattr": (0,),
+    "shutil.copyfile": (1,),
+    "shutil.copymode": (1,),
+    "shutil.copystat": (1,),
+    "shutil.copytree": (1,),
+    "shutil.move": (0, 1),
+    "shutil.rmtree": (0,),
+}
+# Links could point a later write (or the parent's copy) into the store: never allowed.
+_LINK_EVENTS = ("os.symlink", "os.link")
+_WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
+
+
+def _is_write_open(args: tuple[object, ...]) -> bool:
+    mode = args[1] if len(args) > 1 else None
+    flags = args[2] if len(args) > 2 else 0
+    if isinstance(mode, str) and any(c in mode for c in "wax+"):
+        return True
+    return isinstance(flags, int) and bool(flags & _WRITE_FLAGS)
+
+
+def write_roots(params: dict[str, Any], work: Path) -> tuple[str, ...]:
+    """The directories a child task may change: its work dir and the output locations the
+    parent named (`out` / `cache` files, `out_dir`)."""
+    roots = {os.path.abspath(work)}
+    for key in ("out", "cache"):
+        if isinstance(params.get(key), str):
+            roots.add(os.path.dirname(os.path.abspath(params[key])))
+    if isinstance(params.get("out_dir"), str):
+        roots.add(os.path.abspath(params["out_dir"]))
+    return tuple(sorted(roots))
+
+
+def write_guard(roots: tuple[str, ...]) -> Callable[[str, tuple[object, ...]], None]:
+    """An audit hook refusing every filesystem change outside `roots` (paths are made
+    absolute against the cwd without touching the filesystem; links are refused, so a path
+    under a root cannot lead elsewhere)."""
+    prefixes = tuple(os.path.join(r, "") for r in roots)
+
+    def allowed(path: object) -> bool:
+        if isinstance(path, int):  # an fd opened earlier (that open was checked)
+            return True
+        if isinstance(path, bytes):
+            path = os.fsdecode(path)
+        if not isinstance(path, str | os.PathLike):
+            return False
+        full = os.path.abspath(os.fspath(path))
+        return full in roots or full.startswith(prefixes)
+
+    def hook(event: str, args: tuple[object, ...]) -> None:
+        if event in _LINK_EVENTS:
+            raise PermissionError(f"memory-symbols child: {event} is not allowed")
+        if event == "open":
+            if args and _is_write_open(args) and not allowed(args[0]):
+                raise PermissionError("memory-symbols child: a write outside its work dir")
+            return
+        positions = _MUTATING_EVENTS.get(event)
+        if positions is not None:
+            for i in positions:
+                if i < len(args) and not allowed(args[i]):
+                    raise PermissionError(f"memory-symbols child: {event} outside its work dir")
+
+    return hook
 
 
 def _iter_chunks(fh: IO[bytes], size: int = 1024 * 1024) -> Iterator[bytes]:
@@ -501,7 +584,9 @@ def child_main(argv: list[str]) -> int:
     """Entry point inside the child: `<task> <params.json> <result.json>`."""
     task, params_path, result_path = argv
     params = json.loads(Path(params_path).read_text())
+    sys.dont_write_bytecode = True
     sys.addaudithook(_deny_hook)
+    sys.addaudithook(write_guard(write_roots(params, Path.cwd())))
     try:
         result = TASKS[task](params)
     except Refused as exc:

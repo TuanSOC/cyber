@@ -190,8 +190,19 @@ def cmd_verify(_args: argparse.Namespace) -> int:
         if rel not in listed:
             problems += 1
             log("mismatch", path=safe_text(rel, 255), reason="not in the manifest")
-    if not (root / ".cache/volatility3/identifier.cache").is_file():
+    cache = root / ".cache/volatility3/identifier.cache"
+    if not cache.is_file():
         log("warning", message="no identifier cache: run `reindex`")
+    elif manifest.identifier_cache_sha256 is None:
+        log("warning", message="the manifest records no cache hash (not seeded): run `reindex`")
+    else:
+        try:
+            cache_ok = sha256_file(cache) == manifest.identifier_cache_sha256
+        except Exception:  # noqa: BLE001 - an unreadable cache is a mismatch
+            cache_ok = False
+        if not cache_ok:
+            problems += 1
+            log("mismatch", path=".cache/volatility3/identifier.cache", reason="sha256 differs")
     log("verified", files=len(manifest.files), mismatches=problems)
     return 1 if problems else 0
 

@@ -5,8 +5,8 @@ server-side process tree.
   transaction) and answers `409 analysis_not_ready` while the job is queued or running.
 - Text is returned exactly as stored (bounded and NUL-free at ingest); command lines and
   bash history are raw here (job pages, evidence.read) and masked only on the shared
-  surfaces (findings, IOC context, timeline titles; RT13). Addresses are integers,
-  hex heads and disassembly are strings.
+  surfaces (findings, IOC context, timeline titles; RT13). Addresses (and address
+  attributes) are `0x...` hex strings, as are hex heads; disassembly is text.
 - No audit per read (recorded decision, same as the static result pages).
 """
 

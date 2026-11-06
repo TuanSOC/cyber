@@ -9,9 +9,11 @@ the declared type `memory`, the TLP:RED default in the upload transaction and no
 analysis of any kind (RT3).
 """
 
+import contextlib
 import logging
 import shutil
 import uuid
+from collections.abc import Iterator
 
 import magic
 from starlette.requests import ClientDisconnect, Request
@@ -105,11 +107,33 @@ def _check_request(request: Request, kind: UploadKind | None = None) -> int:
     return size
 
 
-def _check_free_space(directory: str, size: int) -> None:
+# Bytes promised to the memory uploads now spooling in this process (review fix). The check
+# and the increment run without an await between them, so concurrent uploads on one event
+# loop never both take the same free space. Conservative: bytes already spooled count twice
+# (in `free` and here) until the upload ends. Several API processes sharing the spool volume
+# each keep their own count; the 1 GiB reserve is the margin between them.
+_spool_reserved = 0
+
+
+def spool_reservation(kind: UploadKind | None, declared: int) -> int:
+    """Bytes a memory upload reserves: its declared length, or the memory limit when the
+    body is chunked (no Content-Length), since its real size is known only at the end."""
+    return declared if declared > 0 else max_upload_bytes(kind)
+
+
+@contextlib.contextmanager
+def _reserve_spool(directory: str, size: int) -> Iterator[None]:
     """A memory image is spooled whole before it is stored: refuse it now when the spool dir
-    cannot hold it plus the reserve (507, retry later) instead of failing gigabytes in."""
-    if shutil.disk_usage(directory).free < size + MEMORY_SPOOL_RESERVE_BYTES:
+    cannot hold it, every other running memory upload's reservation and the reserve (507,
+    retry later) instead of failing gigabytes in. Released when the upload ends."""
+    global _spool_reserved
+    if shutil.disk_usage(directory).free - _spool_reserved < size + MEMORY_SPOOL_RESERVE_BYTES:
         raise InsufficientStorage()
+    _spool_reserved += size
+    try:
+        yield
+    finally:
+        _spool_reserved -= size
 
 
 async def _insert_records(
@@ -213,11 +237,17 @@ async def upload(
         # Authoritative (actual size, org locked) again before the records commit.
         await quota.check_fits(ctx, declared)
 
-    async with slot("upload", user.id, settings.max_concurrent_uploads_per_user):
+    async with contextlib.AsyncExitStack() as stack:
+        await stack.enter_async_context(
+            slot("upload", user.id, settings.max_concurrent_uploads_per_user)
+        )
+        cap = max_upload_bytes(kind)
         if kind == MEMORY:
-            _check_free_space(settings.upload_tmp_dir, declared)
+            # The reservation is also the spool cap (a body never outgrows what it reserved).
+            cap = spool_reservation(kind, declared)
+            stack.enter_context(_reserve_spool(settings.upload_tmp_dir, cap))
         try:
-            spooled = await spool(request.stream(), settings.upload_tmp_dir, max_upload_bytes(kind))
+            spooled = await spool(request.stream(), settings.upload_tmp_dir, cap)
         except TooLarge as exc:
             raise _too_large(kind) from exc
         except ClientDisconnect as exc:

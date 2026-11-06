@@ -42,6 +42,10 @@ celery_app.conf.update(
     worker_enable_remote_control=False,
     worker_hijack_root_logger=False,
     broker_connection_retry_on_startup=True,
+    # Soft limit: `pipeline.run_job` reports `failed / timed_out` and cleans up; the hard
+    # limit kills the child (a new one resets /work). Per-task limits from the API win.
+    task_soft_time_limit=config.TASK_SOFT_TIME_LIMIT_S,
+    task_time_limit=config.TASK_TIME_LIMIT_S,
     # Own unacked bookkeeping keys: the broker ACL confines this user to `memory*` keys.
     broker_transport_options={
         "unacked_key": f"{queues.memory}.unacked",

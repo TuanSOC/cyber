@@ -10,13 +10,16 @@ import { MemoryUploadOption } from "@/components/memory/memory-upload-option";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError, errorMessage } from "@/lib/api";
+import { memoryUploadErrorText } from "@/lib/memory";
 import { type UploadHandle, uploadEvidence } from "@/lib/upload";
 
 type Item = UploadItem;
 
 let nextId = 1;
 
-function describe(error: unknown): string {
+function describe(error: unknown, memory: boolean): string {
+  const memoryText = memory ? memoryUploadErrorText(error) : null;
+  if (memoryText) return memoryText;
   if (error instanceof ApiError) {
     if (error.code === "payload_too_large") return "File exceeds the maximum evidence size.";
     if (error.code === "aborted") return "Cancelled.";
@@ -88,7 +91,7 @@ export function EvidenceUploader({ orgId, investigationId }: { orgId: string; in
           queryClient.invalidateQueries({ queryKey: ["org", orgId, "analyses"] }),
         ]);
       } catch (error) {
-        update(id, { state: "failed", error: describe(error) });
+        update(id, { state: "failed", error: describe(error, Boolean(item?.memory)) });
       }
     }
     current.current = null;

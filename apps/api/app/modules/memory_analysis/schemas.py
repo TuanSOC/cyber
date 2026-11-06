@@ -13,12 +13,50 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from app.modules.pcap_analysis.schemas import CappedPage
 
 
-def _to_int(value: object) -> object:
-    return int(value) if isinstance(value, Decimal) else value
+def _to_hex(value: object) -> object:
+    """An unsigned 64-bit address as `0x...` lowercase hex text. Kernel addresses are above
+    2**63, and a JSON number above 2**53 loses its low bits in the browser, so the API never
+    sends an address as a number (review fix)."""
+    if isinstance(value, Decimal):
+        value = int(value)
+    if isinstance(value, int) and not isinstance(value, bool):
+        if not 0 <= value < 2**64:
+            raise ValueError("address outside the unsigned 64-bit range")
+        return f"0x{value:x}"
+    return value
 
 
-# Unsigned 64-bit addresses are NUMERIC in the database (Decimal from the driver).
-Address = Annotated[int, BeforeValidator(_to_int)]
+# Unsigned 64-bit addresses are NUMERIC in the database (Decimal from the driver); the API
+# speaks hex strings.
+Address = Annotated[
+    str, BeforeValidator(_to_hex), Field(pattern=r"^0x[0-9a-f]{1,16}$", examples=["0xfffff8000000"])
+]
+
+# Largest integer a browser reads exactly (Number.MAX_SAFE_INTEGER).
+JS_SAFE_INT = 2**53 - 1
+# Artifact attributes that hold an address (the normalizers' `addr()` keys): always sent as
+# hex text, whatever their size.
+ADDRESS_ATTRIBUTES = frozenset({"base", "offset", "table_address", "handler"})
+
+
+def _attributes_out(value: object) -> object:
+    """Address attributes as hex text; other integers are left as they are (the UI marks a
+    number above 2**53 as approximate)."""
+    if not isinstance(value, dict):
+        return value
+    out: dict[str, Any] = {}
+    for key, item in value.items():
+        if (
+            key in ADDRESS_ATTRIBUTES
+            and isinstance(item, int)
+            and not isinstance(item, bool)
+            and 0 <= item < 2**64
+        ):
+            out[key] = f"0x{item:x}"
+        else:
+            out[key] = item
+    return out
+
 MemoryOsName = Literal["windows", "linux"]
 SymbolsStatus = Literal["resolved", "missing"]
 PluginRunState = Literal["ok", "failed", "timeout", "skipped", "unsupported"]
@@ -159,7 +197,8 @@ class ArtifactOut(_Row):
     id: uuid.UUID
     type: MemoryArtifactType
     pid: int | None
-    attributes: dict[str, Any]
+    # Scalars only; address keys (`ADDRESS_ATTRIBUTES`) arrive as `0x...` text.
+    attributes: Annotated[dict[str, Any], BeforeValidator(_attributes_out)]
 
 
 class ArtifactPage(CappedPage[ArtifactOut]):

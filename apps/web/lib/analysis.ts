@@ -9,7 +9,10 @@ export type StaticProfile = Extract<JobProfile, "full" | "av">;
 export type MemoryProfile = Extract<JobProfile, "triage" | "full">;
 export type OsHint = Schemas["OsHint"];
 
+/** The static profiles a user picks from (the Malware Lab's run and filter options). */
 export const PROFILE_LABELS: Record<StaticProfile, string> = { full: "Full", av: "AV scan" };
+/** Any job's profile as text, keyed by the whole `JobProfile` (M8 added `triage`). */
+export const JOB_PROFILE_LABELS: Record<JobProfile, string> = { full: "Full", av: "AV scan", triage: "Triage" };
 export const MEMORY_PROFILE_LABELS: Record<MemoryProfile, string> = { triage: "Triage", full: "Full" };
 export const OS_HINT_LABELS: Record<OsHint, string> = { auto: "Detect automatically", windows: "Windows", linux: "Linux" };
 

@@ -27,6 +27,7 @@ import hashlib
 import ipaddress
 import re
 import ssl
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -250,8 +251,13 @@ def fetch_windows(
 ) -> Change:
     """Download, convert in a child, check GUID / age / name against the request, place."""
     schemas = schema_dir or volatility_schema_dir()
-    with StoreWriter(root, log=log) as writer:
-        work = writer.work_dir("fetch")
+    # The download and the child's conversion happen in a temp dir outside the store (review
+    # fix); `adopt` copies the produced ISF into the staging dir, `stage` re-hashes it.
+    with (
+        StoreWriter(root, log=log) as writer,
+        tempfile.TemporaryDirectory(prefix="memory-symbols-") as tmp,
+    ):
+        work = Path(tmp)
         got = download(pdb, work / "download.pdb", policy=policy, transport=transport, log=log)
         log("downloaded", bytes=got.size, sha256=got.sha256, hops=len(got.urls) - 1)
         produced = work / "isf.json.xz"
@@ -268,7 +274,8 @@ def fetch_windows(
                 "the converted ISF's PDB name / GUID / age do not match the request: refusing"
             )
         try:
-            change = writer.stage(produced, pdb, out["sha256"], "msdl", replace=replace)
+            staged = writer.adopt(produced, work, "fetch")
+            change = writer.stage(staged, pdb, out["sha256"], "msdl", replace=replace)
         except StoreError as exc:
             hint = "" if replace else " (re-run with --replace to replace it)"
             raise FetchFailed(f"{exc}{hint}") from exc

@@ -170,7 +170,7 @@ export const ARTIFACT_FIELDS: Record<MemoryArtifactType, readonly ArtifactField[
   syscall_hook: [
     { key: "table", label: "Table" },
     { key: "index", label: "Index" },
-    { key: "handler", label: "Handler", format: "mono" },
+    { key: "handler", label: "Handler", format: "address" },
     { key: "table_address", label: "Table address", format: "address" },
   ],
   hidden_module: [
@@ -183,6 +183,20 @@ export const ARTIFACT_FIELDS: Record<MemoryArtifactType, readonly ArtifactField[
 
 const COUNT = new Intl.NumberFormat("en-US");
 
+/**
+ * JSON numbers above 2^53 (Number.MAX_SAFE_INTEGER) lost their low bits in the browser: shown
+ * with "≈" (any attribute, `service.start` included). The API sends address attributes as hex
+ * text, so this only marks counts and other integers.
+ */
+const approx = (value: number, shown: string): string =>
+  Number.isInteger(value) && !Number.isSafeInteger(value) ? `≈${shown}` : shown;
+
+function scalarText(value: unknown): string | null {
+  if (typeof value === "number") return Number.isFinite(value) ? approx(value, String(value)) : null;
+  if (typeof value === "string" || typeof value === "boolean") return String(value);
+  return null;
+}
+
 /** One attribute as display text (scalars only; anything else is dropped), null when absent. */
 export function attributeValue(attributes: unknown, field: ArtifactField): string | null {
   if (!isRecord(attributes) || !Object.hasOwn(attributes, field.key)) return null;
@@ -190,15 +204,13 @@ export function attributeValue(attributes: unknown, field: ArtifactField): strin
   if (value === null || value === undefined || value === "") return null;
   switch (field.format) {
     case "address":
-      return formatAddress(value as number | string);
+      return typeof value === "number" || typeof value === "string" ? formatAddress(value) : null;
     case "bool":
-      return typeof value === "boolean" ? (value ? "yes" : "no") : String(value);
+      return typeof value === "boolean" ? (value ? "yes" : "no") : scalarText(value);
     case "bytes":
-      return typeof value === "number" && Number.isFinite(value) ? COUNT.format(value) : String(value);
+      return typeof value === "number" && Number.isFinite(value) ? approx(value, COUNT.format(value)) : scalarText(value);
     default:
-      if (typeof value === "number") return Number.isFinite(value) ? String(value) : null;
-      if (typeof value === "string" || typeof value === "boolean") return String(value);
-      return null;
+      return scalarText(value);
   }
 }
 
@@ -216,9 +228,9 @@ export function otherAttributes(type: MemoryArtifactType, attributes: unknown): 
 // Addresses and hex
 
 /**
- * An unsigned 64-bit address as hex text. JSON numbers above 2^53 lose their low bits in the
- * browser, so such values are marked approximate ("≈"); `0x…` strings (the normalizers' text
- * form of addresses that do not fit a bigint) are shown as they are.
+ * An unsigned 64-bit address as hex text. The API sends every address (`offset`, `start`,
+ * `end` and the address attributes) as `0x…` text, shown as it is. A JSON number (an older
+ * payload) above 2^53 lost its low bits in the browser, so it is marked approximate ("≈").
  */
 export function formatAddress(value: number | string | null | undefined): string {
   if (value === null || value === undefined) return "—";
@@ -604,6 +616,21 @@ export function memoryRunErrorText(error: unknown): string {
 
 /** Default `MEMORY_MAX_BYTES` (the API does not publish its setting; operators may raise it to 16 GiB). */
 export const MEMORY_MAX_BYTES_DEFAULT = 8 * 1024 ** 3;
+
+/**
+ * Memory-specific texts for a refused memory upload (`?kind=memory`), or null for any other
+ * error. 413 is the API's `memory_image_too_large` or the proxy's body cap (no JSON body);
+ * 507 is the spool space check, which keeps room for the whole image.
+ */
+export function memoryUploadErrorText(error: unknown): string | null {
+  if (!(error instanceof ApiError)) return null;
+  if (error.status === 413 || error.code === "memory_image_too_large" || error.code === "payload_too_large")
+    return `The memory image is larger than this platform accepts (MEMORY_MAX_BYTES, ${MEMORY_MAX_BYTES_DEFAULT / 1024 ** 3} GiB by default, at most 16 GiB). Capture a smaller image or ask an operator to raise the limit.`;
+  if (error.status === 507 || error.code === "insufficient_storage")
+    return "Not enough free disk space to receive this memory image right now (the upload holds the whole image on disk until it is stored). Try again later, after other memory uploads finish, or ask an operator to free space.";
+  if (error.code === "memory_image_empty") return "An empty file cannot be uploaded as a memory image.";
+  return null;
+}
 
 export const UPLOAD_NOTICE =
   "Memory images are TLP:RED material from the upload: restricted (never sent to AI or threat-intel providers) until an admin releases them, and never analyzed automatically. Run the memory analysis from the evidence page.";

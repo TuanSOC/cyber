@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from memory_worker.symbols import reindex as rx
-from memory_worker.symbols.manifest import CACHE_FILE, StoreWriter
+from memory_worker.symbols.manifest import CACHE_FILE, StoreWriter, read_manifest, sha256_file
 from tests.symbols_helpers import dumps, linux_isf, new_store, put, windows_isf, xz
 
 
@@ -72,6 +72,8 @@ def test_reindex_installs_the_checked_cache(tmp_path: Path) -> None:
         prefix + "manifest.json",
     ]
     assert not (root / ".staging").exists()
+    # The manifest vouches for the installed cache (the worker seeds only a matching one).
+    assert read_manifest(root).identifier_cache_sha256 == sha256_file(root / CACHE_FILE)
 
 
 def test_a_bad_cache_is_never_installed(tmp_path: Path) -> None:
