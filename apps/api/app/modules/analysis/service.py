@@ -33,8 +33,8 @@ from app.modules.analysis.schemas import AnalysisJobOut, AnalysisJobPage
 from app.modules.audit import service as audit
 from app.modules.evidence import service as evidence_service
 from app.modules.evidence.models import CustodyAction, EvidenceStatus
+from app.modules.memory_analysis import sensitivity as memory_sensitivity
 from app.modules.memory_analysis.errors import MemoryImageEmpty, MemoryImageTooLarge
-from app.modules.memory_analysis.sensitivity import apply_memory_default
 
 log = logging.getLogger(__name__)
 
@@ -177,7 +177,9 @@ async def _create(
         details["os_hint"] = os_hint.value
     if analyzer == Analyzer.MEMORY:
         # TLP:RED by default (RT3), in this transaction; idempotent (phase-8 entry point).
-        await apply_memory_default(ctx.session, ctx.org_id, evidence_id, ctx.user.id)
+        await memory_sensitivity.apply_memory_default(
+            ctx.session, ctx.org_id, evidence_id, ctx.user.id
+        )
     evidence_service.record_event(
         ctx,
         evidence_id=evidence_id,

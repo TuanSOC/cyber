@@ -11,7 +11,8 @@ the job's analyzer (one ingester per analyzer, see SUCCESS_INGESTERS).
 
 M8: a memory job may also report `failed` / `symbols_missing` WITH a result version: its
 diagnostic stream (the symbols it needs) goes to DIAGNOSTIC_INGESTERS; a failed report of any
-other analyzer, or with another code, never has its result read.
+other analyzer, or with another code, never has its result read: carrying a result version
+anyway fails the job `invalid_result`.
 """
 
 import errno
@@ -484,6 +485,12 @@ async def handle_event(raw: dict[str, Any]) -> None:
             return
         if is_diagnostic(job, msg):
             await ingest_diagnostic(job, msg)
+            return
+        if msg.outcome == Outcome.FAILED and msg.result_version_id is not None:
+            # M8: only a memory `symbols_missing` report may carry a result. Any other
+            # failed report with one (another analyzer, another code) is refused unread.
+            log.warning("refusing a failed report with a result for analysis job %s", job.id)
+            await _fail_job(job, "invalid_result")
             return
         async with tenant_session(org_id, None) as session:
             locked = await repo.get_for_update(session, org_id, msg.job_id)

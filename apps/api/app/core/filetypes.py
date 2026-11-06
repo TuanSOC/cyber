@@ -5,6 +5,11 @@ A mismatch is a flag for the analyst (and the audit `evidence.type_mismatch`), n
 reason to reject: an evidence platform must accept whatever an analyst collected, disguised
 malware included. Routing to the analyzers is unchanged (it reads the content only).
 
+M8 phase 6: the family `memory` (a memory image). It is declared by a `kind=memory` upload
+or by the image extensions below. A raw image has no magic, so `memory` + unknown content is
+not a mismatch; the analyzers' routing never sends anything to the memory analyzer (a memory
+run is always an explicit request).
+
 Pure functions on untrusted input: they never raise on a hostile name or MIME string.
 """
 
@@ -12,7 +17,10 @@ from typing import Final, Literal
 
 from cyberlab_jobs.capture import capture_format, executable_format
 
-Family = Literal["pcap", "pe", "elf", "pdf", "zip", "office_legacy", "image", "text", "archive"]
+Family = Literal[
+    "pcap", "pe", "elf", "pdf", "zip", "office_legacy", "image", "text", "archive", "memory"
+]
+MEMORY: Final = "memory"
 
 _EXTENSIONS: Final[dict[str, Family]] = {
     **dict.fromkeys(("pcap", "pcapng", "cap"), "pcap"),
@@ -26,6 +34,8 @@ _EXTENSIONS: Final[dict[str, Family]] = {
     ),
     **dict.fromkeys(("txt", "log", "csv", "json"), "text"),
     **dict.fromkeys(("7z", "rar", "gz", "tar"), "archive"),
+    # M8: raw / padded, LiME, VMware, Windows crash dump and ELF core images.
+    **dict.fromkeys(("raw", "mem", "vmem", "lime", "dmp", "core"), "memory"),
 }
 
 # libmagic MIME types (lower case, parameters stripped) -> family. `image/*` and `text/*` are
@@ -83,12 +93,15 @@ BENIGN_PAIRS: Final[frozenset[tuple[str, str]]] = frozenset(
 MAX_EXTENSION = 16
 
 
-def declared_family(filename: str) -> str | None:
+def declared_family(filename: str, *, kind: str | None = None) -> str | None:
     """The family the file's name claims (its last extension), or None (no or unknown one).
 
     The stored name is already sanitized; trailing dots and spaces are ignored like Windows
     does (`evil.exe.` opens as an `.exe`). A leading-dot name (`.pcap`) has no extension.
+    An upload declared `kind=memory` (M8) is a memory image whatever its name.
     """
+    if kind == MEMORY:
+        return MEMORY
     name = filename.rstrip(" .").replace("\\", "/").rsplit("/", 1)[-1]
     stem, dot, ext = name.rpartition(".")
     if not dot or not stem or not 0 < len(ext) <= MAX_EXTENSION:
