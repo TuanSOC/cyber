@@ -57,7 +57,10 @@ def test_no_heuristic_exceeds_its_ceiling(report: evaluate.Report) -> None:
         for finding in out.findings:
             assert finding.detection_method.startswith("heuristic:")
             assert SEVERITY_RANK[finding.severity] <= SEVERITY_RANK["medium"]
-            assert SEVERITY_RANK[finding.severity] <= SEVERITY_RANK[METHOD_MAX[finding.detection_method]]
+            assert (
+                SEVERITY_RANK[finding.severity]
+                <= SEVERITY_RANK[METHOD_MAX[finding.detection_method]]
+            )
 
 
 def test_no_secret_reaches_a_shared_surface(report: evaluate.Report) -> None:
@@ -115,7 +118,9 @@ def test_the_harness_reports_a_table(report: evaluate.Report) -> None:
     assert "IOC recall: 8/8 (1.00)" in text and "real-world quality" in text
 
 
-def test_harness_counts_a_missing_label_as_a_false_negative(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_harness_counts_a_missing_label_as_a_false_negative(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     labels = evaluate.load_labels()
     labels["scenarios"]["windows_workstation"]["findings"] = [
         {"method": "heuristic:mem_hidden_process@1", "type": "mem_hidden_process", "pid": 1}

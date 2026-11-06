@@ -62,7 +62,7 @@ def test_processes_merge_scan_and_list_and_join_cmdline_and_image() -> None:
     assert len(out.processes) == 40
     assert by_pid[6112].sources == ["psscan"] and by_pid[6112].cmdline is None
     assert all(p.sources == ["pslist", "psscan"] for p in out.processes if p.pid != 6112)
-    assert by_pid[5260].cmdline.startswith("powershell.exe -nop -w hidden -enc")
+    assert (by_pid[5260].cmdline or "").startswith("powershell.exe -nop -w hidden -enc")
     assert by_pid[3040].image_path == "C:\\Windows\\Explorer.EXE"
     assert by_pid[4].image_path is None and by_pid[4].exit_time is None
     assert by_pid[4].offset == 0xFFFF_A08F_0000_0000
@@ -164,4 +164,4 @@ def test_oversized_attributes_are_shortened_to_fit_the_column() -> None:
     wide = "\u8def" * 1024  # 3 bytes each in UTF-8: three of them exceed the 4 KiB column
     value = _row(P.WINDOWS_USERASSIST, Type="Value", Name=wide, **{"Hive Name": wide, "Path": wide})
     (entry,) = normalized("windows", {P.WINDOWS_USERASSIST: [value]}).artifacts
-    assert entry.type == "userassist" and len(entry.attributes["path"]) == 256
+    assert entry.type == "userassist" and len(str(entry.attributes["path"])) == 256

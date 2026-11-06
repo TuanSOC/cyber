@@ -2,6 +2,7 @@
 Volatility): run the root-side pipeline (identify choice, bounded reads, normalizers,
 detections, stream writer) on a scenario directory, as the replay engine would feed it."""
 
+import functools
 import gzip
 import io
 import json
@@ -100,7 +101,7 @@ def run_scenario(
         data = path.read_bytes() if path.is_file() else b""
         if mutate is not None:
             data = mutate(plugin, data)
-        rows[plugin] = RowSource(lambda data=data: io.BytesIO(data), 50_000, outcome.counted)
+        rows[plugin] = RowSource(functools.partial(io.BytesIO, data), 50_000, outcome.counted)
     assemble(out, facts, outcomes, rows, limits)
     return [MEMORY_LINE_ADAPTER.validate_json(line) for line in gzip.open(out).read().splitlines()]
 

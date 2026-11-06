@@ -193,7 +193,7 @@ def _artifacts(b: Builder, rows: Rows) -> None:
                 "table_address": addr(u64(c.table_address)),
             },
         )
-    for h in b.parse(
+    for hm in b.parse(
         P.LINUX_HIDDEN_MODULES, rows.get(P.LINUX_HIDDEN_MODULES, ()), m.LinuxHiddenModule
     ):
         b.artifact(
@@ -201,11 +201,11 @@ def _artifacts(b: Builder, rows: Rows) -> None:
             "hidden_module",
             None,
             {
-                "name": text(h.module_name, 255),
-                "offset": addr(u64(h.offset)),
-                "code_size": count(h.code_size),
-                "taints": text(h.taints, 255),
-                "args": text(h.load_arguments, ATTRIBUTE_TEXT),
+                "name": text(hm.module_name, 255),
+                "offset": addr(u64(hm.offset)),
+                "code_size": count(hm.code_size),
+                "taints": text(hm.taints, 255),
+                "args": text(hm.load_arguments, ATTRIBUTE_TEXT),
             },
         )
 

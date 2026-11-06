@@ -45,9 +45,11 @@ target-version = "py312"
 select = ["E", "F", "I", "B", "S", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S603", "S607", "S108", "S311"]
+# S104: "0.0.0.0" listen addresses are plugin-output data here, never a bind; S103: tests
+# build world-readable symbol stores on purpose (the store is sealed 0444 / 0555).
+"tests/**" = ["S101", "S603", "S607", "S108", "S311", "S104", "S103"]
 "samples/**" = ["S311", "S101"]
-"dataset/**" = ["S311", "S101"]
+"dataset/**" = ["S311", "S101", "S104"]
 
 [tool.mypy]
 strict = true

@@ -57,6 +57,8 @@ def test_the_vsl_license_text_and_notice_are_in_the_image() -> None:
 def test_no_forbidden_dependency_is_importable() -> None:
     for module in ("leechcorepyc", "Crypto", "PIL", "smb", "yara", "yara_x"):
         assert importlib.util.find_spec(module) is None, module
-    import volatility3
+    # Read from the installed metadata: importing `volatility3.framework` would create its
+    # cache dir under the unwritable HOME (the worker process never imports it).
+    from importlib.metadata import version
 
-    assert volatility3.__version__ == "2.28.2"
+    assert version("volatility3") == "2.28.2"

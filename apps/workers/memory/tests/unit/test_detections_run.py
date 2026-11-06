@@ -50,13 +50,17 @@ def noisy(n: int) -> Draft:
 
 def test_two_indicator_families_add_one_correlated_finding() -> None:
     d = draft()
-    d.add_process(7600, 3040, "svhost.exe", "C:\\Users\\Public\\svhost.exe", 9, sources=("psscan",), threads=4)
+    d.add_process(
+        7600, 3040, "svhost.exe", "C:\\Users\\Public\\svhost.exe", 9, sources=("psscan",), threads=4
+    )
     out = run(d)
     types = sorted(f.type for f in out.findings)
     assert types == ["mem_correlated_indicators", "mem_hidden_process", "mem_name_similar_to_core"]
     correlated = next(f for f in out.findings if f.type == "mem_correlated_indicators")
     others = {str(f.finding_id) for f in out.findings if f is not correlated}
-    assert {r.removeprefix("finding:") for r in correlated.evidence_refs if r.startswith("finding:")} == others
+    assert {
+        r.removeprefix("finding:") for r in correlated.evidence_refs if r.startswith("finding:")
+    } == others
     assert correlated.severity == "medium" and correlated.confidence >= 0.8
     # It never raises the others.
     assert all(f.severity == "medium" for f in out.findings)
@@ -110,7 +114,9 @@ def test_findings_carry_the_image_time_and_heuristic_methods() -> None:
 
 def test_finding_cap_sets_the_flag_and_keeps_the_strongest() -> None:
     d = noisy(5)
-    d.injections.append(region(3040, "explorer.exe", 0x10000, 0x1000, "PAGE_EXECUTE_READWRITE", "fc4883e4"))
+    d.injections.append(
+        region(3040, "explorer.exe", 0x10000, 0x1000, "PAGE_EXECUTE_READWRITE", "fc4883e4")
+    )
     out = run(d, limits(max_findings=3))
     assert len(out.findings) == 3 and out.truncated.get("findings") is True
     assert all(f.severity == "medium" for f in out.findings)  # the low one went first
@@ -129,7 +135,10 @@ def test_detector_state_cap(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_ioc_cap() -> None:
     d = draft()
-    d.connections += [tcp(3040, "explorer.exe", "10.0.0.15", 50000 + i, f"203.0.113.{i}", 443) for i in range(1, 9)]
+    d.connections += [
+        tcp(3040, "explorer.exe", "10.0.0.15", 50000 + i, f"203.0.113.{i}", 443)
+        for i in range(1, 9)
+    ]
     out = run(d, limits(max_iocs=5))
     assert len(out.iocs) == 5 and out.truncated.get("iocs") is True
 
@@ -158,7 +167,14 @@ def test_timeline_per_kind_cap(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_iocs_from_connections_command_lines_and_history() -> None:
     d = draft()
-    d.add_process(7000, 3040, "cmd.exe", WIN + "cmd.exe", 9, cmdline="cmd /c curl http://downloads.example.net/a.zip")
+    d.add_process(
+        7000,
+        3040,
+        "cmd.exe",
+        WIN + "cmd.exe",
+        9,
+        cmdline="cmd /c curl http://downloads.example.net/a.zip",
+    )
     d.connections += [
         tcp(7000, "cmd.exe", "10.0.0.15", 50001, "203.0.113.7", 443, minute=10),
         tcp(7000, "cmd.exe", "10.0.0.15", 50002, "203.0.113.7", 443, minute=12),
@@ -196,7 +212,9 @@ def test_history_time_becomes_ioc_time() -> None:
 def test_timeline_events() -> None:
     d = noisy(1)
     d.add_process(9000, 3040, "old.exe", "C:\\old.exe", 20, exit_minute=25)
-    d.connections.append(tcp(3040, "explorer.exe", "10.0.0.15", 50001, "203.0.113.7", 443, minute=30))
+    d.connections.append(
+        tcp(3040, "explorer.exe", "10.0.0.15", 50001, "203.0.113.7", 443, minute=30)
+    )
     out = run(d)
     events = [e.event for e in out.timeline]
     assert events.count("system_time") == 1 and "process_exit" in events

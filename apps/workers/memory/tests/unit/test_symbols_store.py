@@ -9,7 +9,7 @@ import pytest
 from cyberlab_jobs.memory import LinuxBanner, WindowsPdb
 
 from memory_worker.symbols.manifest import isf_relpath
-from memory_worker.symbols.store import SymbolStore, SymbolsCorrupt, normalize_banner
+from memory_worker.symbols.store import SymbolsCorrupt, SymbolStore, normalize_banner
 from tests.symbols_helpers import BANNER, CONTRACT_FIXTURES, GUID, new_store, put, tamper
 
 WIN = WindowsPdb(name="ntkrnlmp.pdb", guid=GUID, age=1)

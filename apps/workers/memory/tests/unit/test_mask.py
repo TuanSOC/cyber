@@ -28,17 +28,29 @@ def test_masked_value_keeps_two_characters_and_the_length() -> None:
         ("sshpass -pPlainPw123 scp a b:", "PlainPw123"),
         ("net use \\\\fs01\\share /user:CORP\\alice S3cretPass! /persistent:no", "S3cretPass!"),
         ("net user bob N3wPassw0rd /add", "N3wPassw0rd"),
-        ("curl -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.e30.sig' https://x", "eyJhbGciOiJIUzI1NiJ9.e30.sig"),
+        (
+            "curl -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.e30.sig' https://x",
+            "eyJhbGciOiJIUzI1NiJ9.e30.sig",
+        ),
         ("curl -H 'Authorization: Basic YWxpY2U6c2VjcmV0' https://x", "YWxpY2U6c2VjcmV0"),
         ("deploy --token=ghp_abcdefghijklmnop1234", "ghp_abcdefghijklmnop1234"),
         ("cli --api-key 0123456789abcdef", "0123456789abcdef"),
         ("cli --client-secret=zyxwvu987654 --secret topsecret99", "zyxwvu987654"),
         ("cli --secret topsecret99", "topsecret99"),
         ("aws configure set aws_access_key_id AKIAIOSFODNN7EXAMPLE", "AKIAIOSFODNN7EXAMPLE"),
-        ("export AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+        (
+            "export AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        ),
         ("git clone https://bob:hunter22pw@git.example.com/repo.git", "hunter22pw"),
-        ("echo '-----BEGIN RSA PRIVATE KEY-----MIIEowIBAAKCAQEA7x-----END RSA PRIVATE KEY-----' > k", "MIIEowIBAAKCAQEA7x"),
-        ("echo -----BEGIN OPENSSH PRIVATE KEY----- b3BlbnNzaC1rZXktdjE truncated", " b3BlbnNzaC1rZXktdjE truncated"),
+        (
+            "echo '-----BEGIN RSA PRIVATE KEY-----MIIEowIBAAKCAQEA7x-----END RSA PRIVATE KEY-----' > k",
+            "MIIEowIBAAKCAQEA7x",
+        ),
+        (
+            "echo -----BEGIN OPENSSH PRIVATE KEY----- b3BlbnNzaC1rZXktdjE truncated",
+            " b3BlbnNzaC1rZXktdjE truncated",
+        ),
     ],
 )
 def test_every_pattern_masks_its_secret(text: str, secret: str) -> None:

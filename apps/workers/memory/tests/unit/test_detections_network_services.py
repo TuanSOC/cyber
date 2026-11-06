@@ -105,7 +105,9 @@ def test_service_under_a_user_writable_directory(binary: str) -> None:
     d = draft()
     d.artifacts.append(service("UpdaterSvc", binary))
     out = run(d)
-    assert [(f.type, f.severity) for f in out.findings] == [("mem_service_user_writable_path", "low")]
+    assert [(f.type, f.severity) for f in out.findings] == [
+        ("mem_service_user_writable_path", "low")
+    ]
     assert "UpdaterSvc" in out.findings[0].description
 
 
@@ -138,7 +140,9 @@ def test_defender_exclusion_needs_the_platform_directory() -> None:
 def test_driver_outside_the_drivers_directory(binary: str) -> None:
     d = draft()
     d.artifacts.append(driver("drv", binary))
-    assert [(f.type, f.severity) for f in run(d).findings] == [("mem_driver_unexpected_path", "low")]
+    assert [(f.type, f.severity) for f in run(d).findings] == [
+        ("mem_driver_unexpected_path", "low")
+    ]
 
 
 @pytest.mark.parametrize(

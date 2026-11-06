@@ -50,9 +50,26 @@ def _openssl(*args: str, cwd: Path) -> None:
 @pytest.fixture(scope="module")
 def pki(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
     d = tmp_path_factory.mktemp("pki")
-    _openssl("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "ca.key", "-out",
-             "ca.pem", "-days", "2", "-subj", "/CN=cyberlab test CA", "-config", _cnf(d),
-             "-extensions", "v3", cwd=d)
+    _openssl(
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-keyout",
+        "ca.key",
+        "-out",
+        "ca.pem",
+        "-days",
+        "2",
+        "-subj",
+        "/CN=cyberlab test CA",
+        "-config",
+        _cnf(d),
+        "-extensions",
+        "v3",
+        cwd=d,
+    )
     sans = ",".join(f"DNS:{n}" for n in NAMES)
     leaf_ext = d / "leaf.ext"
     leaf_ext.write_text(
@@ -60,16 +77,67 @@ def pki(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
         "keyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n"
         "subjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid,issuer\n"
     )
-    _openssl("req", "-newkey", "rsa:2048", "-nodes", "-keyout", "leaf.key", "-out", "leaf.csr",
-             "-subj", "/CN=msdl.test", "-config", _cnf(d), cwd=d)
-    _openssl("x509", "-req", "-in", "leaf.csr", "-CA", "ca.pem", "-CAkey", "ca.key",
-             "-CAcreateserial", "-out", "leaf.pem", "-days", "2", "-extfile", "leaf.ext", cwd=d)
+    _openssl(
+        "req",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-keyout",
+        "leaf.key",
+        "-out",
+        "leaf.csr",
+        "-subj",
+        "/CN=msdl.test",
+        "-config",
+        _cnf(d),
+        cwd=d,
+    )
+    _openssl(
+        "x509",
+        "-req",
+        "-in",
+        "leaf.csr",
+        "-CA",
+        "ca.pem",
+        "-CAkey",
+        "ca.key",
+        "-CAcreateserial",
+        "-out",
+        "leaf.pem",
+        "-days",
+        "2",
+        "-extfile",
+        "leaf.ext",
+        cwd=d,
+    )
     # A second, unrelated CA's leaf: valid names, untrusted issuer.
-    _openssl("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "rogue.key", "-out",
-             "rogue.pem", "-days", "2", "-subj", "/CN=msdl.test", "-config", _cnf(d),
-             "-addext", f"subjectAltName={sans}", cwd=d)
-    return {"ca": d / "ca.pem", "cert": d / "leaf.pem", "key": d / "leaf.key",
-            "rogue_cert": d / "rogue.pem", "rogue_key": d / "rogue.key"}
+    _openssl(
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-keyout",
+        "rogue.key",
+        "-out",
+        "rogue.pem",
+        "-days",
+        "2",
+        "-subj",
+        "/CN=msdl.test",
+        "-config",
+        _cnf(d),
+        "-addext",
+        f"subjectAltName={sans}",
+        cwd=d,
+    )
+    return {
+        "ca": d / "ca.pem",
+        "cert": d / "leaf.pem",
+        "key": d / "leaf.key",
+        "rogue_cert": d / "rogue.pem",
+        "rogue_key": d / "rogue.key",
+    }
 
 
 def _cnf(d: Path) -> str:

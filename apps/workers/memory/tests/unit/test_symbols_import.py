@@ -279,6 +279,12 @@ def test_the_child_refuses_network_and_subprocesses(tmp_path: Path) -> None:
     for event in ("socket.connect", "subprocess.Popen", "os.system", "urllib.Request"):
         with pytest.raises(PermissionError):
             isolate._deny_hook(event, ())
+    # Volatility reads local ISFs through urllib: only file / jar:file URLs pass.
+    isolate._deny_hook("urllib.Request", ("file:///symbols/windows/x.json.xz", None, {}, None))
+    isolate._deny_hook("urllib.Request", ("jar:file:/symbols/x.zip!a.json", None, {}, None))
+    for url in ("https://msdl.microsoft.com/x", "http://127.0.0.1/", "ftp://x/"):
+        with pytest.raises(PermissionError):
+            isolate._deny_hook("urllib.Request", (url, None, {}, None))
 
 
 def test_schema_dir_discovery_needs_volatility() -> None:
@@ -295,7 +301,9 @@ def test_the_real_volatility_schema_refuses_a_broken_isf(tmp_path: Path) -> None
     except ImportRefused:
         pytest.skip("volatility3 is not installed on this interpreter (runs in the image)")
     doc = windows_isf()
-    doc["base_types"] = "not an object"
+    # Volatility's schemas leave the top-level sections untyped (`base_types` is only
+    # `additionalProperties`), so a wrong section type passes; a missing required one does not.
+    del doc["symbols"]
     src = tmp_path / "broken.json"
     src.write_bytes(dumps(doc))
     with pytest.raises(isolate.ChildFailed, match="schema violation|no Volatility schema"):

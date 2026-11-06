@@ -197,7 +197,16 @@ _DENIED_EVENTS = (
 )
 
 
-def _deny_hook(event: str, _args: tuple[object, ...]) -> None:
+# Volatility opens every location through `urllib.request.urlopen`, local ISFs included
+# (`ResourceAccessor.open`): file URLs must pass or its indexer silently records nothing.
+_LOCAL_URL_SCHEMES = ("file:", "jar:file:")
+
+
+def _deny_hook(event: str, args: tuple[object, ...]) -> None:
+    if event == "urllib.Request":
+        url = args[0] if args and isinstance(args[0], str) else ""
+        if url.lower().startswith(_LOCAL_URL_SCHEMES):
+            return
     if event.startswith(_DENIED_EVENTS):
         raise PermissionError(f"memory-symbols child: {event} is not allowed")
 
@@ -350,7 +359,12 @@ def validate_isf(doc: dict[str, Any], schema_dir: Path) -> None:
     except ImportError as exc:  # never skip validation silently (research §7)
         raise Refused("jsonschema is not installed: refusing to import unvalidated ISF") from exc
     schema = load_schema(schema_dir, doc)
-    validator_cls = jsonschema.validators.validator_for(schema)
+    # Volatility's schemas declare `http://json-schema.org/schema#` ("the latest draft"), which
+    # jsonschema resolves to its newest validator with a DeprecationWarning (a future error):
+    # name that validator explicitly, the same one `jsonschema.validate` picks today.
+    validator_cls = jsonschema.validators.validator_for(
+        schema, default=jsonschema.validators.Draft202012Validator
+    )
     # The first error only: a hostile document may hold millions of them.
     error = next(iter(validator_cls(schema).iter_errors(doc)), None)
     if error is not None:
@@ -594,4 +608,3 @@ def child_main(argv: list[str]) -> int:
         return 3
     Path(result_path).write_text(json.dumps(result))
     return 0
-

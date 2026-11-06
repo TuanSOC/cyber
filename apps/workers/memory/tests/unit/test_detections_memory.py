@@ -26,7 +26,13 @@ IMAGE: dict[str, Any] = {
 def draft(os: MemoryOs = "windows") -> Draft:
     d = Draft(os=os, profile=MemoryProfile.FULL, image=dict(IMAGE))
     d.add_process(3040, 2900, "explorer.exe", "C:\\Windows\\explorer.exe", 5)
-    d.add_process(4400, 3040, "msedge.exe", "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe", 6)
+    d.add_process(
+        4400,
+        3040,
+        "msedge.exe",
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        6,
+    )
     d.add_process(5300, 3040, "notepad.exe", WIN + "notepad.exe", 7)
     return d
 
@@ -44,7 +50,9 @@ def found(out: DetectionOutput) -> list[tuple[str, str, object]]:
 
 def test_region_with_mz_header_is_medium() -> None:
     d = draft()
-    d.injections.append(region(3040, "explorer.exe", 0x520000, 0x1D000, "PAGE_EXECUTE_READWRITE", MZ_HEAD))
+    d.injections.append(
+        region(3040, "explorer.exe", 0x520000, 0x1D000, "PAGE_EXECUTE_READWRITE", MZ_HEAD)
+    )
     out = run(d)
     assert found(out) == [("mem_private_exec_pe", "medium", 3040)]
     finding = out.findings[0]
@@ -58,7 +66,9 @@ def test_pe_signature_at_in_bounds_e_lfanew() -> None:
     head[0x3C:0x40] = (0x30).to_bytes(4, "little")
     head[0x30:0x34] = b"PE\0\0"
     d = draft()
-    d.injections.append(region(5300, "notepad.exe", 0x10000, 0x1000, "PAGE_EXECUTE_READWRITE", head.hex()))
+    d.injections.append(
+        region(5300, "notepad.exe", 0x10000, 0x1000, "PAGE_EXECUTE_READWRITE", head.hex())
+    )
     out = run(d)
     assert found(out) == [("mem_private_exec_pe", "medium", 5300)]
     assert "a PE header" in out.findings[0].description
@@ -75,15 +85,21 @@ def test_without_mz_the_e_lfanew_field_is_not_trusted() -> None:
 
 def test_shellcode_region_without_header_is_low() -> None:
     d = draft()
-    d.injections.append(region(5300, "notepad.exe", 0x1F45A300000, 0x1000, "PAGE_EXECUTE_READWRITE", SHELLCODE_HEAD))
+    d.injections.append(
+        region(5300, "notepad.exe", 0x1F45A300000, 0x1000, "PAGE_EXECUTE_READWRITE", SHELLCODE_HEAD)
+    )
     assert found(run(d)) == [("mem_private_exec_region", "low", 5300)]
 
 
 def test_jit_host_region_without_header_is_skipped_but_with_header_is_not() -> None:
     d = draft()
-    d.injections.append(region(4400, "msedge.exe", 0x2A400000000, 0x10000, "PAGE_EXECUTE_READWRITE", SHELLCODE_HEAD))
+    d.injections.append(
+        region(4400, "msedge.exe", 0x2A400000000, 0x10000, "PAGE_EXECUTE_READWRITE", SHELLCODE_HEAD)
+    )
     assert run(d).findings == []
-    d.injections.append(region(4400, "msedge.exe", 0x2A500000000, 0x10000, "PAGE_EXECUTE_READWRITE", MZ_HEAD))
+    d.injections.append(
+        region(4400, "msedge.exe", 0x2A500000000, 0x10000, "PAGE_EXECUTE_READWRITE", MZ_HEAD)
+    )
     assert found(run(d)) == [("mem_private_exec_pe", "medium", 4400)]
 
 
@@ -98,7 +114,9 @@ def test_jit_host_region_without_header_is_skipped_but_with_header_is_not() -> N
 )
 def test_regions_outside_the_rule(protection: str | None, private: bool) -> None:
     d = draft()
-    record = region(5300, "notepad.exe", 0x10000, 0x1000, protection or "", MZ_HEAD, private=private)
+    record = region(
+        5300, "notepad.exe", 0x10000, 0x1000, protection or "", MZ_HEAD, private=private
+    )
     record["protection"] = protection
     d.injections.append(record)
     assert run(d).findings == []
@@ -121,8 +139,12 @@ def test_linux_rwx_flags() -> None:
 
 def test_no_title_says_injected_code() -> None:
     d = draft()
-    d.injections.append(region(5300, "notepad.exe", 0x10000, 0x1000, "PAGE_EXECUTE_READWRITE", SHELLCODE_HEAD))
-    d.injections.append(region(3040, "explorer.exe", 0x20000, 0x1000, "PAGE_EXECUTE_READWRITE", MZ_HEAD))
+    d.injections.append(
+        region(5300, "notepad.exe", 0x10000, 0x1000, "PAGE_EXECUTE_READWRITE", SHELLCODE_HEAD)
+    )
+    d.injections.append(
+        region(3040, "explorer.exe", 0x20000, 0x1000, "PAGE_EXECUTE_READWRITE", MZ_HEAD)
+    )
     for finding in run(d).findings:
         assert "inject" not in (finding.title + finding.description).lower()
 
@@ -132,7 +154,16 @@ def test_no_title_says_injected_code() -> None:
 
 def test_module_missing_from_all_lists_is_reported() -> None:
     d = draft()
-    d.artifacts.append(ldr(3040, "C:\\Users\\alice\\AppData\\Local\\Temp\\msupd.dll", 0x6A400000, False, False, False))
+    d.artifacts.append(
+        ldr(
+            3040,
+            "C:\\Users\\alice\\AppData\\Local\\Temp\\msupd.dll",
+            0x6A400000,
+            False,
+            False,
+            False,
+        )
+    )
     out = run(d)
     assert found(out) == [("mem_unlinked_module", "medium", 3040)]
     assert "msupd.dll" in out.findings[0].description
@@ -157,5 +188,14 @@ def test_modules_outside_the_rule(path: str, lists: tuple[bool, bool, bool]) -> 
 
 def test_own_image_by_name_when_paths_differ() -> None:
     d = draft()
-    d.artifacts.append(ldr(5300, "\\Device\\HarddiskVolume3\\Windows\\System32\\notepad.exe", 0x10000, False, False, False))
+    d.artifacts.append(
+        ldr(
+            5300,
+            "\\Device\\HarddiskVolume3\\Windows\\System32\\notepad.exe",
+            0x10000,
+            False,
+            False,
+            False,
+        )
+    )
     assert run(d).findings == []

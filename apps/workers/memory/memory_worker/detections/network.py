@@ -91,9 +91,7 @@ def detect(view: MemoryView, ctx: Context) -> list[Finding]:
                 },
                 key=str(pid),
                 pid=pid,
-                refs=refs(
-                    [f"pid:{pid}", *(f"connection:{off}" for _, _, off in remotes if off)]
-                ),
+                refs=refs([f"pid:{pid}", *(f"connection:{off}" for _, _, off in remotes if off)]),
                 attributes={"pid": pid, "connections": len(remotes), "first_remote": str(first_ip)},
                 dst_ip=first_ip,
                 dst_port=first_port,

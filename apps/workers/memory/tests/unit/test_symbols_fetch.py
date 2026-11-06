@@ -176,9 +176,7 @@ def test_oversize_bodies_are_refused(tmp_path: Path) -> None:
         return httpx.Response(200, content=iter([b"x" * 600, b"x" * 600]))
 
     with pytest.raises(fw.FetchRefused, match="larger than"):
-        fw.download(
-            PDB, tmp_path / "b", policy=SMALL, transport=_transport({ORIGIN: streamed}, [])
-        )
+        fw.download(PDB, tmp_path / "b", policy=SMALL, transport=_transport({ORIGIN: streamed}, []))
 
 
 @pytest.mark.parametrize("status", [404, 500, 403])

@@ -134,8 +134,7 @@ TEMPLATES: dict[str, tuple[str, str, str]] = {
     "mem_shell_history_pattern": (
         M_SHELL,
         "Shell history matches download-and-execute or reverse-shell patterns ({patterns})",
-        "bash pid {pid} history line (secrets masked): {command}. Matched patterns: "
-        "{patterns}.",
+        "bash pid {pid} history line (secrets masked): {command}. Matched patterns: {patterns}.",
     ),
     "mem_correlated_indicators": (
         M_CORRELATED,
@@ -184,9 +183,7 @@ class Finding:
     def finding_id(self, image_sha256: str) -> uuid.UUID:
         """Stable: the same observation on the same image always gets the same id (ids are
         unique per job: `(job_id, finding_id)`)."""
-        return uuid.uuid5(
-            FINDING_NAMESPACE, f"{image_sha256}|{self.method}|{self.type}|{self.key}"
-        )
+        return uuid.uuid5(FINDING_NAMESPACE, f"{image_sha256}|{self.method}|{self.type}|{self.key}")
 
 
 class Budget:

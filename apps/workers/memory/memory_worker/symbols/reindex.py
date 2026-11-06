@@ -54,8 +54,7 @@ def cache_locations(cache: Path) -> list[str]:
     conn = sqlite3.connect(uri, uri=True)
     try:
         tables = [
-            row[0]
-            for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         ]
         locations: list[str] = []
         for table in tables:

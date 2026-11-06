@@ -64,7 +64,7 @@ _HOST_RE = re.compile(rf"^{_LABEL}(\.{_LABEL})*$")
 _URL_CHARS = frozenset(chr(c) for c in range(0x21, 0x7F)) - frozenset('\\"<>^`{|}')
 
 if not all(s.startswith(".") and _HOST_RE.fullmatch(s[1:]) for s in SYMBOL_REDIRECT_SUFFIXES):
-    raise RuntimeError("every SYMBOL_REDIRECT_SUFFIXES entry is \".<host name>\"")
+    raise RuntimeError('every SYMBOL_REDIRECT_SUFFIXES entry is ".<host name>"')
 
 
 class FetchRefused(RuntimeError):

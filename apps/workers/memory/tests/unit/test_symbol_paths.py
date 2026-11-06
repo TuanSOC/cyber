@@ -42,7 +42,7 @@ def test_paths_are_the_store_then_the_builtin_dirs(tmp_path: Path) -> None:
     assert builtin[0].endswith("/volatility3/symbols")
     assert builtin[1].endswith("/volatility3/framework/symbols")
     cache = str(out["cache"])
-    assert not any(str(p).startswith(cache) for p in out["paths"])  # type: ignore[union-attr]
+    assert not any(str(p).startswith(cache) for p in out["paths"])
     for table in ("pe", "netscan", "bash"):
         urls = out[table]
         assert isinstance(urls, list) and urls, table

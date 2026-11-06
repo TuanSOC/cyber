@@ -18,6 +18,7 @@ from cyberlab_jobs.memory import (
     MemoryLimits,
     MemoryProfile,
 )
+from cyberlab_worker import sandbox
 from cyberlab_worker.errors import JobFailed
 
 from memory_worker import detections, pipeline
@@ -70,8 +71,8 @@ def no_sandbox(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         calls.append(f"upload:{path.name}")
         return "v-123"
 
-    monkeypatch.setattr(pipeline.sandbox, "prepare", prepare)
-    monkeypatch.setattr(pipeline.sandbox, "cleanup", lambda dirs: calls.append("cleanup"))
+    monkeypatch.setattr(sandbox, "prepare", prepare)
+    monkeypatch.setattr(sandbox, "cleanup", lambda dirs: calls.append("cleanup"))
     monkeypatch.setattr(pipeline, "upload", upload)
     return calls
 
