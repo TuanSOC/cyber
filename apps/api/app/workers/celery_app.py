@@ -9,6 +9,7 @@ from celery.schedules import crontab
 from cyberlab_jobs import (
     AI_RESUME,
     CORRELATION_INDEX_PENDING,
+    DISK_EXPIRE_EXPORTS,
     REAP,
     RETENTION_SWEEP,
     TI_RESUME,
@@ -72,6 +73,14 @@ celery_app.conf.update(
             "schedule": 60.0,
             "kwargs": {"message": {}},
             "options": {"queue": queues.ingest, "expires": 55},
+        },
+        # M9: unpromoted disk file exports expire (phase 10; the retention worker deletes the
+        # objects, RT19). Hourly, on this (ingest) worker.
+        "expire-disk-exports": {
+            "task": DISK_EXPIRE_EXPORTS,
+            "schedule": 3600.0,
+            "kwargs": {"message": {}},
+            "options": {"queue": queues.ingest, "expires": 3500},
         },
         # M7: the daily retention sweep on the retention worker (dry-run unless the DB says
         # enforce is effective, RT1). Expires before the next day's tick.

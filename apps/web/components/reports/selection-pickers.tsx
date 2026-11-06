@@ -39,7 +39,7 @@ function LoadState({ loading, error, empty, count }: { loading: boolean; error: 
 }
 
 const analyzerText = (analyzer: string) =>
-  analyzer === "pcap" ? "PCAP" : analyzer === "static" ? "Static" : analyzer === "memory" ? "Memory" : analyzer;
+  analyzer === "pcap" ? "PCAP" : analyzer === "static" ? "Static" : analyzer === "memory" ? "Memory" : analyzer === "disk" ? "Disk" : analyzer;
 
 export function JobsPicker({
   include,

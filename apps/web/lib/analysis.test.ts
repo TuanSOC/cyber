@@ -28,7 +28,7 @@ import {
 // M8 RT1: every analyzer-keyed map covers every analyzer; memory never falls into a pcap /
 // static "else". (Typed maps fail typecheck when the contract gains an analyzer; this test
 // fails at runtime if a map is widened by a cast.)
-const ANALYZERS: Analyzer[] = ["pcap", "static", "memory"];
+const ANALYZERS: Analyzer[] = ["pcap", "static", "memory", "disk"];
 
 describe("analyzer exhaustiveness", () => {
   it("every analyzer has its own route, label and AI task list", () => {
@@ -36,6 +36,16 @@ describe("analyzer exhaustiveness", () => {
     expect(new Set(Object.values(ANALYZER_ROUTES)).size).toBe(ANALYZERS.length);
     expect(Object.keys(JOB_TASKS).sort()).toEqual([...ANALYZERS].sort());
     expect(JOB_TASKS.memory).toEqual([]);
+    expect(JOB_TASKS.disk).toEqual([]);
+  });
+
+  it("disk jobs link to /forensics and are labelled by profile (M9)", () => {
+    expect(analysisSegment({ id: "j1", analyzer: "disk" })).toBe("forensics/j1");
+    expect(analysisKindLabel({ analyzer: "disk", profile: "triage" })).toBe("Disk (triage)");
+    expect(analysisKindLabel({ analyzer: "disk", profile: "full" })).toBe("Disk (full)");
+    expect(analysisKindLabel({ analyzer: "disk", profile: "extract" })).toBe("Disk (file export)");
+    expect(runKindOf({ analyzer: "disk", profile: "triage" })).toBeNull();
+    expect(analysisErrorText("no_supported_filesystem")).toMatch(/NTFS, FAT/);
   });
 
   it("memory jobs link to /memory and are labelled by profile", () => {

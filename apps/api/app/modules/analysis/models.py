@@ -5,6 +5,7 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Any
 
+from cyberlab_jobs.disk import DiskProfile
 from cyberlab_jobs.memory import MemoryProfile, OsHint
 from cyberlab_jobs.static import Profile
 from sqlalchemy import (
@@ -26,15 +27,18 @@ class Analyzer(enum.StrEnum):
     PCAP = "pcap"
     STATIC = "static"
     MEMORY = "memory"  # M8 (migration 0016)
+    DISK = "disk"  # M9 (migration 0017)
 
 
 class JobProfile(enum.StrEnum):
     """What a run was asked to do: static `full` / `av` (0006), memory `triage` / `full`
-    (0016); NULL for pcap. One column for both analyzers, so `full` is shared."""
+    (0016), disk `triage` / `full` / `extract` (0017); NULL for pcap. One column for every
+    analyzer, so `full` and `triage` are shared."""
 
     FULL = "full"
     AV = "av"
     TRIAGE = "triage"
+    EXTRACT = "extract"  # a disk file export job (M9 phase 10), never requested directly
 
 
 # The profiles each analyzer takes (the 0016 checks agree; test_analyzer_exhaustive).
@@ -43,21 +47,41 @@ PROFILES: Mapping[Analyzer, frozenset[JobProfile]] = MappingProxyType(
         Analyzer.PCAP: frozenset(),
         Analyzer.STATIC: frozenset(JobProfile(p.value) for p in Profile),
         Analyzer.MEMORY: frozenset(JobProfile(p.value) for p in MemoryProfile),
+        Analyzer.DISK: frozenset(JobProfile(p.value) for p in DiskProfile),
+    }
+)
+# The profiles an analyst may request through `POST /evidence/{id}/analyses` (`extract` jobs
+# are created by the file-export route, phase 10).
+REQUESTABLE_PROFILES: Mapping[Analyzer, frozenset[JobProfile]] = MappingProxyType(
+    {
+        **PROFILES,
+        Analyzer.DISK: frozenset({JobProfile.TRIAGE, JobProfile.FULL}),
     }
 )
 DEFAULT_PROFILE: Mapping[Analyzer, JobProfile | None] = MappingProxyType(
-    {Analyzer.PCAP: None, Analyzer.STATIC: JobProfile.FULL, Analyzer.MEMORY: JobProfile.TRIAGE}
+    {
+        Analyzer.PCAP: None,
+        Analyzer.STATIC: JobProfile.FULL,
+        Analyzer.MEMORY: JobProfile.TRIAGE,
+        Analyzer.DISK: JobProfile.TRIAGE,
+    }
 )
 # The web route segment of each analyzer's job page (`/o/{org}/{route}/{job}`): every deep
 # link the API builds goes through this map (RT1: no two-way "else" sends memory to pcap).
 ANALYZER_ROUTES: Mapping[Analyzer, str] = MappingProxyType(
-    {Analyzer.PCAP: "pcap", Analyzer.STATIC: "malware", Analyzer.MEMORY: "memory"}
+    {
+        Analyzer.PCAP: "pcap",
+        Analyzer.STATIC: "malware",
+        Analyzer.MEMORY: "memory",
+        Analyzer.DISK: "forensics",
+    }
 )
 ANALYZER_TITLES: Mapping[Analyzer, str] = MappingProxyType(
     {
         Analyzer.PCAP: "PCAP analysis",
         Analyzer.STATIC: "Static analysis",
         Analyzer.MEMORY: "Memory analysis",
+        Analyzer.DISK: "Disk analysis",
     }
 )
 

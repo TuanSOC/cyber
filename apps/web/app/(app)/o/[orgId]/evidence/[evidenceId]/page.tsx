@@ -12,6 +12,8 @@ import { CustodyTimeline } from "@/components/evidence/custody-timeline";
 import { EvidenceActions } from "@/components/evidence/evidence-actions";
 import { EvidenceIntegrityStrip } from "@/components/evidence/evidence-integrity-strip";
 import { HashValue } from "@/components/hash-value";
+import { DerivedEvidenceBadge } from "@/components/disk/derived-evidence-badge";
+import { EvidenceSensitivityBadge } from "@/components/evidence/sensitivity-badge";
 import { MemorySensitivityBadge } from "@/components/memory/memory-sensitivity-badge";
 import { EvidenceExclusionBadges, EvidenceSharePolicyCard } from "@/components/investigations/evidence-share-policy";
 import { NotFoundCard } from "@/components/not-found-card";
@@ -92,6 +94,8 @@ export default function EvidencePage() {
             {e.status === "archived" && <Badge variant="outline">archived</Badge>}
             <EvidenceExclusionBadges evidence={e} />
             <MemorySensitivityBadge orgId={orgId} evidence={e} />
+            <EvidenceSensitivityBadge orgId={orgId} evidence={e} />
+            <DerivedEvidenceBadge orgId={orgId} evidence={e} />
             <EvidenceActions
               orgId={orgId}
               evidence={e}

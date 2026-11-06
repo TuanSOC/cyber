@@ -6,11 +6,19 @@ from collections.abc import Coroutine
 from typing import Any
 
 from celery.signals import worker_init
-from cyberlab_jobs import CORRELATION_INDEX_PENDING, INGEST_EVENT, REAP, REPORT_RENDERED
+from cyberlab_jobs import (
+    CORRELATION_INDEX_PENDING,
+    DISK_EXPIRE_EXPORTS,
+    DISK_INGEST,
+    INGEST_EVENT,
+    REAP,
+    REPORT_RENDERED,
+)
 
 import app.models  # noqa: F401  (register every mapper before the first query)
 from app.core.config import get_settings
 from app.modules.correlation import indexer as correlation_indexer
+from app.modules.disk_forensics import export_service as disk_exports
 from app.modules.reports import render_ingest
 from app.workers import ingest, reaper
 from app.workers.celery_app import celery_app
@@ -75,3 +83,28 @@ def correlation_index_pending(message: dict[str, Any] | None = None) -> None:
     indexed = run(correlation_indexer.index_pending(get_settings().correlation_index_batch_jobs))
     if indexed:
         log.info("correlation: %d job(s) indexed", indexed)
+
+
+# M9 (RT9): the disk ingest worker's task (queue `ingest_disk`, its own solo process): the
+# report `handle_event` handed off. Same retry policy as `ingest.event`.
+@celery_app.task(  # type: ignore[untyped-decorator]
+    name=DISK_INGEST,
+    autoretry_for=ingest.TRANSIENT_ERRORS,
+    retry_backoff=2,
+    retry_backoff_max=120,
+    max_retries=8,
+)
+def disk_ingest(message: dict[str, Any]) -> None:
+    run(ingest.handle_disk_ingest(message))
+
+
+# M9 (beat, hourly): unpromoted file exports older than DISK_EXPORT_TTL_S become `expired`
+# (phase 10); the retention worker deletes the object versions (phase 9, RT19).
+@celery_app.task(name=DISK_EXPIRE_EXPORTS)  # type: ignore[untyped-decorator]
+def disk_expire_exports(message: dict[str, Any] | None = None) -> None:
+    try:
+        expired = run(disk_exports.expire_exports(500))
+    except NotImplementedError:
+        return  # M9 phase 1: the body lands with phase 10
+    if expired:
+        log.info("disk exports: %d expired", expired)

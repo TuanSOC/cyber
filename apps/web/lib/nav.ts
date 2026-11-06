@@ -63,7 +63,6 @@ export const NAV: NavItem[] = [
     label: "Forensics",
     icon: HardDrive,
     segment: "forensics",
-    plannedFor: "a later milestone",
     summary: "Disk forensics with The Sleuth Kit and Plaso timelines.",
   },
   {

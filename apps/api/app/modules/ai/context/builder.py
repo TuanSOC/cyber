@@ -369,11 +369,21 @@ async def _memory_digest(
     return [await sel.findings(session, org_id, jobs), iocs, await _ti(session, org_id, iocs, opts)]
 
 
+async def _disk_digest(
+    session: AsyncSession, org_id: uuid.UUID, job: AnalysisJob, opts: Options
+) -> list[Selection]:
+    """M9 phase 9 owns the body (findings and IOCs only, masked; never file listings, shell
+    history or events). Until then a disk job never reaches a digest silently as pcap (RT1)."""
+    raise NotImplementedError("the disk digest lands with M9 phase 9")
+
+
 async def _digest_selections(
     session: AsyncSession, org_id: uuid.UUID, job: AnalysisJob, opts: Options
 ) -> list[Selection]:
     if job.analyzer == Analyzer.MEMORY:
         return await _memory_digest(session, org_id, job, opts)
+    if job.analyzer == Analyzer.DISK:
+        return await _disk_digest(session, org_id, job, opts)
     if job.analyzer == Analyzer.STATIC:
         return await _static_summary(session, org_id, job, opts)
     return await _pcap_summary(session, org_id, job, opts)

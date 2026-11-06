@@ -1,0 +1,62 @@
+[project]
+name = "cyberlab-disk-worker"
+version = "0.1.0"
+description = "CyberLab disk forensics analyzer (untrusted-input worker) and the trusted disk-hashsets tool"
+requires-python = ">=3.12,<3.13"
+# TSK and libewf through their Python bindings in library mode, pinned exactly (a bump is a
+# deliberate change re-checked on the generated-image suite). Plaso lives in its own venv
+# (/opt/plaso, from plaso.lock) and is NOT a dependency here. docker/finalize_image.py asserts
+# the pins and that no Debian TSK / ewf-tools package is present in the prod target.
+dependencies = [
+    "celery[redis]>=5.5",
+    "httpx>=0.28",
+    "pydantic>=2.9",
+    "cyberlab-jobs",
+    "cyberlab-worker",
+    "pytsk3==20260715",
+    "libewf-python==20260924",
+    # The M3 pin (apps/workers/static): the probe compiles the baked M3 rule sources (RT8).
+    "yara-python>=4.5,<5",
+    "python-magic>=0.4.27",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "redis>=5.2",
+]
+
+[tool.uv.sources]
+# The image places the contracts at /packages/py-jobs (same relative path as here).
+cyberlab-jobs = { path = "../../../packages/py-jobs", editable = true }
+cyberlab-worker = { path = "../../../packages/py-worker-kit", editable = true }
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = ["engine: runs the real TSK / libewf / Plaso on generated images (--heavy lanes)"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["plaso"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "S", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S603", "S607", "S108", "S311"]
+"samples/**" = ["S311", "S101", "S603", "S607"]
+"dataset/**" = ["S311", "S101"]
+"docker/**" = ["S603", "S607"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["celery.*", "kombu.*", "pytsk3.*", "pyewf.*", "yara.*", "magic.*"]
+ignore_missing_imports = true

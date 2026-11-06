@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 
 import pytest
+from cyberlab_jobs.disk import DISK_ERROR_CODES
 from cyberlab_jobs.memory import MEMORY_ERROR_CODES
 from cyberlab_jobs.report import RENDER_ERROR_CODES
 
@@ -59,6 +60,7 @@ def _api_codes() -> set[str]:
         *(APP / "modules" / "analysis").glob("*.py"),
         *(APP / "modules" / "reports").glob("*.py"),
         *(APP / "modules" / "memory_analysis").glob("*.py"),
+        *(APP / "modules" / "disk_forensics").glob("*.py"),
     ]
     return set().union(*(_literal_codes(p) for p in paths))
 
@@ -71,6 +73,7 @@ def test_every_contract_code_is_classified() -> None:
         *REAPER_CODES.values(),
         *ANALYZER_CODES,
         *MEMORY_ERROR_CODES,  # M8: the memory analyzer, its ingest and the API refusals
+        *DISK_ERROR_CODES,  # M9: the disk analyzer, its ingest and the API refusals
         "snapshot_too_large",  # the renderer's download cap (report-worker tasks.py)
     }
     missing = sorted(codes - set(ERROR_CLASS))
@@ -88,11 +91,17 @@ def test_every_literal_code_of_the_api_is_classified() -> None:
 def test_analyzer_codes_match_the_worker_sources() -> None:  # pragma: no cover - host only
     paths = [
         p
-        for sub in ("pcap/pcap_worker", "static/static_worker", "memory/memory_worker")
+        for sub in (
+            "pcap/pcap_worker",
+            "static/static_worker",
+            "memory/memory_worker",
+            "disk/disk_worker",
+        )
         for p in (WORKERS / sub).rglob("*.py")
     ]
     found = set().union(*(_literal_codes(p) for p in paths))
-    assert found - set(ANALYZER_CODES) - set(MEMORY_ERROR_CODES) == set()
+    known = set(ANALYZER_CODES) | set(MEMORY_ERROR_CODES) | set(DISK_ERROR_CODES)
+    assert found - known == set()
 
 
 def test_memory_codes_have_the_planned_classes() -> None:
@@ -105,6 +114,21 @@ def test_memory_codes_have_the_planned_classes() -> None:
     assert classify("insufficient_disk") is ErrorClass.INFRA
     assert classify("plugin_timeout") is ErrorClass.INFRA
     assert set(MEMORY_ERROR_CODES) <= set(ERROR_CLASS)
+
+
+def test_disk_codes_have_the_planned_classes() -> None:
+    """M9 (plan Frozen interfaces 6; RT22: the segment download keeps `integrity_mismatch`)."""
+    assert classify("unsupported_disk_format") is ErrorClass.INPUT
+    assert classify("no_supported_filesystem") is ErrorClass.INPUT
+    assert classify("disk_image_too_large") is ErrorClass.INPUT
+    assert classify("disk_segments_invalid") is ErrorClass.INPUT
+    assert classify("disk_parse_failed") is ErrorClass.PARSE
+    assert classify("timeline_failed") is ErrorClass.PARSE
+    assert classify("insufficient_disk") is ErrorClass.INFRA
+    assert classify("stage_timeout") is ErrorClass.INFRA
+    assert classify("integrity_mismatch") is ErrorClass.INFRA
+    assert classify("export_hash_mismatch") is ErrorClass.INFRA
+    assert set(DISK_ERROR_CODES) <= set(ERROR_CLASS)
 
 
 def test_classes_and_fallbacks() -> None:

@@ -41,6 +41,7 @@ async def run_analysis(
         analyzer=body.analyzer,
         profile=body.profile,
         os_hint=body.os_hint,
+        segments=body.segments,
     )
 
 

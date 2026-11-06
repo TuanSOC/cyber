@@ -79,11 +79,14 @@ _MEMORY_TABS: dict[RefKind, DeepLinkTab] = {
     RefKind.IOC: "iocs",
     RefKind.TIMELINE: "timeline",
 }
+# M9: a disk job's page (`/forensics/{job}`) has the same shared tabs.
+_DISK_TABS: dict[RefKind, DeepLinkTab] = dict(_MEMORY_TABS)
 # Analyzer -> (route, tabs): every analyzer (RT1: no "else" mislabels a memory job).
 ANALYZER_LINKS: dict[str, tuple[DeepLinkRoute, dict[RefKind, DeepLinkTab]]] = {
     "pcap": ("pcap", _PCAP_TABS),
     "static": ("malware", _STATIC_TABS),
     "memory": ("memory", _MEMORY_TABS),
+    "disk": ("forensics", _DISK_TABS),
 }
 _RECORD_TABS: dict[str, DeepLinkTab] = {"dns": "dns", "http": "http", "tls": "tls"}
 # A job overview / sample / PE summary link carries no row ref.

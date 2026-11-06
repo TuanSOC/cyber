@@ -68,6 +68,18 @@ x-api-env: &api-env
   ANALYSIS_MEMORY_PLUGIN_TIMEOUT_S: ${ANALYSIS_MEMORY_PLUGIN_TIMEOUT_S:-1200}
   MEMORY_MAX_ACTIVE_PER_ORG: ${MEMORY_MAX_ACTIVE_PER_ORG:-1}
   MEMORY_MAX_ACTIVE_TOTAL: ${MEMORY_MAX_ACTIVE_TOTAL:-2}
+  # M9 disk forensics: the per-request segment cap (<= 16 GiB; CADDY_EVIDENCE_MAX must cover
+  # it), the segment-set total (16 GiB default, under the 20 GiB default org quota, RT21), the
+  # claimed EWF media bound (RT6), the job and disk-ingest timeouts (RT9), the active-job caps
+  # (one disk worker) and the file-export bounds.
+  DISK_MAX_UPLOAD_BYTES: ${DISK_MAX_UPLOAD_BYTES:-8589934592}
+  DISK_MAX_IMAGE_BYTES: ${DISK_MAX_IMAGE_BYTES:-17179869184}
+  DISK_MAX_MEDIA_BYTES: ${DISK_MAX_MEDIA_BYTES:-2199023255552}
+  ANALYSIS_DISK_TIMEOUT_S: ${ANALYSIS_DISK_TIMEOUT_S:-14400}
+  DISK_INGEST_TIMEOUT_S: ${DISK_INGEST_TIMEOUT_S:-1800}
+  DISK_MAX_ACTIVE_PER_ORG: ${DISK_MAX_ACTIVE_PER_ORG:-1}
+  DISK_MAX_ACTIVE_TOTAL: ${DISK_MAX_ACTIVE_TOTAL:-1}
+  DISK_EXPORT_TTL_S: ${DISK_EXPORT_TTL_S:-604800}
 
 # Least-privilege env of the retention worker (M7). Never merged with *api-env: its DB role is
 # `cyberlab_retention` (NOBYPASSRLS), its MinIO user `cyberlab-purge`, its broker user
@@ -313,6 +325,58 @@ x-memory-symbols: &memory-symbols
     memory-symbols-init:
       condition: service_completed_successfully
 
+# Untrusted disk analyzer (M9): TSK (pytsk3) / libewf / Plaso / YARA over an attacker-controlled
+# disk image, offline, one confined process per stage (uid 10007, seccomp AF_UNIX only + no
+# io_uring; RT27 for the uid). The memory worker's isolation: root process with the analyzers'
+# six capabilities, `analysis` only (broker + MinIO presigned URLs, no egress), env BROKER_URL
+# only (broker user `disk`). `/work` is a named volume (images are GiBs; the write watchdog
+# holds DISK_WORK_MIN_FREE_BYTES, RT4) and the hash-set store is mounted read-only. No
+# privileged mount of any kind (RT26).
+x-disk-worker: &disk-worker
+  image: cyberlab/disk-worker:dev
+  build:
+    context: ./apps/workers/disk
+    target: dev
+    additional_contexts:
+      jobs: ./packages/py-jobs
+      worker_kit: ./packages/py-worker-kit
+      static_rules: ./apps/workers/static/rules/yara
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  cap_add: [SETUID, SETGID, KILL, CHOWN, DAC_OVERRIDE, FOWNER]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 256
+  mem_limit: 3g
+  cpus: 2
+  tmpfs:
+    - /tmp:size=64m,mode=1700
+    - /dev/shm:size=1m,mode=1700
+  restart: unless-stopped
+  networks: [analysis]
+
+# Trusted operator tool (M9): imports NSRL RDSv3 / plain hash lists from `./.disk-import`
+# into the hash-set store. Profile `tools` only, the disk image as uid 10008, NO network at all
+# (nothing is ever downloaded), no secrets. Parses run in forked children with rlimits and the
+# kit's seccomp filter, never `run_tool` (no uid change, RT25); /tmp is the external sort.
+x-disk-hashsets: &disk-hashsets
+  image: cyberlab/disk-worker:dev
+  pull_policy: never
+  profiles: ["tools"]
+  user: "10008:10008"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 64
+  mem_limit: 2g
+  network_mode: none
+  tmpfs:
+    - /tmp:size=1g,mode=1777
+  entrypoint: ["python", "-I", "-m", "disk_worker.hashsets"]
+  depends_on:
+    disk-hashsets-init:
+      condition: service_completed_successfully
+
 x-api-healthcheck: &api-healthcheck
   test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=4)"]
   interval: 5s
@@ -445,6 +509,7 @@ services:
       BROKER_RETENTION_PASSWORD: ${BROKER_RETENTION_PASSWORD:-change-me-broker-retention}
       # M8 memory analyzer: the same default rule.
       BROKER_MEMORY_PASSWORD: ${BROKER_MEMORY_PASSWORD:-change-me-broker-memory}
+      BROKER_DISK_PASSWORD: ${BROKER_DISK_PASSWORD:-change-me-broker-disk}
     volumes:
       - ./infra/redis-broker:/init:ro
     networks: [backend, analysis, enrich]
@@ -669,6 +734,80 @@ services:
       - memory_symbols_test:/symbols
       - ./.memory-import:/import:ro
 
+  # Disk analyzer (M9): consumes `disk.analyze` / `disk.export` (queue `disk`). Phase 1: every
+  # job fails `not_implemented` (the TSK pipeline lands in phase 2).
+  disk-worker:
+    <<: *disk-worker
+    environment:
+      BROKER_URL: redis://disk:${BROKER_DISK_PASSWORD:-change-me-broker-disk}@redis-broker:6379/0
+    volumes:
+      - ./apps/workers/disk/disk_worker:/srv/workers/disk/disk_worker:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+      - ./packages/py-worker-kit:/packages/py-worker-kit:ro
+      - disk_work:/work
+      - disk_hashsets:/hashsets:ro
+    depends_on:
+      redis-broker:
+        condition: service_healthy
+
+  # Trusted disk ingest (M9, RT9): its own solo process on the queue `ingest_disk`, so one
+  # long disk transaction never delays the shared ingest queue (reaper, correlation, other
+  # analyzers). The ingest worker validates the `finished` event and hands it off here.
+  disk-ingest-worker:
+    image: cyberlab/api:dev
+    pull_policy: never
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--pool", "solo",
+              "-Q", "ingest_disk", "--without-gossip", "--without-mingle", "--loglevel", "INFO"]
+    environment:
+      <<: *api-env
+      PROCESS_ROLE: ingest
+      BROKER_URL: redis://ingest:${BROKER_INGEST_PASSWORD}@redis-broker:6379/0
+      INGEST_TMP_DIR: /var/lib/cyberlab/ingest-tmp
+    volumes:
+      - ./apps/api:/srv/api
+      - ./packages/py-jobs:/packages/py-jobs
+      - ingest_tmp:/var/lib/cyberlab/ingest-tmp
+    read_only: true
+    mem_limit: 1g
+    tmpfs:
+      - /tmp:size=64m
+    restart: unless-stopped
+    networks: [backend]
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # The hash-set volumes are owned by the tool's uid 10008 and world-readable (the worker reads
+  # them read-only as root and as uid 10007). One-shot, profile `tools`, no network.
+  disk-hashsets-init:
+    image: cyberlab/disk-worker:dev
+    pull_policy: never
+    profiles: ["tools"]
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c", "chown 10008:10008 /hashsets /hashsets-test && chmod 0755 /hashsets /hashsets-test"]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER]
+    security_opt: ["no-new-privileges:true"]
+    network_mode: none
+    volumes:
+      - disk_hashsets:/hashsets
+      - disk_hashsets_test:/hashsets-test
+
+  # `pnpm disk:hashsets -- <command>`: the operator's store (rw at /hashsets) and the
+  # read-only import dir `./.disk-import` (NSRL RDSv3 SQLite, plain md5 / sha1 / sha256 lists).
+  disk-hashsets:
+    <<: *disk-hashsets
+    volumes:
+      - disk_hashsets:/hashsets
+      - ./.disk-import:/import:ro
+
+  # `pnpm disk:hashsets -- --store test <command>`: the same tool on the test store.
+  disk-hashsets-test:
+    <<: *disk-hashsets
+    volumes:
+      - disk_hashsets_test:/hashsets
+      - ./.disk-import:/import:ro
+
   # Report renderer (M6): consumes `report.render` (queue `report`), renders the signed
   # snapshot in its sandboxed subprocess, uploads the artifact through the presigned POST
   # and answers `report.rendered` on `ingest` (the ingest worker re-hashes and records it).
@@ -803,6 +942,14 @@ services:
       MEMORY_MAX_ACTIVE_PER_ORG: "100"
       MEMORY_MAX_ACTIVE_TOTAL: "1000"
       TEST_BROKER_MEMORY_URL: redis://memory:${BROKER_MEMORY_PASSWORD:-change-me-broker-memory}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      # M9: small disk caps for the intake tests (never more than 64 MiB uploaded), high
+      # active-job caps, and the disk analyzer's and the ingest user's broker URLs (ACL tests).
+      DISK_MAX_UPLOAD_BYTES: "67108864"
+      DISK_MAX_IMAGE_BYTES: "268435456"
+      DISK_MAX_ACTIVE_PER_ORG: "100"
+      DISK_MAX_ACTIVE_TOTAL: "1000"
+      TEST_BROKER_DISK_URL: redis://disk:${BROKER_DISK_PASSWORD:-change-me-broker-disk}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      TEST_BROKER_INGEST_URL: redis://ingest:${BROKER_INGEST_PASSWORD}@redis-broker:6379/${TEST_BROKER_DB:-1}
     volumes:
       - ./apps/api:/srv/api
       - ./packages/py-jobs:/packages/py-jobs
@@ -1034,6 +1181,69 @@ services:
       redis-broker:
         condition: service_healthy
 
+  # Disk worker tests (M9): `/work` is a per-container tmpfs (generated images are <= 64 MiB),
+  # the test hash-set store read-only (phase 13's pipeline run; unit tests build temp stores),
+  # bind mounts of the sources (the M8 RT6 pattern).
+  disk-worker-test:
+    <<: *disk-worker
+    profiles: ["test"]
+    environment:
+      BROKER_URL: redis://disk:${BROKER_DISK_PASSWORD:-change-me-broker-disk}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      QUEUE_PREFIX: "test."
+      WORKER_QUEUE: disk
+      # The replay timeline engine and the M3 test rules are refused unless this is set.
+      TEST_PROFILE: "1"
+      DISK_WORK_MIN_FREE_BYTES: "67108864"
+      RUFF_CACHE_DIR: /tmp/ruff
+      MYPY_CACHE_DIR: /tmp/mypy
+    tmpfs:
+      - /tmp:size=64m,mode=1700
+      - /dev/shm:size=1m,mode=1700
+      - /work:size=1g,mode=0711
+    volumes:
+      - ./apps/workers/disk/disk_worker:/srv/workers/disk/disk_worker:ro
+      - ./apps/workers/disk/tests:/srv/workers/disk/tests:ro
+      - ./apps/workers/disk/samples:/srv/workers/disk/samples:ro
+      - ./apps/workers/disk/dataset:/srv/workers/disk/dataset:ro
+      - ./apps/workers/disk/pyproject.toml:/srv/workers/disk/pyproject.toml:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+      - ./packages/py-worker-kit:/packages/py-worker-kit:ro
+      - disk_hashsets_test:/hashsets:ro
+    depends_on:
+      redis-broker:
+        condition: service_healthy
+
+  # The disk ingest worker on the test DB, buckets and broker db (`test.ingest_disk`).
+  disk-ingest-worker-test:
+    profiles: ["test"]
+    image: cyberlab/api:dev
+    pull_policy: never
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--pool", "solo",
+              "-Q", "test.ingest_disk", "--without-gossip", "--without-mingle", "--loglevel", "INFO"]
+    environment:
+      <<: *api-env
+      ENV: test
+      PROCESS_ROLE: ingest
+      DATABASE_URL: ${TEST_DATABASE_URL}
+      REDIS_URL: ${TEST_REDIS_URL}
+      MINIO_BUCKET: ${MINIO_TEST_BUCKET}
+      RESULTS_BUCKET: ${RESULTS_TEST_BUCKET}
+      BROKER_URL: redis://ingest:${BROKER_INGEST_PASSWORD}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      QUEUE_PREFIX: "test."
+      INGEST_TMP_DIR: /var/lib/cyberlab/ingest-tmp
+    volumes:
+      - ./apps/api:/srv/api
+      - ./packages/py-jobs:/packages/py-jobs
+      - ingest_tmp:/var/lib/cyberlab/ingest-tmp
+    read_only: true
+    mem_limit: 1g
+    tmpfs:
+      - /tmp:size=64m
+    networks: [backend]
+    depends_on:
+      redis-broker:
+        condition: service_healthy
+
   # Retention worker tests (M7): the test DB (retention role), the test buckets and the lane's
   # broker db with the `test.` prefix. Not a dependency of api-test (memory): phase 3 runs the
   # purge in-process in api-test; phase 11 starts this one explicitly.
@@ -1120,6 +1330,11 @@ volumes:
   memory_work:
   memory_symbols:
   memory_symbols_test:
+  # M9: the disk worker's scratch (segments are GiBs) and the hash-set stores (written only by
+  # disk-hashsets; read-only in the workers).
+  disk_work:
+  disk_hashsets:
+  disk_hashsets_test:
   # ai-mock's test-only request mirror (its /tmp; read-only in api-test): see ai-mock.
   ai_mock_state:
   # Created and refreshed by scripts/e2e.mjs (fixed name so the script can address it).

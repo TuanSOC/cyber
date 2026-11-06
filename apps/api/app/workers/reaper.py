@@ -17,8 +17,9 @@ from app.modules.ai.contracts import AiErrorCode, AiRunStatus
 from app.modules.ai.models import AiRun, AiRunIndex
 from app.modules.analysis import lifecycle
 from app.modules.analysis import repository as repo
-from app.modules.analysis.models import ACTIVE, AnalysisJobIndex, AnalysisStatus
+from app.modules.analysis.models import ACTIVE, AnalysisJobIndex, AnalysisStatus, Analyzer
 from app.modules.audit import service as audit
+from app.modules.disk_forensics import export_service as disk_exports
 from app.modules.reports import dispatch as render_dispatch
 from app.modules.reports.dispatch import ACTIVE as RENDER_ACTIVE
 from app.modules.reports.models import ReportRender, ReportRenderIndex, ReportVersion
@@ -72,6 +73,9 @@ async def reap() -> int:
                     target_id=job_id,
                     details={"evidence_id": str(job.evidence_id), "error_code": code},
                 )
+                if job.analyzer == Analyzer.DISK:
+                    # M9: a reaped `extract` job fails its pending exports (phase 10 body).
+                    await disk_exports.fail_pending_exports(session, job)
                 reaped += 1
     if reaped:
         log.info("reaped %d stale analysis jobs", reaped)

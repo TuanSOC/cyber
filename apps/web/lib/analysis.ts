@@ -3,21 +3,25 @@ import type { Schemas } from "@cyberlab/contracts";
 export type AnalysisJob = Schemas["AnalysisJobOut"];
 export type AnalysisStatus = Schemas["AnalysisStatus"];
 export type Analyzer = Schemas["Analyzer"];
-/** A job's profile: static `full` / `av`, memory `triage` / `full` (M8); null for pcap. */
+/** A job's profile: static `full` / `av`, memory `triage` / `full` (M8), disk `triage` / `full` /
+ * `extract` (M9); null for pcap. */
 export type JobProfile = Schemas["JobProfile"];
 export type StaticProfile = Extract<JobProfile, "full" | "av">;
 export type MemoryProfile = Extract<JobProfile, "triage" | "full">;
+export type DiskProfile = Extract<JobProfile, "triage" | "full" | "extract">;
 export type OsHint = Schemas["OsHint"];
 
 export const PROFILE_LABELS: Record<StaticProfile, string> = { full: "Full", av: "AV scan" };
 export const MEMORY_PROFILE_LABELS: Record<MemoryProfile, string> = { triage: "Triage", full: "Full" };
+export const DISK_PROFILE_LABELS: Record<DiskProfile, string> = { triage: "Triage", full: "Full", extract: "File export" };
 export const OS_HINT_LABELS: Record<OsHint, string> = { auto: "Detect automatically", windows: "Windows", linux: "Linux" };
 
 /** Every analyzer's job page route segment (M8 RT1: one map, no two-way "else"). */
-export const ANALYZER_ROUTES: Record<Analyzer, "pcap" | "malware" | "memory"> = {
+export const ANALYZER_ROUTES: Record<Analyzer, "pcap" | "malware" | "memory" | "forensics"> = {
   pcap: "pcap",
   static: "malware",
   memory: "memory",
+  disk: "forensics",
 };
 
 /** The module that shows a job, for "open it in ..." text (M8 RT1: every analyzer). */
@@ -25,15 +29,19 @@ export const ANALYZER_MODULES: Record<Analyzer, { article: string; module: strin
   pcap: { article: "a PCAP analysis", module: "the PCAP Analyzer", source: "capture analysis" },
   static: { article: "a static analysis", module: "the Malware Lab", source: "file analysis" },
   memory: { article: "a memory analysis", module: "Memory Analysis", source: "memory analysis" },
+  disk: { article: "a disk analysis", module: "Forensics", source: "disk analysis" },
 };
 
-/** Short label of what ran: "PCAP", "Static (full)", "AV scan", "Memory (triage)", "Memory (full)". */
+/** Short label of what ran: "PCAP", "Static (full)", "AV scan", "Memory (triage)", "Memory (full)",
+ * "Disk (triage)", "Disk (full)", "Disk (file export)". */
 export function analysisKindLabel(job: Pick<AnalysisJob, "analyzer" | "profile">): string {
   switch (job.analyzer) {
     case "pcap":
       return "PCAP";
     case "memory":
       return job.profile === "full" ? "Memory (full)" : "Memory (triage)";
+    case "disk":
+      return job.profile === "full" ? "Disk (full)" : job.profile === "extract" ? "Disk (file export)" : "Disk (triage)";
     default:
       return job.profile === "av" ? "AV scan" : "Static (full)";
   }
@@ -110,10 +118,10 @@ export function offeredRuns(kind: EvidenceKind): { primary: RunKind[]; more: Run
 }
 
 /** The run kind of an existing job (for "an X is already running" checks); null for memory
- * jobs (they are not offered from the run buttons). */
+ * and disk jobs (they are not offered from the run buttons). */
 export function runKindOf(job: Pick<AnalysisJob, "analyzer" | "profile">): RunKind | null {
   if (job.analyzer === "pcap") return "pcap";
-  if (job.analyzer === "memory") return null;
+  if (job.analyzer === "memory" || job.analyzer === "disk") return null;
   return job.profile === "av" ? "static_av" : "static_full";
 }
 
@@ -189,6 +197,23 @@ const ERROR_TEXT: Record<string, string> = {
   plugin_timeout: "A memory analysis step did not finish in time.",
   plugin_failed: "A memory analysis step failed.",
   engine_unavailable: "The memory analysis engine was not available.",
+  // disk analyzer (M9)
+  unsupported_disk_format:
+    "Not a supported disk image (raw / dd, split raw or EWF E01; VMDK, VHD, QCOW, AFF, L01, compressed or archived files are refused).",
+  no_supported_filesystem:
+    "No supported file system could be opened (NTFS, FAT, exFAT and ext2/3/4 only; encrypted or unknown partitions are listed in the summary).",
+  disk_image_too_large: "A disk image segment is larger than the disk analyzer accepts.",
+  disk_image_set_too_large: "The disk image segments together are larger than the disk analyzer accepts.",
+  disk_segments_invalid: "The disk image segments must be distinct evidence items of this case, in order.",
+  disk_image_empty: "An empty file cannot be analyzed as a disk image.",
+  disk_parse_failed: "The disk image could not be analyzed (the file listing did not parse).",
+  timeline_failed: "The artifact timeline of the disk image failed.",
+  walk_memory: "Listing a file system needed more memory than the disk analyzer allows.",
+  stage_timeout: "A disk analysis step did not finish in time.",
+  integrity_mismatch: "A segment did not match its stored hash when the analyzer downloaded it.",
+  export_hash_mismatch: "An exported file did not match the analyzer's reported hash.",
+  disk_export_not_allowed:
+    "This file cannot be exported (deleted, not a regular file, too large, not allocated, or a protected secret store).",
   // static analyzer
   sample_too_large: "The file is larger than the static analyzer accepts.",
   av_unavailable: "The antivirus engine (ClamAV) was not available, so the file was not scanned.",

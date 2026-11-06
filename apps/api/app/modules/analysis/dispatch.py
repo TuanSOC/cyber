@@ -16,9 +16,11 @@ from typing import Any
 
 import anyio
 from cyberlab_jobs import (
+    DISK_ANALYZE,
     MEMORY_ANALYZE,
     PCAP_ANALYZE,
     STATIC_ANALYZE,
+    DiskJobV1,
     JobLimits,
     MemoryJobV1,
     PcapJobV1,
@@ -35,7 +37,7 @@ from app.core.threads import broker_limiter
 from app.modules.analysis import analyzers
 from app.modules.analysis.models import Analyzer, JobProfile
 
-JobMessage = PcapJobV1 | StaticJobV1 | MemoryJobV1
+JobMessage = PcapJobV1 | StaticJobV1 | MemoryJobV1 | DiskJobV1
 
 
 @dataclass(frozen=True)
@@ -138,6 +140,11 @@ def build_message(item: DispatchInput) -> JobMessage:
         from app.modules.memory_analysis.dispatch import build_memory_message
 
         return build_memory_message(item, settings)
+    if item.analyzer == Analyzer.DISK:
+        # M9 phase 7 owns the body (segment set, presigned GETs, limits, deadline).
+        from app.modules.disk_forensics.dispatch import build_disk_message
+
+        return build_disk_message(item, [], settings)
     ttl = timedelta(seconds=settings.analysis_queue_ttl_s)
     common = presigned_common(item, settings, get_expires=ttl)
     if item.analyzer == Analyzer.STATIC:
@@ -157,6 +164,7 @@ def task_and_queue(analyzer: Analyzer, settings: Settings) -> tuple[str, str]:
         Analyzer.PCAP: (PCAP_ANALYZE, queues.pcap),
         Analyzer.STATIC: (STATIC_ANALYZE, queues.static),
         Analyzer.MEMORY: (MEMORY_ANALYZE, queues.memory),
+        Analyzer.DISK: (DISK_ANALYZE, queues.disk),
     }
     return routes[analyzer]
 

@@ -26,6 +26,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+from cyberlab_jobs.disk import DiskProfile
 from cyberlab_jobs.memory import MemoryProfile
 from cyberlab_jobs.static import Profile
 from sqlalchemy import RowMapping, Text, bindparam, text
@@ -46,13 +47,14 @@ WINDOWS: dict[str, timedelta] = {
     "24h": timedelta(hours=24),
     "7d": timedelta(days=7),
 }
-ANALYZER_KINDS = ("pcap", "static", "memory")
+ANALYZER_KINDS = ("pcap", "static", "memory", "disk")
 NO_SUBKIND = "none"
 OTHER = "other"
 SUBKINDS: frozenset[str] = frozenset(
     {
         *(p.value for p in Profile),
         *(p.value for p in MemoryProfile),
+        *(p.value for p in DiskProfile),
         *TI_PROVIDER_NAMES,
         "multi",
         *AI_PROVIDER_NAMES,
@@ -74,6 +76,7 @@ ACTIVE_STATUSES: dict[str, tuple[str, ...]] = {
     "pcap": ("queued", "running"),
     "static": ("queued", "running"),
     "memory": ("queued", "running"),
+    "disk": ("queued", "running"),
     "ti": tuple(TI_RUN_ACTIVE),
     "ai": tuple(s.value for s in AI_RUN_ACTIVE),
     "report": tuple(RENDER_ACTIVE),

@@ -199,6 +199,37 @@ class Settings(BaseSettings):
     memory_max_timeline: int = Field(default=5_000, ge=1, le=5_000)
     # Process tree served by the read API (phase 7): nodes per response.
     memory_tree_max_nodes: int = Field(default=5_000, ge=1, le=20_000)
+    # Disk forensics (M9): per-request segment cap (<= 16 GiB: the M8 Caddy bound), segment
+    # sets (<= 64 segments, the sum <= DISK_MAX_IMAGE_BYTES: 16 GiB under the 20 GiB default
+    # org quota, <= 64 GiB; RT21), the claimed EWF media size (RT6), the result caps (the
+    # `disk.v1` contract ceilings), timeouts, active-job caps and file exports (phase 10).
+    disk_max_upload_bytes: int = Field(default=8 * 1024**3, ge=1, le=16 * 1024**3)
+    disk_max_segments: int = Field(default=64, ge=1, le=64)
+    disk_max_image_bytes: int = Field(default=16 * 1024**3, ge=1, le=64 * 1024**3)
+    disk_max_media_bytes: int = Field(default=2 * 1024**4, ge=1, le=16 * 1024**4)
+    disk_max_result_bytes: int = Field(default=256 * 1024**2, ge=1024, le=256 * 1024**2)
+    # The disk ingest's own framing bounds (RT9); lines = the sum of the caps + 3.
+    disk_max_result_decompressed_bytes: int = Field(
+        default=3 * 1024**3 // 2, ge=1024, le=3 * 1024**3 // 2
+    )
+    analysis_disk_timeout_s: int = Field(default=14_400, ge=60, le=21_600)
+    # The disk ingest worker's budget: the ingest hand-off moves the deadline by this (RT9).
+    disk_ingest_timeout_s: int = Field(default=1_800, ge=60, le=7_200)
+    disk_max_active_per_org: int = Field(default=1, ge=1)
+    disk_max_active_total: int = Field(default=1, ge=1)
+    disk_max_partitions: int = Field(default=128, ge=1, le=128)
+    disk_max_filesystems: int = Field(default=32, ge=1, le=32)
+    disk_max_files: int = Field(default=500_000, ge=1, le=2_000_000)
+    disk_max_streams_per_file: int = Field(default=16, ge=1, le=16)
+    disk_max_events: int = Field(default=250_000, ge=0, le=1_000_000)
+    disk_max_events_read: int = Field(default=20_000_000, ge=0, le=100_000_000)
+    disk_max_findings: int = Field(default=5_000, ge=1, le=5_000)
+    disk_max_iocs: int = Field(default=20_000, ge=1, le=20_000)
+    disk_max_timeline: int = Field(default=5_000, ge=1, le=5_000)
+    disk_export_max_bytes: int = Field(default=64 * 1024**2, ge=1, le=64 * 1024**2)
+    disk_export_max_files: int = Field(default=20, ge=1, le=20)
+    # Unpromoted exports become `expired` after this; the retention worker deletes the object.
+    disk_export_ttl_s: int = Field(default=7 * 86_400, ge=3_600)
     # Ingest: zip-bomb guard on the inflated stream and a cap on its lines (all kinds).
     analysis_max_result_decompressed_bytes: int = 1024**3
     analysis_max_result_lines: int = 400_000
@@ -502,6 +533,35 @@ class Settings(BaseSettings):
                 "below ANALYSIS_MEMORY_TIMEOUT_S"
             )
         return self
+
+    @model_validator(mode="after")
+    def _disk_limits(self) -> Self:
+        """M9: an upload fits a set, a set the media bound, an export the static analyzer
+        (the derived evidence gets its normal static job), the events read the stored ones."""
+        if self.disk_max_upload_bytes > self.disk_max_image_bytes:
+            raise ValueError("DISK_MAX_UPLOAD_BYTES must not exceed DISK_MAX_IMAGE_BYTES")
+        if self.disk_max_image_bytes > self.disk_max_media_bytes:
+            raise ValueError("DISK_MAX_IMAGE_BYTES must not exceed DISK_MAX_MEDIA_BYTES")
+        if self.disk_export_max_bytes > self.static_max_bytes:
+            raise ValueError("DISK_EXPORT_MAX_BYTES must not exceed STATIC_MAX_BYTES")
+        if self.disk_max_events_read < self.disk_max_events:
+            raise ValueError("DISK_MAX_EVENTS_READ must be at least DISK_MAX_EVENTS")
+        if self.disk_ingest_timeout_s >= self.analysis_disk_timeout_s:
+            raise ValueError("DISK_INGEST_TIMEOUT_S must be below ANALYSIS_DISK_TIMEOUT_S")
+        return self
+
+    def disk_max_result_lines(self) -> int:
+        """The disk ingest's line bound (RT9): every per-kind cap plus header, trailer and one."""
+        return 3 + sum(
+            (
+                self.disk_max_partitions,
+                self.disk_max_files,
+                self.disk_max_events,
+                self.disk_max_findings,
+                self.disk_max_iocs,
+                self.disk_max_timeline,
+            )
+        )
 
     def memory_max_result_lines(self) -> int:
         """The memory ingest's line bound (RT9): every per-kind cap plus header, image and

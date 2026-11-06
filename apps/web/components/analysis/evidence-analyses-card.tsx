@@ -11,6 +11,7 @@ import { AnalysisStatusBadge } from "@/components/analysis/analysis-status-badge
 import { AnalyzerBadge } from "@/components/analysis/analyzer-badge";
 import { FindingCount } from "@/components/analysis/finding-count";
 import { SignatureCount } from "@/components/malware/signature-count";
+import { RunDiskAnalysis } from "@/components/disk/run-disk-analysis";
 import { RunMemoryAnalysis } from "@/components/memory/run-memory-analysis";
 import { Pager } from "@/components/pager";
 import { QueryError } from "@/components/query-error";
@@ -139,6 +140,19 @@ export function EvidenceAnalysesCard({
         </CardTitle>
         {runnable && (
           <CardAction className="flex flex-wrap justify-end gap-2">
+            {/* M9: the disk run dialog (phase 11 slot); never automatic. */}
+            <RunDiskAnalysis
+              orgId={orgId}
+              evidence={evidence}
+              canRun={runnable && !disabled}
+              active={activeAnalyzers.has("disk")}
+              onRequested={() => {
+                setOffset(0);
+                void queryClient.invalidateQueries({ queryKey: [...evidenceKey, "analyses"] });
+                void queryClient.invalidateQueries({ queryKey: ["org", orgId, "analyses"] });
+                void refreshCustody();
+              }}
+            />
             {/* M8: the memory run dialog (phase 9); never automatic. */}
             <RunMemoryAnalysis
               orgId={orgId}

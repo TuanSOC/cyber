@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "sets": [
+    {
+      "name": "evil",
+      "kind": "known_bad",
+      "algorithms": [
+        "sha256"
+      ],
+      "files": [
+        {
+          "algo": "sha256",
+          "path": "../../etc/sha256.bin",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "count": 1
+        }
+      ],
+      "source_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "imported_at": "2026-10-01T00:00:00Z",
+      "tool_version": "fixture"
+    }
+  ]
+}

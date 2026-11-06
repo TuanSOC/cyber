@@ -4,6 +4,13 @@ Everything that crosses the broker or the result store is defined here, validate
 (`extra="forbid"`), and carries an explicit schema version.
 """
 
+from cyberlab_jobs.disk import (
+    DISK_EXPORT_SCHEMA,
+    DISK_SCHEMA,
+    DiskExportJobV1,
+    DiskJobV1,
+    DiskLimits,
+)
 from cyberlab_jobs.limits import JobLimits
 from cyberlab_jobs.memory import MEMORY_SCHEMA, MemoryJobV1, MemoryLimits
 from cyberlab_jobs.messages import (
@@ -20,6 +27,10 @@ from cyberlab_jobs.tasks import (
     AI_RUN,
     AI_VERIFY,
     CORRELATION_INDEX_PENDING,
+    DISK_ANALYZE,
+    DISK_EXPIRE_EXPORTS,
+    DISK_EXPORT,
+    DISK_INGEST,
     INGEST_EVENT,
     MEMORY_ANALYZE,
     PCAP_ANALYZE,
@@ -41,6 +52,12 @@ __all__ = [
     "AI_RUN",
     "AI_VERIFY",
     "CORRELATION_INDEX_PENDING",
+    "DISK_ANALYZE",
+    "DISK_EXPIRE_EXPORTS",
+    "DISK_EXPORT",
+    "DISK_EXPORT_SCHEMA",
+    "DISK_INGEST",
+    "DISK_SCHEMA",
     "INGEST_EVENT",
     "INGEST_SCHEMA",
     "MEMORY_ANALYZE",
@@ -57,6 +74,9 @@ __all__ = [
     "TI_ENRICH",
     "TI_RESUME",
     "TI_VERIFY",
+    "DiskExportJobV1",
+    "DiskJobV1",
+    "DiskLimits",
     "IngestEvent",
     "IngestMessageV1",
     "JobLimits",

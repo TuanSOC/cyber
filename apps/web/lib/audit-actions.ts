@@ -50,4 +50,11 @@ export const AUDIT_ACTIONS = [
   // M8: memory sensitivity (TLP:RED by default, admin release once).
   "memory.sensitivity_defaulted",
   "memory.sensitivity_released",
+  // M9: disk forensics (sensitivity of disk images and derived evidence, analysis and exports).
+  "disk.sensitivity_defaulted",
+  "disk.sensitivity_released",
+  "disk.analysis_requested",
+  "disk.export_requested",
+  "disk.export_promoted",
+  "disk.interop_exported",
 ] as const;

@@ -18,7 +18,10 @@ from app.modules.auth.router import router as auth_router
 from app.modules.case_attack.router import router as case_attack_router
 from app.modules.case_timeline.router import router as case_timeline_router
 from app.modules.correlation.router import router as correlation_router
+from app.modules.disk_forensics.export_router import router as disk_export_router
+from app.modules.disk_forensics.router import router as disk_forensics_router
 from app.modules.evidence.router import router as evidence_router
+from app.modules.evidence.router_sensitivity import router as evidence_sensitivity_router
 from app.modules.investigations.router import router as investigations_router
 from app.modules.ioc_collections.router import router as ioc_collections_router
 from app.modules.memory_analysis.router import router as memory_analysis_router
@@ -76,6 +79,11 @@ def create_app() -> FastAPI:
     # M8: memory results (phase 7) and memory sensitivity (phase 8); 501 stubs until then.
     v1.include_router(memory_analysis_router)
     v1.include_router(memory_sensitivity_router)
+    # M9: disk results (phase 8) and file exports (phase 10): 501 stubs until then; the
+    # generic evidence sensitivity routes (implemented in phase 1, RT2).
+    v1.include_router(disk_forensics_router)
+    v1.include_router(disk_export_router)
+    v1.include_router(evidence_sensitivity_router)
     v1.include_router(threat_intel_router)
     v1.include_router(attack_router)
     v1.include_router(ai_router)

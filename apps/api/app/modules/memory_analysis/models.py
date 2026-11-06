@@ -54,6 +54,14 @@ SOURCE_BITS = {"pslist": 1, "psscan": 2, "pstree": 4}
 BULK_TABLES = ("memory_processes", "memory_connections", "memory_injections", "memory_artifacts")
 
 
+class SensitivitySource(enum.StrEnum):
+    """What the restricted evidence is (M9, RT2: the table is evidence-level, not renamed)."""
+
+    MEMORY = "memory"
+    DISK = "disk"
+    DERIVED = "derived"  # a file exported from a disk image (inherits the restriction)
+
+
 class SensitivityState(enum.StrEnum):
     RESTRICTED = "restricted"
     RELEASED = "released"
@@ -180,6 +188,7 @@ class MemorySensitivity(Base):
         ),
         Index(None, "organization_id"),
         CheckConstraint("state IN ('restricted', 'released')", name="state"),
+        CheckConstraint("source IN ('memory', 'disk', 'derived')", name="source"),
     )
 
     evidence_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
@@ -192,3 +201,5 @@ class MemorySensitivity(Base):
     released_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     released_at: Mapped[datetime | None]
     release_reason: Mapped[str | None] = mapped_column(Text)
+    # M9 (0017, RT2): `memory` for every M8 row.
+    source: Mapped[str] = mapped_column(String(16), server_default=SensitivitySource.MEMORY.value)

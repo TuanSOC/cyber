@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { UploadRow, type UploadItem } from "@/components/evidence/upload-row";
+import { DiskUploadOption } from "@/components/disk/disk-upload-option";
 import { MemoryUploadOption } from "@/components/memory/memory-upload-option";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -134,6 +135,8 @@ export function EvidenceUploader({ orgId, investigationId }: { orgId: string; in
         onChange={(event) => setDescription(event.target.value)}
       />
       <MemoryUploadOption value={memory} onChange={setMemory} disabled={busy} />
+      {/* M9 slot (phase 11): `?kind=disk` lands with phase 7. */}
+      <DiskUploadOption value={false} onChange={() => undefined} disabled={busy} />
       <button
         type="button"
         onClick={() => input.current?.click()}

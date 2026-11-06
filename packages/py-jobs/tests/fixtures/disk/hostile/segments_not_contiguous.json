@@ -1,0 +1,18 @@
+{
+  "segments": [
+    {
+      "ordinal": 0,
+      "evidence_id": "5a000000-0000-4000-8000-000000000001",
+      "expected_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size_bytes": 1024,
+      "url": "http://minio:9000/evidence/x?sig=1"
+    },
+    {
+      "ordinal": 2,
+      "evidence_id": "5a000000-0000-4000-8000-000000000002",
+      "expected_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size_bytes": 1024,
+      "url": "http://minio:9000/evidence/x?sig=1"
+    }
+  ]
+}

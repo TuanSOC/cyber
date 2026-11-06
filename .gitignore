@@ -32,3 +32,5 @@ playwright-report/
 backups/
 # M8: the operator import dir of `pnpm memory:symbols -- import` (ISFs, local ISF zips)
 .memory-import/
+# M9: the operator import dir of `pnpm disk:hashsets -- import-*` (NSRL RDSv3, hash lists)
+.disk-import/

@@ -23,8 +23,7 @@ transaction ends and can never clear the flags the default has just set.
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import HTTPConnection
 
@@ -32,7 +31,7 @@ from app.core.errors import NotFound
 from app.core.rbac import OrgContext
 from app.modules.audit import service as audit
 from app.modules.evidence import repository as evidence_repo
-from app.modules.investigations.models import EvidenceSharePolicy
+from app.modules.evidence.sensitivity import apply_restricted_default
 from app.modules.memory_analysis.errors import AcknowledgementRequired, MemorySensitivityReleased
 from app.modules.memory_analysis.models import MemorySensitivity, SensitivityState
 from app.modules.memory_analysis.schemas import MemorySensitivityOut, ReleaseIn
@@ -40,62 +39,13 @@ from app.modules.users.models import User
 
 RESTRICTED = SensitivityState.RESTRICTED.value
 RELEASED = SensitivityState.RELEASED.value
-_EXCLUDED = {"ai_excluded": True, "ti_excluded": True}
 
 
 async def apply_memory_default(
     session: AsyncSession, org_id: uuid.UUID, evidence_id: uuid.UUID, actor_id: uuid.UUID
 ) -> bool:
-    await evidence_repo.lock_evidence_for_policy(session, org_id, evidence_id)
-    m = MemorySensitivity
-    inserted = await session.scalar(
-        insert(m)
-        .values(
-            evidence_id=evidence_id,
-            organization_id=org_id,
-            state=RESTRICTED,
-            defaulted_by=actor_id,
-        )
-        .on_conflict_do_nothing(index_elements=[m.evidence_id])
-        .returning(m.evidence_id)
-    )
-    if inserted is None:  # already restricted or released: nothing changes
-        return False
-
-    p = EvidenceSharePolicy
-    before = (
-        await session.execute(
-            select(p.ai_excluded, p.ti_excluded).where(
-                p.organization_id == org_id, p.evidence_id == evidence_id
-            )
-        )
-    ).one_or_none()
-    was = {
-        "ai_excluded": bool(before.ai_excluded) if before is not None else False,
-        "ti_excluded": bool(before.ti_excluded) if before is not None else False,
-    }
-    if was != _EXCLUDED:
-        await session.execute(
-            insert(p)
-            .values(
-                evidence_id=evidence_id, organization_id=org_id, updated_by=actor_id, **_EXCLUDED
-            )
-            .on_conflict_do_update(
-                index_elements=[p.evidence_id],
-                set_={**_EXCLUDED, "updated_by": actor_id, "updated_at": func.now()},
-            )
-        )
-    audit.record(
-        session,
-        action="memory.sensitivity_defaulted",
-        org_id=org_id,
-        actor_id=actor_id,
-        target_type="evidence",
-        target_id=evidence_id,
-        details={"state": RESTRICTED, "share_policy": {"from": was, "to": dict(_EXCLUDED)}},
-    )
-    await session.flush()
-    return True
+    # M9 (RT2): the body moved to the evidence-level service; memory is one source of it.
+    return await apply_restricted_default(session, org_id, evidence_id, actor_id, "memory")
 
 
 async def state_of(

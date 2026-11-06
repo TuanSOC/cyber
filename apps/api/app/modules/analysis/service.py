@@ -17,6 +17,7 @@ from app.core.deps import CurrentUser
 from app.core.errors import AppError, Conflict, NotFound, TooManyRequests
 from app.core.pagination import PageParams
 from app.core.rbac import OrgContext, Permission, org_session
+from app.core.stubs import not_implemented
 from app.core.tenancy import tenant_session
 from app.modules.analysis import analyzers, dispatch, lifecycle
 from app.modules.analysis import repository as repo
@@ -33,6 +34,7 @@ from app.modules.analysis.schemas import AnalysisJobOut, AnalysisJobPage
 from app.modules.audit import service as audit
 from app.modules.evidence import service as evidence_service
 from app.modules.evidence.models import CustodyAction, EvidenceStatus
+from app.modules.disk_forensics.errors import DiskImageTooLarge
 from app.modules.memory_analysis import sensitivity as memory_sensitivity
 from app.modules.memory_analysis.errors import MemoryImageEmpty, MemoryImageTooLarge
 
@@ -66,6 +68,7 @@ TOO_LARGE: dict[Analyzer, type[AppError]] = {
     Analyzer.PCAP: CaptureTooLarge,
     Analyzer.STATIC: SampleTooLarge,
     Analyzer.MEMORY: MemoryImageTooLarge,
+    Analyzer.DISK: DiskImageTooLarge,
 }
 # Automatic runs only (never memory: a memory run is always an explicit request, M8).
 SKIPPABLE = (AnalysisActive, AnalysisQueueFull, CaptureTooLarge, SampleTooLarge, TooManyRequests)
@@ -75,6 +78,8 @@ def _active_caps(settings: Settings, analyzer: Analyzer) -> tuple[int, int]:
     """(per org, global) active jobs of one analyzer (M8: memory has its own, lower caps)."""
     if analyzer == Analyzer.MEMORY:
         return settings.memory_max_active_per_org, settings.memory_max_active_total
+    if analyzer == Analyzer.DISK:
+        return settings.disk_max_active_per_org, settings.disk_max_active_total
     return settings.max_active_analyses_per_org, settings.max_active_analyses_global
 
 
@@ -236,15 +241,25 @@ async def request_analysis(
     profile: JobProfile | None = None,
     os_hint: OsHint | None = None,
     auto: bool = False,
+    segments: list[uuid.UUID] | None = None,
 ) -> AnalysisJobOut:
-    """Create the job (committed first), then enqueue it. A lost enqueue is a failed job."""
+    """Create the job (committed first), then enqueue it. A lost enqueue is a failed job.
+
+    `segments` (disk only, M9): the ordered segment set (phase 7 validates and stores it)."""
     allowed = PROFILES[analyzer]
     if (profile is None) != (not allowed) or (profile is not None and profile not in allowed):
         raise ValueError(f"{analyzer} jobs take a profile of {sorted(allowed)}")
-    if (os_hint is not None) != (analyzer == Analyzer.MEMORY):
-        raise ValueError("memory jobs need an os_hint; other analyzers take none")
-    if analyzer == Analyzer.MEMORY and auto:
-        raise ValueError("memory analysis is never automatic")
+    if (os_hint is not None) != (analyzer in (Analyzer.MEMORY, Analyzer.DISK)):
+        raise ValueError("memory and disk jobs need an os_hint; other analyzers take none")
+    if analyzer in (Analyzer.MEMORY, Analyzer.DISK) and auto:
+        raise ValueError("memory and disk analysis is never automatic")
+    if (segments is not None) != (analyzer == Analyzer.DISK):
+        raise ValueError("disk jobs name their segments; other analyzers take none")
+    if analyzer == Analyzer.DISK:
+        # M9 phase 1: the request is accepted by schema; the segment set, the sensitivity
+        # default of every segment and the dispatch land with phase 7 (`disk_forensics.
+        # segments` / `dispatch`). Until then nothing is created.
+        raise not_implemented()
     if await _global_queue_full(analyzer):
         raise AnalysisQueueFull()
     token = secrets.token_urlsafe(32)

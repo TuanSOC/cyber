@@ -102,12 +102,22 @@ _JOB_TABLES: dict[str, Any] = {
 # Table -> {analyzer: tab} of the cited job's page; absent: no link (M8 RT1: memory jobs
 # link their findings, IOCs, timeline and overview to their own page).
 _TABS: dict[str, dict[str, str]] = {
-    "analysis_findings": {"pcap": "findings", "static": "findings", "memory": "findings"},
+    "analysis_findings": {
+        "pcap": "findings",
+        "static": "findings",
+        "memory": "findings",
+        "disk": "findings",
+    },
     "network_alerts": {"pcap": "alerts"},
     "network_flows": {"pcap": "flows"},
-    "iocs": {"pcap": "iocs", "static": "iocs", "memory": "iocs"},
-    "analysis_timeline": {"pcap": "timeline", "memory": "timeline"},
-    "analysis_jobs": {"pcap": "overview", "static": "overview", "memory": "overview"},
+    "iocs": {"pcap": "iocs", "static": "iocs", "memory": "iocs", "disk": "iocs"},
+    "analysis_timeline": {"pcap": "timeline", "memory": "timeline", "disk": "timeline"},
+    "analysis_jobs": {
+        "pcap": "overview",
+        "static": "overview",
+        "memory": "overview",
+        "disk": "overview",
+    },
     "malware_signature_matches": {"static": "signatures"},
     "malware_capabilities": {"static": "capabilities"},
     "malware_strings": {"static": "strings"},

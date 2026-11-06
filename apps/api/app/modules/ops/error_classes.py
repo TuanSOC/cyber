@@ -14,6 +14,8 @@ can store on a failed job, run or render:
 - memory jobs (M8): `cyberlab_jobs.memory.MEMORY_ERROR_CODES` (the memory analyzer, its
   ingest and the API refusals). `symbols_missing` is `input` (an operator gap, not a worker
   failure; RT25), so it never inflates the §14 worker failure rate.
+- disk jobs (M9): `cyberlab_jobs.disk.DISK_ERROR_CODES` (the disk analyzer, its ingest and the
+  API refusals). The segment download keeps the kit's `integrity_mismatch` (RT22).
 `tests/unit/test_error_classes.py` fails on any code found in those sources that is missing.
 """
 
@@ -49,6 +51,7 @@ ANALYZER_CODES = (
     "integrity_mismatch",
     "result_upload_failed",
     # memory (M8): its JobFailed codes are MEMORY_ERROR_CODES (classified below).
+    # disk (M9): its JobFailed codes are DISK_ERROR_CODES (classified below).
 )
 
 _P, _I, _Y, _V, _N, _O = (
@@ -95,6 +98,20 @@ ERROR_CLASS: Mapping[str, ErrorClass] = MappingProxyType(
         "plugin_timeout": _I,
         "plugin_failed": _P,
         "engine_unavailable": _I,
+        # --- disk jobs (M9, cyberlab_jobs.disk.DISK_ERROR_CODES; `not_implemented`,
+        # `insufficient_disk`, `engine_unavailable`, `integrity_mismatch` are shared above) ---
+        "unsupported_disk_format": _N,
+        "no_supported_filesystem": _N,
+        "disk_image_too_large": _N,
+        "disk_image_set_too_large": _N,
+        "disk_segments_invalid": _N,
+        "disk_image_empty": _N,
+        "disk_parse_failed": _P,
+        "timeline_failed": _P,
+        "walk_memory": _I,
+        "stage_timeout": _I,
+        "export_hash_mismatch": _I,
+        "disk_export_not_allowed": _N,
         # --- threat intel item reasons (runs store no error code) ---
         "rate_limited": _V,
         "quota_exhausted": _V,

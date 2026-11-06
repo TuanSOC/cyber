@@ -1,0 +1,5 @@
+# Debian packages of the phase-4 synthetic disk image generator (dev / test target ONLY; the
+# prod target asserts none of them is present). PLACEHOLDER written by M9 phase 1: phase 4
+# (group A', merged before the disk image is built) owns this list. Expected content: dosfstools
+# mtools e2fsprogs exfatprogs ntfs-3g libntfs-3g* fdisk ewf-tools hivex python3-hivex util-linux.
+# One package per line; lines starting with # are ignored.

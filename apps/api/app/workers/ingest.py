@@ -50,9 +50,13 @@ from app.modules.analysis.models import (
     AnalysisJobIndex,
     AnalysisStatus,
     Analyzer,
+    JobProfile,
 )
 from app.modules.analysis.result_stream import InvalidResult
 from app.modules.audit import service as audit
+from app.modules.disk_forensics import handoff as disk_handoff
+from app.modules.disk_forensics import ingest as disk_ingest
+from app.modules.disk_forensics import ingest_export as disk_ingest_export
 from app.modules.evidence.models import (
     CustodyAction,
     Evidence,
@@ -379,12 +383,21 @@ SUCCESS_INGESTERS: dict[Analyzer, Ingester] = {
     Analyzer.PCAP: _ingest_pcap,
     Analyzer.STATIC: _ingest_static,
     Analyzer.MEMORY: memory_ingest.ingest_memory,
+    # M9: run by the disk ingest worker (task `disk.ingest`, queue `ingest_disk`; RT9), never
+    # by this one: `handle_event` hands every disk result off first.
+    Analyzer.DISK: disk_ingest.ingest_disk,
 }
-# M8: failed reports that carry a diagnostic result (memory `symbols_missing` only).
+# M8: failed reports that carry a diagnostic result (memory `symbols_missing`; M9: disk
+# `no_supported_filesystem` / `unsupported_disk_format`, on the disk ingest worker).
 DIAGNOSTIC_INGESTERS: dict[Analyzer, Ingester] = {
     Analyzer.MEMORY: memory_ingest.ingest_memory_diagnostic,
+    Analyzer.DISK: disk_ingest.ingest_disk_diagnostic,
 }
-DIAGNOSTIC_CODES = frozenset({"symbols_missing"})
+DIAGNOSTIC_CODES_BY_ANALYZER: dict[Analyzer, frozenset[str]] = {
+    Analyzer.MEMORY: frozenset({"symbols_missing"}),
+    Analyzer.DISK: frozenset({"no_supported_filesystem", "unsupported_disk_format"}),
+}
+DIAGNOSTIC_CODES: frozenset[str] = frozenset().union(*DIAGNOSTIC_CODES_BY_ANALYZER.values())
 
 
 async def ingest_success(job: AnalysisJob, msg: IngestMessageV1) -> None:
@@ -406,7 +419,7 @@ def is_diagnostic(job: AnalysisJob, msg: IngestMessageV1) -> bool:
         msg.outcome == Outcome.FAILED
         and msg.result_version_id is not None
         and job.analyzer in DIAGNOSTIC_INGESTERS
-        and msg.error_code in DIAGNOSTIC_CODES
+        and msg.error_code in DIAGNOSTIC_CODES_BY_ANALYZER.get(job.analyzer, frozenset())
     )
 
 
@@ -468,6 +481,48 @@ async def _authenticated_job(msg: IngestMessageV1) -> AnalysisJob | None:
     return job
 
 
+def _carries_disk_result(job: AnalysisJob, msg: IngestMessageV1) -> bool:
+    """A disk report the disk ingest worker reads: success (`disk.v1`, or `disk-export.v1`
+    for an `extract` job) or a diagnostic failure."""
+    if msg.result_version_id is None:
+        return False
+    return msg.outcome == Outcome.SUCCEEDED or is_diagnostic(job, msg)
+
+
+async def handle_disk_ingest(raw: dict[str, Any]) -> None:
+    """The task `disk.ingest` (disk ingest worker, M9 RT9): the report handed off by
+    `handle_event`, re-authenticated here (token and org from our own index), then one of
+    three schema branches: `disk-export.v1` (an `extract` job, phase 10), `disk.v1` (a
+    success, phase 7), or the diagnostic stream (phase 7). A permanent failure is recorded on
+    the job (`ingest_error`); transient ones are retried by the task."""
+    try:
+        msg = IngestMessageV1.model_validate(raw)
+    except ValidationError:
+        log.warning("dropping invalid disk ingest message")
+        return
+    job = await _authenticated_job(msg)
+    if job is None or job.analyzer != Analyzer.DISK or job.status not in ACTIVE:
+        return
+    if not _carries_disk_result(job, msg):
+        return
+    org_id = job.organization_id
+    try:
+        if job.profile == JobProfile.EXTRACT:
+            await _ingest_result(job, msg, disk_ingest_export.ingest_disk_export)
+        elif msg.outcome == Outcome.SUCCEEDED:
+            await _ingest_result(job, msg, SUCCESS_INGESTERS[Analyzer.DISK])
+        else:
+            await _ingest_result(job, msg, DIAGNOSTIC_INGESTERS[Analyzer.DISK])
+    except TRANSIENT_ERRORS:
+        raise
+    except Exception:
+        log.exception("disk ingest failed for analysis job %s", msg.job_id)
+        async with tenant_session(org_id, None) as session:
+            locked = await repo.get_for_update(session, org_id, msg.job_id)
+            if locked is not None:
+                await _fail(session, locked, "ingest_error")
+
+
 async def handle_event(raw: dict[str, Any]) -> None:
     try:
         msg = IngestMessageV1.model_validate(raw)
@@ -480,6 +535,12 @@ async def handle_event(raw: dict[str, Any]) -> None:
         return
     org_id = job.organization_id
     try:
+        if job.analyzer == Analyzer.DISK and _carries_disk_result(job, msg):
+            # M9 (RT9): validated here, ingested by the disk ingest worker (`disk.ingest` on
+            # `ingest_disk`); the hand-off moves the deadline by DISK_INGEST_TIMEOUT_S.
+            if job.status in ACTIVE:
+                await disk_handoff.hand_off(job, msg)
+            return
         if msg.outcome == Outcome.SUCCEEDED:
             await ingest_success(job, msg)
             return

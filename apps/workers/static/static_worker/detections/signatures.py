@@ -13,10 +13,20 @@
 """
 
 from cyberlab_jobs.static import CapabilityRecord, SignatureMatch
+# M9 phase 1 (RT8): the YARA allow-list lives in the worker kit, shared with the disk analyzer;
+# re-exported here unchanged.
+from cyberlab_worker.yara_rules import (  # noqa: F401 - re-exports (shim)
+    BASELINE_SHA256,
+    TEST_RULES_SHA256,
+    YARA_DEFAULT,
+    YARA_SEVERITY_ALLOWLIST,
+    YARA_TEST_ALLOWLIST,
+    yara_ceilings,
+    yara_severity,
+)
 
 from static_worker.detections.base import (
     HEURISTIC_MAX,
-    SEVERITY_RANK,
     Finding,
     Severity,
     cap,
@@ -27,20 +37,6 @@ from static_worker.detections.base import (
 CLAMAV_METHOD = "signature:clamav@1"
 YARA_METHOD = "signature:yara@1"
 CAPA_METHOD = "capability:capa@1"
-
-YARA_DEFAULT: Severity = "low"
-# sha256 of rules/yara/cyberlab_baseline.yar (update together with the file; a unit test
-# compares) and of the test-only tests/rules/yara/cyberlab_test.yar.
-BASELINE_SHA256 = "ee13bafb7a0ec8c90670fc7388549f817c3d7d8b6ec37ac4baac2d9cb0cf8599"
-TEST_RULES_SHA256 = "df6bb6fd2829e4d0a69845bc827b267f076923e9e79bad813cbafdf2a1018baa"
-# (rule file sha256, rule name) -> highest severity the rule's own meta may claim.
-YARA_SEVERITY_ALLOWLIST: dict[tuple[str, str], Severity] = {
-    (BASELINE_SHA256, "CyberLab_Embedded_PE_In_Overlay"): "medium",
-    (BASELINE_SHA256, "CyberLab_Embedded_PE_In_Resource"): "medium",
-}
-YARA_TEST_ALLOWLIST: dict[tuple[str, str], Severity] = {
-    (TEST_RULES_SHA256, "CyberLab_Test_Marker"): "medium",
-}
 
 # namespace prefix -> (finding type, severity)
 CAPA_HIGH_RISK: tuple[tuple[str, str, Severity], ...] = (
@@ -59,28 +55,6 @@ def clamav_severity(name: str) -> Severity:
     if name.startswith("Heuristics."):
         return "info"
     return "high"
-
-
-def yara_ceilings(rule_hashes: dict[str, str], *, test_rules: bool) -> dict[str, Severity]:
-    """ "<namespace>:<rule>" -> ceiling, for the rule files this job actually loaded.
-
-    `rule_hashes`: namespace -> sha256 of its rule file, computed by root.
-    """
-    allowlist = YARA_SEVERITY_ALLOWLIST | (YARA_TEST_ALLOWLIST if test_rules else {})
-    return {
-        f"{namespace}:{rule}": ceiling
-        for namespace, sha256 in rule_hashes.items()
-        for (allowed_sha256, rule), ceiling in allowlist.items()
-        if sha256 == allowed_sha256
-    }
-
-
-def yara_severity(match: SignatureMatch, ceilings: dict[str, Severity] | None = None) -> Severity:
-    claimed = match.meta.get("severity", YARA_DEFAULT).strip().lower()
-    if claimed not in SEVERITY_RANK:
-        return YARA_DEFAULT
-    ceiling = (ceilings or {}).get(f"{match.namespace}:{match.name}", YARA_DEFAULT)
-    return cap(claimed, ceiling)  # type: ignore[arg-type]
 
 
 def signature_findings(

@@ -77,6 +77,17 @@ M8_TABLES = [
     "memory_artifacts",
     "memory_sensitivity",
 ]
+# M9 (0017): disk results, segment sets and exports are insert-only for the app role (no
+# DELETE grant; retention deletes `disk_files` / `disk_events` only; exports move forward by
+# their trigger: tests/integration/test_m9_schema.py).
+M9_TABLES = [
+    "analysis_job_segments",
+    "disk_images",
+    "disk_partitions",
+    "disk_files",
+    "disk_events",
+    "disk_exports",
+]
 
 
 @pytest.mark.parametrize("table", APPEND_ONLY)
@@ -306,3 +317,19 @@ async def test_app_role_cannot_delete_memory_rows(table: str) -> None:
     with pytest.raises(DBAPIError, match="permission denied"):
         async with tenant_session(t.org_id, t.owner_id) as s:
             await s.execute(text(f"DELETE FROM {table}"))
+
+
+@pytest.mark.parametrize("table", M9_TABLES)
+async def test_app_role_cannot_delete_disk_rows(table: str) -> None:
+    t = await seed_tenant("alpha")
+    with pytest.raises(DBAPIError, match="permission denied"):
+        async with tenant_session(t.org_id, t.owner_id) as s:
+            await s.execute(text(f"DELETE FROM {table}"))
+
+
+@pytest.mark.parametrize("table", ["analysis_job_segments", "disk_files", "disk_events"])
+async def test_app_role_cannot_update_disk_rows(table: str) -> None:
+    t = await seed_tenant("alpha")
+    with pytest.raises(DBAPIError, match="permission denied"):
+        async with tenant_session(t.org_id, t.owner_id) as s:
+            await s.execute(text(f"UPDATE {table} SET organization_id = organization_id"))

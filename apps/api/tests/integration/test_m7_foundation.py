@@ -40,6 +40,8 @@ from tests.ops_helpers import (
 from tests.report_helpers import purge_reports_test_bucket, reports_test_bucket
 from tests.security import (
     idor_cases_correlation,
+    idor_cases_disk,
+    idor_cases_disk_exports,
     idor_cases_memory,
     idor_cases_memory_sensitivity,
     idor_cases_ops,
@@ -52,6 +54,10 @@ M7_MODULES = (idor_cases_retention, idor_cases_correlation, idor_cases_ops)
 M8_PENDING_PATHS = frozenset(
     path
     for module in (idor_cases_memory, idor_cases_memory_sensitivity)
+    for _, path in module.PENDING_ROUTES
+) | frozenset(  # M9 phase 1: the disk read API (phase 8) and file exports (phase 10)
+    path
+    for module in (idor_cases_disk, idor_cases_disk_exports)
     for _, path in module.PENDING_ROUTES
 )
 ORG = "/api/v1/orgs/{org_id}"

@@ -7,6 +7,7 @@ set -eu
 : "${BROKER_API_PASSWORD:?}" "${BROKER_INGEST_PASSWORD:?}" "${BROKER_PCAP_PASSWORD:?}"
 : "${BROKER_STATIC_PASSWORD:?}" "${BROKER_ENRICH_PASSWORD:?}" "${BROKER_ANALYST_PASSWORD:?}"
 : "${BROKER_REPORT_PASSWORD:?}" "${BROKER_RETENTION_PASSWORD:?}" "${BROKER_MEMORY_PASSWORD:?}"
+: "${BROKER_DISK_PASSWORD:?}"
 
 # Commands no component needs and that would let one inspect or disrupt others' queues.
 DENY="-@dangerous -@admin -keys -scan -randomkey -sort -dump -object"
@@ -66,6 +67,11 @@ retention_keys() {
 # ingest (`~*`) reach report*; no other user's patterns match it.
 # The untrusted memory analyzer (M8) is an analyzer: `analyzer_keys memory` (memory* /
 # test.memory*, write-only to ingest). The api publishes `memory.analyze` through `~*`.
+# The untrusted disk analyzer (M9) is an analyzer: `analyzer_keys disk` (disk* / test.disk*,
+# write-only to ingest*). The api publishes `disk.analyze` / `disk.export` through `~*`; the
+# trusted ingest user (`~*`) hands results to `ingest_disk` and the disk ingest worker (same
+# user) consumes it (RT9). Analyzers can write `ingest_disk` (it matches `ingest*`) but never
+# read it; a `disk.ingest` message is re-authenticated by its per-job token like any report.
 cat >/tmp/users.acl <<EOF
 user default off
 user api on >${BROKER_API_PASSWORD} ~* resetchannels +@all ${DENY}
@@ -77,6 +83,7 @@ user analyst on >${BROKER_ANALYST_PASSWORD} $(analyst_keys) resetchannels +@all 
 user report on >${BROKER_REPORT_PASSWORD} $(analyzer_keys report) resetchannels +@all ${DENY} ${READ_DENY}
 user retention on >${BROKER_RETENTION_PASSWORD} $(retention_keys) resetchannels +@all ${DENY} ${READ_DENY}
 user memory on >${BROKER_MEMORY_PASSWORD} $(analyzer_keys memory) resetchannels +@all ${DENY} ${READ_DENY}
+user disk on >${BROKER_DISK_PASSWORD} $(analyzer_keys disk) resetchannels +@all ${DENY} ${READ_DENY}
 user healthcheck on nopass resetkeys +ping
 EOF
 chmod 600 /tmp/users.acl

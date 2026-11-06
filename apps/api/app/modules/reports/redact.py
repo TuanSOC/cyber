@@ -230,6 +230,8 @@ async def seed(
         for value in cmdlines:
             if isinstance(value, str) and value:
                 p.text(value)
+    # M9 (RT1): disk jobs seed nothing beyond their findings and IOCs (above) until phase 9
+    # decides which listing fields (user profile names, host names) may seed the map.
 
 
 def seed_run_maps(p: Pseudonymizer, originals: Iterable[tuple[str, str]]) -> None:

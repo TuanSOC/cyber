@@ -1,6 +1,7 @@
-"""Migrations replay from scratch in one alembic run (M3 RT7); 0016, 0015, 0014, 0013, 0012,
+"""Migrations replay from scratch in one alembic run (M3 RT7); 0017, 0016, 0015, 0014, 0013, 0012,
 0011, 0010, 0009 and 0006 downgrade cleanly (0014 leaves its enum values and the inactive
-system user, 0016 its `memory` analyzer value).
+system user, 0016 its `memory` analyzer value, 0017 its `disk` value and keeps existing
+memory sensitivity rows as `source = memory`).
 
 `env.py` applies every pending revision in a single transaction; 0006 adds an enum value,
 which Postgres will not let that same transaction use. The session fixture already upgrades
@@ -192,6 +193,31 @@ OS_HINT_COLUMN = (
 )
 
 
+# 0017 (M9 disk forensics).
+M9_TABLES = (
+    "analysis_job_segments",
+    "disk_images",
+    "disk_partitions",
+    "disk_files",
+    "disk_events",
+    "disk_exports",
+)
+M9_REGCLASSES = "SELECT " + ", ".join(f"to_regclass('{t}')::text" for t in M9_TABLES)
+M9_FUNCTIONS = (
+    "SELECT proname::text FROM pg_proc WHERE proname IN ('analysis_job_segments_guard', "
+    "'disk_exports_transition') ORDER BY proname"
+)
+SOURCE_COLUMN = (
+    "SELECT column_name FROM information_schema.columns "
+    "WHERE table_name = 'memory_sensitivity' AND column_name = 'source'"
+)
+
+
+async def _m9_tables(engine: AsyncEngine) -> list[object]:
+    async with engine.connect() as conn:
+        return [t for t in (await conn.execute(text(M9_REGCLASSES))).one() if t is not None]
+
+
 async def _m8_tables(engine: AsyncEngine) -> list[object]:
     async with engine.connect() as conn:
         return [t for t in (await conn.execute(text(M8_REGCLASSES))).one() if t is not None]
@@ -210,6 +236,11 @@ def _exception_triggers(function: str) -> list[str]:
 async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine) -> None:
     await get_engine().dispose()
     try:
+        _alembic("downgrade", "0016")  # 0017 (M9) goes away; the `disk` enum value stays
+        assert await _m9_tables(owner_engine) == []
+        assert await _scalars(owner_engine, M9_FUNCTIONS) == []
+        assert await _scalars(owner_engine, SOURCE_COLUMN) == []
+        assert "disk" in set(map(str, await _scalars(owner_engine, ANALYZER_VALUES)))
         _alembic("downgrade", "0015")  # 0016 (M8) goes away; the `memory` enum value stays
         assert await _m8_tables(owner_engine) == []
         assert await _scalars(owner_engine, M8_FUNCTIONS) == []
@@ -256,18 +287,30 @@ async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine)
 
         _alembic("downgrade", "0005")
         assert await _scalars(owner_engine, PROFILE_COLUMN) == []
-        # Enum values cannot be dropped: 'static' (0006) and 'memory' (0016) stay, unused.
-        assert await _scalars(owner_engine, ANALYZER_VALUES) == ["pcap", "static", "memory"]
+        # Enum values cannot be dropped: 'static' (0006), 'memory' (0016) and 'disk' (0017)
+        # stay, unused.
+        assert await _scalars(owner_engine, ANALYZER_VALUES) == [
+            "pcap",
+            "static",
+            "memory",
+            "disk",
+        ]
 
         _alembic("downgrade", "base")
         assert await _scalars(owner_engine, "SELECT to_regtype('analyzer')::text") == [None]
 
-        _alembic("upgrade", "head")  # one run: 0001..0016 (the ALTER TYPEs autocommit)
+        _alembic("upgrade", "head")  # one run: 0001..0017 (the ALTER TYPEs autocommit)
     finally:
         _alembic("upgrade", "head")  # never leave the shared test database half-migrated
         await get_engine().dispose()
 
-    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0016"]
+    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0017"]
+    assert await _m9_tables(owner_engine) == list(M9_TABLES)
+    assert await _scalars(owner_engine, M9_FUNCTIONS) == [
+        "analysis_job_segments_guard",
+        "disk_exports_transition",
+    ]
+    assert await _scalars(owner_engine, SOURCE_COLUMN) == ["source"]
     assert await _scalars(owner_engine, HOLD_SYNC_COLUMNS) == [
         "s3_full_synced_at",
         "s3_sync_cursor_at",

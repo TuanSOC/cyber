@@ -84,6 +84,16 @@ services:
     volumes: !override
       - ingest_tmp:/var/lib/cyberlab/ingest-tmp
 
+  # M9 (RT9): the disk ingest worker in prod, like the ingest worker.
+  disk-ingest-worker:
+    image: cyberlab/api:prod
+    environment:
+      <<: [*prod-ti, *prod-ai]
+      ENV: prod
+      COOKIE_SECURE: "true"
+    volumes: !override
+      - ingest_tmp:/var/lib/cyberlab/ingest-tmp
+
   ingest-beat:
     image: cyberlab/api:prod
     environment:
@@ -119,6 +129,7 @@ services:
       BROKER_REPORT_PASSWORD: ${BROKER_REPORT_PASSWORD:?set BROKER_REPORT_PASSWORD}
       BROKER_RETENTION_PASSWORD: ${BROKER_RETENTION_PASSWORD:?set BROKER_RETENTION_PASSWORD}
       BROKER_MEMORY_PASSWORD: ${BROKER_MEMORY_PASSWORD:?set BROKER_MEMORY_PASSWORD}
+      BROKER_DISK_PASSWORD: ${BROKER_DISK_PASSWORD:?set BROKER_DISK_PASSWORD}
 
   # The report renderer in prod (M6): prod image, ENV=prod, its own broker password required;
   # still no DB, MinIO credentials or signing material.
@@ -168,6 +179,30 @@ services:
 
   memory-symbols-init:
     image: cyberlab/memory-worker:prod
+
+  # The disk analyzer in prod (M9): prod image (no GPL test tools, no compiler, no tests),
+  # its own broker password required, no source bind mount; the hash-set store read-only.
+  disk-worker:
+    image: cyberlab/disk-worker:prod
+    build:
+      context: ./apps/workers/disk
+      target: prod
+      additional_contexts:
+        jobs: ./packages/py-jobs
+        worker_kit: ./packages/py-worker-kit
+        static_rules: ./apps/workers/static/rules/yara
+    environment:
+      BROKER_URL: redis://disk:${BROKER_DISK_PASSWORD:?set BROKER_DISK_PASSWORD}@redis-broker:6379/0
+    volumes: !override
+      - disk_work:/work
+      - disk_hashsets:/hashsets:ro
+
+  # The operator's hash-set tool and its volume init run the prod image too (profile `tools`).
+  disk-hashsets:
+    image: cyberlab/disk-worker:prod
+
+  disk-hashsets-init:
+    image: cyberlab/disk-worker:prod
 
   pcap-worker:
     image: cyberlab/pcap-worker:prod

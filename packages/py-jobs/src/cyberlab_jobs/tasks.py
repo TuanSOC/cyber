@@ -6,6 +6,13 @@ PCAP_ANALYZE = "pcap.analyze"
 STATIC_ANALYZE = "static.analyze"
 # Memory forensics (M8): consumed only by the untrusted memory analyzer (queue `memory`).
 MEMORY_ANALYZE = "memory.analyze"
+# Disk forensics (M9): `disk.analyze` / `disk.export` go to the untrusted disk analyzer (queue
+# `disk`); the trusted ingest worker hands a disk result to `disk.ingest` on the dedicated
+# queue `ingest_disk` (the disk ingest worker, RT9); `disk.expire_exports` is an ingest beat task.
+DISK_ANALYZE = "disk.analyze"
+DISK_EXPORT = "disk.export"
+DISK_INGEST = "disk.ingest"
+DISK_EXPIRE_EXPORTS = "disk.expire_exports"
 INGEST_EVENT = "ingest.event"
 REAP = "ingest.reap"
 # Threat intel (M4): consumed only by the trusted enrich worker. They live here so that the
@@ -46,6 +53,16 @@ class Queues:
     @property
     def memory(self) -> str:
         return f"{self.prefix}memory"
+
+    @property
+    def disk(self) -> str:
+        return f"{self.prefix}disk"
+
+    @property
+    def ingest_disk(self) -> str:
+        """The disk ingest worker's own queue (M9, RT9): long transactions never delay the
+        shared ingest queue (reaper, correlation, other analyzers)."""
+        return f"{self.prefix}ingest_disk"
 
     @property
     def ingest(self) -> str:

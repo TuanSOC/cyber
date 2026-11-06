@@ -12,7 +12,13 @@ from app.core.rbac import OrgContext
 from app.modules.audit import service as audit
 from app.modules.evidence import repository as repo
 from app.modules.evidence.models import CustodyAction, EvidenceCustodyEvent, EvidenceStatus
-from app.modules.evidence.schemas import CustodyEventOut, CustodyPage, EvidenceOut, EvidencePage
+from app.modules.evidence.schemas import (
+    CustodyEventOut,
+    CustodyPage,
+    EvidenceOut,
+    EvidencePage,
+    EvidenceSensitivityOut,
+)
 from app.modules.investigations.models import InvestigationStatus
 
 # M8: the stored `memory_sensitivity.state` as the `EvidenceOut` literal.
@@ -45,7 +51,14 @@ def to_out(row: repo.EvidenceRow) -> EvidenceOut:
         declared_type=e.declared_type,
         type_mismatch=e.type_mismatch,
         memory_sensitivity=_SENSITIVITY.get(row.memory_sensitivity or ""),
+        sensitivity=_sensitivity(row.sensitivity),
     )
+
+
+def _sensitivity(found: tuple[str, str] | None) -> EvidenceSensitivityOut | None:
+    if found is None:
+        return None
+    return EvidenceSensitivityOut.model_validate({"state": found[0], "source": found[1]})
 
 
 def record_event(

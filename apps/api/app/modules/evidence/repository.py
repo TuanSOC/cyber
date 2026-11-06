@@ -29,6 +29,8 @@ class EvidenceRow:
     legal_hold: bool = False
     # M8: `restricted` / `released` when the evidence is a memory image (`memory_sensitivity`).
     memory_sensitivity: str | None = None
+    # M9 (RT2): `(state, source)` of the evidence's `memory_sensitivity` row, any source.
+    sensitivity: tuple[str, str] | None = None
 
 
 async def get_investigation(
@@ -87,6 +89,21 @@ async def memory_sensitivity_states(
     return {evidence_id: str(state) for evidence_id, state in rows.all()}
 
 
+async def sensitivity_states(
+    session: AsyncSession, org_id: uuid.UUID, evidence_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, tuple[str, str]]:
+    """`{evidence_id: (state, source)}` of the given evidence that have a row (M9, RT2)."""
+    if not evidence_ids:
+        return {}
+    m = MemorySensitivity
+    rows = await session.execute(
+        select(m.evidence_id, m.state, m.source).where(
+            m.organization_id == org_id, m.evidence_id.in_(evidence_ids)
+        )
+    )
+    return {evidence_id: (str(state), str(source)) for evidence_id, state, source in rows.all()}
+
+
 async def _purges(
     session: AsyncSession, org_id: uuid.UUID, evidence_ids: list[uuid.UUID]
 ) -> dict[uuid.UUID, tuple[datetime, uuid.UUID]]:
@@ -101,6 +118,10 @@ async def _purges(
     return {evidence_id: (at, run_id) for evidence_id, at, run_id in rows.all()}
 
 
+def _memory_state(found: tuple[str, str] | None) -> str | None:
+    return found[0] if found is not None and found[1] == "memory" else None
+
+
 async def _rows(
     session: AsyncSession, org_id: uuid.UUID, rows: list[tuple[Evidence, str]]
 ) -> list[EvidenceRow]:
@@ -108,7 +129,7 @@ async def _rows(
     hashes = await _hashes(session, ids)
     flags = await _flags(session, org_id, ids)
     purges = await _purges(session, org_id, ids)
-    sensitivity = await memory_sensitivity_states(session, org_id, ids)
+    sensitivity = await sensitivity_states(session, org_id, ids)
     holds = await active_holds(session, org_id, now=datetime.now(UTC)) if ids else None
     out = []
     for e, name in rows:
@@ -122,7 +143,9 @@ async def _rows(
                 purged_at=purged_at,
                 purge_run_id=run_id,
                 legal_hold=holds is not None and holds.covers(e.investigation_id),
-                memory_sensitivity=sensitivity.get(e.id),
+                # M8's field keeps its meaning: memory images only (M9, RT2).
+                memory_sensitivity=_memory_state(sensitivity.get(e.id)),
+                sensitivity=sensitivity.get(e.id),
             )
         )
     return out

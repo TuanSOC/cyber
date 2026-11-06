@@ -13,9 +13,9 @@ from pydantic import BaseModel, Field
 from app.modules.ops.error_classes import ErrorClass
 
 Window = Literal["1h", "24h", "7d"]
-OutcomeKind = Literal["pcap", "static", "memory", "ti", "ai", "report"]
+OutcomeKind = Literal["pcap", "static", "memory", "disk", "ti", "ai", "report"]
 # The analyzers (M8 RT1: a failed memory job must not break this page).
-AnalyzerKind = Literal["pcap", "static", "memory"]
+AnalyzerKind = Literal["pcap", "static", "memory", "disk"]
 
 
 class KindMetricsOut(BaseModel):
@@ -42,7 +42,8 @@ class RecentFailureOut(BaseModel):
 
     job_id: uuid.UUID
     kind: AnalyzerKind
-    # The static (`full` / `av`) or memory (`triage` / `full`) profile; null for pcap.
+    # The static (`full` / `av`), memory (`triage` / `full`) or disk (`triage` / `full` /
+    # `extract`) profile; null for pcap.
     subkind: str | None
     error_code: str | None
     error_class: ErrorClass

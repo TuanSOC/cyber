@@ -601,9 +601,14 @@ class Omissions(Strict):
 
     `memory_restricted`: memory-derived rows of restricted evidence (TLP:RED by default until
     an admin releases it) omitted from a report below TLP:RED.
+
+    `disk_restricted` (M9, RT23): disk-derived rows of restricted evidence (disk images and
+    files exported from them) omitted below TLP:RED. `None` (the default) is left out of the
+    canonical bytes, so every M8 snapshot with memory omissions keeps its signed bytes.
     """
 
     memory_restricted: int = Field(default=0, ge=0)
+    disk_restricted: int | None = Field(default=None, ge=0)
 
 
 class ReportSnapshot(Strict):
@@ -719,6 +724,11 @@ def canonical_json(obj: Strict | dict[str, Any] | list[Any]) -> bytes:
     if isinstance(obj, ReportSnapshot) and obj.omissions is None:
         # Additive M8 field (RT10): absent, not null, so pre-M8 signed bytes never change.
         data.pop("omissions", None)
+    elif isinstance(obj, ReportSnapshot) and obj.omissions is not None:
+        omissions = data.get("omissions")
+        if isinstance(omissions, dict) and omissions.get("disk_restricted") is None:
+            # Additive M9 field (RT23): absent, not null, so M8-signed bytes never change.
+            omissions.pop("disk_restricted", None)
     _reject_floats(data)
     return json.dumps(
         data, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False

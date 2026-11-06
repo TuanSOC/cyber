@@ -16,6 +16,14 @@ from app.modules.audit.models import AuditLog
 from app.modules.auth.models import AuthEvent, RefreshToken
 from app.modules.case_attack.models import CaseAttackMapping
 from app.modules.correlation.models import CorrelationJobState, CorrelationKey
+from app.modules.disk_forensics.models import (
+    AnalysisJobSegment,
+    DiskEvent,
+    DiskExport,
+    DiskFile,
+    DiskImage,
+    DiskPartition,
+)
 from app.modules.evidence.models import Evidence, EvidenceCustodyEvent, EvidenceHash
 from app.modules.investigations.models import (
     EvidenceSharePolicy,
@@ -78,6 +86,12 @@ from app.modules.threat_intel.models import (
 from app.modules.users.models import User
 
 __all__ = [
+    "AnalysisJobSegment",
+    "DiskEvent",
+    "DiskExport",
+    "DiskFile",
+    "DiskImage",
+    "DiskPartition",
     "AiCitation",
     "AiContextRef",
     "AiOrgSettings",

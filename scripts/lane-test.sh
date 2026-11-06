@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Run api-test (or another test-profile service) against an isolated test lane (parallel
 # development agents).
-#   scripts/lane-test.sh <lane 2..8> [--service <test service>] [--heavy] <command...>
+#   scripts/lane-test.sh <lane 2..9> [--service <test service>] [--heavy] <command...>
 #   e.g. scripts/lane-test.sh 3 uv run pytest -q -p no:cacheprovider tests/unit/test_ai_providers.py
 #        scripts/lane-test.sh 4 --service report-worker-test pytest -q tests/   (M6, RT21)
 #        scripts/lane-test.sh 2 --service memory-worker-test --heavy pytest -q tests/engine  (M8)
-# `--heavy` (M8) takes two slots, atomically (both or wait): runs that load a memory image.
+#        scripts/lane-test.sh 3 --service disk-worker-test --heavy pytest -q tests/engine  (M9)
+# `--heavy` (M8) takes two slots, atomically (both or wait): runs that load a memory image
+# (M9: or generate / open a disk image, or run Plaso).
+# Lane 9 (M9 phase 1, RT27): cyberlab_b9_test, Redis / broker db 9; M10 and M11 reuse it.
 # `--print-lock-root` prints the slot lock root and exits (M7 restore drill, RT25).
 # Lane N uses database cyberlab_bN_test, app Redis db N and broker db N, so lanes never
 # truncate or purge each other's state. The default lane (cyberlab_test, db 1) is untouched.
@@ -23,9 +26,9 @@ if [ "${1:-}" = "--print-lock-root" ]; then
   exit 0
 fi
 
-lane="${1:?lane number 2..8}"
+lane="${1:?lane number 2..9}"
 shift
-case "$lane" in [2-8]) ;; *) echo "lane must be 2..8" >&2; exit 2 ;; esac
+case "$lane" in [2-9]) ;; *) echo "lane must be 2..9" >&2; exit 2 ;; esac
 
 service="api-test"
 if [ "${1:-}" = "--service" ]; then
@@ -33,7 +36,7 @@ if [ "${1:-}" = "--service" ]; then
   shift 2
 fi
 case "$service" in
-  api-test|report-worker-test|memory-worker-test) ;;
+  api-test|report-worker-test|memory-worker-test|disk-worker-test) ;;
   *) echo "unsupported lane service: $service" >&2; exit 2 ;;
 esac
 need=1
@@ -99,7 +102,7 @@ if [ "$service" = "api-test" ]; then
     -e TEST_LANE="$lane" \
     api-test "$@"
 else
-  # The renderer and the memory analyzer hold no DB or app Redis settings: only the lane's
+  # The renderer and the memory / disk analyzers hold no DB or app Redis settings: only the lane's
   # broker db, which compose interpolates into its BROKER_URL through TEST_BROKER_DB.
   docker compose --profile test run --rm --no-deps "$service" "$@"
 fi

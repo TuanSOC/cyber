@@ -11,3 +11,5 @@
 plans
 docs
 .secrets
+.memory-import
+.disk-import

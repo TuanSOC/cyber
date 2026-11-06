@@ -4,6 +4,8 @@ Before M8 a dozen two-way branches sent "not static" to the pcap code path: a me
 have linked to `/pcap/{id}`, failed the org operations page (`kind: Literal["pcap",
 "static"]`), built a pcap AI digest and mislabelled citations and timeline titles. Each map
 below is the single place its branch reads from; a new analyzer fails here first.
+
+M9 phase 1 adds `disk` (route `forensics`, profiles `triage` / `full` / `extract`).
 """
 
 import typing
@@ -48,8 +50,8 @@ SETTINGS = Settings(
 )
 
 
-def test_memory_is_an_analyzer() -> None:
-    assert ALL == {"pcap", "static", "memory"}
+def test_memory_and_disk_are_analyzers() -> None:
+    assert ALL == {"pcap", "static", "memory", "disk"}
 
 
 @pytest.mark.parametrize(
@@ -63,6 +65,7 @@ def test_analyzer_keyed_maps_are_complete(mapping: typing.Mapping[Analyzer, obje
 
 def test_routes_are_distinct_and_memory_has_its_own() -> None:
     assert ANALYZER_ROUTES[Analyzer.MEMORY] == "memory"
+    assert ANALYZER_ROUTES[Analyzer.DISK] == "forensics"
     assert len(set(ANALYZER_ROUTES.values())) == len(Analyzer)
     assert analyzer_route("memory") == "memory" and analyzer_route("nope") is None
     assert set(ANALYZER_ROUTES.values()) <= set(typing.get_args(DeepLinkRoute))
@@ -77,12 +80,17 @@ def test_per_analyzer_parameters_and_queues() -> None:
         assert task == f"{analyzer.value}.analyze"
         assert queue == f"{SETTINGS.queue_prefix}{analyzer.value}"
     assert analyzers.max_bytes(SETTINGS, Analyzer.MEMORY) == SETTINGS.memory_max_bytes
+    assert analyzers.max_bytes(SETTINGS, Analyzer.DISK) == SETTINGS.disk_max_upload_bytes
+    assert analyzers.timeout_s(SETTINGS, Analyzer.DISK) == SETTINGS.analysis_disk_timeout_s
 
 
 def test_profiles_per_analyzer() -> None:
     assert PROFILES[Analyzer.PCAP] == frozenset()
     assert PROFILES[Analyzer.STATIC] == {JobProfile.FULL, JobProfile.AV}
     assert PROFILES[Analyzer.MEMORY] == {JobProfile.TRIAGE, JobProfile.FULL}
+    assert PROFILES[Analyzer.DISK] == {JobProfile.TRIAGE, JobProfile.FULL, JobProfile.EXTRACT}
+    disk = AnalysisCreate(analyzer=Analyzer.DISK, segments=[uuid.uuid4()])
+    assert (disk.profile, disk.os_hint) == (JobProfile.TRIAGE, "auto")
     assert AnalysisCreate(analyzer=Analyzer.MEMORY).profile is JobProfile.TRIAGE
     assert AnalysisCreate(analyzer=Analyzer.MEMORY).os_hint == "auto"
     assert AnalysisCreate(analyzer=Analyzer.STATIC).profile is JobProfile.FULL
@@ -93,6 +101,12 @@ def test_profiles_per_analyzer() -> None:
         {"analyzer": "pcap", "profile": "full"},
         {"analyzer": "static", "os_hint": "linux"},
         {"analyzer": "memory", "os_hint": "macos"},
+        {"analyzer": "disk"},  # no segments
+        {"analyzer": "disk", "segments": []},
+        {"analyzer": "disk", "segments": [str(uuid.UUID(int=1))] * 2},
+        {"analyzer": "disk", "segments": [str(uuid.uuid4())], "profile": "extract"},
+        {"analyzer": "disk", "segments": [str(uuid.uuid4())], "profile": "av"},
+        {"analyzer": "static", "segments": [str(uuid.uuid4())]},
     ):
         with pytest.raises(ValueError):
             AnalysisCreate.model_validate(bad)
@@ -104,7 +118,7 @@ def test_ops_kinds_and_literals_cover_every_analyzer() -> None:
     assert ALL <= set(ACTIVE_STATUSES)
     assert set(typing.get_args(AnalyzerKind)) == ALL
     assert ALL <= set(typing.get_args(OutcomeKind))
-    assert {"triage", "full", "av"} <= SUBKINDS
+    assert {"triage", "full", "av", "extract"} <= SUBKINDS
     # A failed memory job renders on the org operations page (RT1).
     RecentFailureOut(
         job_id=uuid.uuid4(),
@@ -122,6 +136,7 @@ def test_ops_kinds_and_literals_cover_every_analyzer() -> None:
 def test_timeline_titles_cover_every_analyzer() -> None:
     assert set(_ANALYZER_TITLE) == ALL
     assert _ANALYZER_TITLE["memory"] == "Memory analysis"
+    assert _ANALYZER_TITLE["disk"] == "Disk analysis"
 
 
 def test_links_of_memory_jobs_go_to_the_memory_page() -> None:
@@ -134,5 +149,23 @@ def test_links_of_memory_jobs_go_to_the_memory_page() -> None:
     assert path(org, finding) == f"/o/{org}/memory/{job}?tab=findings&ref=r1"
     assert set(ANALYZER_LINKS) == ALL
     assert ANALYZER_LINKS["memory"][0] == "memory"
+    assert ANALYZER_LINKS["disk"][0] == "forensics"
+    assert _job_href("disk", job, "findings") == f"/forensics/{job}?tab=findings"
+    disk_finding = Resolved("finding", "r2", job, None, "disk")
+    assert path(org, disk_finding) == f"/o/{org}/forensics/{job}?tab=findings&ref=r2"
     for table in ("analysis_findings", "iocs", "analysis_jobs"):
         assert set(_TABS[table]) == ALL, table
+
+
+def test_a_failed_disk_job_renders_on_the_operations_page() -> None:
+    RecentFailureOut(
+        job_id=uuid.uuid4(),
+        kind="disk",
+        subkind="extract",
+        error_code="no_supported_filesystem",
+        error_class="input",
+        finished_at=None,
+        investigation_id=uuid.uuid4(),
+        evidence_id=uuid.uuid4(),
+        href="/forensics/x",
+    )
