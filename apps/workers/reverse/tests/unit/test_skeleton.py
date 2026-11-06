@@ -4,11 +4,8 @@ enables execution, the JVM argument helpers agree with our launch.properties."""
 import inspect
 from pathlib import Path, PurePosixPath
 
-import pytest
-
 from re_worker import jvm_args, priority
 from re_worker.detections import run as detect
-from re_worker.engines import Budget, ProfileUnavailable, Workspace
 from re_worker.engines.r2 import run_quick
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,13 +20,6 @@ def test_frozen_signatures() -> None:
     assert list(inspect.signature(priority.rank).parameters) == ["view", "job"]
     assert list(inspect.signature(detect).parameters) == ["view", "limits"]
     assert list(inspect.signature(run_quick).parameters) == ["ws", "job", "budget"]
-
-
-def test_quick_is_unavailable_until_phase_3(tmp_path: Path) -> None:
-    ws = Workspace(tmp_path, tmp_path / "in", tmp_path / "st", tmp_path / "out", tmp_path / "p")
-    with pytest.raises(ProfileUnavailable):
-        run_quick(ws, None, Budget.starting_now(10))  # type: ignore[arg-type]
-    assert ProfileUnavailable.code == "profile_unavailable"
 
 
 def test_quick_script_never_executes_the_sample() -> None:

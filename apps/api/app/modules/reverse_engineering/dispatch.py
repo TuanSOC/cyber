@@ -204,16 +204,20 @@ def build_re_message(item: DispatchInput, source_job: ReSource, settings: Settin
     expires = timedelta(seconds=settings.analysis_queue_ttl_s + settings.analysis_re_timeout_s)
     common = presigned_common(item, settings, get_expires=expires)
     profile = ReProfile(item.profile or JobProfile.FULL)
+    addresses = list(item.decompile_addresses) if profile == ReProfile.FULL else []
+    limits = re_limits(settings)
+    # The worker's stream checker caps decompiled rows at max_decompiled and priority.rank never
+    # cuts requested addresses, so the cap must cover every requested one.
+    if len(addresses) > limits.max_decompiled:
+        limits = limits.model_copy(update={"max_decompiled": len(addresses)})
     return ReJobV1.model_validate(
         {
             **common,
             "source_job_id": source_job.job_id,
             "profile": profile,
             "file_format": source_job.file_format,
-            "decompile_addresses": list(item.decompile_addresses)
-            if profile == ReProfile.FULL
-            else [],
+            "decompile_addresses": addresses,
             "capa_file_vas": list(source_job.capa_file_vas),
-            "limits": re_limits(settings),
+            "limits": limits,
         }
     )
