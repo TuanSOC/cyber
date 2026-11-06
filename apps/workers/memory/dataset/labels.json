@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "caveat": "Synthetic scenarios designed alongside the detectors: precision and recall on this set show that the detectors behave as specified, not their real-world quality.",
+  "match": "A finding matches a label on (detection_method, type, pid); pid is the finding's `pid` attribute, null when the finding has none. Findings at `info` are ignored. Baselines and near-misses expect nothing above info. `severity`, when given, must also match. An IOC label matches on (type, value) and, when given, its first source; IOC labels list only what each scenario injects (recall), never everything the baseline yields.",
+  "scenarios": {
+    "windows_workstation": {"kind": "baseline", "findings": [], "iocs": []},
+    "windows_server": {"kind": "baseline", "findings": [], "iocs": []},
+    "linux_server": {"kind": "baseline", "findings": [], "iocs": []},
+    "win_hidden_process": {
+      "kind": "positive",
+      "findings": [{"method": "heuristic:mem_hidden_process@1", "type": "mem_hidden_process", "pid": 7340}],
+      "iocs": []
+    },
+    "win_injected_pe": {
+      "kind": "positive",
+      "findings": [{"method": "heuristic:mem_injected_code@1", "type": "mem_private_exec_pe", "pid": 3040, "severity": "medium"}],
+      "iocs": []
+    },
+    "win_injected_shellcode": {
+      "kind": "positive",
+      "findings": [{"method": "heuristic:mem_injected_code@1", "type": "mem_private_exec_region", "pid": 5300, "severity": "low"}],
+      "iocs": []
+    },
+    "win_lsass_wrong_parent": {
+      "kind": "positive",
+      "findings": [{"method": "heuristic:mem_process_lineage@1", "type": "mem_process_lineage", "pid": 696}],
+      "iocs": []
+    },
+    "win_two_lsass": {
+      "kind": "positive",
+      "findings": [{"method": "heuristic:mem_process_lineage@1", "type": "mem_core_process_count", "pid": null}],
+      "iocs": []
+    },
+    "win_scvhost": {
+      "kind": "positive",
+      "findings": [{"method": "heuristic:mem_masquerade@1", "type": "mem_name_similar_to_core", "pid": 7020}],
+      "iocs": []
+    },
+    "win_core_name_public": {
+      "kind": "positive",
+      "findings": [{"method": "heuristic:mem_masquerade@1", "type": "mem_core_name_unexpected_path", "pid": 7140}],
+      "iocs": []
+    },
+    "win_encoded_powershell": {
+      "kind": "positive",
+      "findings": [{"method": "heuristic:mem_suspicious_cmdline@1", "type": "mem_suspicious_cmdline", "pid": 7400, "severity": "medium"}],
+      "iocs": []
+    },
+    "win_certutil_download": {
+      "kind": "positive",
+      "findings": [{"method": "heuristic:mem_suspicious_cmdline@1", "type": "mem_suspicious_cmdline", "pid": 7460, "severity": "medium"}],
+      "iocs": [
+        {"type": "url", "value": "http://198.51.100.12/p.exe", "source": "cmdline"},
+        {"type": "ip", "value": "198.51.100.12", "source": "cmdline"}
+      ]
+    },
+    "win_unlinked_dll": {
+      "kind": "positive",
+      "findings": [{"method": "heuristic:mem_unlinked_module@1", "type": "mem_unlinked_module", "pid": 3040}],
+      "iocs": []
+    },
+    "win_service_programdata": {
+      "kind": "positive",
+      "findings": [{"method": "heuristic:mem_service_path@1", "type": "mem_service_user_writable_path", "pid": null, "severity": "low"}],
+      "iocs": []
+    },
+    "win_lsass_external": {
+      "kind": "positive",
+      "findings": [{"method": "heuristic:mem_unexpected_network@1", "type": "mem_unexpected_network", "pid": 696}],
+      "iocs": [{"type": "ip", "value": "203.0.113.80", "source": "connection"}]
+    },
+    "win_cmdline_password": {
+      "kind": "positive",
+      "findings": [{"method": "heuristic:mem_suspicious_cmdline@1", "type": "mem_suspicious_cmdline", "pid": 7520, "severity": "low"}],
+      "iocs": [{"type": "ip", "value": "10.0.0.9", "source": "cmdline"}]
+    },
+    "win_combined_indicators": {
+      "kind": "positive",
+      "findings": [
+        {"method": "heuristic:mem_hidden_process@1", "type": "mem_hidden_process", "pid": 7600},
+        {"method": "heuristic:mem_masquerade@1", "type": "mem_name_similar_to_core", "pid": 7600},
+        {"method": "heuristic:mem_injected_code@1", "type": "mem_private_exec_pe", "pid": 7600},
+        {"method": "heuristic:mem_correlated_indicators@1", "type": "mem_correlated_indicators", "pid": 7600}
+      ],
+      "iocs": []
+    },
+    "linux_curl_sh": {
+      "kind": "positive",
+      "findings": [{"method": "heuristic:mem_linux_shell_history@1", "type": "mem_shell_history_pattern", "pid": 1030}],
+      "iocs": [
+        {"type": "url", "value": "http://198.51.100.7/x.sh", "source": "bash"},
+        {"type": "ip", "value": "198.51.100.7", "source": "bash"}
+      ]
+    },
+    "linux_bash_password": {
+      "kind": "positive",
+      "findings": [{"method": "heuristic:mem_linux_shell_history@1", "type": "mem_shell_history_pattern", "pid": 1030}],
+      "iocs": [
+        {"type": "url", "value": "http://198.51.100.9/a", "source": "bash"},
+        {"type": "ip", "value": "198.51.100.9", "source": "bash"}
+      ]
+    },
+    "win_defender_platform": {"kind": "near_miss", "findings": [], "iocs": []},
+    "win_exited_parent": {"kind": "near_miss", "findings": [], "iocs": []}
+  }
+}
