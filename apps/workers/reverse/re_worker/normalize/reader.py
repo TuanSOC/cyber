@@ -155,6 +155,7 @@ class StageStatus(BaseModel):
     decompiler_limited: Count = 0  # prlimit applied to a decompiler child (RT4)
     decompiler_restarts: Count = 0
     unknown_options: Annotated[list[Arg], Field(max_length=32)] = []
+    engine_errors: Annotated[list[Name], Field(max_length=32)] = []  # the radare2 reducer
     loader_options: Annotated[list[Arg], Field(max_length=64)] = []
 
 

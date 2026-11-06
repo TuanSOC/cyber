@@ -5,6 +5,7 @@ recomputes rva / callers / callees and drops what the ingest would refuse."""
 import gzip
 import json
 from pathlib import Path
+from typing import Any
 
 from cyberlab_jobs.reverse import (
     RE_LINE_ADAPTER,
@@ -59,7 +60,9 @@ def test_probe_values_root_owns_are_replaced() -> None:
     assert not analysis.invalid
     assert all(f.priority_rank is None for f in analysis.functions)
     assert max(f.callers for f in analysis.functions) < 999
-    assert all(f.rva == f.entry - analysis.facts.image_base for f in analysis.functions)  # type: ignore[union-attr]
+    assert analysis.facts is not None
+    base = analysis.facts.image_base
+    assert all(f.rva == f.entry - base for f in analysis.functions)
 
 
 def test_caps_cut_and_dangling_references_drop() -> None:
@@ -141,5 +144,6 @@ def test_diagnostic_stream(tmp_path: Path) -> None:
     lines = _read(path)
     assert [getattr(line, "kind", "") for line in lines] == ["header", "program", "trailer"]
     validate_stream(lines, job_id=the_job.job_id, diagnostic=True)  # type: ignore[arg-type]
-    assert lines[1].arch == "other" and lines[1].analysis_status == "not_run"  # type: ignore[attr-defined]
+    program: Any = lines[1]
+    assert program.arch == "other" and program.analysis_status == "not_run"
     assert lines[0].engine == ReEngine.GHIDRA  # type: ignore[attr-defined]

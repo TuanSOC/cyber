@@ -22,6 +22,7 @@ import subprocess
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -107,4 +108,5 @@ def test_ghidra_analyses_and_decompiles(
     assert by_kind.get("call_edge") and by_kind.get("import") and by_kind.get("string")
     assert by_kind.get("import_ref")
     decompiled = by_kind["decompiled"]
-    assert any(d.status == "ok" and "main" in (d.code or "") for d in decompiled)  # type: ignore[attr-defined]
+    code: Any = decompiled
+    assert any(d.status == "ok" and "main" in (d.code or "") for d in code)

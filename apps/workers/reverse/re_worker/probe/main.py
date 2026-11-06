@@ -2,6 +2,7 @@
 
     python -I -s -B -m re_worker.probe analyze   --sample S --loader pe|elf --project P ...
     python -I -s -B -m re_worker.probe decompile --project P --out O --heap N --list L
+    python -I -s -B -m re_worker.probe r2 --input <out>/r2.out --out O --max-functions N ...
 
 Root starts it through `sandbox.run_tool` with cwd = the root-owned, read-only input dir and
 the stage environment (`engines/spec.py`). Outputs, both in `--out`:
@@ -32,12 +33,13 @@ PATH_FLAGS = ("sample", "project", "out", "list", "input")
 
 
 def _parser() -> argparse.ArgumentParser:
-    from re_worker.probe import analyze, decompile
+    from re_worker.probe import analyze, decompile, r2
 
     parser = argparse.ArgumentParser(prog="re_worker.probe")
     sub = parser.add_subparsers(dest="stage", required=True)
     analyze.add_arguments(sub.add_parser("analyze"))
     decompile.add_arguments(sub.add_parser("decompile"))
+    r2.add_arguments(sub.add_parser("r2"))
     return parser
 
 
@@ -61,6 +63,10 @@ def _stage(stage: str) -> tuple[Callable[..., None], Callable[..., dict[str, int
         from re_worker.probe import analyze
 
         return analyze.run, analyze.caps
+    if stage == "r2":
+        from re_worker.probe import r2
+
+        return r2.run, r2.caps
     from re_worker.probe import decompile
 
     return decompile.run, decompile.caps

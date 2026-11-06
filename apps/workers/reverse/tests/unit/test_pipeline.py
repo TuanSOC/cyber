@@ -177,10 +177,22 @@ def test_format_mismatch_and_garbage(dirs: sandbox.JobDirs) -> None:
     assert mismatch.value.code == "unsupported_format"
 
 
-def test_quick_is_unavailable_until_phase_3(dirs: sandbox.JobDirs) -> None:
+def test_quick_replay(dirs: sandbox.JobDirs) -> None:
+    """Phase 3: the quick profile through the same root code (reducer rows replayed)."""
+    _, lines = _run(dirs, "quick_pe", profile="quick")
+    header = lines[0]
+    assert (header.engine, header.code_kind, header.jvm_args) == ("replay", "disasm", [])
+    assert [(s.stage, s.status) for s in header.stages] == [("r2", "ok")]
+    assert _kinds(lines, "function") and not _kinds(lines, "decompiled")
+    assert all(f.priority_rank is None for f in _kinds(lines, "function"))
+    out = dirs.root / "r2-out"
+    assert out.stat().st_uid == 0  # sealed after the reducer
+
+
+def test_quick_without_reducer_output_fails(dirs: sandbox.JobDirs) -> None:
     with pytest.raises(JobFailed) as failed:
-        _run(dirs, "pe_full", profile="quick")
-    assert failed.value.code == "profile_unavailable"
+        _run(dirs, "pe_full", profile="quick")  # no r2_reduce rows in this case
+    assert failed.value.code == "re_parse_failed"
 
 
 class PlantingRunner(ReplayRunner):

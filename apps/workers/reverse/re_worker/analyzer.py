@@ -1,9 +1,9 @@
-"""Reverse engineering of one sample (M10 phase 2; the frozen call `analyze(job, dirs, config)`).
+"""Reverse engineering of one sample (M10 phases 2 and 3; frozen `analyze(job, dirs, config)`).
 
     size checks -> free space (RT5) -> download (sha256 + size verified, root-owned 0444)
       -> root magic check (loader or diagnostic) -> engine:
            full:  Ghidra `analyze` -> rank -> Ghidra `decompile`      (engines/ghidra.py)
-           quick: radare2 once + its reducer (phase 3)                (engines/r2.py)
+           quick: radare2 once + its reducer probe                    (engines/r2.py)
            replay (TEST_PROFILE only): the same root code over hand-written stage rows
       -> ReView -> detections (phase 5) -> `re.v1` (result.py) -> path
 
@@ -93,6 +93,8 @@ def _engine_output(
         from re_worker.engines import r2
 
         try:
+            if isinstance(runner, ReplayRunner):  # hand-written reducer rows (test profile)
+                return r2.quick_with(ws, job, budget, runner, sample)
             return r2.run_quick(ws, job, budget)
         except ProfileUnavailable as exc:
             raise JobFailed("profile_unavailable") from exc

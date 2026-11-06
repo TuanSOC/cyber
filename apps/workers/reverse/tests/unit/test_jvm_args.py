@@ -8,6 +8,7 @@ import pytest
 from re_worker import jvm_args
 from re_worker.engines.spec import (
     JVM_SUBDIRS,
+    StageSpec,
     UnsafeEnvironment,
     analyze_spec,
     assert_clean_env,
@@ -20,7 +21,7 @@ JAVA = Path("/opt/java/openjdk")
 GHIDRA = Path("/opt/ghidra")
 
 
-def _analyze() -> object:
+def _analyze() -> StageSpec:
     return analyze_spec(
         python="/opt/venv/bin/python",
         out=OUT,
@@ -39,13 +40,13 @@ def _analyze() -> object:
 
 def test_analyze_argv_is_the_isolated_probe() -> None:
     spec = _analyze()
-    argv = list(spec.argv)  # type: ignore[attr-defined]
+    argv = list(spec.argv)
     assert argv[:6] == ["/opt/venv/bin/python", "-I", "-s", "-B", "-m", "re_worker.probe"]
     assert argv[6] == "analyze"
     assert argv[argv.index("--loader") + 1] == "pe"
     assert argv[argv.index("--max-functions") + 1] == "20000"
-    assert spec.subdirs == JVM_SUBDIRS and spec.heap_bytes == 2 * 1024**3  # type: ignore[attr-defined]
-    assert spec.stdout_name == "rows.jsonl"  # type: ignore[attr-defined]
+    assert spec.subdirs == JVM_SUBDIRS and spec.heap_bytes == 2 * 1024**3
+    assert spec.stdout_name == "rows.jsonl"
 
 
 def test_jvm_environment_is_fresh_and_clean() -> None:

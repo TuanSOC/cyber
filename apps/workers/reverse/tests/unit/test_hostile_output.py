@@ -4,6 +4,7 @@ isolation, an untrusted `status.json`, and root's conclusions about how a stage 
 
 import io
 import json
+from typing import Any
 from pathlib import PurePosixPath
 
 import pytest
@@ -87,8 +88,9 @@ def test_status_is_bounded_and_validated() -> None:
     assert loads(b'{"a": [1, {"b": null}]}') == {"a": [1, {"b": None}]}
 
 
-def _proc(**fields: object) -> ProcessResult:
-    return ProcessResult(**{"end": "exited", "returncode": 0, "duration_ms": 5, **fields})  # type: ignore[arg-type]
+def _proc(**fields: Any) -> ProcessResult:
+    values: dict[str, Any] = {"end": "exited", "returncode": 0, "duration_ms": 5, **fields}
+    return ProcessResult(**values)
 
 
 def _status(**fields: object) -> StageStatus:
@@ -109,8 +111,8 @@ def test_conclusions_of_the_analyze_stage() -> None:
     timeout = conclude(A, _proc(end="timeout", returncode=None), None, expected_args=EXPECTED)
     assert timeout.fatal == "analysis_timeout" and timeout.report.status == "timeout"
     assert conclude(A, _proc(), None, expected_args=EXPECTED).fatal == "jvm_start_failed"
-    never = conclude(A, _proc(end="failed", returncode=1), _status(jvm_started=False),
-                     expected_args=EXPECTED)  # fmt: skip
+    not_started = _status(jvm_started=False)
+    never = conclude(A, _proc(end="failed", returncode=1), not_started, expected_args=EXPECTED)
     assert never.fatal == "jvm_start_failed"
     extra = _status(jvm_args=[*EXPECTED, "-javaagent:/x.jar"])
     assert conclude(A, _proc(), extra, expected_args=EXPECTED).fatal == "jvm_start_failed"
@@ -120,8 +122,9 @@ def test_conclusions_of_the_analyze_stage() -> None:
     )
     monitor = conclude(A, _proc(), _status(analysis_status="timeout"), expected_args=EXPECTED)
     assert monitor.report.status == "timeout" and monitor.report.truncated and monitor.usable
-    crashed = conclude(A, _proc(end="failed", returncode=1, hs_err=True),
-                       _status(status="failed", error="RuntimeException"), expected_args=EXPECTED)  # fmt: skip
+    died = _proc(end="failed", returncode=1, hs_err=True)
+    failed = _status(status="failed", error="RuntimeException")
+    crashed = conclude(A, died, failed, expected_args=EXPECTED)
     assert crashed.fatal is None and crashed.usable and crashed.report.status == "failed"
     assert crashed.engine_errors == ["jvm_crash"]
 
@@ -144,10 +147,10 @@ def test_conclusions_of_the_decompile_stage() -> None:
 
 
 def test_audit_refusals_and_the_launcher_classpath() -> None:
-    refused = conclude(ReStage.ANALYZE, _proc(), _status(audit={"socket": 2, "child:x": 0}),
-                       expected_args=EXPECTED)  # fmt: skip
+    audited = _status(audit={"socket": 2, "child:x": 0})
+    refused = conclude(ReStage.ANALYZE, _proc(), audited, expected_args=EXPECTED)
     assert refused.engine_errors == ["audit_refusals"] and refused.audit == {"socket": 2}
     with_cp = [*EXPECTED[:3], "-Djava.class.path=/opt/ghidra/x.jar", *EXPECTED[3:]]
     assert effective_args(with_cp) == EXPECTED
-    assert conclude(ReStage.ANALYZE, _proc(), _status(jvm_args=with_cp),
-                    expected_args=EXPECTED).fatal is None  # fmt: skip
+    classpath = _status(jvm_args=with_cp)
+    assert conclude(ReStage.ANALYZE, _proc(), classpath, expected_args=EXPECTED).fatal is None

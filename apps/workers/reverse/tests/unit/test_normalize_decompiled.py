@@ -20,14 +20,15 @@ def test_cut_code_on_a_line_boundary_with_the_marker() -> None:
     assert len(text.encode()) <= 4096 and cut > 0
     assert text.endswith(TRUNCATION_MARKER.format(n=cut))
     assert text.removesuffix(TRUNCATION_MARKER.format(n=cut)).endswith("\n")
-    assert len(code.encode()) - cut == len(text.removesuffix(TRUNCATION_MARKER.format(n=cut)).encode())
+    kept = text.removesuffix(TRUNCATION_MARKER.format(n=cut))
+    assert len(code.encode()) - cut == len(kept.encode())
     assert cut_code("short\n", 4096) == ("short\n", 0)
     assert cut_code("x" * 100, 10) == ("", 100)  # no room even for the marker
 
 
 def test_record_for_matches_the_contract() -> None:
-    record = record_for(1, "int f(void)\n{\n  return 0;\n}\n" * 3000, S.OK, CodeKind.PSEUDO_C,
-                        max_bytes=1024)  # fmt: skip
+    code = "int f(void)\n{\n  return 0;\n}\n" * 3000
+    record = record_for(1, code, S.OK, CodeKind.PSEUDO_C, max_bytes=1024)
     assert record.status == S.TRUNCATED and record.truncated_bytes > 0
     assert record.code_sha256 == code_sha256(record.code or "")
     assert record_for(2, None, S.TIMEOUT, CodeKind.PSEUDO_C, max_bytes=1024).code is None
@@ -55,7 +56,13 @@ def test_unlisted_duplicate_and_wrong_kind_rows_are_dropped() -> None:
         out_of_time=False,
     )
     assert [r.status for r in found.records] == [S.OK]
-    assert found.dropped == {"code_kind": 1, "duplicate": 1, "not_listed": 1, "invalid": 1, "kind": 1}
+    assert found.dropped == {
+        "code_kind": 1,
+        "duplicate": 1,
+        "not_listed": 1,
+        "invalid": 1,
+        "kind": 1,
+    }
 
 
 def test_missing_entries_and_the_code_budget() -> None:

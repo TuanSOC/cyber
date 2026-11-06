@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Radare2 quick profile engine"
-status: pending
+status: code-complete (untested in Docker)
 priority: P3
 effort: "12h"
 dependencies: [1]
@@ -40,3 +40,15 @@ The `quick` profile: radare2 6.2.6, run **once, non-interactively, with a fixed 
 - **r2 parser memory safety:** C parsers with frequent fixes; contained by the sandbox, recorded in THREAT_MODEL; version pinned and shown in every result.
 - **r2 variable / command drift:** a pinned 6.2.6 and the engine-smoke check of variable names and `aflj` reference fields.
 - **Weaker function recovery on stripped binaries:** measured in phase 4 against the same ground truth and stated in the docs.
+
+## Notes (as built, untested in Docker)
+
+Code-only (no container ran, no radare2 on the host). Host checks: `tests/unit/test_r2_reducer.py` and `tests/unit/test_r2_script.py` (12) pass; `test_pipeline.py::test_quick_*` (replay) and `tests/engine/test_r2_smoke.py` need the image.
+
+- **Engine** (`engines/r2.py`): `run_quick(ws, job, budget)` raises `ProfileUnavailable` when `/usr/bin/radare2` or the script is missing, else `quick_with(ws, job, budget, runner, sample)`: one `r2` out dir shared by the radare2 run (`spec.r2_spec`: `radare2 -q -NN -S -2 -i /opt/re/r2/quick.r2 <sample>`, stdout `r2.out`, RLIMIT_AS 1 GiB, CPU 2 x t, NPROC 64, NOFILE 1024, FSIZE 256 MiB) and the reducer probe (`spec.reducer_spec`, step `r2_reduce`, RLIMIT_AS 2 GiB), sealed after the reducer; both under the watchdog. Time: `quick_timeout_s` split by `split_time` (reducer <= 120 s). The replay engine runs the same code (`r2.out` / `r2_reduce.jsonl` files of a case); the analyzer routes `quick` + replay to `quick_with`.
+- **Reducer** (`probe/r2.py`, `python -I -s -B -m re_worker.probe r2`): audit hook first; bounded split at `===CYBERLAB:<section>===` lines in the script's order (repeats / out-of-order markers ignored and recorded; JSON strings cannot forge one since radare2 escapes newlines); each section <= 64 MiB before parsing; strict JSON (the normalize reader's `loads`); rows in the Ghidra `analyze` shapes. Mapping: `ij` `bin.baddr` -> image base, `entry0` -> entry and `export`; `aflj` (`addr` or 5.x `offset`; body `[minaddr, maxaddr)` when sane else `[addr, addr + size)`; `callrefs` CALL -> edges, a callref / dataref to an import `plt` slot -> import ref, a call to a `sym.imp.*` thunk -> import ref of the caller; `datarefs` to a string `vaddr` -> string ref); `iij` -> imports (`Ordinal_<n>` names are ordinals); `izj` -> strings (`wide` = utf16le). Header `engine: radare2`, `code_kind: disasm`, one `r2` stage, no decompiled lines, no ranks.
+- **Deviations (parent to confirm):** the frozen script (phase 1) has no `iEj` / `agCj` and no `anal.timeout`: call edges come from `aflj` `callrefs` only, exports only from `entry0`, and the analysis time is bounded by the wall timeout alone. Engine errors are `radare_<section>_failed` / `radare_<section>_too_large` / `radare_marker_unexpected` / `quick_rows_*` (the contract's `ErrorCode` pattern has no digits, so `r2_<cmd>_failed` cannot be stored). A radare2 run killed at its timeout keeps what it printed: stage `timeout`, `truncated.r2_output`. The no-go `full` fallback (`pdfj`) is not built (the spike has not decided).
+- **Frozen test to update (parent):** `tests/unit/test_skeleton.py::test_quick_is_unavailable_until_phase_3` calls `run_quick(ws, None, ...)` and expects `ProfileUnavailable`; it still holds on a host without radare2, but in the image (radare2 present) it now reaches the sample and fails. It should be removed or replaced by `test_pipeline.py::test_quick_replay`.
+- **Phase 2 fix in the same session** (`e722d82`): root no longer cuts phase 5's `rank()` at `max_decompiled` (requested addresses are never dropped); `function_not_found` is reported for requested addresses that are not functions. Note: the contract's `StreamChecker` caps decompiled lines at `limits.max_decompiled`, so the API must send `max_decompiled >= len(decompile_addresses)` (e.g. `max(RE_MAX_DECOMPILED, len(addresses))` in `build_re_message`); otherwise a job requesting more addresses than `max_decompiled` is refused by the worker's own stream check (`re_parse_failed`).
+
+**Remains (Docker):** `scripts/lane-test.sh 3 --service re-worker-test pytest -q tests/unit/test_r2_reducer.py tests/unit/test_r2_script.py tests/unit/test_pipeline.py`; `scripts/lane-test.sh 3 --service re-worker-test pytest -q -s -m engine tests/engine/test_r2_smoke.py` (confirms the 6.2.6 variable names, `-S` together with `-i`, and the `aflj` `callrefs` / `datarefs` fields; if those are absent the phase stops and reports, no interactive pipe is added); `ruff format`, `ruff check`, `mypy`; then `RE_QUICK_ENABLED=true` in the default settings is the parent's decision.

@@ -1,4 +1,4 @@
-"""What one stage process gets (M10 phase 2): argv, environment and resource limits.
+"""What one stage process gets (M10 phases 2 and 3): argv, environment and resource limits.
 
 Pure Python (no kit import), so the values are unit-tested on any host (`test_rlimits.py`,
 `test_jvm_args.py`); `engines/ghidra.py` (and phase 3's `engines/r2.py`) turn a
@@ -12,7 +12,10 @@ values and the parent applies them here):
   `jvm_args.cpu_limit_s(stage timeout)` = 2 x t + 60 (RT3: it sums every JVM thread);
   RLIMIT_NPROC 256 (below `pids_limit` 512, so root can always fork its kill helper, RT13);
   RLIMIT_NOFILE 4096; RLIMIT_FSIZE 1 GiB (one file; the disk watchdog bounds the job, RT5).
-- radare2 (phase 3) keeps its own values in `engines/r2.py`.
+- radare2 (`r2`, phase 3): RLIMIT_AS 1 GiB, CPU 2 x t, NPROC 64, NOFILE 1024, FSIZE 256 MiB
+  (its stdout `r2.out`; a cut file is `truncated.r2_output`); the radare2 reducer probe:
+  RLIMIT_AS 2 GiB (one JSON section of <= 64 MiB parsed at a time), CPU = t, NPROC 16,
+  NOFILE 256, FSIZE 512 MiB.
 
 Environment: the kit sets `PATH`, `LANG`, `HOME` / `XDG_CONFIG_HOME` / `TMPDIR` = the out
 dir; a JVM stage overrides them with fresh subdirs root created in its out dir and adds
@@ -36,6 +39,16 @@ JVM_SUBDIRS = ("home", "tmp", "xdg", "xdg/config", "xdg/cache")
 JVM_NPROC = 256
 JVM_NOFILE = 4096
 JVM_FSIZE = 1 * GIB
+R2_BINARY = Path("/usr/bin/radare2")
+R2_AS = 1 * GIB
+R2_NPROC = 64
+R2_NOFILE = 1024
+R2_MAX_OUTPUT_BYTES = 256 * MIB  # RE_R2_MAX_OUTPUT_BYTES (= its RLIMIT_FSIZE)
+R2_OUTPUT = "r2.out"
+REDUCER_AS = 2 * GIB
+REDUCER_NPROC = 16
+REDUCER_NOFILE = 256
+REDUCER_FSIZE = 512 * MIB
 ROWS = "rows.jsonl"
 STATUS = "status.json"
 DECOMPILE_LIST = "decompile_list.json"
@@ -178,9 +191,56 @@ def decompile_spec(
     )
 
 
+def r2_spec(*, script: Path, sample: PurePosixPath, timeout_s: float) -> StageSpec:
+    """RT9: one non-interactive run of the fixed, root-owned script; no command is ever built
+    from binary-derived data. `-NN`: no rc files, no plugins; `-S`: radare2's own sandbox (a
+    second layer only); `-2`: stderr closed; `-q`: quit after the script."""
+    argv = (str(R2_BINARY), "-q", "-NN", "-S", "-2", "-i", str(script), str(sample))
+    return StageSpec(
+        name="r2",
+        argv=argv,
+        env={},
+        limits=Limits(
+            as_bytes=R2_AS,
+            cpu_s=2 * max(1, int(timeout_s)),
+            nproc=R2_NPROC,
+            nofile=R2_NOFILE,
+            fsize_bytes=R2_MAX_OUTPUT_BYTES,
+        ),
+        timeout_s=timeout_s,
+        stdout_name=R2_OUTPUT,
+    )
+
+
+def reducer_spec(
+    *, python: str, out: PurePosixPath, timeout_s: float, caps: dict[str, int]
+) -> StageSpec:
+    """The reducer probe, in the same out dir as the radare2 run (same uid)."""
+    cap_args = [a for kind, n in sorted(caps.items()) for a in (f"--max-{kind}", str(n))]
+    argv = _probe(python, "r2", "--input", str(out / R2_OUTPUT), "--out", str(out), *cap_args)
+    return StageSpec(
+        name="r2",
+        argv=argv,
+        env={},
+        limits=Limits(
+            as_bytes=REDUCER_AS,
+            cpu_s=max(1, int(timeout_s)),
+            nproc=REDUCER_NPROC,
+            nofile=REDUCER_NOFILE,
+            fsize_bytes=REDUCER_FSIZE,
+        ),
+        timeout_s=timeout_s,
+        stdout_name=ROWS,
+        step="r2_reduce",
+    )
+
+
 __all__ = [
     "DECOMPILE_LIST",
     "PROBE_MODULE",
+    "R2_BINARY",
+    "R2_MAX_OUTPUT_BYTES",
+    "R2_OUTPUT",
     "JVM_SUBDIRS",
     "ROWS",
     "STATUS",
@@ -193,4 +253,6 @@ __all__ = [
     "decompile_spec",
     "jvm_env",
     "jvm_limits",
+    "r2_spec",
+    "reducer_spec",
 ]
