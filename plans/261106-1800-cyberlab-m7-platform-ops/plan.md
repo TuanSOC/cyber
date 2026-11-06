@@ -13,7 +13,7 @@ description: >-
   per-user rate limit, an audit of evidence views, a type-mismatch flag, SSE-S3 at rest
   and a tested object-store image path. Plus the docs fixes from the coverage audit.
   Red-teamed 2026-11-06 (RT1–RT38).
-status: pending
+status: completed
 priority: P1
 effort: 153h
 branch: "feat/m7-platform-ops"
@@ -404,17 +404,17 @@ Seed questions given to the reviewers (kept for traceability):
 
 | Phase | Name | Group | Depends on | Status |
 |-------|------|-------|------------|--------|
-| 1 | [Foundation contracts migration 0014 and ops services](./phase-01-foundation-contracts-migration-0014-and-ops-services.md) | A | — | Pending |
-| 2 | [Backup restore and restore drill](./phase-02-backup-restore-and-restore-drill.md) | B (2a, lane 2; the drill is a heavy step, alone) | 1 | Pending |
-| 3 | [Data retention purge and legal hold](./phase-03-data-retention-purge-and-legal-hold.md) | B (2b, lane 3) | 1 | Pending |
-| 4 | [Deterministic correlation and org search API](./phase-04-deterministic-correlation-and-org-search-api.md) | B (2c, lane 4) | 1 | Pending |
-| 5 | [Runtime job metrics and live run procedures](./phase-05-runtime-job-metrics-and-live-run-procedures.md) | B (2d, lane 5; the replay is a heavy step) | 1 | Pending |
-| 6 | [Security hardening rate limit view audit type mismatch and object storage](./phase-06-security-hardening-rate-limit-view-audit-type-mismatch-and-object-storage.md) | B (2e, lane 6; an image build is a heavy step) | 1 | Pending |
-| 7 | [Sandbox security design and dynamic v1 contract](./phase-07-sandbox-security-design-and-dynamic-v1-contract.md) | B (2f, lane 7, unit only) | 1 | Pending |
-| 8 | [Search and correlation frontend](./phase-08-search-and-correlation-frontend.md) | B (2g, web only) | 1 (frozen contracts) | Pending |
-| 9 | [Retention legal hold and operations frontend](./phase-09-retention-legal-hold-and-operations-frontend.md) | B (2h, web only) | 1 (frozen contracts) | Pending |
-| 10 | [Docs threat model and audit quick wins](./phase-10-docs-threat-model-and-audit-quick-wins.md) | C | B merged | Pending |
-| 11 | [Hardening e2e restore drill metric and gate](./phase-11-hardening-e2e-restore-drill-metric-and-gate.md) | D | all | Pending |
+| 1 | [Foundation contracts migration 0014 and ops services](./phase-01-foundation-contracts-migration-0014-and-ops-services.md) | A | — | Completed |
+| 2 | [Backup restore and restore drill](./phase-02-backup-restore-and-restore-drill.md) | B (2a, lane 2; the drill is a heavy step, alone) | 1 | Completed |
+| 3 | [Data retention purge and legal hold](./phase-03-data-retention-purge-and-legal-hold.md) | B (2b, lane 3) | 1 | Completed |
+| 4 | [Deterministic correlation and org search API](./phase-04-deterministic-correlation-and-org-search-api.md) | B (2c, lane 4) | 1 | Completed |
+| 5 | [Runtime job metrics and live run procedures](./phase-05-runtime-job-metrics-and-live-run-procedures.md) | B (2d, lane 5; the replay is a heavy step) | 1 | Completed |
+| 6 | [Security hardening rate limit view audit type mismatch and object storage](./phase-06-security-hardening-rate-limit-view-audit-type-mismatch-and-object-storage.md) | B (2e, lane 6; an image build is a heavy step) | 1 | Completed |
+| 7 | [Sandbox security design and dynamic v1 contract](./phase-07-sandbox-security-design-and-dynamic-v1-contract.md) | B (2f, lane 7, unit only) | 1 | Completed |
+| 8 | [Search and correlation frontend](./phase-08-search-and-correlation-frontend.md) | B (2g, web only) | 1 (frozen contracts) | Completed |
+| 9 | [Retention legal hold and operations frontend](./phase-09-retention-legal-hold-and-operations-frontend.md) | B (2h, web only) | 1 (frozen contracts) | Completed |
+| 10 | [Docs threat model and audit quick wins](./phase-10-docs-threat-model-and-audit-quick-wins.md) | C | B merged | Completed |
+| 11 | [Hardening e2e restore drill metric and gate](./phase-11-hardening-e2e-restore-drill-metric-and-gate.md) | D | all | Completed |
 
 Effort (RT18): 22 + 17 + 23 + 16 + 10 + 13 + 10 + 9 + 9 + 8 + 16 = **153 h**. Critical path: 1 → max(B) (phase 3, 23 h) → 10 → 11, about 22 + 23 + 8 + 16 = **69 h** of wall time with eight group-B agents. At most three API lanes run at once.
 
@@ -614,3 +614,27 @@ Effort (RT18): 22 + 17 + 23 + 16 + 10 + 13 + 10 + 9 + 9 + 8 + 16 = **153 h**. Cr
 - **SSE key loss** makes every encrypted object and MinIO's own IAM and config unreadable (RT7). The secrets backup checklist, the manifest key fingerprint and the drill using the real key path cover it.
 - **Lane memory:** three API lanes fit the M5/M6 budget only if the heavy steps run alone.
 - **Contract drift:** the frontend builds against stubs. Any schema change after phase 1 is a parent broadcast, and the merge checks for drift.
+
+## Closure (2026-11-06)
+
+**Completed**, with one caveat: the gate passed **in segments**. A single uninterrupted `pnpm verify:prod` pass was not achieved, because the host ran out of memory or the session limit interrupted it. The segments:
+- **Dev phase**, gate run vp8 (2026-11-06, the old gate): API suite 4915 passed / 53 skipped / 1 xfailed, the dynamic gate, the enrich / ingest / analyst network checks, the TI and AI key-leak tests, workers, web, contracts (no drift), gateway, dev e2e and the four env checks.
+- **After the review fix d9e409c (migration 0015) and the gate fixes 7d2a8e8:** the targeted lane suites 109 passed. Full API run 1 had 4915 passed and 1 teardown deadlock error, fixed in `conftest.py` with a retry.
+- **Prod phase** with the fixed gate, in its own compose project `cyberlab-prod`: every step passed, including the four env checks, prod health, the signing keys, the headers, the prod e2e over TLS (349 s) and the restore drill (144 s, 0 mismatches, peak 630 MiB).
+
+The heavy steps are in `plans/reports/m7-heavy-steps-261106.md` and `ops-metric-261106.md`:
+- restore drills: several, 0 mismatches each;
+- search: p95 0.95 s, with no index used under RLS (accepted);
+- ops replay: 0 % failure, 100 % parse success.
+
+MinIO now runs `pgsty/silo`. The switch came after a backup, the conformance suite and a drill, plus the `1001:0` gid fix.
+
+Still unticked, with reasons in the phase files:
+- search index use under RLS (phase 4);
+- runbooks run by hand as written (phase 10);
+- a retention purge through the running worker, because `test_retention_pipeline.py` was not written (phase 11; noted in phase 3);
+- the gate-run `job_outcomes` addendum (phase 11).
+
+Phase 11 asked for `completed` only after the branch merges. This plan is closed on `feat/m7-platform-ops` before that merge, at the parent's direction. ROADMAP's M6 and M7 rows still need their "pending" wording updated.
+
+**A single-pass `pnpm verify:prod` will be run at M8 closure.**

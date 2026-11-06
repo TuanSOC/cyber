@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Sandbox security design and dynamic v1 contract"
-status: pending
+status: completed
 priority: P1
 effort: "10h"
 dependencies: [1]
@@ -155,3 +155,4 @@ Dynamic analysis stays disabled.
 - **Tests:** `unit/test_dynamic_contract.py` (17) and `unit/test_dynamic_gate.py` (11).
 - **Contract stability:** v1 is engine-neutral and marked "subject to one revision when a bridge is built" (risk 1).
 - **Gate:** nothing in this phase depends on a heavy step. The phase-11 full suite only re-runs these unit tests (pending gate).
+- **Closure (2026-11-06):** These unit tests re-ran in the full API suite of gate run vp8; the gate passed in segments, not in one `pnpm verify:prod` run (see the plan's Closure).

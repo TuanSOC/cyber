@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Case management API notes IOC collections status and TLP"
-status: pending
+status: completed
 priority: P1
 effort: "12h"
 dependencies: [1]
@@ -153,3 +153,4 @@ All paths are under `/api/v1/orgs/{org_id}`. Permissions follow `core/rbac.py`.
 - **IDOR:** `idor_cases_case.py` has cases and victim extenders for a note, a collection with an item, and an evidence policy, and its `PENDING_ROUTES` is empty.
 - **Tests:** `test_case_{status,tlp,policy_api,notes,ioc_collections,ioc_exports,case_iocs}.py` and `unit/test_stix_export.py`.
 - **Full API suite** (phase-9 run): 4167 passed, plus 7 errors in `unit/test_signing.py` (the IDOR stand-in leak, fixed in e6e0665). The re-run after that fix is pending gate.
+- **Closure (2026-11-06):** The full API suite passed in gate run vp8 (4915 passed / 53 skipped / 1 xfailed); the gate passed in segments, not in one `pnpm verify:prod` run (see the plan's Closure).

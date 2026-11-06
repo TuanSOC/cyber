@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "ATT&CK case mapping and timeline export"
-status: pending
+status: completed
 priority: P1
 effort: "8h"
 dependencies: [1]
@@ -100,3 +100,4 @@ The §10 ATT&CK mapping and timeline items at case level:
 - **IDOR:** `idor_cases_attack.py` covers the attack, mapping and export routes, with a mapping victim extender, and its `PENDING_ROUTES` is empty.
 - **Tests:** `test_case_attack.py` (8), `test_case_attack_suggestions.py` (4), `test_timeline_kinds.py` (6), `test_timeline_export.py` (5).
 - **Open:** the full API re-run after the e6e0665 signing fix (pending gate).
+- **Closure (2026-11-06):** The full API re-run passed in gate run vp8 (4915 passed / 53 skipped / 1 xfailed); the gate passed in segments, not in one `pnpm verify:prod` run (see the plan's Closure).

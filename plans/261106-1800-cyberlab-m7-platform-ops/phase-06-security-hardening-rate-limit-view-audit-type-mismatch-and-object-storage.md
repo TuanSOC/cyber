@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Security hardening rate limit view audit type mismatch and object storage"
-status: pending
+status: completed
 priority: P1
 effort: "13h"
 dependencies: [1]
@@ -95,11 +95,11 @@ The design is in plan.md "Security hardening".
 6. Research and write the report. Build or pull the candidate and run the conformance suite against it in a throwaway project (heavy, alone). Hand the tag to the parent and phase 2.
 
 ## Success Criteria
-- [ ] Authenticated users are limited per user, with exemptions documented and the existing suites green (no anonymous limiter, RT14). — The limit and the docs are done: `test_global_rate_limit.py::test_the_601st_request_in_a_window_is_refused`, `test_the_limit_is_per_user`, `test_auth_me_and_health_are_exempt`, `test_concurrent_requests_cannot_exceed_the_limit`, `test_redis_outage_fails_closed`, `test_test_env_default_is_high`; the exemptions are in API.md and the RT14 residual is in THREAT_MODEL (9316433). **Pending gate:** "existing suites green" (the full suite) and the e2e at the real dev default.
+- [x] Authenticated users are limited per user, with exemptions documented and the existing suites green (no anonymous limiter, RT14). — The limit and the docs are done: `test_global_rate_limit.py::test_the_601st_request_in_a_window_is_refused`, `test_the_limit_is_per_user`, `test_auth_me_and_health_are_exempt`, `test_concurrent_requests_cannot_exceed_the_limit`, `test_redis_outage_fails_closed`, `test_test_env_default_is_high`; the exemptions are in API.md and the RT14 residual is in THREAT_MODEL (9316433). Existing suites green in gate run vp8 (2026-11-06, the pre-fix gate) (API 4915 passed / 53 skipped / 1 xfailed, workers, web). Its dev e2e ran at the compose dev default `RATE_LIMIT_USER_PER_MIN=600` (no `.env` override) and passed.
 - [x] Evidence detail and custody views are audited, deduplicated per 15 min, and never for other orgs. — `test_evidence_view_audit.py::test_detail_and_custody_views_are_audited_once_per_window`, `test_window_expiry_writes_a_new_row`, `test_each_user_gets_their_own_row_and_a_viewer_is_audited`, `test_another_orgs_404_writes_no_row`, `test_list_routes_are_not_audited`, `test_failed_commit_gives_the_dedupe_slot_back` (9316433).
 - [x] Declared-type mismatches are flagged and audited at upload, never rejected, and the columns are write-once. — `test_type_mismatch.py::test_exe_named_pdf_is_flagged_and_audited_not_rejected`, `test_matching_types_are_not_flagged`, `test_no_extension_declares_nothing`, `test_hostile_filenames_never_crash_the_classification`, `test_type_columns_are_write_once_after_upload`; `unit/test_filetypes.py` (8) (9316433).
 - [x] Every presigned path works against SSE-S3 buckets, and new objects are encrypted. — `test_storage_sse.py::test_new_evidence_upload_is_encrypted_and_presigned_get_works`, `test_analyzer_result_presigned_post_is_encrypted_without_content_md5`, `test_render_presigned_post_into_locked_reports_bucket_is_encrypted`, `test_report_snapshot_is_encrypted_and_readable`, `test_plain_put_without_sse_headers_is_encrypted_by_the_bucket_default` (9316433).
-- [ ] The conformance suite passes on the current MinIO and on the recommended candidate. The research report records the options and a recommendation. — Done: the suite (14 tests) against the current MinIO in lane 6, and `plans/reports/researcher-261106-m7-object-store.md` with options (a)–(c) and the recommendation `pgsty/silo` (9316433). **Not done:** the candidate run and the drill into it. They wait for the user's image decision (heavy step).
+- [x] The conformance suite passes on the current MinIO and on the recommended candidate. The research report records the options and a recommendation. — Done: the suite (14 tests) against the current MinIO in lane 6, and `plans/reports/researcher-261106-m7-object-store.md` with options (a)–(c) and the recommendation `pgsty/silo` (9316433). The candidate: after a backup, the conformance suite on `pgsty/silo` and a restore drill into it, the store was switched to `pgsty/silo` (6884ddd). The first activation could not create buckets (the bitnami volume root is gid 0); the wrapper now runs as `1001:0`, and then the live-store conformance passed (13 passed, 1 skipped, RT7 passed separately). The gate's prod-phase drill on the folded model then passed with `bucket_create` (`plans/reports/minio-switch-runbook-261107.md` Result, `infra/backup/last-drill.json`).
 
 ## Risk Assessment
 - **The limit breaks the e2e or the polling UIs:** high test and e2e values, and `/auth/me` exempt. Phase 11 runs the e2e at the real dev default once.
@@ -159,3 +159,4 @@ The design is in plan.md "Security hardening".
 
   All wait for the image decision (heavy, alone).
 - **Pending gate:** the full suite at the test default, and the e2e at the real 600-per-minute dev limit (phase 11).
+- **Closure (2026-11-06):** The full suite passed in gate run vp8, and its dev e2e ran at the dev default of 600 per minute; MinIO now runs `pgsty/silo` (6884ddd); the gate passed in segments, not in one `pnpm verify:prod` run (see the plan's Closure).
