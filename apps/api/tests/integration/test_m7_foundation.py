@@ -46,6 +46,7 @@ from tests.security import (
     idor_cases_memory_sensitivity,
     idor_cases_ops,
     idor_cases_retention,
+    idor_cases_reverse,
 )
 from tests.storage_helpers import evidence_test_bucket, lane_key, purge_test_bucket, root_minio
 
@@ -59,6 +60,8 @@ M8_PENDING_PATHS = frozenset(
     path
     for module in (idor_cases_disk, idor_cases_disk_exports)
     for _, path in module.PENDING_ROUTES
+) | frozenset(  # M10 phase 1: the RE read API and capability functions (phase 8)
+    path for _, path in idor_cases_reverse.PENDING_ROUTES
 )
 ORG = "/api/v1/orgs/{org_id}"
 

@@ -33,6 +33,16 @@ export const HTTP_ERROR_TEXT: Readonly<Record<string, string>> = {
   disk_export_not_ready: "The exported file is not ready yet.",
   disk_export_already_promoted: "The exported file was already added to the case.",
   disk_export_expired: "The exported file expired. Export it again.",
+  // M10: reverse engineering.
+  static_analysis_required:
+    "Run a full static analysis of this file first: reverse engineering starts from a static analysis that identified a PE or ELF program.",
+  re_sample_too_large: "The file is larger than the reverse engineering analyzer accepts.",
+  unsupported_architecture: "Only x86 and x86-64 programs can be reverse engineered.",
+  unsupported_managed_code: ".NET (managed) programs cannot be reverse engineered here.",
+  profile_unavailable: "This reverse engineering profile is not available on this platform.",
+  function_not_found: "No function starts at this address in this analysis.",
+  too_many_active_jobs:
+    "Another heavy analysis (memory, disk or reverse engineering) is running on this platform. Try again in a few minutes.",
 };
 
 /** The message for an error code, or null when the code has no specific text. */

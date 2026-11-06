@@ -39,6 +39,7 @@ from app.modules.ai.availability import provider_available
 from app.modules.ai.catalog import AI_CATALOG
 from app.modules.ai.context import builder
 from app.modules.ai.contracts import (
+    PENDING_TASKS,
     AiProviderName,
     AiRunRequest,
     AiRunStatus,
@@ -74,8 +75,16 @@ from app.modules.investigations import policy
 from app.modules.investigations.models import Investigation
 
 PREVIEWS_PER_USER_PER_10MIN = 30
-_TARGET_KINDS: dict[str, Literal["finding", "alert"]] = {"finding": "finding", "alert": "alert"}
-_ANALYZER_TASKS = {AiTask.SUMMARIZE_PCAP: Analyzer.PCAP, AiTask.EXPLAIN_STATIC: Analyzer.STATIC}
+_TARGET_KINDS: dict[str, Literal["finding", "alert", "function"]] = {
+    "finding": "finding",
+    "alert": "alert",
+    "function": "function",
+}
+_ANALYZER_TASKS = {
+    AiTask.SUMMARIZE_PCAP: Analyzer.PCAP,
+    AiTask.EXPLAIN_STATIC: Analyzer.STATIC,
+    AiTask.EXPLAIN_FUNCTION: Analyzer.REVERSE,
+}
 # Kind -> the category of data that would leave the platform (shown before a run).
 _CATEGORIES: dict[RefKind, str] = {
     RefKind.JOB: "job_summary",
@@ -94,6 +103,8 @@ _CATEGORIES: dict[RefKind, str] = {
     RefKind.EVIDENCE: "evidence_metadata",
     RefKind.INVESTIGATION: "case_text",
     RefKind.DIGEST_CLAIM: "digest_claims",
+    RefKind.FUNCTION: "function_facts",  # M10
+    RefKind.CODE: "decompiled_code",  # M10
 }
 
 
@@ -228,6 +239,9 @@ async def _check_budget(ctx: OrgContext, row: AiOrgSettings) -> None:
 async def _prepare(
     ctx: OrgContext, body: AiRunRequest, rate_key: str, limit: int
 ) -> tuple[AiOrgSettings, AiRunRequest, AiProviderName, str]:
+    if body.task in PENDING_TASKS:
+        # M10: `explain_function` is a frozen value; its run path lands in phase 9.
+        raise TaskNotApplicable()
     settings = get_settings()
     row = await _enabled_settings(ctx)
     provider, model = await _provider_and_model(ctx, body, row, settings)

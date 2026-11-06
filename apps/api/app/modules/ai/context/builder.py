@@ -387,6 +387,18 @@ async def _disk_digest(
     return [await sel.findings(session, org_id, jobs), iocs, await _ti(session, org_id, iocs, opts)]
 
 
+async def _re_digest(
+    session: AsyncSession, org_id: uuid.UUID, job: AnalysisJob, opts: Options
+) -> list[Selection]:
+    """M10: a reverse-engineering job's digest is its findings and IOCs only (with the TI
+    answers of those IOCs when asked), like the disk arm and never a pcap summary (RT1).
+    Functions, strings and decompiled code never enter a job digest: code reaches the AI only
+    through `explain_function` (phase 9, `G` / `Q` items)."""
+    jobs = [job.id]
+    iocs = await sel.iocs(session, org_id, jobs)
+    return [await sel.findings(session, org_id, jobs), iocs, await _ti(session, org_id, iocs, opts)]
+
+
 async def _digest_selections(
     session: AsyncSession, org_id: uuid.UUID, job: AnalysisJob, opts: Options
 ) -> list[Selection]:
@@ -394,6 +406,8 @@ async def _digest_selections(
         return await _memory_digest(session, org_id, job, opts)
     if job.analyzer == Analyzer.DISK:
         return await _disk_digest(session, org_id, job, opts)
+    if job.analyzer == Analyzer.REVERSE:
+        return await _re_digest(session, org_id, job, opts)
     if job.analyzer == Analyzer.STATIC:
         return await _static_summary(session, org_id, job, opts)
     return await _pcap_summary(session, org_id, job, opts)

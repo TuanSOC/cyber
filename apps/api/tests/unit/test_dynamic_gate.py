@@ -65,8 +65,9 @@ needs_repo = pytest.mark.skipif(
 def test_analyzer_has_no_dynamic_value() -> None:
     from app.modules.analysis.models import Analyzer
 
-    # M8 adds `memory`, M9 `disk` (offline, untrusted analyzers that never execute anything).
-    assert {a.value for a in Analyzer} == {"pcap", "static", "memory", "disk"}
+    # M8 adds `memory`, M9 `disk`, M10 `reverse` (offline, untrusted analyzers that never
+    # execute anything: no debugger, no emulation).
+    assert {a.value for a in Analyzer} == {"pcap", "static", "memory", "disk", "reverse"}
     assert not [a for a in Analyzer if WORDS.search(a.name) or WORDS.search(a.value)]
 
 

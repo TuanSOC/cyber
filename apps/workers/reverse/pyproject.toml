@@ -1,0 +1,59 @@
+[project]
+name = "cyberlab-re-worker"
+version = "0.1.0"
+description = "CyberLab reverse-engineering analyzer (untrusted-input worker): Ghidra headless via PyGhidra, optional radare2"
+requires-python = ">=3.12,<3.13"
+# PyGhidra is NOT listed: it is installed from the wheel bundled in the SHA-256-verified Ghidra
+# 12.2 zip (`uv pip install --no-deps --no-index`, Dockerfile), never from an index. Its
+# runtime dependencies are listed here so the lock pins them (JPype1, packaging). No r2pipe
+# (RT9: radare2 runs once from a fixed script). docker/finalize_image.py asserts the set.
+dependencies = [
+    "celery[redis]>=5.5",
+    "httpx>=0.28",
+    "pydantic>=2.9",
+    "cyberlab-jobs",
+    "cyberlab-worker",
+    "JPype1==1.6.0",
+    "packaging>=24.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "redis>=5.2",
+]
+
+[tool.uv.sources]
+# The image places the contracts at /packages/py-jobs (same relative path as here).
+cyberlab-jobs = { path = "../../../packages/py-jobs", editable = true }
+cyberlab-worker = { path = "../../../packages/py-worker-kit", editable = true }
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "engine: starts Ghidra or radare2 (run with lane-test.sh --heavy)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "S", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S603", "S607", "S108", "S311"]
+"samples/**" = ["S311", "S101", "S603", "S607"]
+"dataset/**" = ["S311", "S101"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["celery.*", "kombu.*", "pyghidra.*", "jpype.*", "ghidra.*", "java.*"]
+ignore_missing_imports = true

@@ -22,6 +22,7 @@ from cyberlab_jobs.messages import (
     PcapJobV1,
     PresignedPost,
 )
+from cyberlab_jobs.reverse import RE_SCHEMA, ReJobV1, ReLimits
 from cyberlab_jobs.tasks import (
     AI_RESUME,
     AI_RUN,
@@ -34,6 +35,7 @@ from cyberlab_jobs.tasks import (
     INGEST_EVENT,
     MEMORY_ANALYZE,
     PCAP_ANALYZE,
+    RE_ANALYZE,
     REAP,
     REPORT_RENDER,
     REPORT_RENDERED,
@@ -65,6 +67,8 @@ __all__ = [
     "PCAP_ANALYZE",
     "PCAP_SCHEMA",
     "REAP",
+    "RE_ANALYZE",
+    "RE_SCHEMA",
     "REPORT_RENDER",
     "REPORT_RENDERED",
     "RETENTION_RUN_ORG",
@@ -86,4 +90,6 @@ __all__ = [
     "PcapJobV1",
     "PresignedPost",
     "Queues",
+    "ReJobV1",
+    "ReLimits",
 ]

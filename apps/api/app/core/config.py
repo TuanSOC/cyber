@@ -230,6 +230,38 @@ class Settings(BaseSettings):
     disk_export_max_files: int = Field(default=20, ge=1, le=20)
     # Unpromoted exports become `expired` after this; the retention worker deletes the object.
     disk_export_ttl_s: int = Field(default=7 * 86_400, ge=3_600)
+    # Reverse engineering (M10): sample cap (= the capa cap, <= STATIC_MAX_BYTES), the result
+    # caps (the `re.v1` contract ceilings), the RE ingest's own framing bounds, timeouts (the
+    # job, Ghidra's auto-analysis, one decompiled function, the radare2 `quick` run), the
+    # decompile budget, the work-dir budget (RT5) and the per-org cap.
+    re_max_bytes: int = Field(default=16 * 1024**2, ge=1, le=64 * 1024**2)
+    re_max_result_bytes: int = Field(default=256 * 1024**2, ge=1024, le=256 * 1024**2)
+    re_max_result_decompressed_bytes: int = Field(
+        default=768 * 1024**2, ge=1024, le=768 * 1024**2
+    )
+    analysis_re_timeout_s: int = Field(default=3_600, ge=60, le=21_600)
+    re_analysis_timeout_s: int = Field(default=1_500, ge=10)
+    re_decompile_timeout_s: int = Field(default=30, ge=1, le=600)
+    re_quick_timeout_s: int = Field(default=300, ge=10)
+    re_max_decompiled: int = Field(default=300, ge=0, le=2_000)
+    re_max_work_bytes: int = Field(default=2 * 1024**3, ge=64 * 1024**2, le=16 * 1024**3)
+    re_max_active_per_org: int = Field(default=1, ge=1)
+    # `quick` (radare2, phase 3) is refused `422 profile_unavailable` until enabled.
+    re_quick_enabled: bool = False
+    re_max_functions: int = Field(default=20_000, ge=1, le=20_000)
+    re_max_call_edges: int = Field(default=100_000, ge=1, le=100_000)
+    re_max_imports: int = Field(default=10_000, ge=1, le=10_000)
+    re_max_import_refs: int = Field(default=50_000, ge=1, le=50_000)
+    re_max_strings: int = Field(default=20_000, ge=1, le=20_000)
+    re_max_string_refs: int = Field(default=50_000, ge=1, le=50_000)
+    re_max_findings: int = Field(default=2_000, ge=1, le=2_000)
+    re_max_iocs: int = Field(default=10_000, ge=1, le=10_000)
+    # Active memory + disk + reverse jobs platform-wide (M10 RT2): one heavy analysis at a
+    # time on the 8-12 GB single-node host; DEPLOYMENT gives the sizing to raise it.
+    analysis_heavy_max_active: int = Field(default=1, ge=1)
+    # The `Q` (decompiled code) item of `explain_function` (phase 9): the one exception to the
+    # 256-character field cut of the AI transforms.
+    ai_max_code_chars: int = Field(default=12_000, ge=256, le=12_000)
     # Ingest: zip-bomb guard on the inflated stream and a cap on its lines (all kinds).
     analysis_max_result_decompressed_bytes: int = 1024**3
     analysis_max_result_lines: int = 400_000
@@ -549,6 +581,38 @@ class Settings(BaseSettings):
         if self.disk_ingest_timeout_s >= self.analysis_disk_timeout_s:
             raise ValueError("DISK_INGEST_TIMEOUT_S must be below ANALYSIS_DISK_TIMEOUT_S")
         return self
+
+    @model_validator(mode="after")
+    def _re_limits(self) -> Self:
+        """M10: the sample fits the static analyzer (a static `full` job is the input), one
+        decompiled function and the radare2 run fit the analysis, the analysis the job."""
+        if self.re_max_bytes > self.static_max_bytes:
+            raise ValueError("RE_MAX_BYTES must not exceed STATIC_MAX_BYTES")
+        if not (
+            self.re_decompile_timeout_s < self.re_analysis_timeout_s < self.analysis_re_timeout_s
+        ):
+            raise ValueError(
+                "RE_DECOMPILE_TIMEOUT_S < RE_ANALYSIS_TIMEOUT_S < ANALYSIS_RE_TIMEOUT_S is required"
+            )
+        if self.re_quick_timeout_s >= self.analysis_re_timeout_s:
+            raise ValueError("RE_QUICK_TIMEOUT_S must be below ANALYSIS_RE_TIMEOUT_S")
+        return self
+
+    def re_max_result_lines(self) -> int:
+        """The RE ingest's line bound: every per-kind cap plus header, program and trailer."""
+        return 3 + sum(
+            (
+                self.re_max_functions,
+                self.re_max_call_edges,
+                self.re_max_imports,
+                self.re_max_import_refs,
+                self.re_max_strings,
+                self.re_max_string_refs,
+                self.re_max_decompiled,
+                self.re_max_findings,
+                self.re_max_iocs,
+            )
+        )
 
     def disk_max_result_lines(self) -> int:
         """The disk ingest's line bound (RT9): every per-kind cap plus header, trailer and one."""

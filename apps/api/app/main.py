@@ -36,6 +36,7 @@ from app.modules.reports.router import router as reports_router
 from app.modules.reports.router_keys import router as report_keys_router
 from app.modules.reports.router_renders import router as report_renders_router
 from app.modules.retention.router import router as retention_router
+from app.modules.reverse_engineering.router import router as reverse_engineering_router
 from app.modules.search.router import router as search_router
 from app.modules.static_analysis.router import router as static_analysis_router
 from app.modules.threat_intel.router import router as threat_intel_router
@@ -84,6 +85,8 @@ def create_app() -> FastAPI:
     v1.include_router(disk_forensics_router)
     v1.include_router(disk_export_router)
     v1.include_router(evidence_sensitivity_router)
+    # M10: reverse-engineering results (phase 8): 501 stubs until then.
+    v1.include_router(reverse_engineering_router)
     v1.include_router(threat_intel_router)
     v1.include_router(attack_router)
     v1.include_router(ai_router)

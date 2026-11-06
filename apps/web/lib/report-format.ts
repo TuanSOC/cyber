@@ -64,16 +64,22 @@ export function vis(text: string | null | undefined): string {
 // ---------------------------------------------------------------------------------------------
 // Deep links (internal routes only, from ids)
 
-type JobRoute = "pcap" | "malware" | "memory" | "forensics";
+type JobRoute = "pcap" | "malware" | "memory" | "forensics" | "reverse-engineering";
 type Tab = NonNullable<AiDeepLink["tab"]>;
 
 /** The tab of each cited kind on each job route; a kind missing here links to the job overview. */
 const KIND_TABS: Record<string, Partial<Record<JobRoute, Tab>>> = {
-  finding: { pcap: "findings", malware: "findings", memory: "findings", forensics: "findings" },
+  finding: {
+    pcap: "findings",
+    malware: "findings",
+    memory: "findings",
+    forensics: "findings",
+    "reverse-engineering": "findings",
+  },
   alert: { pcap: "alerts" },
   flow: { pcap: "flows" },
-  ioc: { pcap: "iocs", malware: "iocs", memory: "iocs", forensics: "iocs" },
-  ti_result: { pcap: "iocs", malware: "iocs", memory: "iocs", forensics: "iocs" },
+  ioc: { pcap: "iocs", malware: "iocs", memory: "iocs", forensics: "iocs", "reverse-engineering": "iocs" },
+  ti_result: { pcap: "iocs", malware: "iocs", memory: "iocs", forensics: "iocs", "reverse-engineering": "iocs" },
   timeline: { pcap: "timeline", memory: "timeline", forensics: "timeline" },
   signature: { malware: "signatures" },
   capability: { malware: "capabilities" },
@@ -81,13 +87,14 @@ const KIND_TABS: Record<string, Partial<Record<JobRoute, Tab>>> = {
   pe_summary: { malware: "sections" },
 };
 const JOB_KINDS = new Set([...Object.keys(KIND_TABS), "job", "record", "sample"]);
-const PATH_ROUTE = /^\/o\/[0-9a-f-]{36}\/(pcap|malware|memory|forensics)\//i;
+const PATH_ROUTE = /^\/o\/[0-9a-f-]{36}\/(pcap|malware|memory|forensics|reverse-engineering)\//i;
 
 export function jobRouteFor(analyzer: string | null | undefined): JobRoute | null {
   if (analyzer === "pcap") return "pcap";
   if (analyzer === "static") return "malware";
   if (analyzer === "memory") return "memory";
   if (analyzer === "disk") return "forensics";
+  if (analyzer === "reverse") return "reverse-engineering";
   return null;
 }
 

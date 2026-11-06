@@ -69,7 +69,7 @@ SECTIONS = (
     "timeline",
 )
 STAGES = ("base", "reduce")
-TARGET_KINDS = ("finding", "alert")
+TARGET_KINDS = ("finding", "alert", "function")  # M10 (0018): `function`
 SEALED = ("key_kid", "key_epk", "key_nonce", "key_ct", "key_last4")
 MAX_LIST_ENTRIES = 50
 CONTEXT_STATS_MAX_BYTES = 16 * 1024

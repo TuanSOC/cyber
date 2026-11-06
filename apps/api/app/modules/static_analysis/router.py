@@ -15,15 +15,17 @@ from app.core.errors import NotFound
 from app.core.filenames import content_disposition
 from app.core.pagination import PageParamsDep
 from app.core.rbac import OrgContext, Permission, require
+from app.core.stubs import not_implemented
 from app.core.validation import SearchTerm
 from app.modules.audit import service as audit
 from app.modules.evidence.router import DOWNLOAD_HEADERS
 from app.modules.static_analysis import report as reports
+from app.modules.reverse_engineering.schemas import CapabilityFunctionsOut
 from app.modules.static_analysis import repository as repo
 from app.modules.static_analysis.schemas import (
     REPORT_SCHEMA,
     AnalyzerDerivedHashes,
-    CapabilityOut,
+    CapabilityLinkedOut,
     CapabilityPage,
     ElfOut,
     ExportOut,
@@ -174,7 +176,19 @@ async def list_capabilities(
     rows, total = await repo.capabilities(
         ctx.session, ctx.org_id, job_id, page, namespace=namespace, attack=attack, ref=ref
     )
-    return CapabilityPage(items=[CapabilityOut.model_validate(r) for r in rows], total=total)
+    return CapabilityPage(
+        items=[CapabilityLinkedOut.model_validate(r) for r in rows], total=total
+    )
+
+
+@router.get("/capabilities/{capability_id}/functions", response_model=CapabilityFunctionsOut)
+async def capability_functions(
+    job_id: uuid.UUID, capability_id: uuid.UUID, ctx: EvidenceRead
+) -> CapabilityFunctionsOut:
+    """M10: the functions of the newest succeeded RE job of this sample that contain the
+    capability's locations (file virtual addresses, RT8). 404 for unknown / foreign jobs and
+    capabilities. Implemented in M10 phase 8 (501 until then)."""
+    raise not_implemented()
 
 
 @router.get(

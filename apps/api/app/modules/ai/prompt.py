@@ -30,7 +30,14 @@ from functools import lru_cache
 from pathlib import Path
 from string import Template
 
-from app.modules.ai.contracts import AiTask, ContextStats, FrozenContext, PromptParts, RefKind
+from app.modules.ai.contracts import (
+    PENDING_TASKS,
+    AiTask,
+    ContextStats,
+    FrozenContext,
+    PromptParts,
+    RefKind,
+)
 from app.modules.ai.labels import is_label
 
 PROMPT_VERSION = "m5.1"
@@ -67,7 +74,8 @@ _TEMPLATE_FILES = (
     "common.txt",
     "user_head.txt",
     "user_tail.txt",
-    *(f"{task.value}.txt" for task in AiTask),
+    # A pending task's template is a stub, left out of the pins until its phase (M10).
+    *(f"{task.value}.txt" for task in AiTask if task not in PENDING_TASKS),
 )
 
 

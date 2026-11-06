@@ -1,7 +1,7 @@
-"""Migrations replay from scratch in one alembic run (M3 RT7); 0017, 0016, 0015, 0014, 0013, 0012,
+"""Migrations replay from scratch in one alembic run (M3 RT7); 0018, 0017, 0016, 0015, 0014, 0013, 0012,
 0011, 0010, 0009 and 0006 downgrade cleanly (0014 leaves its enum values and the inactive
 system user, 0016 its `memory` analyzer value, 0017 its `disk` value and keeps existing
-memory sensitivity rows as `source = memory`).
+memory sensitivity rows as `source = memory`; 0018 its `reverse` value).
 
 `env.py` applies every pending revision in a single transaction; 0006 adds an enum value,
 which Postgres will not let that same transaction use. The session fixture already upgrades
@@ -193,6 +193,37 @@ OS_HINT_COLUMN = (
 )
 
 
+# 0018 (M10 reverse engineering).
+M10_TABLES = (
+    "re_programs",
+    "re_functions",
+    "re_call_edges",
+    "re_imports",
+    "re_import_refs",
+    "re_strings",
+    "re_string_refs",
+    "re_decompilations",
+    "re_function_capabilities",
+)
+M10_REGCLASSES = "SELECT " + ", ".join(f"to_regclass('{t}')::text" for t in M10_TABLES)
+M10_FUNCTIONS = (
+    "SELECT proname::text FROM pg_proc WHERE proname IN ('analysis_jobs_re_source', "
+    "'capability_locations_valid', 're_params_valid') ORDER BY proname"
+)
+M10_COLUMNS = (
+    "SELECT table_name || '.' || column_name FROM information_schema.columns "
+    "WHERE (table_name = 'analysis_jobs' AND column_name IN ('source_job_id', 're_params')) "
+    "OR (table_name = 'malware_capabilities' AND column_name = 'locations') "
+    "OR (table_name = 'malware_samples' AND column_name = 'capa_base_address') "
+    "ORDER BY 1"
+)
+
+
+async def _m10_tables(engine: AsyncEngine) -> list[object]:
+    async with engine.connect() as conn:
+        return [t for t in (await conn.execute(text(M10_REGCLASSES))).one() if t is not None]
+
+
 # 0017 (M9 disk forensics).
 M9_TABLES = (
     "analysis_job_segments",
@@ -236,6 +267,11 @@ def _exception_triggers(function: str) -> list[str]:
 async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine) -> None:
     await get_engine().dispose()
     try:
+        _alembic("downgrade", "0017")  # 0018 (M10) goes away; the `reverse` enum value stays
+        assert await _m10_tables(owner_engine) == []
+        assert await _scalars(owner_engine, M10_FUNCTIONS) == []
+        assert await _scalars(owner_engine, M10_COLUMNS) == []
+        assert "reverse" in set(map(str, await _scalars(owner_engine, ANALYZER_VALUES)))
         _alembic("downgrade", "0016")  # 0017 (M9) goes away; the `disk` enum value stays
         assert await _m9_tables(owner_engine) == []
         assert await _scalars(owner_engine, M9_FUNCTIONS) == []
@@ -287,24 +323,37 @@ async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine)
 
         _alembic("downgrade", "0005")
         assert await _scalars(owner_engine, PROFILE_COLUMN) == []
-        # Enum values cannot be dropped: 'static' (0006), 'memory' (0016) and 'disk' (0017)
-        # stay, unused.
+        # Enum values cannot be dropped: 'static' (0006), 'memory' (0016), 'disk' (0017) and
+        # 'reverse' (0018) stay, unused.
         assert await _scalars(owner_engine, ANALYZER_VALUES) == [
             "pcap",
             "static",
             "memory",
             "disk",
+            "reverse",
         ]
 
         _alembic("downgrade", "base")
         assert await _scalars(owner_engine, "SELECT to_regtype('analyzer')::text") == [None]
 
-        _alembic("upgrade", "head")  # one run: 0001..0017 (the ALTER TYPEs autocommit)
+        _alembic("upgrade", "head")  # one run: 0001..0018 (the ALTER TYPEs autocommit)
     finally:
         _alembic("upgrade", "head")  # never leave the shared test database half-migrated
         await get_engine().dispose()
 
-    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0017"]
+    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0018"]
+    assert await _m10_tables(owner_engine) == list(M10_TABLES)
+    assert await _scalars(owner_engine, M10_FUNCTIONS) == [
+        "analysis_jobs_re_source",
+        "capability_locations_valid",
+        "re_params_valid",
+    ]
+    assert await _scalars(owner_engine, M10_COLUMNS) == [
+        "analysis_jobs.re_params",
+        "analysis_jobs.source_job_id",
+        "malware_capabilities.locations",
+        "malware_samples.capa_base_address",
+    ]
     assert await _m9_tables(owner_engine) == list(M9_TABLES)
     assert await _scalars(owner_engine, M9_FUNCTIONS) == [
         "analysis_job_segments_guard",

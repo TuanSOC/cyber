@@ -37,6 +37,7 @@ TABLE_MODELS: dict[Table, tuple[type[BaseModel], ...]] = {
 # Columns filled from another line of the stream than the table's own record.
 OTHER_SOURCES: dict[tuple[str, str], type[BaseModel]] = {
     ("malware_samples", "file_format"): static.StaticResultHeader,
+    ("malware_samples", "capa_base_address"): static.StaticResultHeader,  # M10
 }
 # Filled by the server or from the scope, derived by the row builder (checked below), or
 # JSONB documents of a whole contract record (`pe`, `elf`).

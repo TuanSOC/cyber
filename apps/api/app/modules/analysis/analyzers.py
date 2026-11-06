@@ -16,6 +16,8 @@ def max_bytes(settings: Settings, analyzer: Analyzer) -> int:
         Analyzer.MEMORY: settings.memory_max_bytes,
         # One segment (M9): the set total is checked against DISK_MAX_IMAGE_BYTES (phase 7).
         Analyzer.DISK: settings.disk_max_upload_bytes,
+        # M10: the sample (<= the capa cap; 413 re_sample_too_large).
+        Analyzer.REVERSE: settings.re_max_bytes,
     }[analyzer]
 
 
@@ -26,6 +28,7 @@ def timeout_s(settings: Settings, analyzer: Analyzer) -> int:
         Analyzer.STATIC: settings.analysis_static_timeout_s,
         Analyzer.MEMORY: settings.analysis_memory_timeout_s,
         Analyzer.DISK: settings.analysis_disk_timeout_s,
+        Analyzer.REVERSE: settings.analysis_re_timeout_s,
     }[analyzer]
 
 
@@ -36,4 +39,5 @@ def max_result_bytes(settings: Settings, analyzer: Analyzer) -> int:
         Analyzer.STATIC: settings.static_max_result_bytes,
         Analyzer.MEMORY: settings.memory_max_result_bytes,
         Analyzer.DISK: settings.disk_max_result_bytes,
+        Analyzer.REVERSE: settings.re_max_result_bytes,
     }[analyzer]

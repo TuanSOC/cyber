@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.pagination import PageParams
 from app.modules.analysis.models import (
     ACTIVE,
+    HEAVY_ANALYZERS,
     AnalysisJob,
+    AnalysisJobIndex,
     AnalysisStatus,
     Analyzer,
     JobProfile,
@@ -139,6 +141,25 @@ async def lock_org_queue(session: AsyncSession, org_id: uuid.UUID) -> None:
         text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
         {"key": f"analysis-queue:{org_id}"},
     )
+
+
+async def lock_heavy_analyses(session: AsyncSession) -> None:
+    """M10 RT2: serialize heavy (memory / disk / reverse) job creation platform-wide, so the
+    `ANALYSIS_HEAVY_MAX_ACTIVE` cap cannot be raced past. Taken after the org lock (one order
+    everywhere: no deadlock)."""
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": "analysis-heavy"},
+    )
+
+
+async def count_heavy_active(session: AsyncSession) -> int:
+    """Active heavy jobs of every org (the non-tenant job index: no other org's row is read,
+    only counted)."""
+    stmt = select(func.count()).where(
+        AnalysisJobIndex.analyzer.in_(HEAVY_ANALYZERS), AnalysisJobIndex.status.in_(ACTIVE)
+    )
+    return int((await session.execute(stmt)).scalar_one())
 
 
 async def count_active(session: AsyncSession, org_id: uuid.UUID, analyzer: Analyzer) -> int:

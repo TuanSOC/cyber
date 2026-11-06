@@ -28,7 +28,7 @@ import {
 // M8 RT1: every analyzer-keyed map covers every analyzer; memory never falls into a pcap /
 // static "else". (Typed maps fail typecheck when the contract gains an analyzer; this test
 // fails at runtime if a map is widened by a cast.)
-const ANALYZERS: Analyzer[] = ["pcap", "static", "memory", "disk"];
+const ANALYZERS: Analyzer[] = ["pcap", "static", "memory", "disk", "reverse"];
 
 describe("analyzer exhaustiveness", () => {
   it("every analyzer has its own route, label and AI task list", () => {
@@ -37,6 +37,15 @@ describe("analyzer exhaustiveness", () => {
     expect(Object.keys(JOB_TASKS).sort()).toEqual([...ANALYZERS].sort());
     expect(JOB_TASKS.memory).toEqual([]);
     expect(JOB_TASKS.disk).toEqual([]);
+    expect(JOB_TASKS.reverse).toEqual([]);
+  });
+
+  it("reverse-engineering jobs link to /reverse-engineering and are labelled by profile (M10)", () => {
+    expect(analysisSegment({ id: "j1", analyzer: "reverse" })).toBe("reverse-engineering/j1");
+    expect(analysisKindLabel({ analyzer: "reverse", profile: "quick" })).toBe("RE (quick)");
+    expect(analysisKindLabel({ analyzer: "reverse", profile: "full" })).toBe("RE (full)");
+    expect(runKindOf({ analyzer: "reverse", profile: "full" })).toBeNull();
+    expect(analysisErrorText("static_analysis_required")).toMatch(/full static analysis/);
   });
 
   it("disk jobs link to /forensics and are labelled by profile (M9)", () => {

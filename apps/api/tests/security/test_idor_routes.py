@@ -43,6 +43,7 @@ from tests.security import (
     idor_cases_renders,
     idor_cases_reports,
     idor_cases_retention,
+    idor_cases_reverse,
 )
 from tests.security.idor_types import (
     PathOverrides,
@@ -68,7 +69,15 @@ M8_CASE_MODULES = (idor_cases_memory, idor_cases_memory_sensitivity)
 # (phase 1) are in `idor_cases_memory_sensitivity`, the disk sensitivity state (phase 9) in
 # `idor_cases_disk_sensitivity`.
 M9_CASE_MODULES = (idor_cases_disk, idor_cases_disk_exports, idor_cases_disk_sensitivity)
-PENDING_MODULES = (*M6_CASE_MODULES, *M7_CASE_MODULES, *M8_CASE_MODULES, *M9_CASE_MODULES)
+# M10: the RE read API and the capability-functions route (phase 8).
+M10_CASE_MODULES = (idor_cases_reverse,)
+PENDING_MODULES = (
+    *M6_CASE_MODULES,
+    *M7_CASE_MODULES,
+    *M8_CASE_MODULES,
+    *M9_CASE_MODULES,
+    *M10_CASE_MODULES,
+)
 CASE_MODULES = (*CASE_MODULES, *PENDING_MODULES)
 PENDING_ROUTES: frozenset[tuple[str, str]] = frozenset().union(
     *(module.PENDING_ROUTES for module in PENDING_MODULES)

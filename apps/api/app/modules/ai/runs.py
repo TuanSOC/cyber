@@ -54,7 +54,11 @@ SEND_TIMEOUT_S = 15
 GLOBAL_RUNS_LOCK = "ai-runs:global"
 # Runs an identical request is deduplicated against (RT: active or completed).
 DEDUPE_STATUSES = (*RUN_ACTIVE, AiRunStatus.COMPLETED)
-_TARGET_KINDS = {AiTask.EXPLAIN_FINDING: "finding", AiTask.EXPLAIN_ALERT: "alert"}
+_TARGET_KINDS = {
+    AiTask.EXPLAIN_FINDING: "finding",
+    AiTask.EXPLAIN_ALERT: "alert",
+    AiTask.EXPLAIN_FUNCTION: "function",  # M10 (an re_functions id; 0018 check)
+}
 
 
 class AiBusy(Conflict):

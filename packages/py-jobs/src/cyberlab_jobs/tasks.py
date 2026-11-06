@@ -13,6 +13,8 @@ DISK_ANALYZE = "disk.analyze"
 DISK_EXPORT = "disk.export"
 DISK_INGEST = "disk.ingest"
 DISK_EXPIRE_EXPORTS = "disk.expire_exports"
+# Reverse engineering (M10): consumed only by the untrusted RE analyzer (queue `reverse`).
+RE_ANALYZE = "reverse.analyze"
 INGEST_EVENT = "ingest.event"
 REAP = "ingest.reap"
 # Threat intel (M4): consumed only by the trusted enrich worker. They live here so that the
@@ -57,6 +59,10 @@ class Queues:
     @property
     def disk(self) -> str:
         return f"{self.prefix}disk"
+
+    @property
+    def reverse(self) -> str:
+        return f"{self.prefix}reverse"
 
     @property
     def ingest_disk(self) -> str:

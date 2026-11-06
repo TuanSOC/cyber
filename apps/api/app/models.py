@@ -65,6 +65,17 @@ from app.modules.retention.models import (
     RetentionRun,
     RetentionRunItem,
 )
+from app.modules.reverse_engineering.models import (
+    ReCallEdge,
+    ReDecompilation,
+    ReFunction,
+    ReFunctionCapability,
+    ReImport,
+    ReImportRef,
+    ReProgram,
+    ReString,
+    ReStringRef,
+)
 from app.modules.static_analysis.models import (
     MalwareCapability,
     MalwareExport,
@@ -143,6 +154,15 @@ __all__ = [
     "OrgRetentionPolicy",
     "Organization",
     "OrganizationMember",
+    "ReCallEdge",
+    "ReDecompilation",
+    "ReFunction",
+    "ReFunctionCapability",
+    "ReImport",
+    "ReImportRef",
+    "ReProgram",
+    "ReString",
+    "ReStringRef",
     "RefreshToken",
     "Report",
     "ReportCitation",

@@ -77,8 +77,7 @@ export const NAV: NavItem[] = [
     label: "Reverse Engineering",
     icon: Binary,
     segment: "reverse-engineering",
-    plannedFor: "a later milestone",
-    summary: "Ghidra headless and radare2 analysis.",
+    summary: "Ghidra headless decompilation and radare2 quick analysis of PE / ELF programs, offline; never executed.",
   },
   {
     key: "ti",

@@ -50,15 +50,30 @@ class AiTask(enum.StrEnum):
     ATTACK_MAPPING = "attack_mapping"
     INCIDENT_SUMMARY = "incident_summary"
     JOB_DIGEST = "job_digest"  # internal child of an incident; never requested directly
+    # M10: one function of a succeeded reverse-engineering job (target: an re_functions id);
+    # refused `422 task_not_applicable` until phase 9 (`PENDING_TASKS`).
+    EXPLAIN_FUNCTION = "explain_function"
 
 
 # Tasks a user may request (job_digest is created by the API for incident children only).
 REQUESTABLE_TASKS = frozenset(AiTask) - {AiTask.JOB_DIGEST}
 # Tasks whose target is one row of the job (finding / alert) and needs `target_id`.
-TARGETED_TASKS = frozenset({AiTask.EXPLAIN_FINDING, AiTask.EXPLAIN_ALERT})
-JOB_ONLY_TASKS = frozenset(
-    {AiTask.EXPLAIN_FINDING, AiTask.EXPLAIN_ALERT, AiTask.SUMMARIZE_PCAP, AiTask.EXPLAIN_STATIC}
+TARGETED_TASKS = frozenset(
+    {AiTask.EXPLAIN_FINDING, AiTask.EXPLAIN_ALERT, AiTask.EXPLAIN_FUNCTION}
 )
+JOB_ONLY_TASKS = frozenset(
+    {
+        AiTask.EXPLAIN_FINDING,
+        AiTask.EXPLAIN_ALERT,
+        AiTask.SUMMARIZE_PCAP,
+        AiTask.EXPLAIN_STATIC,
+        AiTask.EXPLAIN_FUNCTION,
+    }
+)
+# Frozen values whose run path is not built yet: the run service refuses them with
+# `422 task_not_applicable` and the prompt pins leave their template out (M10 phase 9 removes
+# `explain_function` from here, bumps PROMPT_VERSION to m10.1 and pins the new hashes).
+PENDING_TASKS = frozenset({AiTask.EXPLAIN_FUNCTION})
 INVESTIGATION_ONLY_TASKS = frozenset({AiTask.INCIDENT_SUMMARY})
 
 
@@ -128,6 +143,8 @@ class RefKind(enum.StrEnum):
     EVIDENCE = "evidence"  # K: evidence or custody
     INVESTIGATION = "investigation"  # V
     DIGEST_CLAIM = "digest_claim"  # D: child digest claim, never valid as evidence
+    FUNCTION = "function"  # G: function facts of a reverse-engineering job (M10)
+    CODE = "code"  # Q: one function's decompiled code (M10; capped at AI_MAX_CODE_CHARS)
 
     @property
     def prefix(self) -> str:
@@ -155,6 +172,8 @@ _PREFIX: dict[RefKind, str] = {
     RefKind.EVIDENCE: "K",
     RefKind.INVESTIGATION: "V",
     RefKind.DIGEST_CLAIM: "D",
+    RefKind.FUNCTION: "G",
+    RefKind.CODE: "Q",
 }
 _BY_PREFIX = {p: k for k, p in _PREFIX.items()}
 

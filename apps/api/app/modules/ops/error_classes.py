@@ -16,6 +16,9 @@ can store on a failed job, run or render:
   failure; RT25), so it never inflates the §14 worker failure rate.
 - disk jobs (M9): `cyberlab_jobs.disk.DISK_ERROR_CODES` (the disk analyzer, its ingest and the
   API refusals). The segment download keeps the kit's `integrity_mismatch` (RT22).
+- reverse-engineering jobs (M10): `cyberlab_jobs.reverse.RE_ERROR_CODES` (the RE analyzer,
+  its ingest and the API refusals). A cgroup OOM kill and the disk watchdog are `input` (the
+  sample drove them, RT5 / RT14), not worker failures.
 `tests/unit/test_error_classes.py` fails on any code found in those sources that is missing.
 """
 
@@ -52,6 +55,7 @@ ANALYZER_CODES = (
     "result_upload_failed",
     # memory (M8): its JobFailed codes are MEMORY_ERROR_CODES (classified below).
     # disk (M9): its JobFailed codes are DISK_ERROR_CODES (classified below).
+    # reverse (M10): its JobFailed codes are RE_ERROR_CODES (classified below).
 )
 
 _P, _I, _Y, _V, _N, _O = (
@@ -112,6 +116,20 @@ ERROR_CLASS: Mapping[str, ErrorClass] = MappingProxyType(
         "stage_timeout": _I,
         "export_hash_mismatch": _I,
         "disk_export_not_allowed": _N,
+        # --- reverse-engineering jobs (M10, cyberlab_jobs.reverse.RE_ERROR_CODES;
+        # `not_implemented`, `insufficient_disk`, `engine_unavailable` are shared above) ---
+        "unsupported_architecture": _N,
+        "unsupported_managed_code": _N,
+        "unsupported_format": _N,
+        "re_sample_too_large": _N,
+        "re_out_of_memory": _N,
+        "re_work_too_large": _N,
+        "static_analysis_required": _N,
+        "profile_unavailable": _N,
+        "re_parse_failed": _P,
+        "jvm_start_failed": _I,
+        "analysis_timeout": _I,
+        "decompile_timeout": _I,
         # --- threat intel item reasons (runs store no error code) ---
         "rate_limited": _V,
         "quota_exhausted": _V,

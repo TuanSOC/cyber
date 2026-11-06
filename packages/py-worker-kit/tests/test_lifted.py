@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from cyberlab_worker import mask, yara_rules
+from cyberlab_worker import apisets, mask, yara_rules
 
 REPO = Path(__file__).resolve().parents[3]
 BASELINE = REPO / "apps" / "workers" / "static" / "rules" / "yara" / "cyberlab_baseline.yar"
@@ -56,3 +56,25 @@ def test_rule_files_and_hashes(tmp_path: Path) -> None:
 @pytest.mark.skipif(not BASELINE.is_file(), reason="repository rule sources not mounted")
 def test_the_baseline_hash_matches_the_rule_file() -> None:
     assert hashlib.sha256(BASELINE.read_bytes()).hexdigest() == yara_rules.BASELINE_SHA256
+
+
+def test_api_sets_are_the_m3_data() -> None:
+    """M10 phase 1 (RT7): the data only; `detect()` stays in the static worker (its tests
+    cover the behaviour through the re-export)."""
+    by_type = {s.type: s for s in apisets.API_SETS}
+    assert set(by_type) == {
+        "api_injection",
+        "api_keylogging",
+        "api_anti_debug",
+        "api_credential_access",
+        "api_persistence",
+        "api_downloader",
+    }
+    for api_set in apisets.API_SETS:
+        assert api_set.any_of, api_set.type
+        for combo in api_set.any_of:
+            assert combo <= set(api_set.groups), api_set.type
+    assert apisets.RUN_KEY_FLAG in by_type["api_persistence"].groups["run_key"]
+    assert {"SetWindowsHookExA", "SetWindowsHookExW"} <= by_type["api_keylogging"].groups["hook"]
+    names = apisets.api_names()
+    assert "WriteProcessMemory" in names and apisets.RUN_KEY_FLAG not in names

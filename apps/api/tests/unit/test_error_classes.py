@@ -12,6 +12,7 @@ import pytest
 from cyberlab_jobs.disk import DISK_ERROR_CODES
 from cyberlab_jobs.memory import MEMORY_ERROR_CODES
 from cyberlab_jobs.report import RENDER_ERROR_CODES
+from cyberlab_jobs.reverse import RE_ERROR_CODES
 
 from app.modules.ai.contracts import AiErrorCode
 from app.modules.ops.error_classes import ANALYZER_CODES, ERROR_CLASS, ErrorClass, classify
@@ -61,6 +62,7 @@ def _api_codes() -> set[str]:
         *(APP / "modules" / "reports").glob("*.py"),
         *(APP / "modules" / "memory_analysis").glob("*.py"),
         *(APP / "modules" / "disk_forensics").glob("*.py"),
+        *(APP / "modules" / "reverse_engineering").glob("*.py"),
     ]
     return set().union(*(_literal_codes(p) for p in paths))
 
@@ -74,6 +76,7 @@ def test_every_contract_code_is_classified() -> None:
         *ANALYZER_CODES,
         *MEMORY_ERROR_CODES,  # M8: the memory analyzer, its ingest and the API refusals
         *DISK_ERROR_CODES,  # M9: the disk analyzer, its ingest and the API refusals
+        *RE_ERROR_CODES,  # M10: the RE analyzer, its ingest and the API refusals
         "snapshot_too_large",  # the renderer's download cap (report-worker tasks.py)
     }
     missing = sorted(codes - set(ERROR_CLASS))
@@ -96,11 +99,17 @@ def test_analyzer_codes_match_the_worker_sources() -> None:  # pragma: no cover 
             "static/static_worker",
             "memory/memory_worker",
             "disk/disk_worker",
+            "reverse/re_worker",
         )
         for p in (WORKERS / sub).rglob("*.py")
     ]
     found = set().union(*(_literal_codes(p) for p in paths))
-    known = set(ANALYZER_CODES) | set(MEMORY_ERROR_CODES) | set(DISK_ERROR_CODES)
+    known = (
+        set(ANALYZER_CODES)
+        | set(MEMORY_ERROR_CODES)
+        | set(DISK_ERROR_CODES)
+        | set(RE_ERROR_CODES)
+    )
     assert found - known == set()
 
 
@@ -142,3 +151,22 @@ def test_classes_and_fallbacks() -> None:
     assert all(CODE.fullmatch(code) for code in ERROR_CLASS)
     with pytest.raises(TypeError):
         ERROR_CLASS["x"] = ErrorClass.OTHER  # type: ignore[index]
+
+
+def test_re_codes_have_the_planned_classes() -> None:
+    """M10 (plan Frozen interfaces 7; RT5 / RT14: an OOM kill or the disk watchdog is the
+    sample's doing, so `input`, never a worker failure)."""
+    for code in (
+        "unsupported_architecture",
+        "unsupported_managed_code",
+        "unsupported_format",
+        "re_sample_too_large",
+        "re_out_of_memory",
+        "re_work_too_large",
+    ):
+        assert classify(code) is ErrorClass.INPUT, code
+    assert classify("re_parse_failed") is ErrorClass.PARSE
+    assert classify("jvm_start_failed") is ErrorClass.INFRA
+    for code in ("analysis_timeout", "decompile_timeout", "insufficient_disk"):
+        assert classify(code) is ErrorClass.INFRA, code
+    assert set(RE_ERROR_CODES) <= set(ERROR_CLASS)

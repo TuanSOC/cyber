@@ -791,3 +791,14 @@ async def latest_succeeded_jobs(
         .order_by(AnalysisJob.created_at.desc(), AnalysisJob.id.desc())
     )
     return list(rows)
+
+
+async def select_function_items(
+    session: AsyncSession, org_id: uuid.UUID, job: AnalysisJob, target_id: uuid.UUID
+) -> list[Selection]:
+    """M10 phase 9 (`explain_function`; frozen entry point, stub until then): the target
+    function's facts (G), its code (Q, capped at AI_MAX_CODE_CHARS), the job (J), the capa
+    capabilities linked to it (C), the findings citing it (F), the IOCs from its strings (I)
+    and <= 10 callee facts (G), in that order. The plan's `(session, run, target)` is spelled
+    with the builder's own arguments (org, job, target id)."""
+    raise NotImplementedError("M10 phase 9")

@@ -33,6 +33,7 @@ Hex40 = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
 Text512 = Annotated[str, Field(max_length=512, pattern=NO_NUL)]
 Entropy = Annotated[float, Field(ge=0, le=8, allow_inf_nan=False)]
 Address = Annotated[int, Field(ge=0, le=2**64 - 1)]  # RVAs / VAs (unsigned 64-bit)
+MAX_CAPA_LOCATIONS = 32  # per capability (M10 phase 6 fills them)
 
 
 class Profile(enum.StrEnum):
@@ -90,6 +91,9 @@ class StaticResultHeader(Strict):
     tool_versions: ToolVersions
     engine_errors: Annotated[list[ErrorCode], Field(max_length=32)] = []
     truncated: Annotated[dict[ShortText, bool], Field(max_length=32)] = {}
+    # M10 (additive, RT18): the base address capa reported its locations against (vivisect's
+    # view of the file); None for every stream written before M10.
+    capa_base_address: Address | None = None
 
 
 class SampleInfo(Strict):
@@ -202,6 +206,15 @@ class CapabilityRecord(Strict):
     attack: Annotated[list[AttackId], Field(max_length=20)] = []
     mbc: Annotated[list[MbcId], Field(max_length=20)] = []
     matches: Count = 1
+    # M10 (additive): absolute match addresses (at most 32, sorted, unique) so the RE ingest
+    # can link a capability to the function containing it (file virtual addresses, RT8).
+    locations: Annotated[list[Address], Field(max_length=MAX_CAPA_LOCATIONS)] = []
+
+    @model_validator(mode="after")
+    def _locations(self) -> Self:
+        if self.locations != sorted(set(self.locations)):
+            raise ValueError("capability locations are sorted and unique")
+        return self
 
 
 StaticRecordLine = Annotated[
@@ -241,6 +254,7 @@ STATIC_RECORD_ADAPTER: TypeAdapter[StaticRecordLine] = TypeAdapter(StaticRecordL
 STATIC_LINE_ADAPTER: TypeAdapter[StaticAnyLine] = TypeAdapter(StaticAnyLine)
 
 __all__ = [
+    "MAX_CAPA_LOCATIONS",
     "STATIC_LINE_ADAPTER",
     "STATIC_RECORD_ADAPTER",
     "STATIC_SCHEMA",

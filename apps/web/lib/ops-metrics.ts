@@ -21,13 +21,14 @@ export const WINDOWS: readonly { value: OpsWindow; label: string }[] = [
   { value: "7d", label: "Last 7 days" },
 ];
 
-export const KINDS: readonly OutcomeKind[] = ["pcap", "static", "memory", "disk", "ti", "ai", "report"];
+export const KINDS: readonly OutcomeKind[] = ["pcap", "static", "memory", "disk", "reverse", "ti", "ai", "report"];
 
 export const KIND_LABELS: Record<OutcomeKind, string> = {
   pcap: "PCAP analysis",
   static: "Static analysis",
   memory: "Memory analysis",
   disk: "Disk analysis",
+  reverse: "Reverse engineering",
   ti: "Threat-intel enrichment",
   ai: "AI analyst",
   report: "Report rendering",

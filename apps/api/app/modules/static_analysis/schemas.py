@@ -183,7 +183,35 @@ class SignaturePage(CappedPage[SignatureOut]):
     pass
 
 
-class CapabilityPage(CappedPage[CapabilityOut]):
+def _locations_hex(value: object) -> object:
+    """`malware_capabilities.locations` (decimal strings, 0018) as `0x…` hex text."""
+    if not isinstance(value, list):
+        return value
+    out: list[object] = []
+    for item in value:
+        number = int(item) if isinstance(item, str) and item.isdigit() else item
+        if isinstance(number, Decimal):
+            number = int(number)
+        out.append(f"0x{number:x}" if isinstance(number, int) else number)
+    return out
+
+
+class CapabilityLinkedOut(CapabilityOut):
+    """M10 (RT6): the capabilities route's item. `CapabilityOut` itself stays unchanged (it is
+    also the static JSON report's item type: the report and the M6 snapshot stay
+    byte-identical). `locations`: capa's match addresses (empty for static jobs from before
+    M10); `functions`: how many functions of the newest RE job of the sample contain them
+    (None = no succeeded RE job; phase 8)."""
+
+    locations: Annotated[
+        list[Annotated[str, Field(pattern=r"^0x[0-9a-f]{1,16}$")]],
+        BeforeValidator(_locations_hex),
+        Field(max_length=32),
+    ] = []
+    functions: int | None = None
+
+
+class CapabilityPage(CappedPage[CapabilityLinkedOut]):
     pass
 
 

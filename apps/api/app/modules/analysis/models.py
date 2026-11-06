@@ -7,6 +7,7 @@ from typing import Any
 
 from cyberlab_jobs.disk import DiskProfile
 from cyberlab_jobs.memory import MemoryProfile, OsHint
+from cyberlab_jobs.reverse import ReProfile
 from cyberlab_jobs.static import Profile
 from sqlalchemy import (
     Enum,
@@ -28,17 +29,19 @@ class Analyzer(enum.StrEnum):
     STATIC = "static"
     MEMORY = "memory"  # M8 (migration 0016)
     DISK = "disk"  # M9 (migration 0017)
+    REVERSE = "reverse"  # M10 (migration 0018)
 
 
 class JobProfile(enum.StrEnum):
     """What a run was asked to do: static `full` / `av` (0006), memory `triage` / `full`
-    (0016), disk `triage` / `full` / `extract` (0017); NULL for pcap. One column for every
-    analyzer, so `full` and `triage` are shared."""
+    (0016), disk `triage` / `full` / `extract` (0017), reverse `quick` / `full` (0018); NULL
+    for pcap. One column for every analyzer, so `full` and `triage` are shared."""
 
     FULL = "full"
     AV = "av"
     TRIAGE = "triage"
     EXTRACT = "extract"  # a disk file export job (M9 phase 10), never requested directly
+    QUICK = "quick"  # reverse engineering with radare2 (M10 phase 3; RE_QUICK_ENABLED)
 
 
 # The profiles each analyzer takes (the 0016 checks agree; test_analyzer_exhaustive).
@@ -48,6 +51,7 @@ PROFILES: Mapping[Analyzer, frozenset[JobProfile]] = MappingProxyType(
         Analyzer.STATIC: frozenset(JobProfile(p.value) for p in Profile),
         Analyzer.MEMORY: frozenset(JobProfile(p.value) for p in MemoryProfile),
         Analyzer.DISK: frozenset(JobProfile(p.value) for p in DiskProfile),
+        Analyzer.REVERSE: frozenset(JobProfile(p.value) for p in ReProfile),
     }
 )
 # The profiles an analyst may request through `POST /evidence/{id}/analyses` (`extract` jobs
@@ -64,6 +68,7 @@ DEFAULT_PROFILE: Mapping[Analyzer, JobProfile | None] = MappingProxyType(
         Analyzer.STATIC: JobProfile.FULL,
         Analyzer.MEMORY: JobProfile.TRIAGE,
         Analyzer.DISK: JobProfile.TRIAGE,
+        Analyzer.REVERSE: JobProfile.FULL,
     }
 )
 # The web route segment of each analyzer's job page (`/o/{org}/{route}/{job}`): every deep
@@ -74,6 +79,7 @@ ANALYZER_ROUTES: Mapping[Analyzer, str] = MappingProxyType(
         Analyzer.STATIC: "malware",
         Analyzer.MEMORY: "memory",
         Analyzer.DISK: "forensics",
+        Analyzer.REVERSE: "reverse-engineering",
     }
 )
 ANALYZER_TITLES: Mapping[Analyzer, str] = MappingProxyType(
@@ -82,6 +88,7 @@ ANALYZER_TITLES: Mapping[Analyzer, str] = MappingProxyType(
         Analyzer.STATIC: "Static analysis",
         Analyzer.MEMORY: "Memory analysis",
         Analyzer.DISK: "Disk analysis",
+        Analyzer.REVERSE: "Reverse engineering",
     }
 )
 
@@ -119,6 +126,9 @@ OS_HINT = Enum(
 )
 
 ACTIVE = (AnalysisStatus.QUEUED, AnalysisStatus.RUNNING)
+# M10 RT2: the analyzers that need gigabytes of RAM and disk; at most
+# `ANALYSIS_HEAVY_MAX_ACTIVE` of their jobs are active platform-wide.
+HEAVY_ANALYZERS = frozenset({Analyzer.MEMORY, Analyzer.DISK, Analyzer.REVERSE})
 TERMINAL = (AnalysisStatus.SUCCEEDED, AnalysisStatus.FAILED)
 
 
@@ -133,6 +143,12 @@ class AnalysisJob(UUIDPk, Base):
         UniqueConstraint("id", "organization_id"),
         Index(None, "organization_id", "created_at"),
         Index(None, "evidence_id", "created_at"),
+        ForeignKeyConstraint(
+            ["source_job_id", "organization_id"],
+            ["analysis_jobs.id", "analysis_jobs.organization_id"],
+            ondelete="CASCADE",
+        ),
+        Index(None, "source_job_id"),
         # At most one active run per evidence and analyzer.
         Index(
             "uq_analysis_jobs_active",
@@ -150,6 +166,11 @@ class AnalysisJob(UUIDPk, Base):
     profile: Mapped[JobProfile | None] = mapped_column(PROFILE)
     # Memory runs only (`auto` / `windows` / `linux`), NULL otherwise (0016 check); write-once.
     os_hint: Mapped[OsHint | None] = mapped_column(OS_HINT)
+    # Reverse engineering only (0018, NOT NULL iff analyzer = reverse; write-once): the
+    # succeeded static `full` job of the same evidence it starts from (same-org FK, trigger),
+    # and what was asked (`{"decompile_addresses": [decimal strings]}`, <= 2 KiB).
+    source_job_id: Mapped[uuid.UUID | None]
+    re_params: Mapped[dict[str, Any] | None]
     status: Mapped[AnalysisStatus] = mapped_column(
         pg_enum(AnalysisStatus, "analysis_status"),
         server_default=AnalysisStatus.QUEUED.value,

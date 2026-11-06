@@ -1,0 +1,45 @@
+{"kind":"header","schema_version":"re.v1","job_id":"7b2e1d0f-9c7a-4d66-8e0f-1e2c7a6b2002","profile":"full","engine":"replay","code_kind":"pseudo_c","tool_versions":{"fixture":"synthetic hand-written fixture (not a real binary, not real analysis)","ghidra":"12.2","pyghidra":"3.2.0","jdk":"25.0.1"},"stages":[{"stage":"analyze","status":"ok","duration_ms":30000},{"stage":"decompile","status":"ok","duration_ms":9000}],"audit":{},"jvm_args":["-Xmx2g","-XX:+UseSerialGC","-XX:ActiveProcessorCount=2","-XX:ReservedCodeCacheSize=128m","-XX:MaxMetaspaceSize=512m","-XX:CompressedClassSpaceSize=256m","-XX:MaxDirectMemorySize=256m","-Xss1m","-XX:-UsePerfData","-XX:+DisableAttachMechanism","-XX:+ExitOnOutOfMemoryError","-XX:ErrorFile=/work/out/hs_err.log","-Djava.awt.headless=true","-Duser.home=/work/out/home","-Djava.io.tmpdir=/work/out/tmp"],"engine_errors":[],"truncated":{}}
+{"kind":"program","format":"elf","arch":"x86_64","machine":"x86-64","bits":64,"endianness":"little","language_id":"x86:LE:64:default","compiler_spec":"gcc","image_base":1048576,"preferred_base":0,"entry":1052672,"sha256":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","size_bytes":48640,"analysis_status":"complete","counts":{}}
+{"kind":"function","entry":1052672,"rva":4096,"name":"_start","name_source":"symbol","size":48,"body":[{"start":4096,"end":4144}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":12,"callers":0,"callees":0,"priority_rank":0}
+{"kind":"function","entry":1052928,"rva":4352,"name":"main","name_source":"symbol","size":288,"body":[{"start":4352,"end":4640}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":72,"callers":0,"callees":0,"priority_rank":1}
+{"kind":"function","entry":1053184,"rva":4608,"name":"open_socket","name_source":"symbol","size":160,"body":[{"start":4608,"end":4768}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":40,"callers":0,"callees":0,"priority_rank":2}
+{"kind":"function","entry":1053440,"rva":4864,"name":"load_plugin","name_source":"symbol","size":144,"body":[{"start":4864,"end":5008}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":36,"callers":0,"callees":0,"priority_rank":3}
+{"kind":"function","entry":1053696,"rva":5120,"name":"checksum","name_source":"symbol","size":96,"body":[{"start":5120,"end":5216}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":24,"callers":0,"callees":0,"priority_rank":4}
+{"kind":"function","entry":1053952,"rva":5376,"name":"FUN_00101400","name_source":"generated","size":64,"body":[{"start":5376,"end":5440}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":16,"callers":0,"callees":0,"priority_rank":5}
+{"kind":"function","entry":1081344,"rva":32768,"name":"socket","name_source":"import","size":16,"body":[],"body_truncated":false,"is_thunk":true,"is_external":true,"is_library":false,"signature":null,"calling_convention":null,"instructions":0,"callers":0,"callees":0,"priority_rank":null}
+{"kind":"function","entry":1081360,"rva":32784,"name":"connect","name_source":"import","size":16,"body":[],"body_truncated":false,"is_thunk":true,"is_external":true,"is_library":false,"signature":null,"calling_convention":null,"instructions":0,"callers":0,"callees":0,"priority_rank":null}
+{"kind":"function","entry":1081376,"rva":32800,"name":"dlopen","name_source":"import","size":16,"body":[],"body_truncated":false,"is_thunk":true,"is_external":true,"is_library":false,"signature":null,"calling_convention":null,"instructions":0,"callers":0,"callees":0,"priority_rank":null}
+{"kind":"function","entry":1081392,"rva":32816,"name":"dlsym","name_source":"import","size":16,"body":[],"body_truncated":false,"is_thunk":true,"is_external":true,"is_library":false,"signature":null,"calling_convention":null,"instructions":0,"callers":0,"callees":0,"priority_rank":null}
+{"kind":"function","entry":1081408,"rva":32832,"name":"getaddrinfo","name_source":"import","size":16,"body":[],"body_truncated":false,"is_thunk":true,"is_external":true,"is_library":false,"signature":null,"calling_convention":null,"instructions":0,"callers":0,"callees":0,"priority_rank":null}
+{"kind":"call_edge","caller":1052672,"callee":1052928,"sites":1}
+{"kind":"call_edge","caller":1052928,"callee":1053184,"sites":1}
+{"kind":"call_edge","caller":1052928,"callee":1053440,"sites":1}
+{"kind":"call_edge","caller":1052928,"callee":1053696,"sites":1}
+{"kind":"call_edge","caller":1053184,"callee":1081344,"sites":1}
+{"kind":"call_edge","caller":1053184,"callee":1081360,"sites":1}
+{"kind":"call_edge","caller":1053184,"callee":1081408,"sites":1}
+{"kind":"call_edge","caller":1053440,"callee":1081376,"sites":1}
+{"kind":"call_edge","caller":1053440,"callee":1081392,"sites":1}
+{"kind":"call_edge","caller":1053696,"callee":1053952,"sites":1}
+{"kind":"import","index":0,"library":"libc.so.6","name":"socket","ordinal":null,"address":1081344}
+{"kind":"import","index":1,"library":"libc.so.6","name":"connect","ordinal":null,"address":1081360}
+{"kind":"import","index":2,"library":"libc.so.6","name":"dlopen","ordinal":null,"address":1081376}
+{"kind":"import","index":3,"library":"libc.so.6","name":"dlsym","ordinal":null,"address":1081392}
+{"kind":"import","index":4,"library":"libc.so.6","name":"getaddrinfo","ordinal":null,"address":1081408}
+{"kind":"import_ref","import_index":0,"function_entry":1053184,"count":1}
+{"kind":"import_ref","import_index":1,"function_entry":1053184,"count":1}
+{"kind":"import_ref","import_index":2,"function_entry":1053440,"count":1}
+{"kind":"import_ref","import_index":3,"function_entry":1053440,"count":1}
+{"kind":"import_ref","import_index":4,"function_entry":1053184,"count":1}
+{"kind":"string","index":0,"address":1056768,"encoding":"utf8","value":"updates.example.net","length":19}
+{"kind":"string","index":1,"address":1056800,"encoding":"utf8","value":"libplugin.so","length":12}
+{"kind":"string","index":2,"address":1056832,"encoding":"utf8","value":"plugin_init","length":11}
+{"kind":"string_ref","string_index":0,"function_entry":1053184,"count":1}
+{"kind":"string_ref","string_index":1,"function_entry":1053440,"count":1}
+{"kind":"string_ref","string_index":2,"function_entry":1053440,"count":1}
+{"kind":"decompiled","function_entry":1052928,"status":"ok","code_kind":"pseudo_c","duration_ms":900,"code":"int main(void)\n\n{\n  open_socket();\n  load_plugin();\n  return checksum();\n}","code_sha256":"a4928a730f8578a6f5a49cc341433a2ec4631b5677d15e6b6f37e4baafa4b54c","lines":7,"truncated_bytes":0}
+{"kind":"decompiled","function_entry":1053184,"status":"ok","code_kind":"pseudo_c","duration_ms":900,"code":"int open_socket(void)\n\n{\n  int fd;\n  \n  getaddrinfo(\"updates.example.net\",\"443\",0,&local_28);\n  fd = socket(2,1,0);\n  connect(fd,local_28->ai_addr,0x10);\n  return fd;\n}","code_sha256":"17a47c49c4634ff844345a28c42cd44284b7c258f9ee94aba9b07cbf86e894d5","lines":10,"truncated_bytes":0}
+{"kind":"decompiled","function_entry":1053440,"status":"failed","code_kind":"pseudo_c","duration_ms":900}
+{"kind":"finding","finding_id":"0d8f5c3e-6a1b-4c2d-9e8f-7a6b5c4d3e11","ts":"2026-11-01T08:00:00Z","type":"network_string_function","title":"Function references a host name and calls network APIs","description":"Function references a host name and calls network APIs (static observation of the decompiled program; not a verdict).","severity":"low","confidence":0.6,"detection_method":"heuristic:re_network_string_function@1","evidence_refs":["function:0x101200"],"attributes":{"function_entry":"0x101200"}}
+{"kind":"ioc","type":"domain","value":"updates.example.net","first_seen":"2026-11-01T08:00:00Z","last_seen":"2026-11-01T08:00:00Z","count":1,"source":"re_string"}
+{"kind":"trailer","line_count":44,"sha256":"88dec78012345733601a410568fbc9145e8b498b285b3386f051b1abcf3d9833"}

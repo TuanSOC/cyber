@@ -22,6 +22,7 @@ from app.modules.analysis import analyzers, dispatch, lifecycle
 from app.modules.analysis import repository as repo
 from app.modules.analysis.models import (
     ACTIVE,
+    HEAVY_ANALYZERS,
     PROFILES,
     REQUESTABLE_PROFILES,
     AnalysisJob,
@@ -40,6 +41,12 @@ from app.modules.evidence import service as evidence_service
 from app.modules.evidence.models import CustodyAction, EvidenceCustodyEvent, EvidenceStatus
 from app.modules.memory_analysis import sensitivity as memory_sensitivity
 from app.modules.memory_analysis.errors import MemoryImageEmpty, MemoryImageTooLarge
+from app.modules.reverse_engineering import dispatch as re_dispatch
+from app.modules.reverse_engineering.errors import (
+    HeavyAnalysisBusy,
+    ProfileUnavailable,
+    ReSampleTooLarge,
+)
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +79,7 @@ TOO_LARGE: dict[Analyzer, type[AppError]] = {
     Analyzer.STATIC: SampleTooLarge,
     Analyzer.MEMORY: MemoryImageTooLarge,
     Analyzer.DISK: DiskImageTooLarge,
+    Analyzer.REVERSE: ReSampleTooLarge,
 }
 # Automatic runs only (never memory: a memory run is always an explicit request, M8).
 SKIPPABLE = (AnalysisActive, AnalysisQueueFull, CaptureTooLarge, SampleTooLarge, TooManyRequests)
@@ -83,6 +91,8 @@ def _active_caps(settings: Settings, analyzer: Analyzer) -> tuple[int, int]:
         return settings.memory_max_active_per_org, settings.memory_max_active_total
     if analyzer == Analyzer.DISK:
         return settings.disk_max_active_per_org, settings.disk_max_active_total
+    if analyzer == Analyzer.REVERSE:
+        return settings.re_max_active_per_org, settings.analysis_heavy_max_active
     return settings.max_active_analyses_per_org, settings.max_active_analyses_global
 
 
@@ -96,6 +106,7 @@ def to_out(row: repo.JobRow) -> AnalysisJobOut:
         analyzer=job.analyzer,
         profile=job.profile,
         os_hint=job.os_hint,
+        source_job_id=job.source_job_id,
         status=job.status,
         error_code=job.error_code,
         auto=job.auto,
@@ -130,6 +141,8 @@ async def _create(
     auto: bool,
     token: str,
     segments: list[uuid.UUID] | None = None,
+    source_job_id: uuid.UUID | None = None,
+    decompile_addresses: tuple[int, ...] = (),
 ) -> dispatch.DispatchInput:
     settings = get_settings()
     row = await evidence_service.get_row(ctx, evidence_id, for_update=True)
@@ -163,6 +176,26 @@ async def _create(
     active_count = await repo.count_active(ctx.session, ctx.org_id, analyzer)
     if active_count >= _active_caps(settings, analyzer)[0]:
         raise AnalysisQueueFull()
+    if analyzer in HEAVY_ANALYZERS:
+        # M10 RT2: one heavy analysis (memory, disk or reverse) at a time platform-wide by
+        # default; the refusal never names the other job (it may be another org's).
+        await repo.lock_heavy_analyses(ctx.session)
+        if await repo.count_heavy_active(ctx.session) >= settings.analysis_heavy_max_active:
+            raise HeavyAnalysisBusy()
+    re_source: re_dispatch.ReSource | None = None
+    if analyzer == Analyzer.REVERSE:
+        # M10 phase 7: the succeeded static `full` source job (409 static_analysis_required),
+        # the architecture check, the capa file VAs. Phase 1: 501 before anything is created.
+        assert profile is not None  # noqa: S101 - request_analysis checked it
+        re_source = await re_dispatch.load_source(
+            ctx.session,
+            ctx.org_id,
+            evidence_id,
+            source_job_id=source_job_id,
+            profile=profile,
+            decompile_addresses=decompile_addresses,
+            settings=settings,
+        )
 
     job = AnalysisJob(
         organization_id=ctx.org_id,
@@ -170,6 +203,12 @@ async def _create(
         analyzer=analyzer,
         profile=profile,
         os_hint=os_hint,
+        source_job_id=re_source.job_id if re_source is not None else None,
+        re_params=(
+            {"decompile_addresses": [str(a) for a in decompile_addresses]}
+            if re_source is not None
+            else None
+        ),
         requested_by=ctx.user.id,
         auto=auto,
         ingest_token_sha256=hashlib.sha256(token.encode()).hexdigest(),
@@ -190,6 +229,10 @@ async def _create(
         details["profile"] = profile.value
     if os_hint is not None:
         details["os_hint"] = os_hint.value
+    if re_source is not None:
+        details["source_job_id"] = str(re_source.job_id)
+        if decompile_addresses:
+            details["decompile_addresses"] = len(decompile_addresses)
     if analyzer == Analyzer.DISK:
         details["segments"] = [str(s.evidence_id) for s in disk_set]
         await _record_disk_segments(ctx, job, disk_set)
@@ -221,6 +264,8 @@ async def _create(
         profile=profile,
         os_hint=os_hint,
         segments=tuple(disk_set),
+        re_source=re_source,
+        decompile_addresses=decompile_addresses,
     )
 
 
@@ -296,6 +341,8 @@ async def request_analysis(
     os_hint: OsHint | None = None,
     auto: bool = False,
     segments: list[uuid.UUID] | None = None,
+    source_job_id: uuid.UUID | None = None,
+    decompile_addresses: list[int] | None = None,
 ) -> AnalysisJobOut:
     """Create the job (committed first), then enqueue it. A lost enqueue is a failed job.
 
@@ -315,7 +362,17 @@ async def request_analysis(
             raise ValueError("an extract job is created by a file export, never requested")
         # The rules that need no database (order, count, duplicates; M9 phase 7).
         disk_segments.check_shape(evidence_id, segments or [], get_settings())
-    if await _global_queue_full(analyzer):
+    if analyzer == Analyzer.REVERSE:
+        if auto:
+            raise ValueError("reverse engineering is never automatic")
+        if profile == JobProfile.QUICK and not get_settings().re_quick_enabled:
+            raise ProfileUnavailable()
+        if decompile_addresses and profile != JobProfile.FULL:
+            raise ValueError("decompile_addresses apply to the full profile only")
+    elif source_job_id is not None or decompile_addresses:
+        raise ValueError("source_job_id and decompile_addresses apply to reverse only")
+    # Reverse has no queue cap of its own: the heavy-analysis cap (RT2) bounds it.
+    if analyzer != Analyzer.REVERSE and await _global_queue_full(analyzer):
         raise AnalysisQueueFull()
     token = secrets.token_urlsafe(32)
     async with org_session(org_id, user, Permission.EVIDENCE_WRITE) as ctx:
@@ -329,6 +386,8 @@ async def request_analysis(
             auto=auto,
             token=token,
             segments=segments,
+            source_job_id=source_job_id,
+            decompile_addresses=tuple(decompile_addresses or ()),
         )
     # The job is committed: nothing below may turn this request into an error.
     try:

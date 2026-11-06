@@ -4,11 +4,12 @@ export type AnalysisJob = Schemas["AnalysisJobOut"];
 export type AnalysisStatus = Schemas["AnalysisStatus"];
 export type Analyzer = Schemas["Analyzer"];
 /** A job's profile: static `full` / `av`, memory `triage` / `full` (M8), disk `triage` / `full` /
- * `extract` (M9); null for pcap. */
+ * `extract` (M9), reverse `quick` / `full` (M10); null for pcap. */
 export type JobProfile = Schemas["JobProfile"];
 export type StaticProfile = Extract<JobProfile, "full" | "av">;
 export type MemoryProfile = Extract<JobProfile, "triage" | "full">;
 export type DiskProfile = Extract<JobProfile, "triage" | "full" | "extract">;
+export type ReProfile = Extract<JobProfile, "quick" | "full">;
 export type OsHint = Schemas["OsHint"];
 
 /** The static profiles a user picks from (the Malware Lab's run and filter options). */
@@ -20,17 +21,21 @@ export const JOB_PROFILE_LABELS: Record<JobProfile, string> = {
   triage: "Triage",
   // M9: a disk file export job.
   extract: "File export",
+  // M10: reverse engineering with radare2 (no decompilation).
+  quick: "Quick",
 };
 export const MEMORY_PROFILE_LABELS: Record<MemoryProfile, string> = { triage: "Triage", full: "Full" };
 export const DISK_PROFILE_LABELS: Record<DiskProfile, string> = { triage: "Triage", full: "Full", extract: "File export" };
+export const RE_PROFILE_LABELS: Record<ReProfile, string> = { quick: "Quick (radare2)", full: "Full (Ghidra)" };
 export const OS_HINT_LABELS: Record<OsHint, string> = { auto: "Detect automatically", windows: "Windows", linux: "Linux" };
 
 /** Every analyzer's job page route segment (M8 RT1: one map, no two-way "else"). */
-export const ANALYZER_ROUTES: Record<Analyzer, "pcap" | "malware" | "memory" | "forensics"> = {
+export const ANALYZER_ROUTES: Record<Analyzer, "pcap" | "malware" | "memory" | "forensics" | "reverse-engineering"> = {
   pcap: "pcap",
   static: "malware",
   memory: "memory",
   disk: "forensics",
+  reverse: "reverse-engineering",
 };
 
 /** The module that shows a job, for "open it in ..." text (M8 RT1: every analyzer). */
@@ -39,10 +44,11 @@ export const ANALYZER_MODULES: Record<Analyzer, { article: string; module: strin
   static: { article: "a static analysis", module: "the Malware Lab", source: "file analysis" },
   memory: { article: "a memory analysis", module: "Memory Analysis", source: "memory analysis" },
   disk: { article: "a disk analysis", module: "Forensics", source: "disk analysis" },
+  reverse: { article: "a reverse-engineering analysis", module: "Reverse Engineering", source: "reverse engineering" },
 };
 
 /** Short label of what ran: "PCAP", "Static (full)", "AV scan", "Memory (triage)", "Memory (full)",
- * "Disk (triage)", "Disk (full)", "Disk (file export)". */
+ * "Disk (triage)", "Disk (full)", "Disk (file export)", "RE (quick)", "RE (full)". */
 export function analysisKindLabel(job: Pick<AnalysisJob, "analyzer" | "profile">): string {
   switch (job.analyzer) {
     case "pcap":
@@ -51,6 +57,8 @@ export function analysisKindLabel(job: Pick<AnalysisJob, "analyzer" | "profile">
       return job.profile === "full" ? "Memory (full)" : "Memory (triage)";
     case "disk":
       return job.profile === "full" ? "Disk (full)" : job.profile === "extract" ? "Disk (file export)" : "Disk (triage)";
+    case "reverse":
+      return job.profile === "quick" ? "RE (quick)" : "RE (full)";
     default:
       return job.profile === "av" ? "AV scan" : "Static (full)";
   }
@@ -127,10 +135,10 @@ export function offeredRuns(kind: EvidenceKind): { primary: RunKind[]; more: Run
 }
 
 /** The run kind of an existing job (for "an X is already running" checks); null for memory
- * and disk jobs (they are not offered from the run buttons). */
+ * disk and reverse-engineering jobs (they are not offered from the run buttons). */
 export function runKindOf(job: Pick<AnalysisJob, "analyzer" | "profile">): RunKind | null {
   if (job.analyzer === "pcap") return "pcap";
-  if (job.analyzer === "memory" || job.analyzer === "disk") return null;
+  if (job.analyzer === "memory" || job.analyzer === "disk" || job.analyzer === "reverse") return null;
   return job.profile === "av" ? "static_av" : "static_full";
 }
 
@@ -221,6 +229,19 @@ const ERROR_TEXT: Record<string, string> = {
   stage_timeout: "A disk analysis step did not finish in time.",
   integrity_mismatch: "A segment did not match its stored hash when the analyzer downloaded it.",
   export_hash_mismatch: "An exported file did not match the analyzer's reported hash.",
+  // reverse-engineering analyzer (M10)
+  static_analysis_required: "Run a full static analysis of this file first (it must identify a PE or ELF file).",
+  re_sample_too_large: "The file is larger than the reverse engineering analyzer accepts.",
+  unsupported_architecture: "Only x86 and x86-64 programs can be reverse engineered.",
+  unsupported_managed_code: ".NET (managed) programs cannot be reverse engineered here.",
+  unsupported_format: "Not a PE or ELF program.",
+  re_out_of_memory: "The program needed more memory than the reverse engineering analyzer allows.",
+  re_work_too_large: "The analysis project grew beyond the reverse engineering work-space budget.",
+  re_parse_failed: "The program could not be loaded for reverse engineering.",
+  jvm_start_failed: "The reverse engineering engine could not start.",
+  analysis_timeout: "The program analysis did not finish in time (partial results may be shown).",
+  decompile_timeout: "Decompilation did not finish in time.",
+  profile_unavailable: "This reverse engineering profile is not available on this platform.",
   disk_export_not_allowed:
     "This file cannot be exported (deleted, not a regular file, too large, not allocated, or a protected secret store).",
   // static analyzer

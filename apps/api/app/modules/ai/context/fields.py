@@ -216,6 +216,10 @@ ALLOWED: dict[RefKind, frozenset[str]] = {
     RefKind.DIGEST_CLAIM: frozenset(
         {"kind", "section", "text", "confidence", "citations", "untrusted", "flags"}
     ),
+    # M10: function facts (G) and decompiled code (Q). Empty until phase 9 writes their
+    # allowlists (nothing of these kinds can reach a context before then).
+    RefKind.FUNCTION: frozenset(),
+    RefKind.CODE: frozenset(),
 }
 # Open-ended prefixes per kind (names under them are built from trusted enums or checked).
 ALLOWED_PREFIXES: dict[RefKind, tuple[str, ...]] = {
@@ -256,6 +260,8 @@ STRUCTURAL: dict[RefKind, frozenset[str]] = {
     RefKind.EVIDENCE: frozenset({"size", "mime", "sha256", "uploaded_at", "status"}),
     RefKind.INVESTIGATION: frozenset({"case_ref", "severity", "status", "created_at"}),
     RefKind.DIGEST_CLAIM: ALLOWED[RefKind.DIGEST_CLAIM],
+    RefKind.FUNCTION: frozenset(),  # M10 phase 9
+    RefKind.CODE: frozenset(),  # M10 phase 9
 }
 STRUCTURAL_PREFIXES: dict[RefKind, tuple[str, ...]] = {
     RefKind.JOB: ("count.",),

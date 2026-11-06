@@ -45,7 +45,15 @@ from app.modules.threat_intel.normalize import normalize_suffix
 
 UnavailableReason = Literal["ai_disabled_platform", "prod_mock", "gemini_billing_required"]
 ConfidenceLevel = Literal["low", "medium", "high"]
-DeepLinkRoute = Literal["pcap", "malware", "memory", "forensics", "evidence", "investigation"]
+DeepLinkRoute = Literal[
+    "pcap",
+    "malware",
+    "memory",
+    "forensics",
+    "reverse-engineering",
+    "evidence",
+    "investigation",
+]
 # The result tabs a deep link may name (pcap, static and memory job pages); anything else is
 # dropped. A memory job's findings, IOCs and timeline use the shared tab names (M8).
 DeepLinkTab = Literal[
@@ -343,7 +351,7 @@ class AiRunOut(BaseModel):
     scope: AiScope
     job_id: uuid.UUID | None
     investigation_id: uuid.UUID | None
-    target_kind: Literal["finding", "alert"] | None
+    target_kind: Literal["finding", "alert", "function"] | None
     target_id: uuid.UUID | None
     parent_run_id: uuid.UUID | None
     supersedes_run_id: uuid.UUID | None

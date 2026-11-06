@@ -1,0 +1,1 @@
+Task: explain_function. STUB (M10 phase 1): the final text is written in phase 9, together with the PROMPT_VERSION bump to m10.1 and the new pins. Until then the run service refuses this task.

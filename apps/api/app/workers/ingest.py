@@ -66,6 +66,7 @@ from app.modules.evidence.models import (
 from app.modules.memory_analysis import ingest as memory_ingest
 from app.modules.pcap_analysis import ingest as pcap_ingest
 from app.modules.pcap_analysis import stream
+from app.modules.reverse_engineering import ingest as re_ingest
 from app.modules.static_analysis import ingest as static_ingest
 from app.modules.static_analysis import stream as static_stream
 
@@ -386,16 +387,20 @@ SUCCESS_INGESTERS: dict[Analyzer, Ingester] = {
     # M9: run by the disk ingest worker (task `disk.ingest`, queue `ingest_disk`; RT9), never
     # by this one: `handle_event` hands every disk result off first.
     Analyzer.DISK: disk_ingest.ingest_disk,
+    # M10 phase 7 (stub until then: `ingest_error`).
+    Analyzer.REVERSE: re_ingest.ingest_re,
 }
 # M8: failed reports that carry a diagnostic result (memory `symbols_missing`; M9: disk
 # `no_supported_filesystem` / `unsupported_disk_format`, on the disk ingest worker).
 DIAGNOSTIC_INGESTERS: dict[Analyzer, Ingester] = {
     Analyzer.MEMORY: memory_ingest.ingest_memory_diagnostic,
     Analyzer.DISK: disk_ingest.ingest_disk_diagnostic,
+    Analyzer.REVERSE: re_ingest.ingest_re_diagnostic,
 }
 DIAGNOSTIC_CODES_BY_ANALYZER: dict[Analyzer, frozenset[str]] = {
     Analyzer.MEMORY: frozenset({"symbols_missing"}),
     Analyzer.DISK: frozenset({"no_supported_filesystem", "unsupported_disk_format"}),
+    Analyzer.REVERSE: frozenset({"unsupported_architecture", "unsupported_managed_code"}),
 }
 DIAGNOSTIC_CODES: frozenset[str] = frozenset().union(*DIAGNOSTIC_CODES_BY_ANALYZER.values())
 

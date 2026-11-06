@@ -7,7 +7,9 @@ internal MinIO endpoint and expire with the job's queue TTL.
 Each analyzer has its own message schema, Celery task and queue (and its own broker ACL
 user): `pcap.v1` on `pcap`, `static.v1` on `static`, `memory.v1` on `memory` (M8; the message
 is built by `memory_analysis.dispatch.build_memory_message`), `disk.v1` on `disk` (M9; one GET
-per segment, `disk_forensics.dispatch.build_disk_message`).
+per segment, `disk_forensics.dispatch.build_disk_message`), `re.v1` on `reverse` (M10; the
+message is built by `reverse_engineering.dispatch.build_re_message` from the resolved source
+static job).
 """
 
 import uuid
@@ -20,6 +22,7 @@ from cyberlab_jobs import (
     DISK_ANALYZE,
     MEMORY_ANALYZE,
     PCAP_ANALYZE,
+    RE_ANALYZE,
     STATIC_ANALYZE,
     DiskJobV1,
     JobLimits,
@@ -27,6 +30,7 @@ from cyberlab_jobs import (
     PcapJobV1,
     PresignedPost,
     Queues,
+    ReJobV1,
 )
 from cyberlab_jobs.memory import OsHint
 from cyberlab_jobs.static import Profile, StaticJobV1, StaticLimits
@@ -38,7 +42,7 @@ from app.core.threads import broker_limiter
 from app.modules.analysis import analyzers
 from app.modules.analysis.models import Analyzer, JobProfile
 
-JobMessage = PcapJobV1 | StaticJobV1 | MemoryJobV1 | DiskJobV1
+JobMessage = PcapJobV1 | StaticJobV1 | MemoryJobV1 | DiskJobV1 | ReJobV1
 
 
 @dataclass(frozen=True)
@@ -58,6 +62,10 @@ class DispatchInput:
     # Disk only (M9 phase 7): the ordered segment set (`disk_forensics.segments.Segment`),
     # ordinal 0 being the evidence above.
     segments: tuple[Any, ...] = ()
+    # Reverse engineering only (M10 phase 7): the resolved source static job
+    # (`reverse_engineering.dispatch.ReSource`) and the requested addresses (`full`).
+    re_source: Any = None
+    decompile_addresses: tuple[int, ...] = ()
 
 
 def result_key(organization_id: uuid.UUID, job_id: uuid.UUID) -> str:
@@ -149,6 +157,11 @@ def build_message(item: DispatchInput) -> JobMessage:
         from app.modules.disk_forensics.dispatch import build_disk_message
 
         return build_disk_message(item, list(item.segments), settings)
+    if item.analyzer == Analyzer.REVERSE:
+        # M10 phase 7: the source static job's format and capa file VAs, `ReLimits`.
+        from app.modules.reverse_engineering.dispatch import build_re_message
+
+        return build_re_message(item, item.re_source, settings)
     ttl = timedelta(seconds=settings.analysis_queue_ttl_s)
     common = presigned_common(item, settings, get_expires=ttl)
     if item.analyzer == Analyzer.STATIC:
@@ -169,6 +182,7 @@ def task_and_queue(analyzer: Analyzer, settings: Settings) -> tuple[str, str]:
         Analyzer.STATIC: (STATIC_ANALYZE, queues.static),
         Analyzer.MEMORY: (MEMORY_ANALYZE, queues.memory),
         Analyzer.DISK: (DISK_ANALYZE, queues.disk),
+        Analyzer.REVERSE: (RE_ANALYZE, queues.reverse),
     }
     return routes[analyzer]
 

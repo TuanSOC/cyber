@@ -88,6 +88,19 @@ M9_TABLES = [
     "disk_events",
     "disk_exports",
 ]
+# M10 (0018): RE results are insert-only for the app role (no UPDATE, no DELETE grant;
+# retention deletes the bulk tables, never `re_programs`).
+M10_TABLES = [
+    "re_programs",
+    "re_functions",
+    "re_call_edges",
+    "re_imports",
+    "re_import_refs",
+    "re_strings",
+    "re_string_refs",
+    "re_decompilations",
+    "re_function_capabilities",
+]
 
 
 @pytest.mark.parametrize("table", APPEND_ONLY)
@@ -333,3 +346,14 @@ async def test_app_role_cannot_update_disk_rows(table: str) -> None:
     with pytest.raises(DBAPIError, match="permission denied"):
         async with tenant_session(t.org_id, t.owner_id) as s:
             await s.execute(text(f"UPDATE {table} SET organization_id = organization_id"))
+
+
+@pytest.mark.parametrize("table", M10_TABLES)
+@pytest.mark.parametrize(
+    "statement", ["DELETE FROM {t}", "UPDATE {t} SET organization_id = organization_id"]
+)
+async def test_app_role_cannot_mutate_re_rows(table: str, statement: str) -> None:
+    t = await seed_tenant("alpha")
+    with pytest.raises(DBAPIError, match="permission denied"):
+        async with tenant_session(t.org_id, t.owner_id) as s:
+            await s.execute(text(statement.format(t=table)))

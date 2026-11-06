@@ -15,8 +15,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.models_base import Base, UUIDPk
 
 # M8 (0016): `memory` joins the analyzers (the trigger copies `analyzer::text`); M9 (0017)
-# `disk`.
-KINDS = ("pcap", "static", "memory", "disk", "ti", "ai", "report")
+# `disk`; M10 (0018) `reverse`.
+KINDS = ("pcap", "static", "memory", "disk", "reverse", "ti", "ai", "report")
 
 
 class JobOutcome(UUIDPk, Base):
@@ -25,7 +25,8 @@ class JobOutcome(UUIDPk, Base):
         Index(None, "finished_at"),
         Index(None, "kind", "finished_at"),
         CheckConstraint(
-            "kind IN ('pcap', 'static', 'memory', 'disk', 'ti', 'ai', 'report')", name="kind"
+            "kind IN ('pcap', 'static', 'memory', 'disk', 'reverse', 'ti', 'ai', 'report')",
+            name="kind",
         ),
         CheckConstraint("queue_ms IS NULL OR queue_ms >= 0", name="queue_ms_non_negative"),
         CheckConstraint("run_ms IS NULL OR run_ms >= 0", name="run_ms_non_negative"),

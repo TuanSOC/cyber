@@ -235,7 +235,7 @@ def test_label_grammar_rejects(bad: str) -> None:
 
 def test_every_kind_has_a_unique_prefix() -> None:
     prefixes = [k.prefix for k in RefKind]
-    assert len(set(prefixes)) == len(prefixes) == 16
+    assert len(set(prefixes)) == len(prefixes) == 18  # M10: G (function), Q (code)
     assert all(RefKind.from_prefix(k.prefix) is k for k in RefKind)
     assert labels.qualify("F3", 2) == "J2:F3"
     with pytest.raises(ValueError):

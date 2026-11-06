@@ -28,6 +28,7 @@ from datetime import datetime, timedelta
 
 from cyberlab_jobs.disk import DiskProfile
 from cyberlab_jobs.memory import MemoryProfile
+from cyberlab_jobs.reverse import ReProfile
 from cyberlab_jobs.static import Profile
 from sqlalchemy import RowMapping, Text, bindparam, text
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -47,7 +48,7 @@ WINDOWS: dict[str, timedelta] = {
     "24h": timedelta(hours=24),
     "7d": timedelta(days=7),
 }
-ANALYZER_KINDS = ("pcap", "static", "memory", "disk")
+ANALYZER_KINDS = ("pcap", "static", "memory", "disk", "reverse")
 NO_SUBKIND = "none"
 OTHER = "other"
 SUBKINDS: frozenset[str] = frozenset(
@@ -55,6 +56,7 @@ SUBKINDS: frozenset[str] = frozenset(
         *(p.value for p in Profile),
         *(p.value for p in MemoryProfile),
         *(p.value for p in DiskProfile),
+        *(p.value for p in ReProfile),
         *TI_PROVIDER_NAMES,
         "multi",
         *AI_PROVIDER_NAMES,
@@ -77,6 +79,7 @@ ACTIVE_STATUSES: dict[str, tuple[str, ...]] = {
     "static": ("queued", "running"),
     "memory": ("queued", "running"),
     "disk": ("queued", "running"),
+    "reverse": ("queued", "running"),
     "ti": tuple(TI_RUN_ACTIVE),
     "ai": tuple(s.value for s in AI_RUN_ACTIVE),
     "report": tuple(RENDER_ACTIVE),

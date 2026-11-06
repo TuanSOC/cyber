@@ -130,6 +130,7 @@ services:
       BROKER_RETENTION_PASSWORD: ${BROKER_RETENTION_PASSWORD:?set BROKER_RETENTION_PASSWORD}
       BROKER_MEMORY_PASSWORD: ${BROKER_MEMORY_PASSWORD:?set BROKER_MEMORY_PASSWORD}
       BROKER_DISK_PASSWORD: ${BROKER_DISK_PASSWORD:?set BROKER_DISK_PASSWORD}
+      BROKER_REVERSE_PASSWORD: ${BROKER_REVERSE_PASSWORD:?set BROKER_REVERSE_PASSWORD}
 
   # The report renderer in prod (M6): prod image, ENV=prod, its own broker password required;
   # still no DB, MinIO credentials or signing material.
@@ -203,6 +204,21 @@ services:
 
   disk-hashsets-init:
     image: cyberlab/disk-worker:prod
+
+  # The RE analyzer in prod (M10): prod image (no compiler, no tests, no samples), its own
+  # broker password required, no source bind mount.
+  re-worker:
+    image: cyberlab/re-worker:prod
+    build:
+      context: ./apps/workers/reverse
+      target: prod
+      additional_contexts:
+        jobs: ./packages/py-jobs
+        worker_kit: ./packages/py-worker-kit
+    environment:
+      BROKER_URL: redis://reverse:${BROKER_REVERSE_PASSWORD:?set BROKER_REVERSE_PASSWORD}@redis-broker:6379/0
+    volumes: !override
+      - re_work:/work
 
   pcap-worker:
     image: cyberlab/pcap-worker:prod

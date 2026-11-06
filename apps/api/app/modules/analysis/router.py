@@ -42,6 +42,8 @@ async def run_analysis(
         profile=body.profile,
         os_hint=body.os_hint,
         segments=body.segments,
+        source_job_id=body.source_job_id,
+        decompile_addresses=body.decompile_address_values(),
     )
 
 

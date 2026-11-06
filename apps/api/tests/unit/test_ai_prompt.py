@@ -8,6 +8,7 @@ import pytest
 
 from app.modules.ai import prompt
 from app.modules.ai.contracts import (
+    PENDING_TASKS,
     AiTask,
     ContextStats,
     FieldValue,
@@ -201,7 +202,8 @@ def _vocabulary() -> set[str]:
     return words
 
 
-@pytest.mark.parametrize("task", list(AiTask))
+# M10: a pending task (`explain_function` until phase 9) has a stub template and is refused.
+@pytest.mark.parametrize("task", [t for t in AiTask if t not in PENDING_TASKS])
 def test_outside_block_bytes_come_from_the_allowlist(task: AiTask) -> None:
     stats = ContextStats(
         per_kind={k: KindStats(included=1, total=2) for k, _ in HOSTILE_ITEMS},

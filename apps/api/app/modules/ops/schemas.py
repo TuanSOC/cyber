@@ -13,9 +13,9 @@ from pydantic import BaseModel, Field
 from app.modules.ops.error_classes import ErrorClass
 
 Window = Literal["1h", "24h", "7d"]
-OutcomeKind = Literal["pcap", "static", "memory", "disk", "ti", "ai", "report"]
+OutcomeKind = Literal["pcap", "static", "memory", "disk", "reverse", "ti", "ai", "report"]
 # The analyzers (M8 RT1: a failed memory job must not break this page).
-AnalyzerKind = Literal["pcap", "static", "memory", "disk"]
+AnalyzerKind = Literal["pcap", "static", "memory", "disk", "reverse"]
 
 
 class KindMetricsOut(BaseModel):

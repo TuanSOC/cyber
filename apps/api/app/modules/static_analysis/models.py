@@ -62,6 +62,9 @@ class MalwareSample(_JobRow, Base):
     file_format: Mapped[str] = mapped_column(String(8))
     pe: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     elf: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # M10 (0018): the base capa's locations are relative to (`static.v1` header); NULL for
+    # static jobs from before M10 (their capabilities carry no locations).
+    capa_base_address: Mapped[Decimal | None] = mapped_column(Numeric(20, 0))
 
 
 class MalwareSection(_JobRow, Base):
@@ -153,6 +156,8 @@ class MalwareCapability(_JobRow, Base):
     __table_args__ = (
         _job_fk(),
         Index("ix_malware_capabilities_job_id_namespace", "job_id", "namespace"),
+        # The target of `re_function_capabilities`' same-org FK (0018).
+        UniqueConstraint("id", "organization_id"),
     )
 
     name: Mapped[str] = mapped_column(String(255))
@@ -160,6 +165,9 @@ class MalwareCapability(_JobRow, Base):
     attack: Mapped[list[str]] = mapped_column(JSONB)
     mbc: Mapped[list[str]] = mapped_column(JSONB)
     matches: Mapped[int] = mapped_column(BigInteger)
+    # M10 (0018): absolute match addresses as decimal strings (<= 32; a JSON number cannot
+    # carry an unsigned 64-bit value exactly), `[]` before M10 (the static ingest's default).
+    locations: Mapped[list[str]] = mapped_column(JSONB, server_default="[]", default=list)
 
 
 RESULT_TABLES = (

@@ -6,8 +6,10 @@
 #        scripts/lane-test.sh 4 --service report-worker-test pytest -q tests/   (M6, RT21)
 #        scripts/lane-test.sh 2 --service memory-worker-test --heavy pytest -q tests/engine  (M8)
 #        scripts/lane-test.sh 3 --service disk-worker-test --heavy pytest -q tests/engine  (M9)
+#        scripts/lane-test.sh 2 --service re-worker-test --heavy pytest -q tests/engine  (M10)
+#        scripts/lane-test.sh 9 --service static-worker-test pytest -q tests/unit  (M10 phase 6)
 # `--heavy` (M8) takes two slots, atomically (both or wait): runs that load a memory image
-# (M9: or generate / open a disk image, or run Plaso).
+# (M9: or generate / open a disk image, or run Plaso; M10: or start a JVM / Ghidra).
 # Lane 9 (M9 phase 1, RT27): cyberlab_b9_test, Redis / broker db 9; M10 and M11 reuse it.
 # `--print-lock-root` prints the slot lock root and exits (M7 restore drill, RT25).
 # Lane N uses database cyberlab_bN_test, app Redis db N and broker db N, so lanes never
@@ -36,7 +38,7 @@ if [ "${1:-}" = "--service" ]; then
   shift 2
 fi
 case "$service" in
-  api-test|report-worker-test|memory-worker-test|disk-worker-test) ;;
+  api-test|report-worker-test|memory-worker-test|disk-worker-test|re-worker-test|static-worker-test) ;;
   *) echo "unsupported lane service: $service" >&2; exit 2 ;;
 esac
 need=1
@@ -102,7 +104,8 @@ if [ "$service" = "api-test" ]; then
     -e TEST_LANE="$lane" \
     api-test "$@"
 else
-  # The renderer and the memory / disk analyzers hold no DB or app Redis settings: only the lane's
-  # broker db, which compose interpolates into its BROKER_URL through TEST_BROKER_DB.
+  # The renderer and the memory / disk / RE / static analyzers hold no DB or app Redis settings:
+  # only the lane's broker db, which compose interpolates into its BROKER_URL through
+  # TEST_BROKER_DB.
   docker compose --profile test run --rm --no-deps "$service" "$@"
 fi

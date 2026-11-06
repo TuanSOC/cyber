@@ -383,6 +383,38 @@ x-api-healthcheck: &api-healthcheck
   timeout: 5s
   retries: 30
 
+# Untrusted reverse-engineering analyzer (M10): Ghidra 12.2 headless via PyGhidra (JDK 25) and
+# optional radare2 6.2.6 over an attacker-controlled PE / ELF sample, offline, one confined JVM
+# (or radare2) process per stage (uid 10010, seccomp AF_UNIX only + no io_uring, rlimits).
+# The M3 isolation: root process with the analyzers' six capabilities, `analysis` only (broker
+# + MinIO presigned URLs, no egress), env BROKER_URL only (broker user `reverse`). 4 GiB for
+# one JVM + the decompiler child; one heavy analysis (memory / disk / reverse) at a time
+# platform-wide (ANALYSIS_HEAVY_MAX_ACTIVE, RT2). `/work` is a named volume (Ghidra projects of
+# hundreds of MiB; a root watchdog kills the tool uid above RE_MAX_WORK_BYTES, RT5). pids_limit
+# stays above the stages' RLIMIT_NPROC (256) so root can always fork its kill helper (RT13).
+x-re-worker: &re-worker
+  image: cyberlab/re-worker:dev
+  build:
+    context: ./apps/workers/reverse
+    target: dev
+    additional_contexts:
+      jobs: ./packages/py-jobs
+      worker_kit: ./packages/py-worker-kit
+      static_samples_c: ./apps/workers/static/samples/c
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  cap_add: [SETUID, SETGID, KILL, CHOWN, DAC_OVERRIDE, FOWNER]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 512
+  mem_limit: 4g
+  cpus: 2
+  tmpfs:
+    - /tmp:size=64m,mode=1700
+    - /dev/shm:size=1m,mode=1700
+  restart: unless-stopped
+  networks: [analysis]
+
 # Networks: the api trusts X-Forwarded-For from any peer, so only the gateway and the
 # data services share its network. The web container cannot reach the api directly.
 # `backend` has no egress (M4): nothing on it needs the internet at runtime (see
@@ -533,6 +565,8 @@ services:
       # M8 memory analyzer: the same default rule.
       BROKER_MEMORY_PASSWORD: ${BROKER_MEMORY_PASSWORD:-change-me-broker-memory}
       BROKER_DISK_PASSWORD: ${BROKER_DISK_PASSWORD:-change-me-broker-disk}
+      # M10 reverse-engineering analyzer: the same default rule.
+      BROKER_REVERSE_PASSWORD: ${BROKER_REVERSE_PASSWORD:-change-me-broker-reverse}
     volumes:
       - ./infra/redis-broker:/init:ro
     networks: [backend, analysis, enrich]
@@ -773,6 +807,21 @@ services:
       redis-broker:
         condition: service_healthy
 
+  # Reverse-engineering analyzer (M10): consumes `reverse.analyze` (queue `reverse`). Phase 1:
+  # every job fails `not_implemented` (the Ghidra runner lands in phase 2).
+  re-worker:
+    <<: *re-worker
+    environment:
+      BROKER_URL: redis://reverse:${BROKER_REVERSE_PASSWORD:-change-me-broker-reverse}@redis-broker:6379/0
+    volumes:
+      - ./apps/workers/reverse/re_worker:/srv/workers/reverse/re_worker:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+      - ./packages/py-worker-kit:/packages/py-worker-kit:ro
+      - re_work:/work
+    depends_on:
+      redis-broker:
+        condition: service_healthy
+
   # Trusted disk ingest (M9, RT9): its own solo process on the queue `ingest_disk`, so one
   # long disk transaction never delays the shared ingest queue (reaper, correlation, other
   # analyzers). The ingest worker validates the `finished` event and hands it off here.
@@ -973,6 +1022,13 @@ services:
       DISK_MAX_ACTIVE_TOTAL: "1000"
       TEST_BROKER_DISK_URL: redis://disk:${BROKER_DISK_PASSWORD:-change-me-broker-disk}@redis-broker:6379/${TEST_BROKER_DB:-1}
       TEST_BROKER_INGEST_URL: redis://ingest:${BROKER_INGEST_PASSWORD}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      # M10: tests create many memory / disk / reverse jobs (the heavy cap has its own tests,
+      # which set it back to 1), the RE per-org cap, the `quick` profile available to the
+      # request tests, and the RE analyzer's broker URL (ACL tests).
+      ANALYSIS_HEAVY_MAX_ACTIVE: "1000"
+      RE_MAX_ACTIVE_PER_ORG: "100"
+      RE_QUICK_ENABLED: "true"
+      TEST_BROKER_REVERSE_URL: redis://reverse:${BROKER_REVERSE_PASSWORD:-change-me-broker-reverse}@redis-broker:6379/${TEST_BROKER_DB:-1}
     volumes:
       - ./apps/api:/srv/api
       - ./packages/py-jobs:/packages/py-jobs
@@ -1236,6 +1292,35 @@ services:
       redis-broker:
         condition: service_healthy
 
+  # RE worker tests (M10): `/work` is an anonymous per-container volume (disk-backed, removed
+  # with `--rm`, still isolated per container; RT22: a tmpfs would count against the 4 GiB
+  # cgroup), bind mounts of the sources (the M8 RT6 pattern). Every JVM run is `--heavy`.
+  re-worker-test:
+    <<: *re-worker
+    profiles: ["test"]
+    environment:
+      BROKER_URL: redis://reverse:${BROKER_REVERSE_PASSWORD:-change-me-broker-reverse}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      QUEUE_PREFIX: "test."
+      WORKER_QUEUE: reverse
+      # The replay engine (hand-written stage outputs) is refused unless this is set.
+      TEST_PROFILE: "1"
+      RUFF_CACHE_DIR: /tmp/ruff
+      MYPY_CACHE_DIR: /tmp/mypy
+    volumes:
+      - ./apps/workers/reverse/re_worker:/srv/workers/reverse/re_worker:ro
+      - ./apps/workers/reverse/tests:/srv/workers/reverse/tests:ro
+      - ./apps/workers/reverse/samples:/srv/workers/reverse/samples:ro
+      - ./apps/workers/reverse/dataset:/srv/workers/reverse/dataset:ro
+      - ./apps/workers/reverse/r2:/srv/workers/reverse/r2:ro
+      - ./apps/workers/reverse/docker:/srv/workers/reverse/docker:ro
+      - ./apps/workers/reverse/pyproject.toml:/srv/workers/reverse/pyproject.toml:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+      - ./packages/py-worker-kit:/packages/py-worker-kit:ro
+      - /work
+    depends_on:
+      redis-broker:
+        condition: service_healthy
+
   # The disk ingest worker on the test DB, buckets and broker db (`test.ingest_disk`).
   disk-ingest-worker-test:
     profiles: ["test"]
@@ -1358,6 +1443,8 @@ volumes:
   disk_work:
   disk_hashsets:
   disk_hashsets_test:
+  # M10: the RE worker's scratch (Ghidra projects; wiped after each job).
+  re_work:
   # ai-mock's test-only request mirror (its /tmp; read-only in api-test): see ai-mock.
   ai_mock_state:
   # Created and refreshed by scripts/e2e.mjs (fixed name so the script can address it).
