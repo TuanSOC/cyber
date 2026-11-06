@@ -11,6 +11,7 @@ import { MemoryUploadOption } from "@/components/memory/memory-upload-option";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError, errorMessage } from "@/lib/api";
+import { diskUploadErrorText } from "@/lib/disk";
 import { memoryUploadErrorText } from "@/lib/memory";
 import { type UploadHandle, uploadEvidence } from "@/lib/upload";
 
@@ -18,9 +19,9 @@ type Item = UploadItem;
 
 let nextId = 1;
 
-function describe(error: unknown, memory: boolean): string {
-  const memoryText = memory ? memoryUploadErrorText(error) : null;
-  if (memoryText) return memoryText;
+function describe(error: unknown, kind: "memory" | "disk" | undefined): string {
+  const kindText = kind === "memory" ? memoryUploadErrorText(error) : kind === "disk" ? diskUploadErrorText(error) : null;
+  if (kindText) return kindText;
   if (error instanceof ApiError) {
     if (error.code === "payload_too_large") return "File exceeds the maximum evidence size.";
     if (error.code === "aborted") return "Cancelled.";
@@ -43,6 +44,8 @@ export function EvidenceUploader({ orgId, investigationId }: { orgId: string; in
   const [description, setDescription] = useState("");
   // M8: upload the next files as memory images (`?kind=memory`, RT3); phase 9's option sets it.
   const [memory, setMemory] = useState(false);
+  // M9: upload the next files as disk image segments (`?kind=disk`); one option at a time.
+  const [disk, setDisk] = useState(false);
   const [dragging, setDragging] = useState(false);
   const busy = items.some((item) => item.state === "uploading" || item.state === "queued");
 
@@ -78,7 +81,7 @@ export function EvidenceUploader({ orgId, investigationId }: { orgId: string; in
         item.file,
         item.description,
         (p) => update(id, { progress: p }),
-        item.memory ? { kind: "memory" } : {},
+        item.memory ? { kind: "memory" } : item.disk ? { kind: "disk" } : {},
       );
       try {
         const evidence = await current.current.promise;
@@ -92,7 +95,7 @@ export function EvidenceUploader({ orgId, investigationId }: { orgId: string; in
           queryClient.invalidateQueries({ queryKey: ["org", orgId, "analyses"] }),
         ]);
       } catch (error) {
-        update(id, { state: "failed", error: describe(error, Boolean(item?.memory)) });
+        update(id, { state: "failed", error: describe(error, item?.memory ? "memory" : item?.disk ? "disk" : undefined) });
       }
     }
     current.current = null;
@@ -111,6 +114,7 @@ export function EvidenceUploader({ orgId, investigationId }: { orgId: string; in
       file,
       description: description.trim(),
       memory,
+      disk,
       progress: 0,
       state: "queued" as const,
     }));
@@ -137,9 +141,23 @@ export function EvidenceUploader({ orgId, investigationId }: { orgId: string; in
         value={description}
         onChange={(event) => setDescription(event.target.value)}
       />
-      <MemoryUploadOption value={memory} onChange={setMemory} disabled={busy} />
-      {/* M9 slot (phase 11): `?kind=disk` lands with phase 7. */}
-      <DiskUploadOption value={false} onChange={() => undefined} disabled={busy} />
+      <MemoryUploadOption
+        value={memory}
+        onChange={(next) => {
+          setMemory(next);
+          if (next) setDisk(false);
+        }}
+        disabled={busy}
+      />
+      {/* M9 (phase 11): each file becomes one disk image segment (`?kind=disk`). */}
+      <DiskUploadOption
+        value={disk}
+        onChange={(next) => {
+          setDisk(next);
+          if (next) setMemory(false);
+        }}
+        disabled={busy}
+      />
       <button
         type="button"
         onClick={() => input.current?.click()}

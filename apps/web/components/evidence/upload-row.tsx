@@ -11,6 +11,8 @@ export type UploadItem = {
   description: string;
   /** Uploaded with `?kind=memory` (M8). */
   memory?: boolean;
+  /** Uploaded with `?kind=disk`, one segment per file (M9). */
+  disk?: boolean;
   progress: number;
   state: "queued" | "uploading" | "done" | "failed";
   error?: string;
