@@ -1,7 +1,7 @@
 ---
 phase: 10
 title: "Docs threat model and audit quick wins"
-status: pending
+status: completed
 priority: P1
 effort: "8h"
 dependencies: [2, 3, 4, 5, 6, 7, 8, 9]
@@ -81,9 +81,9 @@ Document M7, close the documentation gaps and overclaims from `plans/reports/req
 5. Reconcile THREAT_INTEL, AI_ANALYST, REPORTS and SANDBOX_SECURITY with the code. Remove `scripts;C/`.
 
 ## Success Criteria
-- [ ] Every audit quick win (1–9) and every listed overclaim is fixed or recorded as already fixed. — Quick wins 1–6, 8 and 9 and every listed overclaim are fixed (9316433; see the notes). **Quick win 7 is open:** the M5 `plan.md` is `completed`, but the M6 phase files still say `status: pending` and `plans/reports/report-metric-*.md` does not exist. ROADMAP records it ("its gate-run metric report `report-metric-*.md` is not written yet"). Both are outside this phase's files.
+- [x] Every audit quick win (1–9) and every listed overclaim is fixed or recorded as already fixed. — Quick wins 1–6, 8 and 9 and every listed overclaim are fixed (9316433; see the notes). Quick win 7 is closed at the plan closure: `plans/reports/report-metric-261106.md` exists (floors met), and the M6 plan and phase files are `completed`. ROADMAP's M6 row still says the metric report is not written; that is a docs edit outside the plan files.
 - [x] The §11 mapping and the OpenSearch decision are documented, and the correlation module is described. — `docs/DATABASE.md` §11 mapping table (`analysis_results`, `threat_intelligence`, `attack_techniques`, `investigation_timeline`, `api_keys`, `forensic_artifacts` / `memory_findings`, `malware_findings`); `docs/ARCHITECTURE.md` "Platform operations (M7)" → "Correlation", "Search", "OpenSearch decision" (deferred, with the revisit criteria) (9316433).
-- [ ] DEPLOYMENT has tested-as-written backup, restore and retention runbooks and every new secret. THREAT_MODEL has the M7 section and the updated known gaps. — Written: DEPLOYMENT "Backup and restore (M7)" (what a backup is (TLP:RED), take, restore, drill), "SSE-S3 and the KMS key", "Object-store image", "Retention operations", the Prometheus scrape example, and the env table rows for every new secret; THREAT_MODEL "M7: platform operations" and the updated "Known gaps" (backups, view audit, rate limit, MinIO image) (9316433). **Pending gate:** "tested as written". Phase 11 runs the runbook commands during the drill.
+- [ ] DEPLOYMENT has tested-as-written backup, restore and retention runbooks and every new secret. THREAT_MODEL has the M7 section and the updated known gaps. — Written: DEPLOYMENT "Backup and restore (M7)" (what a backup is (TLP:RED), take, restore, drill), "SSE-S3 and the KMS key", "Object-store image", "Retention operations", the Prometheus scrape example, and the env table rows for every new secret; THREAT_MODEL "M7: platform operations" and the updated "Known gaps" (backups, view audit, rate limit, MinIO image) (9316433). **Left unticked:** backup and restore ran only through `pnpm restore:drill` (the scripts the runbook calls, 0 mismatches) and the MinIO switch's backup; nobody ran the runbook commands by hand as written, and the retention runbook was not run as written. The THREAT_MODEL part is met.
 - [x] ROADMAP, PRD, TESTING and README describe the current scope without overclaims. — ROADMAP M7 row ("done, pending its gate"), "Later" additions and the "Gated" link; PRD retitled ("Product Requirements", current scope M1–M7) with "Non-goals (current scope)"; TESTING rows (0.978, the parser posture row, ASR 0.290, the M7 suites and §13 / §14 rows); README (synthetic, TShark, no live model run, veraPDF not gated) (9316433). The M7 metric tables stay for phase 11 (pending gate).
 
 ## Risk Assessment
@@ -132,3 +132,4 @@ Document M7, close the documentation gaps and overclaims from `plans/reports/req
   - quick win 7's M6 bookkeeping: the M6 phase statuses and `report-metric-*.md` are outside this phase's files;
   - the M7 metric tables in TESTING, filled by phase 11.
 - **Pending gate:** running the runbooks as written (the phase-11 drill review), and the ROADMAP M7 row moving from "done, pending its gate".
+- **Closure (2026-11-06):** The drill ran the backup and restore scripts, but the runbooks were not run by hand as written (criterion left unticked). ROADMAP's M7 row still says "done, pending its gate" (docs, outside the plan files).

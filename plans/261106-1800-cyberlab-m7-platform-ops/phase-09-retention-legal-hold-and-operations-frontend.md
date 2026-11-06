@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Retention legal hold and operations frontend"
-status: pending
+status: completed
 priority: P1
 effort: "9h"
 dependencies: [1]
@@ -128,3 +128,4 @@ It builds against the phase-1 contracts with mocked fetch. No containers.
   - `apps/web/e2e/retention.spec.ts`: policy, preview, dry run, hold, purged evidence, viewer and operations.
 - **Copy review:** the "purge" and "legal hold" wording has no legal opinion and is reviewed in phase 11 (risk 2).
 - **Pending gate:** `e2e/retention.spec.ts` (phase 11) and the `pnpm verify` re-run on the final tree.
+- **Closure (2026-11-06):** `retention.spec.ts` passed in the dev e2e (vp8) and the prod e2e (steps 4 and 5 skipped in prod by design); the gate passed in segments, not in one `pnpm verify:prod` run (see the plan's Closure).

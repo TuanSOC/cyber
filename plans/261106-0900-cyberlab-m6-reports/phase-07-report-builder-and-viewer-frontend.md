@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Report builder and viewer frontend"
-status: pending
+status: completed
 priority: P1
 effort: "12h"
 dependencies: [1]
@@ -145,3 +145,4 @@ It builds against the phase-1 frozen contracts with mocked fetch.
   - The viewer-vs-PDF text comparison on the golden snapshot (planned for phase 9) was not written.
   - The web "Cited by" panel is deferred (ROADMAP).
   - The prod e2e is pending gate.
+- **Closure (2026-11-06):** The prod e2e passed over TLS (349 s) in the prod phase with the fixed gate (7d2a8e8); the gate passed in segments, not in one `pnpm verify:prod` run (see the plan's Closure).

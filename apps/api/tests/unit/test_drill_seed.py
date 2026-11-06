@@ -4,9 +4,12 @@ before any request, any owner write or any governance-bypass delete."""
 
 import io
 import json
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from minio import Minio
+from minio.error import S3Error
 
 from app.scripts import drill_seed
 
@@ -79,3 +82,92 @@ async def test_owner_rows_refuse_outside_the_drill(monkeypatch: pytest.MonkeyPat
     monkeypatch.setenv("DRILL_OWNER_DATABASE_URL", "postgresql+asyncpg://x:y@nowhere:1/z")
     with pytest.raises(drill_seed.DrillError, match="CYBERLAB_DRILL"):
         await drill_seed._seed_owner_rows({})
+
+
+class FakeStore:
+    """A root client stand-in: `deny_create` answers make_bucket as the 1001:1001 Silo wrapper
+    did on the original bitnami volume root (root:root 0775), 2026-11-06."""
+
+    def __init__(self, deny_create: bool = False, fail_put: bool = False) -> None:
+        self.deny_create = deny_create
+        self.fail_put = fail_put
+        self.buckets: dict[str, dict[str, bytes]] = {}
+        self.calls: list[str] = []
+
+    @staticmethod
+    def _error(code: str) -> S3Error:
+        return S3Error(code, code, "/", "req", "host", None)  # type: ignore[arg-type]
+
+    def make_bucket(self, bucket: str) -> None:
+        self.calls.append("make_bucket")
+        if self.deny_create:
+            raise self._error("AccessDenied")
+        self.buckets[bucket] = {}
+
+    def put_object(self, bucket: str, key: str, data: io.BytesIO, length: int) -> None:
+        self.calls.append("put_object")
+        if self.fail_put:
+            raise self._error("AccessDenied")
+        self.buckets[bucket][key] = data.read(length)
+
+    def get_object(self, bucket: str, key: str) -> Any:
+        body = self.buckets[bucket][key]
+
+        class Response:
+            def read(self) -> bytes:
+                return body
+
+            def close(self) -> None: ...
+
+            def release_conn(self) -> None: ...
+
+        return Response()
+
+    def remove_object(self, bucket: str, key: str, version_id: str | None = None) -> None:
+        self.calls.append("remove_object")
+        self.buckets[bucket].pop(key, None)
+
+    def list_objects(self, bucket: str, include_version: bool = False) -> list[Any]:
+        return [SimpleNamespace(object_name=k, version_id=None) for k in self.buckets[bucket]]
+
+    def remove_bucket(self, bucket: str) -> None:
+        self.calls.append("remove_bucket")
+        self.buckets.pop(bucket)
+
+
+def test_bucket_probe_creates_writes_reads_and_removes() -> None:
+    store = FakeStore()
+    record = drill_seed.bucket_probe(store, "abcd")  # type: ignore[arg-type]
+    assert record == {"check": "bucket_create", "ok": True, "bucket": "drill-probe-abcd"}
+    assert store.calls == [
+        "make_bucket",
+        "put_object",
+        "remove_object",
+        "remove_bucket",
+    ]
+    assert store.buckets == {}
+
+
+def test_bucket_probe_reports_access_denied_on_the_original_layout() -> None:
+    store = FakeStore(deny_create=True)
+    record = drill_seed.bucket_probe(store, "abcd")  # type: ignore[arg-type]
+    assert record["ok"] is False and record["code"] == "AccessDenied"
+    assert store.buckets == {}
+
+
+def test_bucket_probe_removes_the_bucket_after_a_failed_write() -> None:
+    store = FakeStore(fail_put=True)
+    record = drill_seed.bucket_probe(store, "abcd")  # type: ignore[arg-type]
+    assert record["ok"] is False and record["code"] == "AccessDenied"
+    assert store.buckets == {}, "the probe bucket must not be left behind"
+
+
+def test_root_client_needs_the_drill_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DRILL_MINIO_ROOT_USER", "root")
+    monkeypatch.setenv("DRILL_MINIO_ROOT_PASSWORD", "pw")
+    monkeypatch.setenv("MINIO_ENDPOINT", "minio:9000")
+    assert isinstance(drill_seed._root_client(), Minio)
+    for name in ("DRILL_MINIO_ROOT_USER", "DRILL_MINIO_ROOT_PASSWORD"):
+        monkeypatch.delenv(name)
+    with pytest.raises(drill_seed.DrillError, match="DRILL_MINIO_ROOT_USER"):
+        drill_seed._root_client()

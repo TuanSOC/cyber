@@ -383,9 +383,7 @@ def _on_since(h: LegalHold) -> datetime:
     return h.s3_synced_at - SYNC_SKEW
 
 
-def _plan(
-    h: LegalHold, on: bool, at: datetime, query: TextClause, params: dict[str, Any]
-) -> _Plan:
+def _plan(h: LegalHold, on: bool, at: datetime, query: TextClause, params: dict[str, Any]) -> _Plan:
     cursor, pass_at = _resume(h, on, at)
     return _Plan(h, on, query, params, cursor, pass_at, _on_since(h) if on else _EPOCH)
 

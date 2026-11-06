@@ -3,9 +3,9 @@
 Date: 2026-11-07. Branch: `feat/m7-platform-ops`. Follows from
 `plans/reports/researcher-261106-m7-object-store.md`, recommendation (a).
 
-**Status:** the files are new only, and nothing has been pulled, built, started or switched. The
-switch happens only if three gates all pass: the backup, the isolated conformance suite and the
-restore drill into the new image.
+**Status (2026-11-06): switched and folded into `docker-compose.yml`.** See
+[Result](#result-2026-11-06) at the end. The sections below are the plan as prepared, corrected
+where the wrapper user changed (`1001:1001` -> `1001:0`).
 
 ## Facts re-verified on 2026-11-06 (registry HTTP API and GitHub API; no `docker pull`)
 
@@ -109,7 +109,7 @@ after the switch.
 **The fix:** `infra/minio/silo/Dockerfile` builds a local wrapper image,
 `localhost/cyberlab/silo:RELEASE.2026-10-26T00-00-00Z`:
 - It is built `FROM pgsty/silo:RELEASE.2026-10-26T00-00-00Z@sha256:7bb2…`.
-- It adds `USER 1001:1001` and a `chown 1001:1001 /data`.
+- It adds `USER 1001:0` and a `chown 1001:0 /data` (first prepared as `1001:1001`, see Result).
 - Its CMD is `server /data --console-address :9001 --certs-dir /tmp/minio-certs`.
 
 With the wrapper:
@@ -149,7 +149,7 @@ node scripts/minio-switch.mjs run [--lane 6] [--prod]
    - The candidate equals the pin.
    - The attestation verifies, with `gh`, else `cosign`, else a refusal unless `--skip-attestation`.
 2. **Build the wrapper:** `docker compose -f docker-compose.yml -f infra/minio/silo/docker-compose.silo.yml build minio`.
-   This pulls the base by digest. Then it asserts that `Config.User` is `1001:1001`.
+   This pulls the base by digest. Then it asserts that `Config.User` is `1001:0`.
 3. **Back up:** `runBackup` (`pnpm backup`) writes into a new Docker volume,
    `cyberlab-switch_pre-silo-<utc>`, labelled `cyberlab.switch=pre-silo`. This volume is the
    rollback anchor and is kept. The backup runs with `restart: false`, so the writers stay
@@ -227,7 +227,7 @@ reads only a host directory. It refuses in three cases:
    bitnami MinIO, creating fresh buckets and then removing them.
 5. **Fresh-volume ownership relies on BuildKit keeping the `chown` of the VOLUME path.** Docker
    Desktop uses BuildKit by default. On the legacy builder, run
-   `docker run --rm -v <vol>:/data postgres:17.11-alpine chown 1001:1001 /data`.
+   `docker run --rm -v <vol>:/data postgres:17.11-alpine chown 1001:0 /data`.
 6. **Prod KMS key file:** it must be readable by uid 1001, which is no change from bitnami.
 7. **Git Bash rewrites `/data` arguments.** The script passes it internally, so it is unaffected.
 8. **Unverified:**
@@ -255,3 +255,68 @@ reads only a host directory. It refuses in three cases:
 - The drill model with `MINIO_IMAGE=<wrapper>` / `MINIO_DATA_DIR=/data` resolves `/data` and uses
   the image's CMD.
 - The candidate model resolves `pgsty/silo@sha256:7bb2…`.
+
+## Result (2026-11-06)
+
+**First activation failed, non-destructively.** `node scripts/minio-switch.mjs run` passed all three
+gates (backup into `cyberlab-switch_pre-silo-20261106t071907z`, the isolated conformance suite
+with RT7, the restore drill into the wrapper). After activation the wrapper (then `1001:1001`)
+read and wrote every existing bucket, but the conformance suite against the live store failed
+with 13 `AccessDenied` errors: it could not create new buckets.
+
+- **Root cause:** the bitnami volume root `/data` is `root:root 0775`. Bitnami runs as uid 1001,
+  **gid 0**, and creates buckets through the group write bit. The bucket dirs are `1001:0`, so
+  existing buckets worked.
+- **Why the gates missed it:** the candidate ran as root on a fresh volume, and the drill
+  restores the original layout (BusyBox `tar --numeric-owner -xpf` of `./` restores `0:0 0775`,
+  checked) but never created a bucket after the restore.
+- **Fix:** the wrapper runs as `1001:0` (Dockerfile `USER` / `chown`, overlay, `WRAPPER_USER`).
+  Silo had already rewritten `.minio.sys`, so bitnami was not started again and nothing was
+  rolled back.
+- **Gates added:**
+  - `preflight` stats the live `cyberlab_miniodata` root (read-only helper) and refuses when the
+    wrapper user cannot create entries in it (`checkDataDirLayout`; unit tests cover
+    `0:0 0775` with `1001:1001`, which is refused, and with `1001:0`, which is accepted).
+  - The restore drill's `check` creates, writes, reads and removes a new bucket on the
+    restored, original layout (`bucket_create`, `drill_seed.bucket_probe`; unit-tested). The full
+    drill was not rerun.
+
+**Re-activation (wrapper `1001:0`, the original volume, `.env` with the `.env.silo` lines):**
+
+| Check | Result |
+| --- | --- |
+| minio healthy, `minio-init` | passed (buckets, SSE-S3, users and policies) |
+| bucket probe (`mcli mb --with-lock`, put, get, rm, rb) as root | passed |
+| `lane-test.sh 6 … test_object_store_conformance.py` (live store) | 13 passed, 1 skipped (RT7 restart step) |
+| `lane-test.sh 2 … test_storage_minio.py test_evidence.py` | 29 passed |
+| dev stack `docker compose up -d --wait` | all services healthy |
+
+**Folded into `docker-compose.yml`:**
+- `image: ${MINIO_IMAGE:-localhost/cyberlab/silo:RELEASE.2026-10-26T00-00-00Z}` with a `build:`
+  section (context `infra/minio/silo`, `SILO_BASE` pinned to the index digest) and
+  `pull_policy: never`. A fresh clone builds the wrapper on its first `up`; this was checked
+  with a throwaway tag.
+- `TARGET_IMAGE` (the same interpolation as the tag) makes the Dockerfile refuse to build under
+  any other tag, so a bitnami `MINIO_IMAGE` can never become the tag of a Silo build. Checked:
+  `MINIO_IMAGE=example.invalid/guard:test docker compose build minio` fails.
+- `user: "1001:0"`, `read_only: ${MINIO_READ_ONLY:-true}`, a `/tmp` tmpfs, `cap_drop: [ALL]`,
+  `no-new-privileges`, `pids_limit: 512`, and `MINIO_DATA_DIR` defaulting to `/data`. Backup,
+  restore and the drill now get the hardening too.
+- The overlay keeps the build, the literal tag, the command and the data dir. The hardening was
+  removed from it, because compose merges list fields and duplicated `security_opt` is invalid.
+- The suites above were rerun on the folded model, with no overlay: conformance 13 passed and
+  1 skipped, storage and evidence 29 passed, and the bucket probe passed.
+
+**Rollback (unchanged in substance):** a full restore of
+`cyberlab-switch_pre-silo-20261106t071907z` onto bitnami. `.env` now needs
+`MINIO_IMAGE=bitnamilegacy/minio:2025.5.24 MINIO_DATA_DIR=/bitnami/minio/data MINIO_READ_ONLY=false`,
+because the compose defaults are Silo's (`rollbackSteps`). Keep the backup volume until the
+switch has run for a while.
+
+RT7 against the live store on the folded model also passed: `OBJECT_STORE_RESTART_PHASE=prepare`,
+`docker compose restart minio`, then `=verify`. This used a lane-6 `api-test` run with the
+lane-test env, because `lane-test.sh` cannot pass `-e`.
+
+**Still open:**
+- the full restore drill on the folded model;
+- `pnpm verify`.

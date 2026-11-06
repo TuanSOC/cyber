@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Foundation contracts migration 0012 and renderer service"
-status: pending
+status: completed
 priority: P1
 effort: "22h"
 dependencies: []
@@ -200,7 +200,7 @@ After this phase the stack runs as before:
 - [x] `reports` and `reports-test` exist with object lock and no default retention. `api-test` uses `reports-test`, and the MinIO policy has no delete on either. — `integration/test_m6_foundation.py::test_reports_test_bucket_is_locked_and_the_api_user_cannot_delete`; `unit/test_config.py::test_report_defaults`; `infra/minio/init.sh` (`mc mb --with-lock` for both, no default retention), `api-policy.template.json` without `DeleteObject*` (ad5b65e). Only `reports-test` is probed by a test; `reports` is created by the same line.
 - [x] The M5 prompt-pin test is unchanged (`policy_excluded` is not rendered). The timeline answers with nullable `evidence_id` and accepts `kinds`, and the M5 timeline and AI tests stay green. — `test_share_policy.py::test_policy_count_is_stored_but_not_rendered`; `test_m6_foundation.py::test_timeline_accepts_kinds_and_case_events_have_no_evidence`; API suite 3718 passed / 44 skipped with the M5 suites unchanged (ad5b65e).
 - [x] Every new route exists as a 501 stub with frozen schemas. The contracts are generated and committed, and the IDOR enumerator lists every route. Unfilled routes are reported as pending (`PENDING_ROUTES`), never silently passed. — 40 routes (17 + 14 + 4 + 5) as 501 stubs; `packages/contracts/{openapi.json,src/schema.d.ts}` committed in ad5b65e; `security/test_idor_routes.py::test_pending_routes_are_real_routes_without_cases`, `test_every_org_scoped_route_has_an_idor_case`; `test_m6_foundation.py::test_m6_routes_check_membership_first_and_validate_bodies`. All four `PENDING_ROUTES` are now empty (`test_every_m6_route_is_in_the_schema_and_none_is_pending`, 319f04d).
-- [ ] `pnpm verify` is green. — **pending gate.** Its parts passed in ad5b65e (API 3718 passed, kit 40, pcap 48, static 252, report 29, web typecheck + eslint + 322 vitest, dev e2e 8 passed), but no combined `pnpm verify` run is recorded; the final `pnpm verify:prod` covers it.
+- [x] `pnpm verify` is green. — Met by the dev phase of gate run vp8 (2026-11-06, the pre-fix gate): API suite 4915 passed / 53 skipped / 1 xfailed, the dynamic gate, the enrich / ingest / analyst network checks, the TI and AI key-leak tests, workers, web, contracts (no drift), gateway, dev e2e and the four env checks. Its parts had passed earlier in ad5b65e (API 3718 passed, kit 40, pcap 48, static 252, report 29, web typecheck + eslint + 322 vitest, dev e2e 8 passed). Not one uninterrupted `verify:prod` run: see the plan's Closure.
 
 ## Risk Assessment
 - **Editing M4 / M5 files** right after their gates: `ai/service_runs`, `ai/context/builder`, `ai/contracts`, `workers/analyst` (70 KB), `threat_intel/service_runs`, `workers/enrich` (47 KB), the timeline and the worker kit. The changes are additive call sites and defaulted parameters only. The full M4 and M5 suites and the pcap and static isolation suites must stay green before the phase is committed (RT3, RT10, RT20).
@@ -304,3 +304,4 @@ Written at the end of phase A (code) and verified in phase B (containers: dev st
   - the `check-report-env.mjs` gate script: replaced by phase 9's `scripts/check-report-worker-env.mjs` (e6e0665);
   - the web `AI_ERROR_TEXT.policy_blocked`: done in phase 6 (`lib/ai.ts`).
 - **Open:** `pnpm verify` / `pnpm verify:prod` on the final tree (pending gate).
+- **Closure (2026-11-06):** The `pnpm verify` / `verify:prod` item above: the gate passed in segments, not in one `pnpm verify:prod` run (see the plan's Closure).

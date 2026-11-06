@@ -9,7 +9,7 @@ description: >-
   with a citation appendix. An isolated, sandboxed WeasyPrint report-worker
   (no egress, no JS, no fetches, rlimits) renders it to PDF/A-3a, HTML and Markdown
   (DOCX deferred, RT12).
-status: pending
+status: completed
 priority: P1
 effort: 113h
 branch: "feat/m6-reports"
@@ -315,15 +315,15 @@ They also checked PyPI, OSV / GHSA, the WeasyPrint 70.0 docs and source, python-
 
 | Phase | Name | Group | Depends on | Status |
 |-------|------|-------|------------|--------|
-| 1 | [Foundation contracts migration 0012 and renderer service](./phase-01-foundation-contracts-migration-0012-and-renderer-service.md) | A | — | Pending |
-| 2 | [Case management API notes IOC collections status and TLP](./phase-02-case-management-api-notes-ioc-collections-status-and-tlp.md) | B (2a, lane 2) | 1 | Pending |
-| 3 | [Report snapshot versioning citations and signing](./phase-03-report-snapshot-versioning-citations-and-signing.md) | B (2b, lane 3) | 1 | Pending |
-| 4 | [Isolated report renderer worker](./phase-04-isolated-report-renderer-worker.md) | B (2c, lane 4 + report-worker-test) | 1 | Pending |
-| 5 | [ATT&CK case mapping and timeline export](./phase-05-att-ck-case-mapping-and-timeline-export.md) | B (2d, lane 5) | 1 | Pending |
-| 6 | [Case management frontend](./phase-06-case-management-frontend.md) | B (2e, web only) | 1 (frozen contracts) | Pending |
-| 7 | [Report builder and viewer frontend](./phase-07-report-builder-and-viewer-frontend.md) | B (2f, web only) | 1 (frozen contracts) | Pending |
-| 8 | [Docs and threat model](./phase-08-docs-and-threat-model.md) | C | B merged | Pending |
-| 9 | [Hardening e2e metric and gate](./phase-09-hardening-e2e-metric-and-gate.md) | D | all | Pending |
+| 1 | [Foundation contracts migration 0012 and renderer service](./phase-01-foundation-contracts-migration-0012-and-renderer-service.md) | A | — | Completed |
+| 2 | [Case management API notes IOC collections status and TLP](./phase-02-case-management-api-notes-ioc-collections-status-and-tlp.md) | B (2a, lane 2) | 1 | Completed |
+| 3 | [Report snapshot versioning citations and signing](./phase-03-report-snapshot-versioning-citations-and-signing.md) | B (2b, lane 3) | 1 | Completed |
+| 4 | [Isolated report renderer worker](./phase-04-isolated-report-renderer-worker.md) | B (2c, lane 4 + report-worker-test) | 1 | Completed |
+| 5 | [ATT&CK case mapping and timeline export](./phase-05-att-ck-case-mapping-and-timeline-export.md) | B (2d, lane 5) | 1 | Completed |
+| 6 | [Case management frontend](./phase-06-case-management-frontend.md) | B (2e, web only) | 1 (frozen contracts) | Completed |
+| 7 | [Report builder and viewer frontend](./phase-07-report-builder-and-viewer-frontend.md) | B (2f, web only) | 1 (frozen contracts) | Completed |
+| 8 | [Docs and threat model](./phase-08-docs-and-threat-model.md) | C | B merged | Completed |
+| 9 | [Hardening e2e metric and gate](./phase-09-hardening-e2e-metric-and-gate.md) | D | all | Completed |
 
 Effort (RT13): 22 + 12 + 15 + 16 + 8 + 10 + 12 + 6 + 12 = 113 h, with DOCX cut. Critical path: 1 → max(B) → 8 → 9, about 22 + 16 + 6 + 12 = 56 h of wall time with six group-B agents.
 
@@ -479,3 +479,15 @@ Effort (RT13): 22 + 12 + 15 + 16 + 8 + 10 + 12 + 6 + 12 = 113 h, with DOCX cut. 
 - **Policy windows (RT20):** manual TI lookups are not case-scoped, and a provider call already in flight when a flag flips completes.
 - **Lane memory:** `report-worker-test` (1 GB) plus two API lanes within `LANE_SLOTS=3` fits the M5 budget (5–8 GB free) only if the analyzers stay stopped.
 - **Contract drift:** the frontend builds against stubs. Any schema change after phase 1 is a parent broadcast; the merge step checks for drift.
+
+## Closure (2026-11-06)
+
+**Completed**, with one caveat: the gate passed **in segments**. A single uninterrupted `pnpm verify:prod` pass was not achieved, because the host ran out of memory or the session limit interrupted it. The segments:
+- **Dev phase**, gate run vp8 (2026-11-06, before the M7 fixes): API suite 4915 passed / 53 skipped / 1 xfailed, the dynamic gate, the enrich / ingest / analyst network checks, the TI and AI key-leak tests, workers, web, contracts (no drift), gateway, dev e2e and the four env checks.
+- **Prod phase**, rerun with the fixed gate (7d2a8e8) in its own compose project `cyberlab-prod`: every step passed, including the four env checks, prod health, the signing keys, the headers and the prod e2e over TLS (349 s).
+
+The M6 metric is in `plans/reports/report-metric-261106.md`, and every floor is met: citations 662/662, `verify_report` 76/76, tamper detection 190/190, 0 hostile escapes, deterministic renders 38/38 per format. veraPDF was not run (recorded, never gating).
+
+Still open, recorded in the phase files: `test_policy_pipeline.py` (phase 9) and the "Cited by" panel (deferred, ROADMAP).
+
+**A single-pass `pnpm verify:prod` will be run at M8 closure.**

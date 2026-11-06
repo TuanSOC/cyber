@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Case management frontend"
-status: pending
+status: completed
 priority: P1
 effort: "10h"
 dependencies: [1]
@@ -140,3 +140,4 @@ The phase builds against the phase-1 frozen contracts (`packages/contracts/src/s
   - `ioc-parts.test.tsx` (4), `lib/ioc-collections.test.ts` (7), `lib/case-attack.test.ts` (6), `timeline.test.tsx` (3);
   - `policy-blocked.test.tsx` (5), `lib/api.test.ts` (5).
   - Web total: 446 passed (phase 9). Dev e2e: all 7 specs pass. The prod e2e is pending gate.
+- **Closure (2026-11-06):** The prod e2e passed over TLS (349 s) in the prod phase with the fixed gate (7d2a8e8); the gate passed in segments, not in one `pnpm verify:prod` run (see the plan's Closure).

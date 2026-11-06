@@ -45,6 +45,8 @@ import {
   loadEnv,
   lockAllSlots,
   parseArgs,
+  runHelper,
+  volumeName,
 } from "./lib/stack.mjs";
 
 // --- the pin (verified 2026-11-06 against the Docker Hub registry API and the GitHub attestation) -
@@ -58,7 +60,9 @@ export const SILO = Object.freeze({
   signerWorkflow: "pgsty/silo/.github/workflows/docker-release.yml",
 });
 export const WRAPPER_IMAGE = `localhost/cyberlab/silo:${SILO.tag}`;
-export const WRAPPER_USER = "1001:1001";
+// uid 1001, gid 0: exactly bitnami's user. The bitnami volume root is root:root 0775, so new
+// buckets are created through its group 0 write bit; 1001:1001 got AccessDenied (2026-11-06).
+export const WRAPPER_USER = "1001:0";
 export const SILO_DATA_DIR = "/data";
 export const BITNAMI_DATA_DIR = "/bitnami/minio/data";
 export const SILO_DIR = "infra/minio/silo";
@@ -69,6 +73,9 @@ export const CANDIDATE_PROJECT = "cyberlab-objstore";
 export const MAIN_PROJECT = "cyberlab";
 export const SWITCH_LABEL = "cyberlab.switch=pre-silo";
 export const DEFAULT_LANE = 6;
+// Since the switch was folded into docker-compose.yml (2026-11-06) the defaults are the
+// wrapper's; the bitnami rollback sets these in .env (bitnami cannot run read-only).
+export const BITNAMI_ROLLBACK_ENV = Object.freeze(["MINIO_IMAGE=bitnamilegacy/minio:2025.5.24", `MINIO_DATA_DIR=${BITNAMI_DATA_DIR}`, "MINIO_READ_ONLY=false"]);
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const CONFORMANCE_DEPS = ["postgres", "redis", "minio"];
 
@@ -144,6 +151,33 @@ export function candidateEnv(env, { lane = DEFAULT_LANE, password, silo = SILO }
     CONFORMANCE_MIGRATION_DATABASE_URL: urls.migration,
     CONFORMANCE_REDIS_URL: urls.redis,
   };
+}
+
+// `stat -c '%u %g %a'` of a data dir root -> { uid, gid, mode }.
+export function parseStat(text) {
+  const m = typeof text === "string" ? text.trim().match(/^(\d+) (\d+) ([0-7]{3,4})$/) : null;
+  if (!m) throw new StackError(`unexpected stat output: ${JSON.stringify(text)}`);
+  return { uid: Number(m[1]), gid: Number(m[2]), mode: parseInt(m[3], 8) };
+}
+
+// Can `user` ("uid:gid", no supplementary groups) create entries (new buckets) in a directory?
+// POSIX order: the owner bits apply to the owner alone, the group bits to the group alone.
+export function canCreateIn({ uid, gid, mode }, user = WRAPPER_USER) {
+  const [u, g] = String(user).split(":").map(Number);
+  if (!Number.isInteger(u) || !Number.isInteger(g)) throw new StackError(`not a uid:gid user: ${user}`, 2);
+  if (u === 0) return true;
+  const wx = (shift) => ((mode >> shift) & 0o3) === 0o3;
+  if (uid === u) return wx(6);
+  if (gid === g) return wx(3);
+  return wx(0);
+}
+
+// The ORIGINAL volume's root must take new buckets from the wrapper's user (the 2026-11-06
+// failure: every existing bucket worked, a new one got AccessDenied).
+export function checkDataDirLayout(stat, user = WRAPPER_USER) {
+  if (canCreateIn(stat, user)) return [];
+  const mode = stat.mode.toString(8).padStart(4, "0");
+  return [`the MinIO data dir root is ${stat.uid}:${stat.gid} ${mode}: ${user} cannot create a bucket in it (fix the wrapper user, never chown the live volume blindly)`];
 }
 
 export function backupVolumeName(date = new Date()) {
@@ -222,7 +256,7 @@ export function rollbackSteps({ backupVolume, prod = false } = {}) {
     `# Silo cannot be downgraded in place (durable IAM revocation history, .minio.sys metadata).`,
     `# Rollback = restore the pre-switch backup onto the bitnami image. Writes since the backup are lost.`,
     composeLine(files, "stop"),
-    "remove MINIO_IMAGE / MINIO_DATA_DIR (and COMPOSE_FILE) from .env: back to the bitnami defaults",
+    `set ${BITNAMI_ROLLBACK_ENV.join(" ")} in .env (and remove COMPOSE_FILE): the compose default is the Silo wrapper since the fold; have the bitnami image local (pull_policy never)`,
     `docker compose -p ${MAIN_PROJECT} ${mainComposeFiles({ prod }).map((f) => `-f ${f}`).join(" ")} down -v   # DELIBERATE: removes the current volumes`,
     `node scripts/minio-switch.mjs rollback --backup-volume ${backupVolume}${prod ? " --prod" : ""}`,
     `docker volume rm ${backupVolume}   # only once the rollback, or the switch, has been verified`,
@@ -231,13 +265,13 @@ export function rollbackSteps({ backupVolume, prod = false } = {}) {
 
 export function planSequence({ prod = false, lane = DEFAULT_LANE } = {}) {
   return [
-    `preflight: bitnami model, files, pin ${SILO.repository}@${SILO.indexDigest}, provenance (gh attestation verify)`,
+    `preflight: bitnami model, files, pin ${SILO.repository}@${SILO.indexDigest}, provenance (gh attestation verify), ${volumeName(MAIN_PROJECT, "miniodata")} root writable by ${WRAPPER_USER}`,
     composeLine(mainComposeFiles({ prod, overlay: true }), `build minio   # ${WRAPPER_IMAGE} FROM the pinned digest`),
     `backup (runBackup) -> docker volume cyberlab-switch_pre-silo-<utc stamp> (label ${SWITCH_LABEL}); writers and MinIO stay stopped`,
     composeLine(mainComposeFiles({ prod }), `up -d --no-build --no-deps ${CONFORMANCE_DEPS.join(" ")}`),
     `docker ${candidateComposeArgs(["up -d --wait candidate"]).join(" ")}; run --rm conformance (lane ${lane}); RT7 prepare, restart candidate, verify; down -v (guarded)`,
     composeLine(mainComposeFiles({ prod }), "stop"),
-    `pnpm restore:drill --${prod ? " --prod" : ""} --target-minio-image ${WRAPPER_IMAGE} --target-minio-data-dir ${SILO_DATA_DIR}`,
+    `pnpm restore:drill --${prod ? " --prod" : ""} --target-minio-image ${WRAPPER_IMAGE} --target-minio-data-dir ${SILO_DATA_DIR}   # check: bucket_create on the restored (original) layout`,
     `write ${ENV_SUGGESTION}; print the activation and the rollback`,
   ];
 }
@@ -294,10 +328,17 @@ export function preflight({ prod = false, skipAttestation = false, env = loadEnv
   const facts = stackFacts(compose);
   errors.push(...checkCurrentStack(facts));
   candidateRef(env);
+  errors.push(...checkDataDirLayout(dataDirStat(volumeName(MAIN_PROJECT, "miniodata"))));
   if (errors.length) throw new StackError(`preflight failed:\n  - ${errors.join("\n  - ")}`, 2);
   console.log(`  current: ${facts.minioImage} on ${facts.minioDataDir}`);
   verifyAttestation({ skip: skipAttestation });
   return { compose, facts };
+}
+
+// The live volume's root, read-only (helper image, no network).
+export function dataDirStat(volume, { runner = exec } = {}) {
+  const out = runHelper({ mounts: [{ type: "volume", source: volume, target: "/data", readonly: true }], cmd: ["stat", "-c", "%u %g %a", "/data"], quiet: true, exec: runner });
+  return parseStat(out.stdout.toString());
 }
 
 function buildWrapper({ prod }) {
