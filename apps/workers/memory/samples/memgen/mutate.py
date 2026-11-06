@@ -182,15 +182,20 @@ FAMILIES: dict[str, tuple[str, Callable[[random.Random], bytes]]] = {
 }
 
 
-def mutants(seed: int, count: int = 50) -> Iterator[Mutant]:
-    """`count` mutants, round-robin over the families (each family seeded from `seed`), so
-    every family appears once `count >= len(FAMILIES)`. Lazy: one 16 MiB image at a time."""
+def mutant(seed: int, n: int) -> Mutant:
+    """The `n`-th mutant of a seed: families round-robin, each seeded from (seed, n)."""
     names = list(FAMILIES)
+    family = names[n % len(names)]
+    fmt, helper = FAMILIES[family]
+    rng = random.Random(f"{seed}:{n}:{family}")
+    return Mutant(name=f"{family}#{n}", family=family, fmt=fmt, data=helper(rng))
+
+
+def mutants(seed: int, count: int = 50) -> Iterator[Mutant]:
+    """`count` mutants (`mutant(seed, 0..count-1)`), so every family appears once
+    `count >= len(FAMILIES)`. Lazy: one 16 MiB image at a time."""
     for n in range(count):
-        family = names[n % len(names)]
-        fmt, helper = FAMILIES[family]
-        rng = random.Random(f"{seed}:{n}:{family}")
-        yield Mutant(name=f"{family}#{n}", family=family, fmt=fmt, data=helper(rng))
+        yield mutant(seed, n)
 
 
-__all__ = ["FAMILIES", "Mutant", "mutants"]
+__all__ = ["FAMILIES", "Mutant", "mutant", "mutants"]

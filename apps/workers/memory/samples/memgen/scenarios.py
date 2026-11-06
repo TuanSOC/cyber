@@ -1,8 +1,8 @@
 """The synthetic Linux scenarios (M8 phase 4). Benign and hand-written: plausible process trees
 of a small server, nothing taken from a real machine.
 
-- `linux_benign`: about 30 processes (kernel threads under kthreadd, systemd and its services,
-  an SSH session, nginx and PostgreSQL workers);
+- `linux_benign`: 34 processes (kernel threads under kthreadd, systemd and its services, an
+  SSH session, nginx and PostgreSQL workers, a cron update check whose URL is an IOC);
 - `linux_orphan_and_dup`: the benign tree plus a process whose parent exited (its ppid names
   no listed process) and a second process named `systemd` (a user manager, uid 1000);
 - `linux_wide`: 2 000 processes (the row-cap and tree tests);
@@ -62,6 +62,10 @@ def linux_benign() -> Scenario:
              start_s=3600),
         Proc(1206, 1205, "bash", uid=1000, gid=1000, args=("-bash",), start_s=3601),
         Proc(1300, 1206, "top", uid=1000, gid=1000, args=("top",), start_s=3700),
+        # An update check from cron: its URL gives the job IOCs (a domain and a URL).
+        Proc(1400, 541, "curl", args=("curl", "-fsS", "--max-time", "10",
+                                      "https://updates.example.com/agent/check?channel=stable"),
+             start_s=3900),
     ]  # fmt: skip
     return Scenario("linux_benign", tuple(procs), seed=1)
 

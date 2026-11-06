@@ -57,6 +57,26 @@ docker([
   "-c", "python -m samples.generate /tmp/samples >/dev/null && cp /tmp/samples/downloader_imports.bin /tmp/samples/packed_like.bin /out/static/ && chmod -R a+rX /out",
 ]);
 
+// M8 phase 11: the synthetic Linux memory image (LiME) of memory.spec.ts, from the memory
+// worker's own generator (stdlib only; the sources are mounted, so a stale image still writes
+// the current one). Dev only: its ISF (our own, for a fictional kernel) goes into the stack's
+// symbol store through the operator tool (idempotent: `unchanged` on later runs), so the real
+// engine resolves it. The prod-like stack's store stays untouched and the spec skips there.
+const memgenSrc = resolve("apps/workers/memory/samples");
+const memgen = ["run", "--rm", "--user", "0", "-v", `${memgenSrc}:/srv/workers/memory/samples:ro`];
+docker([
+  ...memgen, "-v", `${VOLUME}:/out`, "--entrypoint", "sh", "cyberlab/memory-worker:dev", "-c",
+  "mkdir -p /out/memory && python -m samples.memgen --scenario linux_benign --format lime --out /out/memory/synthetic.lime && chmod -R a+rX /out/memory",
+]);
+if (!PROD) {
+  docker([
+    ...memgen, "-v", `${resolve(".memory-import")}:/out`, "--entrypoint", "python", "cyberlab/memory-worker:dev",
+    "-m", "samples.memgen", "--isf-out", "/out/cyberlab-synthetic-6.1.0.json.xz",
+  ]);
+  sh(`${COMPOSE} --profile tools run --rm memory-symbols-init`);
+  sh("node scripts/memory-symbols.mjs import --file cyberlab-synthetic-6.1.0.json.xz");
+}
+
 // Dev: the `mock` providers' sinks (their keys reach the e2e container through compose
 // interpolation, never through this script's output). Prod has no sink: the specs assert
 // the mocks are refused there. ai-mock is recreated so it forgets the markers it has seen.

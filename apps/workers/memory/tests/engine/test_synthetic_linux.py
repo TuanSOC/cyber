@@ -16,6 +16,7 @@ succeed; `linux.malware.check_syscall` runs and finds no table (ok, no rows); `l
 import gzip
 import hashlib
 import os
+import shutil
 import time
 import uuid
 from pathlib import Path
@@ -231,3 +232,40 @@ def test_a_truncated_image_ends_cleanly(dirs: sandbox.JobDirs, store: Path) -> N
         assert _processes(lines) == {}
     assert sandbox.tool_pids() == []
     assert hashlib.sha256(ws.image.read_bytes()).digest() == hashlib.sha256(data).digest()
+
+
+def test_importing_the_missing_isf_makes_a_rerun_succeed(
+    dirs: sandbox.JobDirs, store: Path, tmp_path: Path
+) -> None:
+    """Phase 11's symbols-missing path on the worker side: the changed-banner image gives the
+    diagnostic; `memory:symbols import` of its ISF (the same `import_file` + reindex the CLI
+    runs) into the store; the re-run of the same image succeeds with that ISF."""
+    data = wrap(build(scenario("symbols_missing")), "raw")
+    ws = Workspace(dirs, store)
+    ws.image.write_bytes(data)
+    os.chmod(ws.image, 0o444)
+    config = load({"BROKER_URL": "redis://x", "MEMORY_SYMBOLS_DIR": str(store)})
+    with pytest.raises(analyzer.DiagnosticResult):
+        analyzer.analyze_image(
+            ws, _job("triage", len(data)), VolatilityEngine(config), SymbolStore(store)
+        )
+    source = tmp_path / "unknown.json.xz"
+    source.write_bytes(isf_xz(UNKNOWN_BANNER))
+    assert [c.action for c in import_isf.import_file(store, source).changes] == ["added"]
+    assert reindex.reindex(store, required_root=Path(os.path.abspath(store))) >= 2
+    for out in [d for d in dirs.root.iterdir() if d.name.endswith("-out")]:
+        shutil.rmtree(out)
+    (dirs.root / analyzer.RESULT).unlink(missing_ok=True)
+    lines = _lines(
+        analyzer.analyze_image(
+            ws, _job("triage", len(data)), VolatilityEngine(config), SymbolStore(store)
+        )
+    )
+    header = lines[0]
+    assert header.symbols.status == "resolved"
+    unknown = next(
+        f for f in read_manifest(store).files if f.identity == LinuxBanner(banner=UNKNOWN_BANNER)
+    )
+    assert header.symbols.isf_sha256 == unknown.sha256
+    assert {p.plugin: p.status for p in header.plugins} == TRIAGE
+    assert len(_processes(lines)) == len(scenario("symbols_missing").procs)

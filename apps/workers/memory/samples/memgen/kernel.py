@@ -317,9 +317,41 @@ def isf_xz(banner: str = BANNER) -> bytes:
     return lzma.compress(isf_json(banner), format=lzma.FORMAT_XZ, preset=6)
 
 
+# The Windows kernel identity of the replay engine's row fixtures
+# (`tests/fixtures/vol_rows/windows/identify.json`).
+REPLAY_WINDOWS_PDB = {"name": "ntkrnlmp.pdb", "guid": "0123456789ABCDEF0123456789ABCDEF", "age": 1}
+
+
+def windows_identity_isf(name: str, guid: str, age: int) -> dict[str, Any]:
+    """An ISF that names a Windows kernel PDB and describes nothing else (base types only):
+    it lets the symbol store resolve the replay fixtures' identity in a pipeline run. The
+    replay engine never loads it; Volatility could not analyse anything with it."""
+    return {
+        "metadata": {
+            "format": ISF_FORMAT,
+            "producer": dict(PRODUCER),
+            "windows": {"pdb": {"GUID": guid, "age": age, "database": name, "machine_type": 34404}},
+        },
+        "base_types": {
+            type_name: {"kind": kind, "size": size, "signed": signed, "endian": "little"}
+            for type_name, (kind, size, signed) in BASE_TYPES.items()
+        },
+        "user_types": {},
+        "enums": {},
+        "symbols": {},
+    }
+
+
+def windows_identity_isf_xz(pdb: dict[str, Any] = REPLAY_WINDOWS_PDB) -> bytes:
+    doc = windows_identity_isf(str(pdb["name"]), str(pdb["guid"]), int(pdb["age"]))
+    raw = json.dumps(doc, sort_keys=True, separators=(",", ":")).encode("ascii")
+    return lzma.compress(raw, format=lzma.FORMAT_XZ, preset=6)
+
+
 __all__ = [
     "BANNER",
     "IMAGE_BYTES",
+    "REPLAY_WINDOWS_PDB",
     "ISF_NAME",
     "KERNEL_MAP",
     "PF_KTHREAD",
@@ -332,4 +364,6 @@ __all__ = [
     "isf_xz",
     "kva",
     "resolve",
+    "windows_identity_isf",
+    "windows_identity_isf_xz",
 ]

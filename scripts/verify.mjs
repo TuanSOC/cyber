@@ -7,6 +7,7 @@
 // phase always runs in its own project, `<dev project>-prod` (scripts/lib/gate.mjs): dev MinIO
 // writes its IAM with the dev KMS key, which the prod key cannot read.
 import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 
 import { composeCommand, gateProjects, prodE2eEnv, withoutComposeEnv } from "./lib/gate.mjs";
 
@@ -145,6 +146,10 @@ async function verifyProd() {
     "Retention-worker envs: retention role, broker user and purge keys only, backend only; no api policy legal hold; prod secrets not dev",
     "node scripts/check-retention-worker-env.mjs",
   );
+  run(
+    "Memory-worker envs: broker URL only, analysis only, read-only symbols; memory-symbols on symbols_egress only; tool uid 10006",
+    "node scripts/check-memory-worker-env.mjs",
+  );
   // The dev stack stops first (host memory; containers and volumes kept): the prod stack runs
   // in its own project with its own volumes, and `restoreDev()` starts the dev stack again.
   run(
@@ -222,9 +227,22 @@ function restoreDev() {
 try {
   run("Dev stack up", "docker compose up -d --build --renew-anon-volumes --wait --wait-timeout 300");
   // Celery workers do not hot-reload: recreate them so the gate tests the current code.
+  // M8 phase 11: the test symbol store holds our synthetic ISFs (the phase-4 Linux kernel and
+  // the identity-only ISF of the replay fixtures' Windows PDB), written by the memory worker's
+  // generator into the operator import dir and imported through the trusted tool (idempotent).
+  // The changed-banner image's ISF is never imported: its run must end `symbols_missing`.
+  run(
+    "Memory: synthetic ISFs into the import dir",
+    `docker compose --profile test run --rm --no-deps -v "${resolve(".memory-import")}:/out" --entrypoint python memory-worker-test -m samples.memgen --isf-out /out/cyberlab-synthetic-6.1.0.json.xz --windows-isf-out /out/cyberlab-replay-windows.json.xz`,
+    { MSYS_NO_PATHCONV: "1" },
+  );
+  run("Memory: test symbol store ownership", "docker compose --profile tools run --rm memory-symbols-init");
+  for (const file of ["cyberlab-synthetic-6.1.0.json.xz", "cyberlab-replay-windows.json.xz"]) {
+    run(`Memory: import ${file} into the test store`, `node scripts/memory-symbols.mjs --store test import --file ${file}`);
+  }
   run(
     "Workers: reload code",
-    "docker compose --profile test up -d --force-recreate --no-deps pcap-worker pcap-worker-test static-worker static-worker-test ingest-worker ingest-beat enrich-worker enrich-worker-test ti-mock analyst-worker analyst-worker-test ai-mock report-worker report-worker-test retention-worker retention-worker-test",
+    "docker compose --profile test up -d --force-recreate --no-deps pcap-worker pcap-worker-test static-worker static-worker-test ingest-worker ingest-beat enrich-worker enrich-worker-test ti-mock analyst-worker analyst-worker-test ai-mock report-worker report-worker-test retention-worker retention-worker-test memory-worker memory-worker-test",
   );
   run(
     "API: ruff, format, mypy --strict, pytest",
@@ -232,8 +250,29 @@ try {
     // the real AI pipeline (analyst-worker-test + ai-mock); live TI / AI tests skip.
     // REPORT_E2E=1 (M6): the render pipeline tests go through report-worker-test, which the
     // reload step started on the default lane's broker db.
-    'docker compose --profile test run --rm -e CYBERLAB_LIVE_TI=0 -e AI_EVAL_LIVE=0 -e REPORT_E2E=1 api-test sh -c "uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest -q"',
+    // MEMORY_E2E=volatility3 (M8): the memory pipeline tests go through memory-worker-test
+    // (the real engine, the test symbol store), which the reload step started.
+    'docker compose --profile test run --rm -e CYBERLAB_LIVE_TI=0 -e AI_EVAL_LIVE=0 -e REPORT_E2E=1 -e MEMORY_E2E=volatility3 api-test sh -c "uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest -q"',
   );
+  // M8: the Windows row fixtures through the broker and the ingest, with memory-worker-test
+  // recreated on the replay engine (test profile only), then back on the real engine.
+  run(
+    "Memory: memory-worker-test on the replay engine",
+    "docker compose --profile test up -d --force-recreate --no-deps memory-worker-test",
+    { MEMORY_TEST_ENGINE: "replay" },
+  );
+  try {
+    run(
+      "Memory pipeline: the replay engine (Windows rows)",
+      "docker compose --profile test run --rm -e MEMORY_E2E=replay api-test uv run pytest -q -p no:cacheprovider tests/integration/test_memory_pipeline.py",
+    );
+  } finally {
+    spawnSync("docker compose --profile test up -d --force-recreate --no-deps memory-worker-test", {
+      shell: true,
+      stdio: "inherit",
+      env: { ...process.env, MEMORY_TEST_ENGINE: "volatility3" },
+    });
+  }
   // The dynamic-analysis gate's broker and compose checks (M7 phase 7) read repository files
   // that api-test does not mount, so they skip there: run them on the host (stdlib, pytest
   // and PyYAML only, no app import; see the test's docstring).

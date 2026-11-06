@@ -839,6 +839,9 @@ services:
       - ai_mock_state:/srv/ai-mock-state:ro
       # The gateway config (M7: test_internal_metrics.py checks it never routes /internal/*).
       - ./infra/caddy:/srv/infra/caddy:ro
+      # M8 phase 11: the synthetic memory image generator (stdlib only), so the memory
+      # pipeline test builds its images in-process; read-only.
+      - ./apps/workers/memory/samples:/srv/memgen/samples:ro
     networks: [backend]
     depends_on:
       postgres:
@@ -1038,6 +1041,9 @@ services:
       WORKER_QUEUE: memory
       # The replay engine (hand-written rows) is refused unless this is set (test profile).
       TEST_PROFILE: "1"
+      # M8 phase 11: the gate runs the pipeline test once per engine (MEMORY_TEST_ENGINE=replay
+      # recreates this consumer for the Windows replay run); the real engine by default.
+      MEMORY_ENGINE: ${MEMORY_TEST_ENGINE:-volatility3}
       RUFF_CACHE_DIR: /tmp/ruff
       MYPY_CACHE_DIR: /tmp/mypy
     tmpfs:

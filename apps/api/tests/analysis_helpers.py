@@ -83,7 +83,7 @@ def _connection() -> Connection:
 
 def purge_test_queues() -> None:
     with _connection() as conn:
-        for name in ("pcap", "static", "ingest", "enrich"):
+        for name in ("pcap", "static", "memory", "ingest", "enrich"):
             conn.default_channel.client.delete(broker_queue(name))
         # Declare the ingest binding (as the trusted side does in production): the analyzer
         # may only publish to it, never declare it.

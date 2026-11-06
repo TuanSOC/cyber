@@ -186,6 +186,23 @@ def test_the_isf_validates_against_volatility_schema() -> None:
     schema = json.loads((schemas / f"schema-{k.ISF_FORMAT}.json").read_text())
     jsonschema.Draft202012Validator(schema).validate(isf())
     jsonschema.Draft202012Validator(schema).validate(isf(UNKNOWN_BANNER))
+    jsonschema.Draft202012Validator(schema).validate(
+        k.windows_identity_isf(**k.REPLAY_WINDOWS_PDB)  # type: ignore[arg-type]
+    )
+
+
+def test_the_windows_identity_isf_names_the_replay_fixture_pdb() -> None:
+    fixture = Path(__file__).parents[1] / "fixtures" / "vol_rows" / "windows" / "identify.json"
+    assert json.loads(fixture.read_text())["pdb"] == k.REPLAY_WINDOWS_PDB
+    doc = json.loads(lzma.decompress(k.windows_identity_isf_xz()))
+    pdb = doc["metadata"]["windows"]["pdb"]
+    assert (pdb["database"], pdb["GUID"], pdb["age"]) == (
+        k.REPLAY_WINDOWS_PDB["name"],
+        k.REPLAY_WINDOWS_PDB["guid"],
+        k.REPLAY_WINDOWS_PDB["age"],
+    )
+    assert doc["user_types"] == {} and doc["symbols"] == {}
+    assert k.windows_identity_isf_xz() == k.windows_identity_isf_xz()
 
 
 def _lime_ranges(data: bytes) -> list[tuple[int, int, int]]:
@@ -286,5 +303,8 @@ def test_the_command_line(tmp_path: Path) -> None:
                         "--out", str(out), "--isf-out", str(isf_out)]) == 0  # fmt: skip
     assert out.read_bytes() == image_bytes("linux_orphan_and_dup", "lime")
     assert isf_out.read_bytes() == isf_xz()
+    windows = tmp_path / "w.json.xz"
+    assert memgen_main(["--windows-isf-out", str(windows)]) == 0
+    assert windows.read_bytes() == k.windows_identity_isf_xz()
     with pytest.raises(SystemExit):
         memgen_main([])
