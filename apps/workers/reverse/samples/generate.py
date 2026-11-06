@@ -1,0 +1,380 @@
+"""Synthetic, labelled RE sample set (M10 phase 4): benign C programs with known structure,
+built at test time, never committed as binaries and never executed.
+
+    python -m samples.generate /path/to/out [--no-bulk] [--no-edges] [--no-twins]
+
+Builds (dev image only: gcc, mingw-w64 x86 / x64, binutils; a missing tool skips its builds
+with the reason recorded under `_skipped`, as M3 does):
+- the fixtures of `samples/c/` (`callgraph`, `strings_refs`, `imports_use`, `elf_net`) and the
+  M3 programs `hello.c` / `injector.c` read in place from `/opt/samples/m3c` (never copied
+  into the repository; their `re:` annotations live in `M3_ANNOTATIONS` here);
+- `bulk_gen.c`, generated from `SEED` (about 5 000 functions with calls, switch tables and
+  string uses; -O2 only): the latency / memory worst case (RT21);
+- per target (`win64` / `win32` mingw-w64, `linux` PIE / `linux_nopie` gcc) and level (-O0,
+  -O2) an **unstripped** build (the truth) and a **stripped** copy (`strip -s`, the measured
+  input), with deterministic flags (`-fno-ident`, `--no-insert-timestamp`,
+  `--build-id=none`, `SOURCE_DATE_EPOCH=0`, relative paths in a per-build directory);
+- the structural edge cases of `samples/edges.py` (M3 PE builder) and the adversarial twins
+  of `samples/twins.py` (win64 -O0 DLLs).
+
+Out: `<name>.exe|.dll|.elf` per build, `truth/<unstripped name>.json` (samples/truth.py),
+`build/<name>/` (object, map, nm and objdump listings), `labels.json` (samples/labels.py:
+per sample format, arch, level, stripped, the expected function / edge / reference counts,
+the expected phase-5 findings and IOCs; `_skipped`, `_injections`, `_meta`).
+"""
+
+import argparse
+import hashlib
+import json
+import os
+import random
+import shutil
+import subprocess
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from cyberlab_worker.iocs import IocCollector
+
+from samples import edges, twins
+from samples.labels import check_labels
+from samples.truth import build_truth
+
+SEED = 20261107
+SRC = Path(__file__).parent / "c"
+M3_SRC = Path(os.environ.get("CYBERLAB_M3C", "/opt/samples/m3c"))
+OPTS = ("O0", "O2")
+BULK_FUNCTIONS = 5_000
+IOC_KINDS = frozenset({"url", "domain", "ip"})
+CAVEAT = (
+    "Synthetic benign programs built for this measurement: the numbers show how the engines "
+    "behave on small, known programs, not their quality on real samples."
+)
+BUILD_ENV = {"SOURCE_DATE_EPOCH": "0", "LC_ALL": "C", "TZ": "UTC"}
+
+# Annotations of the read-only M3 sources (prepended for truth only, never compiled).
+M3_ANNOTATIONS = {
+    "hello.c": "/* re: fn=checksum */\n/* re: fn=main\n * re: calls=checksum\n */\n",
+    "injector.c": (
+        "/* re: fn=inject\n"
+        " * re: import=OpenProcess, VirtualAllocEx, WriteProcessMemory, CreateRemoteThread, "
+        "WaitForSingleObject, CloseHandle\n"
+        " * re: finding=heuristic:re_api_set_function@1|api_injection|medium\n */\n"
+        "/* re: fn=main\n * re: calls=inject\n * re: string=--cyberlab-never-run\n"
+        " * re: string=CyberLab capa fixture (inert)\n */\n"
+    ),
+}
+
+
+@dataclass(frozen=True)
+class Target:
+    name: str
+    cc: str
+    prefix: str  # binutils prefix (strip / nm / objdump)
+    format: str
+    arch: str
+    ext: str
+    cflags: tuple[str, ...] = ()
+    ldflags: tuple[str, ...] = ()
+    pie: bool | None = None
+
+
+MINGW_LD = ("-Wl,--no-insert-timestamp",)
+TARGETS = {
+    "win64": Target("win64", "x86_64-w64-mingw32-gcc", "x86_64-w64-mingw32-", "pe", "x86_64",
+                    ".exe", ldflags=MINGW_LD),
+    "win32": Target("win32", "i686-w64-mingw32-gcc", "i686-w64-mingw32-", "pe", "x86", ".exe",
+                    ldflags=MINGW_LD),
+    "linux": Target("linux", "gcc", "", "elf", "x86_64", ".elf", ("-fPIE",),
+                    ("-pie", "-Wl,--build-id=none"), pie=True),
+    "linux_nopie": Target("linux_nopie", "gcc", "", "elf", "x86_64", ".elf", ("-fno-pie",),
+                          ("-no-pie", "-Wl,--build-id=none"), pie=False),
+}  # fmt: skip
+
+
+@dataclass(frozen=True)
+class Fixture:
+    stem: str
+    text: Callable[[], str]  # the C source compiled
+    targets: tuple[str, ...]
+    opts: tuple[str, ...] = OPTS
+    truth_prefix: str = ""  # annotations prepended for truth (M3 sources)
+    shared: bool = False
+    twin_of: str | None = None
+    plants: list[twins.Plant] = field(default_factory=list)
+
+
+def _read(path: Path) -> Callable[[], str]:
+    return lambda: path.read_text(encoding="utf-8")
+
+
+# --- bulk_gen.c -------------------------------------------------------------------------------
+
+
+def bulk_source(seed: int = SEED, count: int = BULK_FUNCTIONS) -> str:
+    """`bulk_gen.c`: `count` annotated functions, each a dense 8-way switch (a jump table at
+    -O2) calling up to three earlier functions and hashing one unique string."""
+    rng = random.Random(seed)
+    out = [
+        "/* CyberLab RE fixture: parsed only, never run. Generated by samples/generate.py",
+        f" * (bulk_source, seed {seed}, {count} functions): the latency / memory worst case.",
+        " */",
+        "#include <stdio.h>",
+        "",
+        "#define CL_NOINLINE __attribute__((noinline, noclone))",
+        "volatile int g_sink;",
+        "",
+        "/* re: fn=bulk_note */",
+        "CL_NOINLINE int bulk_note(const char *s) {",
+        "    int h = 0;",
+        "    while (*s) {",
+        "        h = h * 31 + *s++;",
+        "    }",
+        "    return h;",
+        "}",
+    ]
+    for i in range(count):
+        callees = sorted(rng.sample(range(i), k=min(i, rng.randint(1, 3))))
+        names = [f"bf_{c:05d}" for c in callees]
+        token = f"{rng.getrandbits(32):08x}"
+        literal = f"cyberlab-bulk-{i:05d}-{token}"
+        out += [
+            "",
+            f"/* re: fn=bf_{i:05d}",
+            f" * re: calls={', '.join([*names, 'bulk_note'])}",
+            f" * re: string={literal}",
+            " */",
+            f"CL_NOINLINE int bf_{i:05d}(int x) {{",
+            f"    int acc = x ^ {rng.getrandbits(16)};",
+            f"    switch ((x + {i}) & 7) {{",
+        ]
+        bodies = [f"acc += {name}(acc ^ {rng.getrandbits(8)});" for name in names]
+        bodies.append(f'acc ^= bulk_note("{literal}");')
+        while len(bodies) < 8:
+            op = rng.choice(["+=", "-=", "^=", "*="])
+            bodies.append(f"acc {op} {rng.randint(3, 4093)};")
+        rng.shuffle(bodies)
+        for case, body in enumerate(bodies):
+            out.append(f"    case {case}: {body} break;")
+        out += ["    default: acc = ~acc; break;", "    }", "    return acc + g_sink;", "}"]
+    last = [f"bf_{i:05d}" for i in range(max(0, count - 8), count)]
+    out += [
+        "",
+        "/* re: fn=main",
+        f" * re: calls={', '.join(last)}",
+        " */",
+        "int main(int argc, char **argv) {",
+        "    int acc = argc;",
+        *[f"    acc += {name}(acc);" for name in last],
+        "    (void)argv;",
+        '    printf("%d\\n", acc);',
+        "    return 0;",
+        "}",
+        "",
+    ]
+    return "\n".join(out)
+
+
+# --- builds -----------------------------------------------------------------------------------
+
+
+class Skip(Exception):  # noqa: N818 - a recorded reason, not an error
+    pass
+
+
+def _tool(name: str) -> str:
+    path = shutil.which(name)
+    if path is None:
+        raise Skip(f"{name} not installed")
+    return path
+
+
+def _run(argv: list[str], cwd: Path) -> str:
+    env = {**os.environ, **BUILD_ENV}
+    done = subprocess.run(  # noqa: S603 - fixed argv, test-time compilation of our own sources
+        argv, cwd=cwd, env=env, check=True, capture_output=True, text=True, encoding="utf-8",
+        errors="replace",
+    )  # fmt: skip
+    return done.stdout
+
+
+def _version(cc: str) -> str:
+    first = _run([cc, "--version"], Path.cwd()).splitlines()
+    return first[0][:200] if first else "unknown"
+
+
+def _expected_iocs(values: list[str]) -> list[dict[str, str]]:
+    collector = IocCollector(10_000)
+    for value in values:
+        collector.observe(value, "re_string")
+    return [
+        {"type": kind, "value": value}
+        for (kind, value) in sorted(collector.entries)
+        if kind in IOC_KINDS
+    ]
+
+
+def build_one(fixture: Fixture, target: Target, opt: str, out: Path) -> dict[str, Any]:
+    """Compile, link, strip and extract the truth of one build; returns its two labels."""
+    cc = _tool(target.cc)
+    strip, nm, objdump = (_tool(target.prefix + t) for t in ("strip", "nm", "objdump"))
+    suffix = twins.TWIN_SUFFIX if fixture.twin_of else ""
+    name = f"{fixture.stem}_{target.name}_{opt}{suffix}"
+    ext = ".dll" if fixture.shared else target.ext
+    work = out / "build" / name
+    shutil.rmtree(work, ignore_errors=True)
+    work.mkdir(parents=True)
+    source = fixture.text()
+    (work / f"{fixture.stem}.c").write_text(source, encoding="utf-8", newline="\n")
+    obj = f"{fixture.stem}.o"
+    _run([cc, "-c", f"-{opt}", "-fno-ident", *target.cflags, f"{fixture.stem}.c", "-o", obj],
+         work)  # fmt: skip
+    shared = ["-shared"] if fixture.shared else []
+    _run([cc, obj, "-o", f"{name}{ext}", *shared, *target.ldflags, f"-Wl,-Map={name}.map"], work)
+    _run([strip, "-s", "-o", f"{name}_stripped{ext}", f"{name}{ext}"], work)
+    nm_args = [nm, "--defined-only", "--numeric-sort"]
+    if target.format == "elf":
+        nm_args.append("--print-size")
+    nm_text = _run([*nm_args, f"{name}{ext}"], work)
+    objdump_text = _run([objdump, "-d", "--no-show-raw-insn", "-w", f"{name}{ext}"], work)
+    (work / f"{name}.nm.txt").write_text(nm_text, encoding="utf-8")
+    (work / f"{name}.objdump.txt").write_text(objdump_text, encoding="utf-8")
+    unstripped = (work / f"{name}{ext}").read_bytes()
+    stripped = (work / f"{name}_stripped{ext}").read_bytes()
+    truth = build_truth(
+        source=fixture.truth_prefix + source,
+        own_object=obj,
+        nm_text=nm_text,
+        map_text=(work / f"{name}.map").read_text(encoding="utf-8", errors="replace"),
+        objdump_text=objdump_text,
+        binary=unstripped,
+    )
+    (out / "truth").mkdir(exist_ok=True)
+    truth_path = f"truth/{name}.json"
+    truth_text = json.dumps(truth.to_json(), indent=1, ensure_ascii=False)
+    (out / truth_path).write_text(truth_text, encoding="utf-8")
+    (out / f"{name}{ext}").write_bytes(unstripped)
+    (out / f"{name}_stripped{ext}").write_bytes(stripped)
+
+    own = [f for f in truth.functions if not f.library]
+    base: dict[str, Any] = {
+        "kind": "twin" if fixture.twin_of else "build",
+        "source": f"{fixture.stem}.c",
+        "format": target.format,
+        "arch": target.arch,
+        "target": target.name,
+        "opt": opt,
+        "pie": target.pie,
+        "dll": fixture.shared,
+        "truth": truth_path,
+        "unstripped": name,
+        "expected_functions": {"all": len(truth.functions), "non_library": len(own)},
+        "edges": len(truth.edges),
+        "string_refs": len(truth.string_refs),
+        "import_refs": len(truth.import_refs),
+        "expected_findings": truth.findings,
+        "expected_iocs": _expected_iocs([r["value"] for r in truth.string_refs]),
+        "compiler": _version(cc),
+    }
+    if fixture.twin_of:
+        base["twin_of"] = fixture.twin_of
+    return {
+        name: {**base, "stripped": False, "file": f"{name}{ext}", "size_bytes": len(unstripped),
+               "sha256": hashlib.sha256(unstripped).hexdigest()},
+        f"{name}_stripped": {**base, "stripped": True, "file": f"{name}_stripped{ext}",
+                             "size_bytes": len(stripped),
+                             "sha256": hashlib.sha256(stripped).hexdigest()},
+    }  # fmt: skip
+
+
+def fixtures(*, bulk: bool = True, twin: bool = True) -> list[Fixture]:
+    items = [
+        Fixture("callgraph", _read(SRC / "callgraph.c"), ("win64", "win32", "linux")),
+        Fixture("strings_refs", _read(SRC / "strings_refs.c"), ("win64", "linux")),
+        Fixture("imports_use", _read(SRC / "imports_use.c"), ("win64", "win32")),
+        Fixture("elf_net", _read(SRC / "elf_net.c"), ("linux", "linux_nopie")),
+    ]
+    for m3 in ("hello.c", "injector.c"):
+        items.append(
+            Fixture(f"m3_{m3[:-2]}", _read(M3_SRC / m3), ("win64",),
+                    truth_prefix=M3_ANNOTATIONS[m3])  # fmt: skip
+        )
+    if bulk:
+        items.append(Fixture("bulk_gen", bulk_source, ("win64", "linux"), opts=("O2",)))
+    if twin:
+        for stem in ("strings_refs", "imports_use"):
+            text, plants = twins.twin_source((SRC / f"{stem}.c").read_text(encoding="utf-8"))
+            items.append(
+                Fixture(stem, lambda text=text: text, ("win64",), opts=("O0",), shared=True,
+                        twin_of=f"{stem}_win64_O0", plants=plants)  # fmt: skip
+            )
+    return items
+
+
+def generate(
+    out: Path, *, bulk: bool = True, edge_cases: bool = True, twin: bool = True
+) -> dict[str, Any]:
+    """The labelled set in `out` (created); returns the labels (also `out/labels.json`)."""
+    out.mkdir(parents=True, exist_ok=True)
+    labels: dict[str, Any] = {}
+    skipped: dict[str, str] = {}
+    injections: dict[str, Any] = {}
+    for fixture in fixtures(bulk=bulk, twin=twin):
+        for target_name in fixture.targets:
+            for opt in fixture.opts:
+                key = f"{fixture.stem}_{target_name}_{opt}"
+                if fixture.twin_of:
+                    key += twins.TWIN_SUFFIX
+                try:
+                    built = build_one(fixture, TARGETS[target_name], opt, out)
+                except Skip as reason:
+                    skipped[key] = str(reason)
+                    continue
+                except OSError as exc:  # an unreadable M3 source outside the dev image
+                    skipped[key] = f"source unavailable: {type(exc).__name__}"
+                    continue
+                labels.update(built)
+                if fixture.twin_of:
+                    plants = [p.as_json() for p in fixture.plants]
+                    for twin_name in built:
+                        injections[twin_name] = {"clean": fixture.twin_of, "plants": plants}
+    if edge_cases:
+        pe = edges.load_pe()
+        if pe is None:
+            skipped["edge_cases"] = "M3 PE builder (samples/pe.py) not found"
+        else:
+            samples = edges.build(pe)
+            for name, data in samples.items():
+                (out / f"{name}.bin").write_bytes(data)
+            for name, label in edges.labels(samples).items():
+                labels[name] = {**label, "file": f"{name}.bin",
+                                "sha256": hashlib.sha256(samples[name]).hexdigest()}  # fmt: skip
+    labels["_skipped"] = dict(sorted(skipped.items()))
+    labels["_injections"] = {"version": 1, "payloads": twins.catalog(), "twins": injections}
+    labels["_meta"] = {"version": 1, "seed": SEED, "caveat": CAVEAT}
+    check_labels(labels)
+    text = json.dumps(labels, indent=2, sort_keys=True, ensure_ascii=False)
+    (out / "labels.json").write_text(text, encoding="utf-8")
+    return labels
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(prog="python -m samples.generate")
+    parser.add_argument("out", type=Path)
+    parser.add_argument("--no-bulk", action="store_true", help="skip bulk_gen (slow -O2 build)")
+    parser.add_argument("--no-edges", action="store_true", help="skip the structural edge cases")
+    parser.add_argument("--no-twins", action="store_true", help="skip the adversarial twins")
+    args = parser.parse_args(argv)
+    labels = generate(
+        args.out, bulk=not args.no_bulk, edge_cases=not args.no_edges, twin=not args.no_twins
+    )
+    for name, label in sorted(labels.items()):
+        if not name.startswith("_"):
+            print(f"{name}: {label['file']}")
+    for name, reason in labels["_skipped"].items():
+        print(f"skipped {name}: {reason}")
+
+
+if __name__ == "__main__":
+    main()
