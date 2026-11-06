@@ -21,7 +21,7 @@ flowchart LR
   A --> M
 ```
 
-The analysis, threat-intel, AI, report and retention workers attach to this core; each has its own section below. Platform operations (backup and restore, retention, correlation, search, metrics) are described in [Platform operations (M7)](#platform-operations-m7).
+The analysis, threat-intel, AI, report and retention workers attach to this core; each has its own section below. Platform operations (backup and restore, retention, correlation, search, metrics) are described in [Platform operations (M7)](#platform-operations-m7). Memory forensics (M8, in progress) adds a third analyzer and an operator symbol tool: [Memory forensics (M8)](#memory-forensics-m8).
 
 - **One origin.** The gateway serves both the app and `/api`, so session cookies are first-party and `SameSite=Strict`.
 - **Networks.** `web` cannot reach `api` directly; only the gateway (and data services) share the api's network. uvicorn trusts `X-Forwarded-For` from its peers, which is safe only because of this isolation. Since M4 `backend` is `internal` (no egress); only the enrich-worker and (M5) the analyst-worker have a route out ([Networks](#networks-m4-m5-m6)).
@@ -46,6 +46,8 @@ apps/api/app/
     analysis/        analysis jobs: request (manual / auto on upload), dispatch per analyzer, lifecycle
     pcap_analysis/   pcap.v1 validation, ingest into tenant tables, read API (also findings / IOCs of every analyzer)
     static_analysis/ static.v1 validation, ingest, read API, JSON report
+    memory_analysis/ (M8, in progress) memory.v1 dispatch, ingest, read API, sensitivity (TLP:RED default,
+                     release); phase 1: models, schemas, 501 stubs, build_memory_message
     threat_intel/    (M4) catalog, normalization, sealing (seal.py: API; unseal.py: enrich worker only),
                      runs, cache, limiter, SSRF checks, provider adapters + HTTP client (enrich worker only),
                      integrations / runs / results API
@@ -233,7 +235,8 @@ flowchart LR
 | `backend` | **yes** since M4 | postgres, redis, redis-broker, minio, minio-init, migrate, api, ingest-worker, ingest-beat, gateway, api-test | no service here has a route out; the API cannot reach the internet even if compromised |
 | `enrich` | yes | postgres, redis-broker, enrich-worker(-test), analyst-worker(-test) | the trusted internet-facing workers' way to their data, and nothing else (no app Redis, MinIO, API or gateway) |
 | `egress` | no | enrich-worker(-test), analyst-worker(-test), ti-mock, ai-mock | the only route out |
-| `analysis` | yes | pcap-worker(-test), static-worker(-test), report-worker(-test) (M6), redis-broker, minio | the untrusted parsers and the renderer: the broker and presigned MinIO URLs only |
+| `analysis` | yes | pcap-worker(-test), static-worker(-test), report-worker(-test) (M6), memory-worker(-test) (M8), redis-broker, minio | the untrusted parsers and the renderer: the broker and presigned MinIO URLs only |
+| `symbols_egress` | no | memory-symbols, memory-symbols-test (M8, profile `tools`) | the operator symbol tool's own way out (Microsoft's symbol server); used by nothing else: no broker, Postgres, MinIO or other network |
 
 M7 adds `db-bootstrap` (one-shot) and `retention-worker(-test)` to `backend` only: Postgres, the broker and MinIO, no egress, no `analysis` network.
 
@@ -398,7 +401,7 @@ The performance numbers are recorded in [TESTING.md](TESTING.md#m7-metrics).
 
 ### Runtime metrics
 
-- `job_outcomes` (kind `pcap` / `static` / `ti` / `ai` / `report`, subkind, status, error code, queue and run milliseconds, finished at) is written only by triggers. `ops/error_classes.py` maps every error code to `parse | infra | policy | provider | input | other`; parse success = succeeded / (succeeded + failed `parse`). The retention worker deletes rows older than `RETENTION_JOB_OUTCOMES_DAYS` (90).
+- `job_outcomes` (kind `pcap` / `static` / `ti` / `ai` / `report`, and `memory` since 0016 (M8), subkind, status, error code, queue and run milliseconds, finished at) is written only by triggers. `ops/error_classes.py` maps every error code to `parse | infra | policy | provider | input | other`; parse success = succeeded / (succeeded + failed `parse`). The retention worker deletes rows older than `RETENTION_JOB_OUTCOMES_DAYS` (90).
 - **`GET /internal/metrics`** (Prometheus text 0.0.4, `no-store`): off (404) unless `METRICS_TOKEN_FILE` holds a token; 60 requests / min per peer; then the bearer token, compared in constant time, is the control (401 without it); a request carrying `X-Forwarded-For` or `Forwarded` gets 403 (defence in depth only: a backend caller can omit the header). Series: `cyberlab_jobs`, `cyberlab_job_failure_ratio`, `cyberlab_job_duration_seconds` (p50 / p95 / p99), `cyberlab_parse_success_ratio`, `cyberlab_job_failures_by_class`, `cyberlab_jobs_active`. Every label value comes from a fixed enum; no org id, user or free text.
 - **`GET /orgs/{org}/ops/metrics?window=`** (`audit.read`) computes the same numbers for one org from its own tenant tables through RLS, never from `job_outcomes`.
 - No Prometheus server runs in compose; DEPLOYMENT has a scrape config.
@@ -413,3 +416,36 @@ The performance numbers are recorded in [TESTING.md](TESTING.md#m7-metrics).
 ### Dynamic analysis (designed, not enabled)
 
 `packages/py-jobs/src/cyberlab_jobs/dynamic.py` freezes the `dynamic.v1` contract with `DYNAMIC_ENABLED = False`; nothing imports it, and `tests/unit/test_dynamic_gate.py` fails if an analyzer value, queue, broker user, compose service or route appears. The design (CAPE v2 on a dedicated KVM host, sinkhole-only egress, snapshot revert) and the gating checklist are in [SANDBOX_SECURITY.md](SANDBOX_SECURITY.md).
+
+## Memory forensics (M8)
+
+**In progress.** Only the phase-1 foundation is committed (untested in a container); the worker fails every job with `not_implemented` and the memory routes answer 501 until their phases land. Details and the build status per phase: [MEMORY_ANALYSIS.md](MEMORY_ANALYSIS.md).
+
+```mermaid
+flowchart LR
+  A[API] -->|memory.analyze| RB[(redis-broker<br/>ACL user memory)]
+  RB -->|queue memory| MW[memory-worker<br/>UNTRUSTED<br/>Volatility 3 v2.28.2, offline]
+  MW -->|presigned GET / POST| M[(MinIO)]
+  MW -->|ingest.event| RB
+  RB --> IW[ingest-worker<br/>trusted]
+  IW -->|memory.v1| P[(PostgreSQL)]
+  SV[(memory_symbols volume)] -->|read-only /symbols| MW
+  OP[operator: pnpm memory:symbols] --> MS[memory-symbols<br/>trusted tool, profile tools]
+  MS -->|writes| SV
+  MS -->|HTTPS, verified, suffix allow-list| MSDL((msdl.microsoft.com<br/>and its CDN))
+  subgraph analysis [analysis network: internal, no egress]
+    MW
+  end
+  subgraph symbols_egress [symbols_egress: the tool's own bridge]
+    MS
+  end
+```
+
+- **Third analyzer, same pattern.** `Analyzer.MEMORY` (PG enum value `memory`, 0016), its own Celery task `memory.analyze`, queue `memory`, broker ACL user `memory` (`analyzer_keys memory`: its own queue keys, write-only to ingest) and active-job caps (`MEMORY_MAX_ACTIVE_PER_ORG` 1, `MEMORY_MAX_ACTIVE_TOTAL` 2). Job profiles `triage` / `full` and `os_hint` `auto` / `windows` / `linux` (one `JobProfile` enum for static and memory). **Never automatic**: a `kind=memory` upload skips the automatic routing entirely (RT3), and the API refuses an automatic memory job.
+- **Untrusted side** (`apps/workers/memory`): the static worker's container isolation on `analysis` only (env `BROKER_URL` only), `mem_limit 3g`, `/work` on the named volume `memory_work`, the symbol store read-only at `/symbols`. Volatility 3 v2.28.2 runs in library mode, offline, one sandboxed process per allow-listed plugin as uid 10006 (seccomp AF_UNIX only without io_uring, a PEP 578 audit hook, a refusing file handler, rlimits, timeouts). Pending phase 2.
+- **Symbols offline.** The worker never fetches symbols. `memory-symbols` (the memory image as uid 10005, compose profile `tools`, never part of `up`, `mem_limit 2g`, network `symbols_egress` only, no secrets) is the only writer of the `memory_symbols` volume: it fetches Windows kernel PDBs over verified HTTPS on operator request and imports operator ISFs and local ISF zips (pending phase 5). A missing symbol becomes a diagnostic `memory.v1` result and a failed `symbols_missing` job naming what is needed.
+- **Trusted side.** The ingest worker dispatches by schema version: `memory.v1` is validated as a whole with its own framing bounds (RT9), then written in one transaction into `memory_images`, `memory_processes`, `memory_connections`, `memory_injections`, `memory_artifacts` plus the shared `analysis_findings`, `iocs` and `analysis_timeline`. A failed job with `symbols_missing` and a result version goes to the diagnostic ingester. Wired in phase 1 (`SUCCESS_INGESTERS`, `DIAGNOSTIC_INGESTERS`); the ingesters are pending phase 6.
+- **Sensitivity.** `memory_sensitivity` per evidence (`restricted` → `released` once) drives the M6 share policy: AI and TI excluded by default, reports include restricted memory rows only at TLP:RED (otherwise counted in `ReportSnapshot.omissions`). Pending phase 8.
+- **Analyzer sweep (RT1, built in phase 1).** Every former two-way analyzer branch has a memory arm: job links (`/memory/{job}`), search hrefs, case ATT&CK sources, timeline titles, ops metrics kinds, report citations and redaction, AI outputs; `tests/unit/test_analyzer_exhaustive.py` and `lib/analysis.test.ts` fail when a map misses an analyzer.
+- **License boundary.** Every Volatility-specific line stays in `apps/workers/memory/` (a VSL "Addition", see its `NOTICE.md`); the contract, ingest, API and web are tool-agnostic.
+- **Web** (pending phase 9): Memory Analysis (`/o/{org}/memory`, `/memory/{job}`) with processes, connections, injections, artifacts, findings, IOCs and timeline tabs, the per-plugin status, the symbols-missing panel and the restricted banner.

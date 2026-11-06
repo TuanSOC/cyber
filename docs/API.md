@@ -53,10 +53,10 @@ Base path `/api/v1`, served through the gateway. Interactive docs (dev only): `/
 | GET / PATCH | `/orgs/{org_id}/investigations/{investigation_id}` | `investigation.read` / `investigation.write` |
 | GET | `/orgs/{org_id}/investigations/{investigation_id}/evidence` | `evidence.read` |
 | GET | `/orgs/{org_id}/investigations/{investigation_id}/timeline?cursor&limit&kinds` (merged case timeline, M5; M6 adds the `note` and `status` kinds, without `evidence_id`) | `evidence.read` |
-| POST | `/orgs/{org_id}/investigations/{investigation_id}/evidence?filename&description` | `evidence.write` |
+| POST | `/orgs/{org_id}/investigations/{investigation_id}/evidence?filename&description&kind` (`kind=memory`, M8: a memory image, never auto-analyzed) | `evidence.write` |
 | GET | `/orgs/{org_id}/evidence/{evidence_id}` · `/download` · `/custody` | `evidence.read` |
 | POST | `/orgs/{org_id}/evidence/{evidence_id}/verify` · `/archive` | `evidence.write` |
-| POST | `/orgs/{org_id}/evidence/{evidence_id}/analyses` `{"analyzer":"pcap"}` or `{"analyzer":"static","profile":"full"\|"av"}` | `evidence.write` (20 manual runs / 10 min) |
+| POST | `/orgs/{org_id}/evidence/{evidence_id}/analyses` `{"analyzer":"pcap"}` or `{"analyzer":"static","profile":"full"\|"av"}` or (M8) `{"analyzer":"memory","profile":"triage"\|"full","os_hint":"auto"\|"windows"\|"linux"}` | `evidence.write` (20 manual runs / 10 min) |
 | GET | `/orgs/{org_id}/evidence/{evidence_id}/analyses` | `evidence.read` |
 | GET | `/orgs/{org_id}/analyses?status&analyzer&profile&investigation_id&latest_per_evidence` · `/orgs/{org_id}/analyses/{job_id}` (incl. `profile`, `summary`) | `evidence.read` |
 | GET | `/orgs/{org_id}/analyses/{job_id}/findings?severity&type` | `evidence.read` |
@@ -66,6 +66,8 @@ Base path `/api/v1`, served through the gateway. Interactive docs (dev only): `/
 | GET | static jobs: `/orgs/{org_id}/analyses/{job_id}/sample` · `/sections` · `/imports?library&q` · `/exports?q` · `/resources` | `evidence.read` |
 | GET | static jobs: `/orgs/{org_id}/analyses/{job_id}/strings?encoding&q` · `/signatures?engine=clamav\|yara` · `/capabilities?namespace&attack` | `evidence.read` |
 | GET | `/orgs/{org_id}/analyses/{job_id}/report` (static jobs) | `evidence.read` (audited) |
+| GET | memory jobs (M8, **501 until phase 7**): `/orgs/{org_id}/analyses/{job_id}/memory` · `/memory/processes?q&ppid&hidden&ref` · `/memory/processes/{pid}` · `/memory/connections?pid&q&ref` · `/memory/injections?pid&ref` · `/memory/artifacts?type&pid&q&ref` | `evidence.read` |
+| GET / POST | `/orgs/{org_id}/evidence/{evidence_id}/memory-sensitivity` · `…/memory-sensitivity/release` (M8, **501 until phase 8**) | `evidence.read` / `org.update` |
 | GET | `?ref=<row id>` on `/findings`, `/records`, `/alerts`, `/iocs`, `/timeline`, `/imports`, `/strings`, `/signatures`, `/capabilities`; `?ref=<flow_ref>` on `/flows` (M5: deep links to one cited row) | `evidence.read` |
 | GET | `/orgs/{org_id}/analyses/{job_id}/iocs?include=enrichment` (latest answer per provider on each IOC, M4) | `evidence.read` |
 | GET | `/orgs/{org_id}/integrations` (provider catalog + this org's status; never a key) · `/orgs/{org_id}/ti/settings` | `org.read` |
@@ -136,6 +138,8 @@ curl -X POST "https://host/api/v1/orgs/$ORG/investigations/$CASE/evidence?filena
 
 The body is the raw file (no multipart). Max 2 GiB (`MAX_EVIDENCE_BYTES`); at most 2 concurrent uploads per user. Each org has a storage quota (`DEFAULT_STORAGE_QUOTA_BYTES`, 20 GiB, unless an operator set a per-org value); active and archived evidence both count. An upload that would exceed it gets `413 storage_quota_exceeded`: before the body is read when `Content-Length` is declared, otherwise after spooling (the stored version is then discarded). Response includes `hashes.md5/sha1/sha256`. Downloads are `application/octet-stream` attachments with `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox`, `Cache-Control: no-store`.
 
+**Memory images (M8, in progress).** `?kind=memory` marks the upload as a memory image. Built in phase 1: such an upload gets **no automatic analysis of any kind** (RT3). Pending phase 6: the per-kind size limit `MEMORY_MAX_BYTES` (8 GiB default, at most 16 GiB; `413 memory_image_too_large`), the free-space check (`507 insufficient_storage`) and the TLP:RED default in the upload transaction (phase 8 logic). Until phase 6, a `kind=memory` upload is bounded by `MAX_EVIDENCE_BYTES` like any other. `CADDY_EVIDENCE_MAX` must cover the larger of the two limits ([DEPLOYMENT.md](DEPLOYMENT.md#memory-forensics-m8)). `EvidenceOut.memory_sensitivity` is `restricted`, `released` or null.
+
 M7 additions to `EvidenceOut`: `declared_type` (the extension family) and `type_mismatch` (declared vs detected by magic; write-once, NULL on older rows). A mismatch is audited `evidence.type_mismatch` and **never rejects the upload**. `purged_at` is set once retention purged the bytes (then download, verify and new analyses answer `410 evidence_purged`), and `legal_hold` tells whether a hold covers the evidence. `GET /evidence/{id}` and `GET /evidence/{id}/custody` are audited (`evidence.viewed`, `evidence.custody_viewed`), at most once per user, evidence and action every 15 minutes. `InvestigationOut.legal_hold` is the case-level flag.
 
 `investigations.allowed_transitions` lists the valid next statuses for the current one.
@@ -146,7 +150,7 @@ M7 additions to `EvidenceOut`: `declared_type` (the extension family) and `type_
   - pcap/pcapng magic → `pcap`;
   - PE or non-core ELF → `static`, profile `full`;
   - any other non-empty file ≤ `STATIC_MAX_BYTES` → `static`, profile `av` (ClamAV + YARA).
-- **Manual runs:** `analyzer` defaults to `pcap`. `profile` is only accepted for `static` and defaults to `full` there.
+- **Manual runs:** `analyzer` defaults to `pcap`. `profile` is accepted for `static` (`full` default, `av`) and, since M8, `memory` (`triage` default, `full`); `os_hint` (`auto` default, `windows`, `linux`) only for `memory`. A memory run is never automatic.
 - **Job fields:** `status` is `queued`, `running`, `succeeded` or `failed`; `error_code` is set on failure; `profile` is set for static jobs only.
 - **Results:** they appear only after the trusted ingest validated the whole result stream; see [PCAP_ANALYSIS.md](PCAP_ANALYSIS.md) and [MALWARE_ANALYSIS.md](MALWARE_ANALYSIS.md). Findings and IOCs of both analyzers are served by the shared `/findings` and `/iocs` routes.
 
@@ -155,8 +159,9 @@ Refusals when requesting a run:
 | Status | Code |
 |---|---|
 | 409 | `analysis_active` (a run of this evidence by the same analyzer is queued/running), `evidence_archived`, `investigation_archived` |
-| 413 | `capture_too_large` (> `PCAP_MAX_BYTES`), `sample_too_large` (> `STATIC_MAX_BYTES`, 64 MiB) |
-| 429 | `analysis_queue_full` (5 active per org / 50 overall, counted per analyzer), `rate_limited` |
+| 413 | `capture_too_large` (> `PCAP_MAX_BYTES`), `sample_too_large` (> `STATIC_MAX_BYTES`, 64 MiB), `memory_image_too_large` (> `MEMORY_MAX_BYTES`, M8) |
+| 422 | `memory_image_empty` (M8: an empty file as a memory image) |
+| 429 | `analysis_queue_full` (5 active per org / 50 overall, counted per analyzer; memory: 1 per org / 2 overall), `rate_limited` |
 
 Static result routes answer `404` for jobs of another analyzer, and `404 results_not_available` from `/sample` when the job has no stored results.
 
@@ -175,6 +180,8 @@ Job `error_code` values:
   - `enqueue_failed`.
   - `never_started`: the queue TTL expired.
 - **Static jobs** use the same input, transfer and trusted-side codes (`sample_too_large` instead of `capture_too_large`). A capped, skipped or incomplete engine does not fail the job: it is listed in the result's `engine_errors` (e.g. `av_not_fully_scanned`, `av_unavailable`, `capa_skipped`).
+
+- **Memory jobs** (M8, `MEMORY_ERROR_CODES`; written by the worker from phase 2): `symbols_missing` (with a diagnostic result naming the required symbols), `symbols_corrupt`, `memory_parse_failed`, `os_undetermined`, `unsupported_memory_format` (compressed or archived upload), `memory_image_too_large`, `memory_image_empty`, `insufficient_disk`, `identify_timeout`, `plugin_timeout`, `plugin_failed`, `engine_unavailable`, and `not_implemented` (every memory job until phase 2 lands). Per-plugin failures that do not fail the job are listed in the memory summary.
 
 Result lists are paged like every list. Text filters are case-insensitive substring matches with `%`/`_` escaped.
 
@@ -269,3 +276,33 @@ Design: [ARCHITECTURE.md](ARCHITECTURE.md#platform-operations-m7). Every route b
 **Evidence deletes by the api (phase 11).** The api's only object delete is the cleanup of a failed upload's version (never committed). It refuses, keeping the version for `reconcile_orphans.py`, when an evidence row records the key, when a legal hold (case or org, active or released within the delay) covers the case, or when that cannot be checked; a test pins it as the only api delete path (`unit/test_evidence_delete_paths.py`).
 
 **New audit actions:** `retention.policy_changed`, `retention.enforce_changed`, `retention.previewed`, `retention.run_requested`, `legal_hold.placed`, `legal_hold.released`, `evidence.purged`, `retention.run_completed` and `retention.run_downgraded` (an enforce run whose enforce is no longer effective runs as a dry run; all three by the retention worker), `evidence.viewed`, `evidence.custody_viewed`, `evidence.type_mismatch`. The custody chain gains the action `purged` (actor: the system user `retention@system.invalid`).
+
+## Memory forensics (M8, in progress)
+
+Design: [MEMORY_ANALYSIS.md](MEMORY_ANALYSIS.md). **Every route below is a 501 stub** (phase 1: schemas frozen, OpenAPI generated from them) until the named phase implements it; the IDOR enumerator lists them as pending (`security/idor_cases_memory.py`, `idor_cases_memory_sensitivity.py`). Paths are under `/api/v1/orgs/{org_id}`.
+
+| Method and path | Permission | Answer | Implemented by |
+|---|---|---|---|
+| `GET /analyses/{job_id}/memory` | `evidence.read` | `MemorySummaryOut`: image facts, symbols outcome (and the requirement of a `symbols_missing` job), per-plugin status, counts, `truncated` | phase 7 |
+| `GET /analyses/{job_id}/memory/processes?q&ppid&hidden&ref` | `evidence.read` | `ProcessPage`; `q` matches name, image path or command line; `hidden=true`: seen by `psscan` only | phase 7 |
+| `GET /analyses/{job_id}/memory/processes/{pid}` | `evidence.read` | `ProcessDetailOut` | phase 7 |
+| `GET /analyses/{job_id}/memory/connections?pid&q&ref` | `evidence.read` | `ConnectionPage` | phase 7 |
+| `GET /analyses/{job_id}/memory/injections?pid&ref` | `evidence.read` | `InjectionPage` | phase 7 |
+| `GET /analyses/{job_id}/memory/artifacts?type&pid&q&ref` | `evidence.read` | `ArtifactPage` (`type` ∈ `module`, `service`, `hive`, `userassist`, `ldr_unlinked`, `bash`, `open_file`, `syscall_hook`, `hidden_module`) | phase 7 |
+| `GET /evidence/{evidence_id}/memory-sensitivity` | `evidence.read` | `MemorySensitivityOut` {`state` `none` / `restricted` / `released`, `defaulted_at`, `released_at`, `released_by_name`, `release_reason`} | phase 8 |
+| `POST /evidence/{evidence_id}/memory-sensitivity/release` `{acknowledge, reason}` (reason 1–500) | `org.update` | `MemorySensitivityOut`; once; audited `memory.sensitivity_released` | phase 8 |
+| existing `POST /evidence/{evidence_id}/analyses` with `analyzer: memory` | `evidence.write` | `AnalysisJobOut` (with `os_hint`) | request built in phase 1; refined in phase 6 |
+| existing `POST /investigations/{investigation_id}/evidence?kind=memory` | `evidence.write` | `EvidenceOut` | flag built in phase 1; limits and default in phase 6 |
+
+- Memory routes answer `404` for unknown or foreign jobs and for jobs of another analyzer. `ref=<row id>` returns a page with just that row (citation deep links).
+- Findings, IOCs and the timeline of memory jobs are served by the shared `/findings`, `/iocs` and `/timeline` routes.
+- After a release, the analyst clears the share-policy flags through the M6 `PUT /evidence/{id}/share-policy`; while the evidence is restricted, that PUT refuses to clear a flag (phase 8).
+- **New audit actions:** `memory.sensitivity_defaulted`, `memory.sensitivity_released`.
+
+| Status | Code |
+|---|---|
+| 409 | `memory_sensitivity_restricted` (clearing a share-policy flag of restricted memory evidence), `memory_sensitivity_released` (a second release), `policy_blocked` (AI runs and job-scope TI on restricted memory evidence, the M6 code) |
+| 413 | `memory_image_too_large` |
+| 422 | `memory_image_empty`, `acknowledgement_required` (release without `acknowledge: true`) |
+| 501 | `not_implemented` (the stubs above, until their phase lands) |
+| 507 | `insufficient_storage` (the API cannot spool the upload now; phase 6) |

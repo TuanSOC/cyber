@@ -114,7 +114,7 @@ It writes `.secrets/report_signing_private.json` (mode 0400, chowned to uid 1000
 | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` | api, minio-init (creates the user) | scoped user, no governance bypass |
 | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | minio, minio-init (and test profile) | never given to the api |
 | `MAX_EVIDENCE_BYTES` | api | default 2 GiB |
-| `CADDY_EVIDENCE_MAX` | gateway | `MAX_EVIDENCE_BYTES` + 1 MiB |
+| `CADDY_EVIDENCE_MAX` | gateway | max(`MAX_EVIDENCE_BYTES`, `MEMORY_MAX_BYTES`) + 1 MiB on the upload route (M8: `.env.example` ships `8590983168`, 8 GiB + 1 MiB; for 16 GiB images use `17180917760`) |
 | `EVIDENCE_LOCK_DAYS` | api | GOVERNANCE retention per evidence version (0 disables) |
 | `UPLOAD_TMP_DIR` | api | spool directory (volume) |
 | `MAX_CONCURRENT_UPLOADS_PER_USER` | api | also bounds concurrent verifies |
@@ -137,6 +137,12 @@ It writes `.secrets/report_signing_private.json` (mode 0400, chowned to uid 1000
 | `MINIO_PURGE_ACCESS_KEY`, `MINIO_PURGE_SECRET_KEY` | minio-init (creates the user), retention-worker only (test profile: `TEST_MINIO_PURGE_*`) | M7: the purge user (version delete, legal hold, no `PutObject`, no bypass, Deny on report snapshots); refused by every other `PROCESS_ROLE`; the secret is required in prod |
 | `RETENTION_POLICY_DELAY_DAYS` | api, retention-worker | M7: delay of a lowered value, of turning `enforce` on and of a hold release (default 7) |
 | `RATE_LIMIT_USER_PER_MIN` | api | M7: global per-user request limit (default 600; the test profile raises it) |
+| `BROKER_MEMORY_PASSWORD` | redis-broker (ACL user `memory`), memory-worker(-test), api-test (`TEST_BROKER_MEMORY_URL`) | M8: the memory analyzer, confined to `memory*` / `test.memory*`, write-only to ingest; dev default `change-me-broker-memory`, required in prod |
+| `MEMORY_MAX_BYTES` | api | M8: largest memory image (default 8 GiB, refused above 16 GiB); `CADDY_EVIDENCE_MAX` must cover it. Enforced on requests now, on `kind=memory` uploads from phase 6 |
+| `ANALYSIS_MEMORY_TIMEOUT_S`, `ANALYSIS_MEMORY_PLUGIN_TIMEOUT_S`, `ANALYSIS_MEMORY_IDENTIFY_TIMEOUT_S` | api (sent in every memory job) | M8: 5 400 / 1 200 / 600 s (job ≤ 21 600) |
+| `MEMORY_MAX_ACTIVE_PER_ORG`, `MEMORY_MAX_ACTIVE_TOTAL` | api | M8: active memory jobs per org / platform-wide (1 / 2; the test profile raises them) |
+| `MEMORY_MAX_RESULT_BYTES`, `MEMORY_MAX_RESULT_DECOMPRESSED_BYTES`, `MEMORY_MAX_{PROCESSES,CONNECTIONS,INJECTIONS,ARTIFACTS,FINDINGS,IOCS,TIMELINE}`, `MEMORY_TREE_MAX_NODES` | api | M8 settings with defaults 256 MiB, 1 GiB, 20 000, 50 000, 5 000, 50 000, 5 000, 20 000, 5 000, 5 000; compose does not pass them |
+| `MEMORY_SYMBOLS_DIR`, `MEMORY_ENGINE`, `MEMORY_PLUGIN_RLIMIT_AS` | memory-worker | M8: `/symbols`, `volatility3` (`replay` only with `TEST_PROFILE=1`), 2.5 GiB; image defaults |
 | `MINIO_KMS_SECRET_KEY_FILE` (compose secret `minio_kms_key`) | minio, minio-init (name check only) | M7: SSE-S3 key `<name>:<base64 32 bytes>`; dev: `infra/minio/dev-kms-key` (name `cyberlab-dev-kms`, refused in prod); prod: `.secrets/minio_kms_key`. Refused by every app `PROCESS_ROLE` |
 | `MINIO_SSE_ENABLED` | minio-init | M7: `true` (default) sets the SSE-S3 bucket default on every bucket |
 | `MINIO_IMAGE`, `MC_IMAGE`, `MINIO_DATA_DIR` | minio, minio-init, backup / restore | M7: object-store image switch (defaults: `bitnamilegacy/minio:2025.5.24`, `bitnamilegacy/minio-client:2025.5.21`, `/bitnami/minio/data`) |
@@ -190,11 +196,13 @@ It writes `.secrets/report_signing_private.json` (mode 0400, chowned to uid 1000
 
 | Service | Image | Trust | Notes |
 |---|---|---|---|
-| `redis-broker` | redis 7.4 | — | separate from the app Redis; ACL users `api`, `ingest`, `pcap`, `static`, `enrich`, `analyst`, `report`, `retention` (M7) (+ `healthcheck`), no persistence, `maxmemory 256mb noeviction` |
+| `redis-broker` | redis 7.4 | — | separate from the app Redis; ACL users `api`, `ingest`, `pcap`, `static`, `enrich`, `analyst`, `report`, `retention` (M7), `memory` (M8) (+ `healthcheck`), no persistence, `maxmemory 256mb noeviction` |
 | `db-bootstrap` | postgres 17.11-alpine | operator (superuser), one-shot | M7: creates / updates `cyberlab_retention` (`infra/postgres/bootstrap.sh`, idempotent) before `migrate`; `backend` only |
 | `retention-worker` | `cyberlab/api` | trusted, destructive | M7: `celery -A app.workers.retention_app worker -Q retention --pool solo` without gossip/mingle/heartbeat; `backend` only, uid 10001, read-only rootfs, tmpfs `/tmp`, `cap_drop: ALL`, no-new-privileges, 384 MiB; least-privilege env (`x-retention-env`, never `*api-env`); dry run unless the DB policy says `enforce` is effective |
 | `pcap-worker` | `cyberlab/pcap-worker` (Zeek 8 base + tshark + suricata) | untrusted | `analysis` network only, read-only rootfs, `cap_drop: ALL` + 6 caps, tini init, `restart: unless-stopped` (fails closed), 2 GiB / 2 CPUs |
 | `static-worker` | `cyberlab/static-worker` (python 3.12-slim-trixie + ClamAV, yara-python, pefile, pyelftools, capa, FLOSS) | untrusted | same isolation as pcap-worker (`analysis` network, read-only rootfs, caps, tini, fail-closed restart), 3 GiB / 2 CPUs |
+| `memory-worker` | `cyberlab/memory-worker` (python 3.12-slim-trixie + volatility3 2.28.2, pefile, capstone, jsonschema; no symbols) | untrusted | M8 (in progress; phase 1 fails every job `not_implemented`): same isolation as static-worker (`analysis` only, env `BROKER_URL` only, read-only rootfs, caps, tini, fail-closed restart), 3 GiB / 2 CPUs, `pids_limit 256`, `/work` on the named volume `memory_work`, `memory_symbols` read-only at `/symbols`; tool uid 10006 |
+| `memory-symbols`, `memory-symbols-test` | `cyberlab/memory-worker` | trusted operator tool | M8 (CLI pending phase 5): profile `tools` (never part of `up`), uid 10005, read-only rootfs, `cap_drop: ALL`, 2 GiB, network `symbols_egress` only, no secrets; the target store rw at `/symbols` (`memory_symbols`, or `memory_symbols_test` for `--store test`) and `./.memory-import` read-only at `/import`. `memory-symbols-init` (one-shot, no network) chowns both volumes to 10005 |
 | `ingest-worker` | `cyberlab/api` | trusted | `celery worker --pool solo`, app DB role + scoped MinIO user |
 | `ingest-beat` | `cyberlab/api` | trusted | Celery beat: enqueues the reaper every 60 s |
 | `enrich-worker` | `cyberlab/api` | trusted, internet-facing | threat-intel lookups (M4); `celery -A app.workers.enrich_app worker -Q enrich --pool solo` without gossip/mingle/heartbeat; `enrich` + `egress` (never `backend` or `analysis`), uid 10001, read-only rootfs, `cap_drop: ALL`, no-new-privileges; least-privilege env (no JWT secret, MinIO credentials or app Redis); seal private keys as a compose secret |
@@ -210,8 +218,9 @@ It writes `.secrets/report_signing_private.json` (mode 0400, chowned to uid 1000
 | `backend` | yes (no egress) | postgres, redis, redis-broker, minio, minio-init, db-bootstrap (M7), migrate, api, ingest-worker, ingest-beat, retention-worker(-test) (M7), gateway, api-test |
 | `enrich` | yes | postgres, redis-broker, enrich-worker(-test), analyst-worker(-test): the workers' data path, without the app Redis, MinIO, the API or the gateway |
 | `frontend` | no | web, gateway, e2e |
-| `analysis` | yes | pcap-worker(-test), static-worker(-test), report-worker(-test), redis-broker, minio |
+| `analysis` | yes | pcap-worker(-test), static-worker(-test), report-worker(-test), memory-worker(-test) (M8), redis-broker, minio |
 | `egress` | no | enrich-worker(-test), analyst-worker(-test), ti-mock, ai-mock |
+| `symbols_egress` | no | memory-symbols, memory-symbols-test (M8, profile `tools`): their own bridge, shared with nothing |
 
 Runtime egress per service (checked 2026-11-05 on Docker Desktop 4.x / WSL2: `/proc/net/route`, a TCP connect to 1.1.1.1:443 and a lookup of `example.org` in each container; `tests/container/test_egress.py` pins it for api-test):
 
@@ -223,6 +232,8 @@ Runtime egress per service (checked 2026-11-05 on Docker Desktop 4.x / WSL2: `/p
 | ingest-worker, ingest-beat | no | none | broker, Postgres, MinIO only |
 | retention-worker(-test), db-bootstrap | no | none | M7: `backend` only (Postgres, the broker, MinIO) |
 | pcap-worker, static-worker | no | none | `analysis` (unchanged); rules and AV DB are baked at build time |
+| memory-worker(-test) | no | none | M8: `analysis`; symbols come only from the read-only store; Volatility is set offline and its tools may open AF_UNIX sockets only (checks pending phases 2, 11) |
+| memory-symbols(-test) | **yes, on operator request** (`fetch-windows` only) | via `symbols_egress` | M8: HTTPS to `msdl.microsoft.com` and its symbol CDN only, by policy in the tool (suffix allow-list), not by the network; run by hand, never by `up`, a test or the gate |
 | report-worker(-test) | no | none | `analysis`; fonts and templates baked into the image; the render subprocess cannot open inet sockets at all (`apps/workers/report/tests/test_isolation.py`, `test_sandbox.py`) |
 | enrich-worker(-test) | **yes** (provider APIs) | via `egress` | one of two (with the analyst-worker); on `enrich` + `egress`, never `backend` or `analysis` (`tests/container/test_enrich_network.py`, run by the gate inside `enrich-worker-test`) |
 | analyst-worker(-test) | **yes** (Anthropic / Gemini APIs) | via `egress` | on `enrich` + `egress`, never `backend` or `analysis` (`tests/container/test_analyst_network.py`, run inside `analyst-worker-test`) |
@@ -232,7 +243,7 @@ Runtime egress per service (checked 2026-11-05 on Docker Desktop 4.x / WSL2: `/p
 - External DNS: containers on `backend` only cannot resolve public names on this engine (`example.org` → `gaierror` from api and ingest-worker), so Docker's embedded DNS is not a lookup channel here (RT22; phase 7 asserts it in the egress suite).
 - Image builds (apt, uv, pnpm, freshclam, capa rules) use the build network, not these.
 
-- **Code reload:** Celery workers do not hot-reload. After changing worker code in dev, run `docker compose restart pcap-worker static-worker ingest-worker enrich-worker analyst-worker report-worker` (and `pcap-worker-test` / `static-worker-test` / `enrich-worker-test` / `analyst-worker-test` / `report-worker-test` for tests). A template, CSS, font or WeasyPrint change needs an image rebuild and a render-budget recalibration ([REPORTS.md](REPORTS.md#render-budget-and-caps-rt1)).
+- **Code reload:** Celery workers do not hot-reload. After changing worker code in dev, run `docker compose restart pcap-worker static-worker ingest-worker enrich-worker analyst-worker report-worker` (and `memory-worker`, M8) (and `pcap-worker-test` / `static-worker-test` / `enrich-worker-test` / `analyst-worker-test` / `report-worker-test` for tests). A template, CSS, font or WeasyPrint change needs an image rebuild and a render-budget recalibration ([REPORTS.md](REPORTS.md#render-budget-and-caps-rt1)).
 - **Rules:** the ET Open snapshot is baked into the pcap-worker image at build time. Rebuild the image to update rules and parsers.
 - **Static worker freshness:** the ClamAV DB (freshclam in a cached build stage) and capa rules (pinned tag, sha256-checked) are baked into the image. The DB is only re-downloaded when `CLAMAV_DB_REFRESH` changes, e.g. `docker compose build --build-arg CLAMAV_DB_REFRESH=$(date +%F) static-worker`; if freshclam fails (e.g. CDN rate limit), the image ships without a DB and every scan reports `av_unavailable`, never "clean". New capa rules need a new pin in `apps/workers/static/docker/fetch_capa_assets.py`. The AV DB date is shown in the Malware Lab. Rebuilding also updates ClamAV, libmagic and the Python parsers.
 
@@ -264,6 +275,8 @@ tar -C . -cf - .env .secrets | age -r <recipient> -o cyberlab-secrets.tar.age
 ```
 
 Redis and the broker are not backed up (denylist, rate limits, queues): the reapers fail jobs that were in flight.
+
+**The M8 symbol store is not in the backup** (the `memory_symbols` volume): it is rebuildable from its manifest. Keep a copy of `manifest.json` (`docker compose --profile tools run --rm memory-symbols list` shows what it holds) and of any operator-built ISF you imported; after a restore re-import or re-fetch them, then `reindex` and `verify` ([Memory forensics](#memory-forensics-m8)).
 
 ### Take a backup
 
@@ -368,3 +381,67 @@ Concepts: [ARCHITECTURE.md](ARCHITECTURE.md#retention-purge-and-legal-hold). Eve
 ## Global rate limit
 
 `RATE_LIMIT_USER_PER_MIN` (api, default 600) caps authenticated requests per user and minute (`429` + `Retry-After`; Redis down: `503`). Raise it for automation-heavy users or the e2e (the test profile uses 100 000). Search has its own `SEARCH_PER_USER_PER_MIN` (30). There is no anonymous or gateway-level flood limit: put a rate-limiting proxy or WAF in front of a real deployment.
+
+## Memory forensics (M8)
+
+**In progress.** The services, volumes, network, broker user and settings below exist since phase 1 (untested in a container). The worker fails every job with `not_implemented` until phase 2, and the `memory:symbols` CLI exits 2 until phase 5. Steps marked *pending* describe the planned behaviour. Design: [MEMORY_ANALYSIS.md](MEMORY_ANALYSIS.md).
+
+### First start (phase 1)
+
+1. `cd apps/workers/memory && uv lock` once, and check it resolves `volatility3==2.28.2` and none of the forbidden packages.
+2. In `.env`: `BROKER_MEMORY_PASSWORD` (required in prod) and `CADDY_EVIDENCE_MAX` ≥ max(`MAX_EVIDENCE_BYTES`, `MEMORY_MAX_BYTES`) + 1 MiB.
+3. Heavy, alone: `docker compose build memory-worker` (and `docker build --target prod` for the prod image); then rebuild api, pcap-worker, static-worker and report-worker one at a time (py-jobs and py-worker-kit changed; the renderer must know the new `omissions` snapshot field).
+4. Recreate `redis-broker` (new ACL user) and run `migrate` (0016).
+5. `docker compose --profile tools run --rm memory-symbols-init` once, to own the symbol volumes.
+
+### Sizing
+
+| Resource | Need |
+|---|---|
+| RAM | the memory worker has `mem_limit 3g` (one plugin at a time, `RLIMIT_AS` 2.5 GiB per plugin); `memory-symbols` 2 GiB while it runs |
+| Disk per image | plan for **about 3× the image size** while it is in flight: the API spool (`upload_tmp`) and the MinIO copy during the upload, then MinIO plus the worker's copy in `memory_work` during the analysis. The spool is removed after the commit and `/work` after the job, but MinIO keeps the evidence for at least `EVIDENCE_LOCK_DAYS` |
+| Docker Desktop | its virtual disk grows and **does not shrink by itself** after large images are deleted; compact it from Docker Desktop (or `wsl --manage <distro> --set-sparse true` / `Optimize-VHD`) when space matters |
+| Org quota | unchanged: the default 20 GiB holds two 8 GiB images; raise an org's quota (Operations) before it investigates larger or more images |
+| Time | a run takes minutes to about an hour (job timeout 90 min, plugin timeout 20 min); every plugin re-stacks the layers in its own process |
+
+### Upload limits
+
+- `MEMORY_MAX_BYTES` defaults to 8 GiB and is refused above 16 GiB (RT14). `CADDY_EVIDENCE_MAX` must be at least the larger evidence limit + 1 MiB: `8590983168` for 8 GiB, `17180917760` for 16 GiB. The API still enforces each kind's own limit (memory: pending phase 6; until then a `kind=memory` upload is bounded by `MAX_EVIDENCE_BYTES`).
+- Caddy keeps `read_body 30m`: an 8 GiB upload needs ≥ 4.6 MB/s sustained, 16 GiB ≥ 9.2 MB/s. A slower link fails the upload; there is no resume (direct multipart upload is ROADMAP "Later").
+- Compressed or archived images are refused by the worker (`unsupported_memory_format`): upload the raw, LiME, AVML, ELF core, `.vmem` or crash-dump file itself.
+- Tests never upload more than 64 MiB (`MEMORY_MAX_BYTES` is 64 MiB in `api-test`).
+
+### Symbols runbook (pending phase 5)
+
+The worker never fetches symbols. When a job fails `symbols_missing`, its page shows what is needed.
+
+```bash
+pnpm memory:symbols -- list                                    # identities, sources, import dates
+pnpm memory:symbols -- fetch-windows --pdb ntkrnlmp.pdb --guid <32 hex> --age <n>
+pnpm memory:symbols -- import --file /import/<file>.json.xz    # an operator-built ISF
+pnpm memory:symbols -- import --file /import/<pack>.zip --sha256 <expected>
+pnpm memory:symbols -- reindex                                 # rebuild the identifier cache
+pnpm memory:symbols -- verify                                  # re-hash every file (exit 1 on a mismatch)
+pnpm memory:symbols -- --store test <command>                  # the test store
+```
+
+- **Windows:** copy the `fetch-windows` command from the job page (built from the validated PDB name, GUID and age only), run it, then re-run the job. The PDB name must be a kernel PDB (`ntkrnlmp.pdb`, `ntoskrnl.pdb`, `ntkrnlpa.pdb`, `ntkrpamp.pdb`); the download is ≤ 128 MiB over verified HTTPS, and the converted ISF's GUID and age must match the request.
+- **Linux:** the page shows the kernel banner as text, never as a command (it is attacker-chosen). Build the ISF **elsewhere**, on a machine with the matching kernel's debug symbols (for example dwarf2json ≥ 0.9.0 against the debug `vmlinux` and its `System.map`), compress it with xz, place it in `./.memory-import/` (gitignored, mounted read-only at `/import`) and `import` it. Third-party Linux ISF collections are not built in; importing one is the operator's judgement (licence and provenance).
+- **Local zips** of ISFs are accepted by `import` (members checked for traversal, symlinks, type, count and size; pass `--sha256` when you know it). There is no URL-based pack import.
+- **`reindex` always runs with the target store mounted at `/symbols`** (both services do this), because the identifier cache stores absolute `file:///symbols/…` locations (RT5).
+- **After a restore** (the symbol volume is not in the backup), or when in doubt: re-import / re-fetch, `reindex`, `verify`.
+
+**When a fetch is refused** (RT11): `fetch-windows` follows at most 3 redirects, each HTTPS to a host that is `msdl.microsoft.com` or ends with a suffix in the tool's recorded allow-list of Microsoft symbol CDN hosts, never an IP literal, userinfo or a non-443 port. No live fetch has ever been made to observe those hosts (by design: no test or gate contacts Microsoft), so the first real fetch may meet a CDN host the list lacks. The tool then refuses and prints the host. Check that the host is a genuine Microsoft symbol CDN, then change the constant deliberately in `memory_worker/symbols/` (a code change with its test), rebuild the image and fetch again; never work around it with another downloader into the store.
+
+**Egress footprint:** only `memory-symbols` can leave the host, only on `symbols_egress`, only while an operator runs it, and only to `msdl.microsoft.com` and its CDN (by policy in the tool; the bridge itself is not filtered). A fetch tells Microsoft which kernel build is under investigation. ISF converted from Microsoft PDBs stays in the local volume; its redistribution terms are unverified, so never ship the volume or put it in an image.
+
+### Operator smoke procedure for the first real image (manual, never automatic)
+
+CI never runs a real Windows image (no third-party image is used; Windows is replay-tested, RT4). Before relying on memory results, run this once on an image you are entitled to analyse, after phases 2–8 have landed:
+
+1. Create a throwaway case with TLP:RED. Upload the image with the memory option (`?kind=memory`); check the evidence shows "restricted" and that no analysis started.
+2. Run memory analysis, profile `triage`, `os_hint` `auto`. If it fails `symbols_missing`, follow the runbook above and re-run.
+3. On success, check the job page: OS, layer and build look right; `windows.pslist` / `linux.pslist` is `ok`; every other plugin has a status (`ok`, `failed`, `timeout`, `skipped`, `unsupported`); the process count and a few known processes match what you expect; the audit-hook counts (`audit_events` in the result header) are zero.
+4. Compare a handful of processes, connections and command lines against another tool you trust. Report any normalizer or column mismatch as a bug (Volatility upgrades are deliberate, pinned changes).
+5. Try `full` once and note the duration and peak disk.
+6. Delete nothing by hand: retention and legal holds govern the case as usual.

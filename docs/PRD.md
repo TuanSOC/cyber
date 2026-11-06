@@ -39,7 +39,7 @@ A secure, multi-tenant investigation platform on a single node:
 
 | Item | Status |
 |---|---|
-| Memory forensics (Volatility 3) | next milestone (M8) |
+| Memory forensics (Volatility 3) | in progress (M8: foundation only; [MEMORY_ANALYSIS.md](MEMORY_ANALYSIS.md)) |
 | Disk forensics (TSK, Plaso, Autopsy), reverse engineering (Ghidra, radare2) | Later |
 | Dynamic analysis (sandbox execution) | designed and gated, not enabled ([SANDBOX_SECURITY.md](SANDBOX_SECURITY.md)) |
 | OpenSearch | deferred; Postgres search until the revisit criteria in ARCHITECTURE are met |

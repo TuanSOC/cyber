@@ -263,7 +263,7 @@ The enrich and analyst workers use the same `cyberlab_app` role as the API (no d
 | `evidence_purges` | tenant, append-only (PK `evidence_id`, composite FK) | the tombstone: `run_id`, `object_version_id`, `sha256`, `purged_at`. The evidence row itself never changes; `EvidenceOut.purged_at` and the `410 evidence_purged` answers come from here. `reconcile_orphans.py` reports a tombstoned version still stored as `purged_pending_delete` and a pinned version missing **without** a tombstone as `missing_unexplained` |
 | `correlation_keys` | tenant | `investigation_id`, `evidence_id`, `job_id`, `kind` (ipv4, ipv6, domain, url, email, md5, sha1, sha256, ja3, ja3s, cert_sha256), `key` (sha256 hex: the M6 `normalize_item` `ioc_key`), `value_norm` ≤ 2 048, `source_table` iocs / malware_samples / evidence_hashes, `source_id`, `first_seen`, `last_seen`; unique (job_id, kind, key); index (org, kind, key); trigram GIN on `value_norm` |
 | `correlation_job_state` | tenant (PK `job_id`) | `indexed_at`, `keys`, `truncated`: a job is indexed exactly once |
-| `job_outcomes` | system (no org id, no tenant data, no RLS) | `kind` pcap / static / ti / ai / report, `subkind` (profile, provider or format; sanitized to `other`), `status`, `error_code` (sanitized), `queue_ms`, `run_ms`, `finished_at`; indexes (finished_at), (kind, finished_at) |
+| `job_outcomes` | system (no org id, no tenant data, no RLS) | `kind` pcap / static / ti / ai / report (`memory` since 0016), `subkind` (profile, provider or format; sanitized to `other`), `status`, `error_code` (sanitized), `queue_ms`, `run_ms`, `finished_at`; indexes (finished_at), (kind, finished_at) |
 | `evidence` (+ columns) | existing | `declared_type` (≤ 32, the extension family) and `type_mismatch`, nullable, write-once (see triggers) |
 | `evidence_custody_events` | existing | the enum `custody_action` gains `purged` and `sent_to_sandbox` (reserved) in an autocommit block; the downgrade cannot drop enum values and leaves them |
 | `report_renders` | existing | `status` gains `purged`; the dedupe index `ux_report_renders_version_id_format_renderer` is recreated `WHERE status NOT IN ('failed', 'purged')`, so a purged rendition can be re-rendered (RT11) |
@@ -315,7 +315,45 @@ The retention role also has `USAGE` on the schema and `EXECUTE` on `app_org_id()
 | `attack_techniques` | the pinned offline JSON index `apps/api/app/modules/attack/data/attack_enterprise_v20.0.json` (not a table) + `case_attack_mappings` for the analyst-confirmed case links | read-only reference data; rebuilt with `scripts/build_attack_index.py` |
 | `investigation_timeline` | computed: `analysis_timeline` rows merged with status, custody and note events in `investigations/timeline.py` (`GET …/investigations/{id}/timeline`) | no stored timeline table |
 | `api_keys` | the **sealed provider keys** in `ti_provider_configs` and `ai_provider_configs` (sealed boxes per domain; the API encrypts only) | **platform API keys** (programmatic or service-account access to CyberLab) are not implemented: ROADMAP "Later" |
-| `forensic_artifacts`, `memory_findings` | not implemented | belong to the disk / memory forensics modules (ROADMAP "Later"; memory forensics is M8) |
+| `memory_findings` | `analysis_findings` of memory jobs (M8, schema in `0016`) | shared with the pcap and static analyzers; the memory ingest that writes them is pending (M8 phase 6) |
+| `forensic_artifacts` | `memory_artifacts` for memory images (M8, `0016`; with `memory_processes`, `memory_connections`, `memory_injections`, `memory_images`) | disk forensics artifacts stay unimplemented (ROADMAP "Later") |
+
+## Memory forensics (M8, migration 0016)
+
+**In progress:** written in M8 phase 1 and not yet run in a container (`test_migrations.py` 0016 down / up, `test_m8_schema.py`, `test_rls_coverage.py` and `test_append_only.py` are written but pending their first run). Nothing writes the memory tables until the phase-6 ingest lands. `0016_m8_memory_forensics` revises `0015` (the M7 hold-sync revision) and follows the M4–M7 conventions: FORCE RLS on every tenant table (`organization_id = app_org_id()`), composite `(id, organization_id)` same-org FKs, SELECT / INSERT grants plus per-column UPDATE, named checks with `octet_length` caps, **no DELETE grant to the app role**. Later M8 schema needs go into `0017`. Details of the analyzer: [MEMORY_ANALYSIS.md](MEMORY_ANALYSIS.md).
+
+### Changes to existing tables
+
+| Table / type | Change |
+|---|---|
+| `analyzer` enum | `ADD VALUE 'memory'` in an autocommit block (the 0006 rule; later SQL compares `analyzer::text`); the downgrade cannot drop it |
+| `analysis_jobs.profile` | `ck_analysis_jobs_profile_valid` (`full` / `av` / `triage`) and `ck_analysis_jobs_profile_matches_analyzer` (static ∈ `full`, `av`; memory ∈ `triage`, `full`; NULL for pcap) replace the 0006 checks |
+| `analysis_jobs.os_hint` | new, `auto` / `windows` / `linux` (`ck_analysis_jobs_os_hint_valid`), NOT NULL exactly for memory jobs (`ck_analysis_jobs_os_hint_iff_memory`); write-once with the profile in the job guard |
+| `job_outcomes.kind` | `ck_job_outcomes_kind` gains `memory` (the M7 trigger already copies `analyzer::text`) |
+
+### Tables
+
+| Table | Scope | Notes |
+|---|---|---|
+| `memory_images` | tenant (PK `job_id`, composite FK to the job) | one per memory job, also for a `symbols_missing` diagnostic: `os`, `arch`, `layer` (≤ 64, e.g. `LimeLayer>Intel32e`), `engine` (`volatility3` / `replay`), `nt_build`, `kernel_banner` (≤ 512), `pdb_name`, `pdb_guid`, `pdb_age`, `system_time`, `symbols_status` (`resolved` / `missing`), `isf_sha256`, `volatility_version`, `plugins` jsonb (≤ 16 KiB, per-plugin status), `counts` jsonb (≤ 4 KiB) |
+| `memory_processes` | tenant, bulk | `id`, `organization_id`, `job_id` (every bulk table carries these three: retention counts by them and citations reference `id`, RT23); `pid`, `ppid`, `name` ≤ 64, `offset`, `create_time`, `exit_time`, `threads`, `handles`, `session_id`, `wow64`, `sources` (bitmask pslist 1 / psscan 2 / pstree 4), `cmdline` ≤ 4 096, `image_path` ≤ 1 024; unique (`job_id`, `pid`, `offset`); index (`job_id`, `ppid`) |
+| `memory_connections` | tenant, bulk | `proto` (tcp / udp / raw / unix / other), `local_addr` / `remote_addr` (inet), ports, `state`, `pid`, `owner`, `created`, `offset` |
+| `memory_injections` | tenant, bulk | `pid`, `process`, `start`, `end`, `protection`, `tag`, `private`, `commit_charge`, `has_pe`, `head_hex` ≤ 128 hex chars, `disasm` ≤ 1 024 |
+| `memory_artifacts` | tenant, bulk | `type` (`module`, `service`, `hive`, `userassist`, `ldr_unlinked`, `bash`, `open_file`, `syscall_hook`, `hidden_module`; no `handle` or `yara`, RT8 / RT9), `pid` (nullable), `attributes` jsonb ≤ 4 KiB with **scalar values only** (`memory_attributes_scalar(jsonb)`); index (`job_id`, `type`, `id`) |
+| `memory_sensitivity` | tenant (PK `evidence_id`, composite FK) | `state` `restricted` / `released`, `defaulted_by` / `defaulted_at`, `released_by` / `released_at`, `release_reason`; drives the M6 share policy (AI / TI excluded while restricted) |
+
+Addresses (`offset`, `start`, `end`) are `NUMERIC(20,0)`: unsigned 64-bit addresses exceed `bigint`. The columns `offset`, `start` and `end` are SQL keywords: quote them in raw SQL. Findings, IOCs and the timeline of memory jobs use the shared `analysis_findings`, `iocs` and `analysis_timeline`; the job-level summary is `analysis_jobs.summary`.
+
+### Grants and triggers (M8)
+
+| Table | `cyberlab_app` | `cyberlab_retention` |
+|---|---|---|
+| `memory_images` | SELECT, INSERT | SELECT |
+| `memory_processes`, `memory_connections`, `memory_injections`, `memory_artifacts` | SELECT, INSERT | SELECT, DELETE (closed-case purge of bulk rows; `BULK_TABLES` joins in M8 phase 8) |
+| `memory_sensitivity` | SELECT, INSERT; UPDATE on `state, released_by, released_at, release_reason` | SELECT |
+
+- `memory_sensitivity_guard()` — `BEFORE UPDATE OR DELETE` on `memory_sensitivity`: the only change is `restricted → released`, once, setting the release columns; every other UPDATE and every DELETE is refused, also for the owner.
+- The app role also gets `EXECUTE` on `memory_attributes_scalar(jsonb)`.
 
 ## Migrations
 
@@ -352,6 +390,12 @@ M6 migration:
 |---|---|
 | `0012` reports and case management | `investigations` gains `tlp` (check, default `amber`, backfilled), `ai_excluded`, `ti_excluded`; `ti_run_items.reason` accepts `policy_blocked`; the eleven tenant tables `investigation_status_events`, `evidence_share_policies`, `analyst_notes`, `analyst_note_versions`, `ioc_collections`, `ioc_collection_items`, `case_attack_mappings`, `reports`, `report_versions`, `report_citations`, `report_renders` plus the system lookup `report_render_index`, with named checks (length caps with `char_length` / `octet_length`, jsonb shapes, hash and signature shapes), composite tenant FKs, RLS ENABLE + FORCE (`tenant_isolation`; the run-index pattern on `report_render_index`), SELECT / INSERT plus per-column UPDATE grants and no DELETE, the four guard triggers and `forbid_mutation()` on the four append-only tables. Indexes include `report_citations (organization_id, kind, ref_id)` and `ioc_collection_items (organization_id, ioc_key)`. `0012` stays frozen: later M6 schema fixes go into `0013` |
 | `0013` same-org FKs (M6 review L4) | `iocs` and `ai_citations` gain the unique constraints `uq_iocs_id_organization_id` / `uq_ai_citations_id_organization_id` (the `id` is the primary key, so they always hold), and the two plain FKs of 0012 become composite `(column, organization_id)` FKs: `ioc_collection_items.ioc_id → iocs` and `report_citations.ai_citation_id → ai_citations`. MATCH SIMPLE leaves NULL references unchecked; creating the FKs validates existing rows, so a cross-org row (only writable past RLS) fails the upgrade |
+
+M8 migration (in progress):
+
+| Revision | Changes |
+|---|---|
+| `0016` memory forensics | the `memory` analyzer value (autocommit block), the memory profile and `os_hint` checks on `analysis_jobs`, `memory` in `ck_job_outcomes_kind`, the six memory tables above with RLS, grants, `memory_attributes_scalar()` and `memory_sensitivity_guard()`. Written in phase 1, not yet run in a container; later M8 schema needs go into `0017` |
 
 asyncpg executes one statement per call, so raw SQL in migrations is issued statement by statement. `citext` is created by migration `0001` (trusted extension, created by the database owner); `gen_random_uuid()` is built in.
 
