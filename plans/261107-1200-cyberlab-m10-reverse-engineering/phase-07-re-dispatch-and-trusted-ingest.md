@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Re dispatch and trusted ingest"
-status: pending
+status: code-complete (untested in Docker)
 priority: P2
 effort: "16h"
 dependencies: [1]
@@ -49,3 +49,19 @@ The trusted side of the pipeline: request validation and job creation, the `ReJo
 ## Risk Assessment
 - **Large transactions:** up to ≈ 300 000 rows plus 32 MiB of code in one transaction; batched inserts and `statement_timeout` sized for it (measured in phase 12 at every cap).
 - **Source job semantics:** the RE job pins its source job id, so later static re-runs do not change an RE result's links (stated in the UI).
+
+## Notes (as built, untested in Docker)
+
+Code-only (no container ran). Host checks: `tests/unit/test_re_stream.py` (38) and `tests/unit/test_re_join.py` (12) pass on the host (`--noconftest`, the API's missing third-party deps stubbed); the whole app imports and the integration modules collect.
+
+- **Request** (`reverse_engineering/dispatch.load_source`, called by `analysis/service._create` after the per-org cap and the heavy cap, phase 1): the requested (else the latest) succeeded static `full` job of the same evidence whose `malware_samples.file_format` is `pe` / `elf` (a purged result has no sample row: it does not qualify) -> `409 static_analysis_required`; machine (case-insensitive) `i386` / `amd64` / `EM_386` / `EM_X86_64` else `422 unsupported_architecture` (missing facts too); a PE importing `mscoree.dll!_CorExeMain|_CorDllMain` -> `422 unsupported_managed_code`. Size (`413 re_sample_too_large`), `quick` gate, schema rules, custody and audit (`source_job_id`, the count of `decompile_addresses`, never the addresses) were already in phase 1's `_create` / `request_analysis`. No `analysis/service.py` change was needed.
+- **Preferred base at dispatch:** PE `pe.image_base`; ELF the lowest allocated (`alloc` flag) section address > 0, page-aligned down (`ElfInfo` has no PT_LOAD field; phase 6 notes). `capa_file_vas` = `join.capa_file_vas(locations, capa_base, preferred)` (none without a capa base; <= 512, the lowest kept).
+- **Message:** `build_re_message` unchanged from phase 1.
+- **Reaper:** no change: the run deadline is `analyzers.timeout_s(REVERSE)` (`ANALYSIS_RE_TIMEOUT_S`) + the M2 grace (set on `started` by the shared ingest), the queue deadline the shared TTL; the RE ingest runs in the shared ingest worker (no hand-off like disk).
+- **Stream** (`stream.py`): `check_framing` with `RE_MAX_RESULT_DECOMPRESSED_BYTES` / `Settings.re_max_result_lines()`; header job / profile; `engine: replay` only when `ingest.replay_allowed()` (`ENV=test`, the api-test service: there is no `TEST_PROFILE` setting in the API); header blocks sized against their `re_programs` jsonb checks (`header_too_large`) and the engine version <= 32; the shared `StreamChecker` (refusals -> reason `stream_rule`); program sha256 / size = the evidence (`program_mismatch`), format = the source job's when its sample row exists (`format_mismatch`); duplicate finding ids / IOCs. Kept in memory besides the checker's key sets: decompile statuses (<= max_decompiled) and, only when the source has capa locations, the body ranges for the join. The every-cap test is an estimate with every character escaped six-fold (≈ 680 MB < 768 MiB) plus the exact line bound.
+- **Join** (`join.py`, pure): `capa file_va = loc - (capa_base - preferred_base)` with **`preferred_base` = the RE program record's** (`re_programs.preferred_base`), body RVA r -> file VA `preferred_base + r`; interval search over sorted ranges with a running max end; one link per (capability, function) at the lowest file VA; overlapping bodies link to every container. Counts: `capa_linked` / `capa_unlocated` (locations), `capabilities_linked`.
+- **Ingest** (`ingest.py`): validation + join in a worker thread, then the shared `_persist`: `re_programs` (counts incl. `capa_linked` / `capa_unlocated`, peak memory = max stage peak, engine version), bulk rows in batches (`RowBuilder` gives imports / strings their uuid when read and maps the refs; a function's `decompile_status` from its decompiled line, else `not_selected`), links in batches of 1000, findings / IOCs in the shared tables. Summary (<= 32 KiB): header run facts, stages, trusted sample identity, program facts, counts, decompile budget, peak memory, `source_job_id`. `ingest_re_diagnostic`: header + program only, `re_programs` row then `_fail(code)` (the memory pattern).
+- **Purged source:** no format check, no links, `capa_linked = capa_unlocated = 0` (the rows are gone, so "all" is 0).
+- **Tests:** `tests/reverse_results.py` (static source through the real static ingest, request helper, retargeted fixtures), `tests/integration/test_analysis_reverse.py` (every accept / refusal path, ELF base, message, never automatic), `tests/integration/test_re_ingest.py` (success incl. join and redelivery, ELF, quick, purged source, diagnostic, hostile streams), `tests/unit/test_re_{stream,join}.py`. `test_m10_foundation.py`: the request now answers `409 static_analysis_required` (only that hunk is mine; phase 9 edits the same file).
+
+**Remains (Docker):** `scripts/lane-test.sh 6 uv run pytest -q -p no:cacheprovider tests/unit/test_re_stream.py tests/unit/test_re_join.py tests/integration/test_analysis_reverse.py tests/integration/test_re_ingest.py tests/integration/test_m10_foundation.py`; `ruff format`, `ruff check`, `mypy` (not run: no ruff / mypy on the host); the ingest at every cap (time, RSS, statement timeout) in phase 12; the real capa + Ghidra base check (phases 6 / 12).

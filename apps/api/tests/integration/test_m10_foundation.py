@@ -75,7 +75,9 @@ async def test_an_re_request_is_schema_checked_and_creates_nothing() -> None:
         assert response.status_code == 422, (bad, response.text)
     ok = {"analyzer": "reverse", "decompile_addresses": ["0x401000"]}
     response = await owner.client.post(url, json=ok, headers=csrf(owner.client))
-    assert response.status_code == 501, response.text  # phase 7 resolves the source
+    # Phase 7: no succeeded static `full` job of this evidence is a source.
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "static_analysis_required"
     jobs = await owner.client.get(f"/api/v1/orgs/{owner.org_id}/evidence/{evidence['id']}/analyses")
     assert all(j["analyzer"] != "reverse" for j in jobs.json()["items"])
 
