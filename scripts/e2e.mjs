@@ -57,6 +57,19 @@ docker([
   "-c", "python -m samples.generate /tmp/samples >/dev/null && cp /tmp/samples/downloader_imports.bin /tmp/samples/packed_like.bin /out/static/ && chmod -R a+rX /out",
 ]);
 
+// M9 phase 13: the multi-segment E01 of the synthetic Windows-shaped NTFS image for
+// forensics.spec.ts (`/data/disk/ewf_multi/`: `image.E01`, `image.E02`, ... and its
+// `ground_truth.json`), built by the disk worker's dev / test image (its image tools never
+// reach prod) with the generator sources mounted, like the pcap dataset above. No loop device,
+// FUSE or mount (RT26); our own content only (the "executables" are inert headers). It replaces
+// whatever `pnpm disk:gen` left in the volume (rerun that for the engine tests afterwards).
+const diskSrc = resolve("apps/workers/disk/samples");
+docker([
+  ...asRoot, "--entrypoint", "sh", "-v", `${diskSrc}:/srv/workers/disk/samples:ro`,
+  "cyberlab/disk-worker:dev",
+  "-c", "python -m samples.diskgen --out /out/disk --only ewf_multi && chmod -R a+rX /out/disk",
+]);
+
 // Dev: the `mock` providers' sinks (their keys reach the e2e container through compose
 // interpolation, never through this script's output). Prod has no sink: the specs assert
 // the mocks are refused there. ai-mock is recreated so it forgets the markers it has seen.
