@@ -81,9 +81,12 @@ describe("operations numbers formatting", () => {
     expect(failureKindLabel({ kind: "pcap", subkind: null })).toBe("PCAP");
     expect(failureKindLabel({ kind: "static", subkind: "av" })).toBe("AV scan");
     expect(failureKindLabel({ kind: "static", subkind: "full" })).toBe("Static (full)");
+    expect(failureKindLabel({ kind: "memory", subkind: "triage" })).toBe("Memory (triage)");
     expect(failureHref(org, { kind: "static", job_id: job })).toBe(`/o/${org}/malware/${job}`);
     expect(failureHref(org, { kind: "pcap", job_id: job })).toBe(`/o/${org}/pcap/${job}`);
     expect(failureHref(org, { kind: "pcap", job_id: "../../x" })).toBeNull();
+    // M8 RT1: a failed memory job links to its own page (never /pcap).
+    expect(failureHref(org, { kind: "memory", job_id: job })).toBe(`/o/${org}/memory/${job}`);
     const failure = {
       job_id: job,
       kind: "pcap" as const,

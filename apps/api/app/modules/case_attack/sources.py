@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError
 from app.modules.ai.contracts import AiRunStatus
 from app.modules.ai.models import AiRun
-from app.modules.analysis.models import AnalysisJob, Analyzer
+from app.modules.analysis.models import AnalysisJob, Analyzer, analyzer_route
 from app.modules.case_attack.schemas import AttackSourceRef, SourceDescriptor
 from app.modules.evidence.models import Evidence
 from app.modules.pcap_analysis.models import AnalysisFinding
@@ -183,7 +183,10 @@ def path(org_id: uuid.UUID, row: Resolved) -> str | None:
     if row.kind == "capability":
         return f"/o/{org_id}/malware/{row.job_id}?tab=capabilities&ref={row.ref_id}"
     if row.kind == "finding":
-        route = "malware" if row.analyzer == "static" else "pcap"
+        # Every analyzer's own page (M8 RT1: memory findings link to /memory).
+        route = analyzer_route(row.analyzer)
+        if route is None:
+            return None
         return f"/o/{org_id}/{route}/{row.job_id}?tab=findings&ref={row.ref_id}"
     return None
 

@@ -1,5 +1,6 @@
-"""Migrations replay from scratch in one alembic run (M3 RT7); 0015, 0014, 0013, 0012, 0011,
-0010, 0009 and 0006 downgrade cleanly (0014 leaves its enum values and the inactive system user).
+"""Migrations replay from scratch in one alembic run (M3 RT7); 0016, 0015, 0014, 0013, 0012,
+0011, 0010, 0009 and 0006 downgrade cleanly (0014 leaves its enum values and the inactive
+system user, 0016 its `memory` analyzer value).
 
 `env.py` applies every pending revision in a single transaction; 0006 adds an enum value,
 which Postgres will not let that same transaction use. The session fixture already upgrades
@@ -171,6 +172,31 @@ TRGM = "SELECT extname::text FROM pg_extension WHERE extname = 'pg_trgm'"
 SYSTEM_USER = "SELECT is_active FROM users WHERE email = 'retention@system.invalid'"
 
 
+# 0016 (M8 memory forensics).
+M8_TABLES = (
+    "memory_images",
+    "memory_processes",
+    "memory_connections",
+    "memory_injections",
+    "memory_artifacts",
+    "memory_sensitivity",
+)
+M8_REGCLASSES = "SELECT " + ", ".join(f"to_regclass('{t}')::text" for t in M8_TABLES)
+M8_FUNCTIONS = (
+    "SELECT proname::text FROM pg_proc WHERE proname IN ('memory_attributes_scalar', "
+    "'memory_sensitivity_guard') ORDER BY proname"
+)
+OS_HINT_COLUMN = (
+    "SELECT column_name FROM information_schema.columns "
+    "WHERE table_name = 'analysis_jobs' AND column_name = 'os_hint'"
+)
+
+
+async def _m8_tables(engine: AsyncEngine) -> list[object]:
+    async with engine.connect() as conn:
+        return [t for t in (await conn.execute(text(M8_REGCLASSES))).one() if t is not None]
+
+
 async def _m7_tables(engine: AsyncEngine) -> list[object]:
     async with engine.connect() as conn:
         return [t for t in (await conn.execute(text(M7_REGCLASSES))).one() if t is not None]
@@ -184,6 +210,11 @@ def _exception_triggers(function: str) -> list[str]:
 async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine) -> None:
     await get_engine().dispose()
     try:
+        _alembic("downgrade", "0015")  # 0016 (M8) goes away; the `memory` enum value stays
+        assert await _m8_tables(owner_engine) == []
+        assert await _scalars(owner_engine, M8_FUNCTIONS) == []
+        assert await _scalars(owner_engine, OS_HINT_COLUMN) == []
+        assert "memory" in set(map(str, await _scalars(owner_engine, ANALYZER_VALUES)))
         _alembic("downgrade", "0014")  # 0015 (M7 review) drops the hold-sync state columns
         assert await _scalars(owner_engine, HOLD_SYNC_COLUMNS) == ["s3_synced_at"]
         _alembic("downgrade", "0013")  # 0014 (M7) goes away; enum values and the user stay
@@ -225,18 +256,18 @@ async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine)
 
         _alembic("downgrade", "0005")
         assert await _scalars(owner_engine, PROFILE_COLUMN) == []
-        # Enum values cannot be dropped: 'static' stays, unused, as documented in 0006.
-        assert await _scalars(owner_engine, ANALYZER_VALUES) == ["pcap", "static"]
+        # Enum values cannot be dropped: 'static' (0006) and 'memory' (0016) stay, unused.
+        assert await _scalars(owner_engine, ANALYZER_VALUES) == ["pcap", "static", "memory"]
 
         _alembic("downgrade", "base")
         assert await _scalars(owner_engine, "SELECT to_regtype('analyzer')::text") == [None]
 
-        _alembic("upgrade", "head")  # one run: 0001..0009 (0006's ALTER TYPE autocommits)
+        _alembic("upgrade", "head")  # one run: 0001..0016 (the ALTER TYPEs autocommit)
     finally:
         _alembic("upgrade", "head")  # never leave the shared test database half-migrated
         await get_engine().dispose()
 
-    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0015"]
+    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0016"]
     assert await _scalars(owner_engine, HOLD_SYNC_COLUMNS) == [
         "s3_full_synced_at",
         "s3_sync_cursor_at",
@@ -244,6 +275,12 @@ async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine)
         "s3_sync_pass_at",
         "s3_synced_at",
     ]
+    assert await _m8_tables(owner_engine) == list(M8_TABLES)
+    assert await _scalars(owner_engine, M8_FUNCTIONS) == [
+        "memory_attributes_scalar",
+        "memory_sensitivity_guard",
+    ]
+    assert await _scalars(owner_engine, OS_HINT_COLUMN) == ["os_hint"]
     assert await _m7_tables(owner_engine) == list(M7_TABLES)
     assert await _scalars(owner_engine, M7_FUNCTIONS) == [
         "forbid_mutation_except_retention",
@@ -288,7 +325,7 @@ async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine)
         "ti_key_version_guard",
         "ti_run_transition",
     ]
-    assert await _scalars(owner_engine, ANALYZER_VALUES) == ["pcap", "static"]
+    assert await _scalars(owner_engine, ANALYZER_VALUES) == ["pcap", "static", "memory"]
     assert await _scalars(owner_engine, PROFILE_COLUMN) == ["profile"]
     assert await _scalars(owner_engine, "SELECT 'static'::analyzer::text") == ["static"]
     constraints = await _scalars(
@@ -296,4 +333,7 @@ async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine)
         "SELECT conname FROM pg_constraint WHERE conrelid = 'analysis_jobs'::regclass "
         "AND conname LIKE 'ck_analysis_jobs_profile%' ORDER BY conname",
     )
-    assert constraints == ["ck_analysis_jobs_profile_iff_static", "ck_analysis_jobs_profile_valid"]
+    assert constraints == [
+        "ck_analysis_jobs_profile_matches_analyzer",
+        "ck_analysis_jobs_profile_valid",
+    ]

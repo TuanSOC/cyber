@@ -10,6 +10,7 @@
 import type { Schemas } from "@cyberlab/contracts";
 
 import { type JobRoute, deepLinkHref, isUuid } from "@/lib/ai";
+import { ANALYZER_ROUTES } from "@/lib/analysis";
 import { ApiError, api, unwrap } from "@/lib/api";
 import { caseTabHref } from "@/lib/case";
 import type { LookupType } from "@/lib/ti";
@@ -193,8 +194,9 @@ export function seenInSummary(data: Pick<JobCorrelations, "items" | "total_keys"
 // ---------------------------------------------------------------------------------------------
 // Key drawer
 
+/** Every analyzer's own job page (M8 RT1: memory jobs link to /memory, never /malware). */
 export function analyzerRoute(analyzer: Occurrence["analyzer"]): JobRoute {
-  return analyzer === "pcap" ? "pcap" : "malware";
+  return ANALYZER_ROUTES[analyzer];
 }
 
 /** The IOC tab of the job where the value was observed. */

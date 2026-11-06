@@ -5,15 +5,27 @@ presigned POST policy (fixed key, size-capped) for its result. Both are signed f
 internal MinIO endpoint and expire with the job's queue TTL.
 
 Each analyzer has its own message schema, Celery task and queue (and its own broker ACL
-user): `pcap.v1` on `pcap`, `static.v1` on `static`.
+user): `pcap.v1` on `pcap`, `static.v1` on `static`, `memory.v1` on `memory` (M8; the message
+is built by `memory_analysis.dispatch.build_memory_message`).
 """
 
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import anyio
-from cyberlab_jobs import PCAP_ANALYZE, STATIC_ANALYZE, JobLimits, PcapJobV1, PresignedPost, Queues
+from cyberlab_jobs import (
+    MEMORY_ANALYZE,
+    PCAP_ANALYZE,
+    STATIC_ANALYZE,
+    JobLimits,
+    MemoryJobV1,
+    PcapJobV1,
+    PresignedPost,
+    Queues,
+)
+from cyberlab_jobs.memory import OsHint
 from cyberlab_jobs.static import Profile, StaticJobV1, StaticLimits
 from minio.datatypes import PostPolicy
 
@@ -21,9 +33,9 @@ from app.core.clients import get_minio
 from app.core.config import Settings, get_settings
 from app.core.threads import broker_limiter
 from app.modules.analysis import analyzers
-from app.modules.analysis.models import Analyzer
+from app.modules.analysis.models import Analyzer, JobProfile
 
-JobMessage = PcapJobV1 | StaticJobV1
+JobMessage = PcapJobV1 | StaticJobV1 | MemoryJobV1
 
 
 @dataclass(frozen=True)
@@ -38,7 +50,8 @@ class DispatchInput:
     size_bytes: int
     ingest_token: str
     analyzer: Analyzer = Analyzer.PCAP
-    profile: Profile | None = None  # static only
+    profile: JobProfile | None = None  # static and memory
+    os_hint: OsHint | None = None  # memory only (M8)
 
 
 def result_key(organization_id: uuid.UUID, job_id: uuid.UUID) -> str:
@@ -76,14 +89,22 @@ def static_limits(settings: Settings) -> StaticLimits:
     )
 
 
-def build_message(item: DispatchInput) -> JobMessage:
-    """Blocking (MinIO region lookup on first use): call from a worker thread."""
-    settings = get_settings()
+def presigned_common(
+    item: DispatchInput, settings: Settings, *, get_expires: timedelta
+) -> dict[str, Any]:
+    """The message fields every analyzer shares: the presigned GET of the exact evidence
+    version (valid `get_expires`) and the presigned POST of its fixed result key, capped at
+    the analyzer's result size and valid for the queue TTL plus the job timeout.
+
+    Blocking (MinIO region lookup on first use): call from a worker thread."""
     minio = get_minio()
     ttl = timedelta(seconds=settings.analysis_queue_ttl_s)
     timeout = analyzers.timeout_s(settings, item.analyzer)
     evidence_url = minio.presigned_get_object(
-        item.storage_bucket, item.storage_key, expires=ttl, version_id=item.storage_version_id
+        item.storage_bucket,
+        item.storage_key,
+        expires=get_expires,
+        version_id=item.storage_version_id,
     )
     key = result_key(item.organization_id, item.job_id)
     policy = PostPolicy(
@@ -95,7 +116,7 @@ def build_message(item: DispatchInput) -> JobMessage:
     )
     fields = {**minio.presigned_post_policy(policy), "key": key}
     scheme = "https" if settings.minio_secure else "http"
-    common = {
+    return {
         "job_id": item.job_id,
         "organization_id": item.organization_id,
         "evidence_id": item.evidence_id,
@@ -108,18 +129,36 @@ def build_message(item: DispatchInput) -> JobMessage:
         ),
         "ingest_token": item.ingest_token,
     }
+
+
+def build_message(item: DispatchInput) -> JobMessage:
+    """Blocking (MinIO region lookup on first use): call from a worker thread."""
+    settings = get_settings()
+    if item.analyzer == Analyzer.MEMORY:
+        from app.modules.memory_analysis.dispatch import build_memory_message
+
+        return build_memory_message(item, settings)
+    ttl = timedelta(seconds=settings.analysis_queue_ttl_s)
+    common = presigned_common(item, settings, get_expires=ttl)
     if item.analyzer == Analyzer.STATIC:
         return StaticJobV1.model_validate(
-            {**common, "profile": item.profile or Profile.FULL, "limits": static_limits(settings)}
+            {
+                **common,
+                "profile": Profile(item.profile or JobProfile.FULL),
+                "limits": static_limits(settings),
+            }
         )
     return PcapJobV1.model_validate({**common, "limits": limits(settings)})
 
 
 def task_and_queue(analyzer: Analyzer, settings: Settings) -> tuple[str, str]:
     queues = Queues(settings.queue_prefix)
-    if analyzer == Analyzer.STATIC:
-        return STATIC_ANALYZE, queues.static
-    return PCAP_ANALYZE, queues.pcap
+    routes = {
+        Analyzer.PCAP: (PCAP_ANALYZE, queues.pcap),
+        Analyzer.STATIC: (STATIC_ANALYZE, queues.static),
+        Analyzer.MEMORY: (MEMORY_ANALYZE, queues.memory),
+    }
+    return routes[analyzer]
 
 
 def _send_sync(item: DispatchInput) -> None:

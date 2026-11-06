@@ -66,6 +66,17 @@ APPEND_ONLY = ["audit_logs", "evidence_hashes", "evidence_custody_events", "auth
 # DELETE for `cyberlab_retention` only and UPDATE for nobody.
 M7_STRICT = ["retention_run_items", "evidence_purges"]
 EXCEPTION_TABLES = ["ti_results", "ai_run_inputs", "ai_context_refs", "ai_outputs", "ai_citations"]
+# M8 (0016): memory results are insert-only for the app role (retention deletes the bulk
+# tables, never images or sensitivity); `memory_sensitivity` is release-once, never deleted
+# (its guard and the grants: tests/integration/test_m8_schema.py).
+M8_TABLES = [
+    "memory_images",
+    "memory_processes",
+    "memory_connections",
+    "memory_injections",
+    "memory_artifacts",
+    "memory_sensitivity",
+]
 
 
 @pytest.mark.parametrize("table", APPEND_ONLY)
@@ -287,3 +298,11 @@ async def test_evidence_status_and_description_are_mutable() -> None:
             {"id": evidence_id},
         )
     assert result.rowcount == 1
+
+
+@pytest.mark.parametrize("table", M8_TABLES)
+async def test_app_role_cannot_delete_memory_rows(table: str) -> None:
+    t = await seed_tenant("alpha")
+    with pytest.raises(DBAPIError, match="permission denied"):
+        async with tenant_session(t.org_id, t.owner_id) as s:
+            await s.execute(text(f"DELETE FROM {table}"))

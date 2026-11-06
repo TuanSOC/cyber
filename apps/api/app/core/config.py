@@ -178,6 +178,27 @@ class Settings(BaseSettings):
     static_max_findings: int = 1_000
     static_max_iocs: int = 5_000
     static_max_result_bytes: int = 64 * 1024**2
+    # Memory forensics (M8): image size cap (RT14: <= 16 GiB; Caddy's read_body 30m needs
+    # >= 4.6 MB/s for 8 GiB), result caps (the `memory.v1` contract ceilings), timeouts and the
+    # active-job caps (a run costs minutes to an hour and gigabytes of disk).
+    memory_max_bytes: int = Field(default=8 * 1024**3, ge=1, le=16 * 1024**3)
+    memory_max_result_bytes: int = Field(default=256 * 1024**2, ge=1024, le=256 * 1024**2)
+    # The memory ingest's own framing bounds (RT9); lines = the sum of the caps + 3.
+    memory_max_result_decompressed_bytes: int = Field(default=1024**3, ge=1024, le=1024**3)
+    analysis_memory_timeout_s: int = Field(default=5_400, ge=60, le=21_600)
+    analysis_memory_plugin_timeout_s: int = Field(default=1_200, ge=10)
+    analysis_memory_identify_timeout_s: int = Field(default=600, ge=10)
+    memory_max_active_per_org: int = Field(default=1, ge=1)
+    memory_max_active_total: int = Field(default=2, ge=1)
+    memory_max_processes: int = Field(default=20_000, ge=1, le=20_000)
+    memory_max_connections: int = Field(default=50_000, ge=1, le=50_000)
+    memory_max_injections: int = Field(default=5_000, ge=1, le=5_000)
+    memory_max_artifacts: int = Field(default=50_000, ge=1, le=50_000)
+    memory_max_findings: int = Field(default=5_000, ge=1, le=5_000)
+    memory_max_iocs: int = Field(default=20_000, ge=1, le=20_000)
+    memory_max_timeline: int = Field(default=5_000, ge=1, le=5_000)
+    # Process tree served by the read API (phase 7): nodes per response.
+    memory_tree_max_nodes: int = Field(default=5_000, ge=1, le=20_000)
     # Ingest: zip-bomb guard on the inflated stream and a cap on its lines (all kinds).
     analysis_max_result_decompressed_bytes: int = 1024**3
     analysis_max_result_lines: int = 400_000
@@ -467,6 +488,35 @@ class Settings(BaseSettings):
         if self.ti_seal_private_keys_file is not None:
             raise ValueError("TI_SEAL_PRIVATE_KEYS_FILE is only accepted with PROCESS_ROLE=enrich")
         return self
+
+    @model_validator(mode="after")
+    def _memory_timeouts(self) -> Self:
+        """M8: a plugin and the identify probe fit in the job, the job in 6 h (MemoryLimits)."""
+        timeout = self.analysis_memory_timeout_s
+        if not (
+            self.analysis_memory_plugin_timeout_s < timeout
+            and self.analysis_memory_identify_timeout_s < timeout
+        ):
+            raise ValueError(
+                "ANALYSIS_MEMORY_PLUGIN_TIMEOUT_S and ANALYSIS_MEMORY_IDENTIFY_TIMEOUT_S must be "
+                "below ANALYSIS_MEMORY_TIMEOUT_S"
+            )
+        return self
+
+    def memory_max_result_lines(self) -> int:
+        """The memory ingest's line bound (RT9): every per-kind cap plus header, image and
+        trailer."""
+        return 3 + sum(
+            (
+                self.memory_max_processes,
+                self.memory_max_connections,
+                self.memory_max_injections,
+                self.memory_max_artifacts,
+                self.memory_max_findings,
+                self.memory_max_iocs,
+                self.memory_max_timeline,
+            )
+        )
 
     @field_validator("ingest_tmp_dir", mode="before")
     @classmethod

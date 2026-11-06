@@ -202,7 +202,7 @@ export function JobsSection({ snapshot }: { snapshot: S }) {
         empty="No analyses included."
         rows={snapshot.jobs.items.map((job) => [
           <span key="a">
-            <RText value={job.analyzer === "static" ? "Static analysis" : job.analyzer === "pcap" ? "PCAP analysis" : job.analyzer} />
+            <RText value={job.analyzer === "static" ? "Static analysis" : job.analyzer === "pcap" ? "PCAP analysis" : job.analyzer === "memory" ? "Memory analysis" : job.analyzer} />
             {job.profile ? <RText value={` (${job.profile})`} /> : null}
             <Cites nos={[job.cite_no]} />
             <RText block value={job.job_id} mono className="text-muted-foreground" />

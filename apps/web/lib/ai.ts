@@ -57,9 +57,11 @@ export function taskLabel(task: string): string {
 }
 
 /** Task buttons of the AI Analyst tab per job page. */
-export const JOB_TASKS: Record<"pcap" | "static", AiTask[]> = {
+export const JOB_TASKS: Record<"pcap" | "static" | "memory", AiTask[]> = {
   pcap: ["summarize_pcap", "ioc_correlation", "attack_mapping"],
   static: ["explain_static", "ioc_correlation", "attack_mapping"],
+  // M8: no memory-specific AI task (generic tasks only after an admin releases the evidence).
+  memory: [],
 };
 
 /** Tasks shown as filters on the runs list (job digests are internal children). */
@@ -339,6 +341,13 @@ export function isUuid(value: string | null | undefined): value is string {
 // Tabs each job route accepts in a link; anything else drops the link.
 const PCAP_LINK_TABS = new Set(["overview", "findings", "alerts", "flows", "dns", "http", "tls", "iocs", "timeline"]);
 const MALWARE_LINK_TABS = new Set(["overview", "findings", "signatures", "capabilities", "sections", "strings", "imports", "iocs"]);
+// M8: the memory job page's shared tabs a citation may target.
+const MEMORY_LINK_TABS = new Set(["overview", "findings", "iocs", "timeline"]);
+const LINK_TABS: Record<JobRoute, ReadonlySet<string>> = {
+  pcap: PCAP_LINK_TABS,
+  malware: MALWARE_LINK_TABS,
+  memory: MEMORY_LINK_TABS,
+};
 const MAX_REF = 128;
 
 const enc = encodeURIComponent;
@@ -357,9 +366,10 @@ export function deepLinkHref(orgId: string, link: AiDeepLink | null | undefined)
     case "investigation":
       return isUuid(link.ref) ? `${base}/investigations/${enc(link.ref)}` : null;
     case "pcap":
-    case "malware": {
+    case "malware":
+    case "memory": {
       if (!isUuid(link.job_id)) return null;
-      const tabs = link.route === "pcap" ? PCAP_LINK_TABS : MALWARE_LINK_TABS;
+      const tabs = LINK_TABS[link.route];
       const tab = link.tab ?? "overview";
       if (!tabs.has(tab)) return null;
       const params = new URLSearchParams();
@@ -548,7 +558,7 @@ export function runDurationText(
 // ---------------------------------------------------------------------------------------------
 // Targets (runs list)
 
-export type JobRoute = "pcap" | "malware";
+export type JobRoute = "pcap" | "malware" | "memory";
 
 /** Route of a job-scoped run when the task alone determines it, else null (look the job up). */
 export function routeForTask(task: AiTask): JobRoute | null {

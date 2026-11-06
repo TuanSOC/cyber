@@ -9,6 +9,8 @@ export type UploadItem = {
   id: number;
   file: File;
   description: string;
+  /** Uploaded with `?kind=memory` (M8). */
+  memory?: boolean;
   progress: number;
   state: "queued" | "uploading" | "done" | "failed";
   error?: string;

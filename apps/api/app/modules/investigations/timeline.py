@@ -46,7 +46,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.sql import Select
 
 from app.core.errors import AppError, NotFound
-from app.modules.analysis.models import AnalysisJob, AnalysisStatus, Analyzer
+from app.modules.analysis.models import ANALYZER_TITLES, AnalysisJob, AnalysisStatus, Analyzer
 from app.modules.evidence.models import Evidence, EvidenceCustodyEvent
 from app.modules.investigations.models import Investigation, InvestigationStatusEvent
 from app.modules.notes.models import AnalystNote, AnalystNoteVersion
@@ -99,7 +99,8 @@ REF_TABLES = {
     RefKindName.NOTE: "analyst_notes",
     RefKindName.STATUS: "investigation_status_events",
 }
-_ANALYZER_TITLE = {"pcap": "PCAP analysis", "static": "Static analysis"}
+# Every analyzer (M8 RT1: "Memory analysis" too), keyed by the stored value.
+_ANALYZER_TITLE = {a.value: title for a, title in ANALYZER_TITLES.items()}
 _CUSTODY_TITLE = {
     "uploaded": "Evidence uploaded",
     "downloaded": "Evidence downloaded",

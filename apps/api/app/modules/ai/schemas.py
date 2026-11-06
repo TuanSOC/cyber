@@ -45,8 +45,9 @@ from app.modules.threat_intel.normalize import normalize_suffix
 
 UnavailableReason = Literal["ai_disabled_platform", "prod_mock", "gemini_billing_required"]
 ConfidenceLevel = Literal["low", "medium", "high"]
-DeepLinkRoute = Literal["pcap", "malware", "evidence", "investigation"]
-# The result tabs a deep link may name (pcap and static job pages); anything else is dropped.
+DeepLinkRoute = Literal["pcap", "malware", "memory", "evidence", "investigation"]
+# The result tabs a deep link may name (pcap, static and memory job pages); anything else is
+# dropped. A memory job's findings, IOCs and timeline use the shared tab names (M8).
 DeepLinkTab = Literal[
     "overview",
     "findings",

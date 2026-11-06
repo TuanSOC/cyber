@@ -118,6 +118,7 @@ services:
       BROKER_ANALYST_PASSWORD: ${BROKER_ANALYST_PASSWORD:?set BROKER_ANALYST_PASSWORD}
       BROKER_REPORT_PASSWORD: ${BROKER_REPORT_PASSWORD:?set BROKER_REPORT_PASSWORD}
       BROKER_RETENTION_PASSWORD: ${BROKER_RETENTION_PASSWORD:?set BROKER_RETENTION_PASSWORD}
+      BROKER_MEMORY_PASSWORD: ${BROKER_MEMORY_PASSWORD:?set BROKER_MEMORY_PASSWORD}
 
   # The report renderer in prod (M6): prod image, ENV=prod, its own broker password required;
   # still no DB, MinIO credentials or signing material.
@@ -144,6 +145,29 @@ services:
         worker_kit: ./packages/py-worker-kit
     volumes: !override
       - static_work:/work
+
+  # The memory analyzer in prod (M8): prod image (no tests or samples), its own broker password
+  # required, no source bind mount; the symbol store stays read-only.
+  memory-worker:
+    image: cyberlab/memory-worker:prod
+    build:
+      context: ./apps/workers/memory
+      target: prod
+      additional_contexts:
+        jobs: ./packages/py-jobs
+        worker_kit: ./packages/py-worker-kit
+    environment:
+      BROKER_URL: redis://memory:${BROKER_MEMORY_PASSWORD:?set BROKER_MEMORY_PASSWORD}@redis-broker:6379/0
+    volumes: !override
+      - memory_work:/work
+      - memory_symbols:/symbols:ro
+
+  # The operator's symbol tool and its volume init run the prod image too (profile `tools`).
+  memory-symbols:
+    image: cyberlab/memory-worker:prod
+
+  memory-symbols-init:
+    image: cyberlab/memory-worker:prod
 
   pcap-worker:
     image: cyberlab/pcap-worker:prod

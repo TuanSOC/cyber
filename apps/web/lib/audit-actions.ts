@@ -47,4 +47,7 @@ export const AUDIT_ACTIONS = [
   "evidence.viewed",
   "evidence.custody_viewed",
   "evidence.type_mismatch",
+  // M8: memory sensitivity (TLP:RED by default, admin release once).
+  "memory.sensitivity_defaulted",
+  "memory.sensitivity_released",
 ] as const;

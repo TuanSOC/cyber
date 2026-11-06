@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import { JOB_TASKS } from "./ai";
 import {
   ANALYSIS_POLL_MS,
+  ANALYZER_ROUTES,
+  type Analyzer,
   analysisErrorText,
   analysisKindLabel,
   analysisSegment,
@@ -21,6 +24,36 @@ import {
   pollWhileActive,
   toolVersions,
 } from "./analysis";
+
+// M8 RT1: every analyzer-keyed map covers every analyzer; memory never falls into a pcap /
+// static "else". (Typed maps fail typecheck when the contract gains an analyzer; this test
+// fails at runtime if a map is widened by a cast.)
+const ANALYZERS: Analyzer[] = ["pcap", "static", "memory"];
+
+describe("analyzer exhaustiveness", () => {
+  it("every analyzer has its own route, label and AI task list", () => {
+    expect(Object.keys(ANALYZER_ROUTES).sort()).toEqual([...ANALYZERS].sort());
+    expect(new Set(Object.values(ANALYZER_ROUTES)).size).toBe(ANALYZERS.length);
+    expect(Object.keys(JOB_TASKS).sort()).toEqual([...ANALYZERS].sort());
+    expect(JOB_TASKS.memory).toEqual([]);
+  });
+
+  it("memory jobs link to /memory and are labelled by profile", () => {
+    expect(analysisSegment({ id: "j1", analyzer: "memory" })).toBe("memory/j1");
+    expect(analysisSegment({ id: "j1", analyzer: "static" })).toBe("malware/j1");
+    expect(analysisSegment({ id: "j1", analyzer: "pcap" })).toBe("pcap/j1");
+    expect(analysisKindLabel({ analyzer: "memory", profile: "triage" })).toBe("Memory (triage)");
+    expect(analysisKindLabel({ analyzer: "memory", profile: "full" })).toBe("Memory (full)");
+    expect(analysisKindLabel({ analyzer: "static", profile: "full" })).toBe("Static (full)");
+    expect(runKindOf({ analyzer: "memory", profile: "triage" })).toBeNull();
+  });
+
+  it("explains the memory error codes", () => {
+    expect(analysisErrorText("symbols_missing")).toMatch(/symbol table/);
+    expect(analysisErrorText("unsupported_memory_format")).toMatch(/compressed or archived/);
+    expect(knownErrorText("not_implemented")).toMatch(/not available yet/);
+  });
+});
 
 describe("active status", () => {
   it.each([

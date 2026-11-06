@@ -21,6 +21,8 @@ from app.modules.correlation.router import router as correlation_router
 from app.modules.evidence.router import router as evidence_router
 from app.modules.investigations.router import router as investigations_router
 from app.modules.ioc_collections.router import router as ioc_collections_router
+from app.modules.memory_analysis.router import router as memory_analysis_router
+from app.modules.memory_analysis.router_sensitivity import router as memory_sensitivity_router
 from app.modules.notes.router import router as notes_router
 from app.modules.ops.internal import router as ops_internal_router
 from app.modules.ops.router import router as ops_router
@@ -71,6 +73,9 @@ def create_app() -> FastAPI:
     v1.include_router(analysis_router)
     v1.include_router(pcap_analysis_router)
     v1.include_router(static_analysis_router)
+    # M8: memory results (phase 7) and memory sensitivity (phase 8); 501 stubs until then.
+    v1.include_router(memory_analysis_router)
+    v1.include_router(memory_sensitivity_router)
     v1.include_router(threat_intel_router)
     v1.include_router(attack_router)
     v1.include_router(ai_router)

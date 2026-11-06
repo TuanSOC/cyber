@@ -27,6 +27,7 @@ import {
   runTargetText,
   taskLabel,
 } from "@/lib/ai";
+import { ANALYZER_ROUTES } from "@/lib/analysis";
 import { api, unwrap } from "@/lib/api";
 import { orgPath } from "@/lib/nav";
 import { useOrg } from "@/lib/org-context";
@@ -189,7 +190,7 @@ function useJobRoutes(orgId: string, runs: readonly AiRun[]): Map<string, JobRou
   });
   results.forEach((result, index) => {
     const analyzer = result.data?.analyzer;
-    if (analyzer) known.set(lookups[index], analyzer === "static" ? "malware" : "pcap");
+    if (analyzer) known.set(lookups[index], ANALYZER_ROUTES[analyzer]);
   });
   return known;
 }

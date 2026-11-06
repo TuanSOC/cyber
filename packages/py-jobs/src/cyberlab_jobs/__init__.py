@@ -5,6 +5,7 @@ Everything that crosses the broker or the result store is defined here, validate
 """
 
 from cyberlab_jobs.limits import JobLimits
+from cyberlab_jobs.memory import MEMORY_SCHEMA, MemoryJobV1, MemoryLimits
 from cyberlab_jobs.messages import (
     INGEST_SCHEMA,
     PCAP_SCHEMA,
@@ -20,6 +21,7 @@ from cyberlab_jobs.tasks import (
     AI_VERIFY,
     CORRELATION_INDEX_PENDING,
     INGEST_EVENT,
+    MEMORY_ANALYZE,
     PCAP_ANALYZE,
     REAP,
     REPORT_RENDER,
@@ -41,6 +43,8 @@ __all__ = [
     "CORRELATION_INDEX_PENDING",
     "INGEST_EVENT",
     "INGEST_SCHEMA",
+    "MEMORY_ANALYZE",
+    "MEMORY_SCHEMA",
     "PCAP_ANALYZE",
     "PCAP_SCHEMA",
     "REAP",
@@ -56,6 +60,8 @@ __all__ = [
     "IngestEvent",
     "IngestMessageV1",
     "JobLimits",
+    "MemoryJobV1",
+    "MemoryLimits",
     "Outcome",
     "PcapJobV1",
     "PresignedPost",

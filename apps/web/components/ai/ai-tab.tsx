@@ -20,7 +20,8 @@ const HISTORY = 50;
  * first), the selected run's output and the job's previous runs.
  */
 export function AiAnalystTab({ orgId, job }: { orgId: string; job: AnalysisJob }) {
-  const variant = job.analyzer === "static" ? "static" : "pcap";
+  // M8 RT1: every analyzer has its own task list (memory: none, never the pcap tasks).
+  const variant = job.analyzer;
   const access = useAiAccess(orgId);
   const [choice, setChoice] = useState<ProviderChoice>({});
   const [selected, setSelected] = useState<{ id: string; deduplicated: boolean; request?: AiRunCreate } | null>(null);

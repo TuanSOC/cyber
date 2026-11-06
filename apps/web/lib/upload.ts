@@ -19,9 +19,12 @@ export function uploadEvidence(
   file: File,
   description: string,
   onProgress: (fraction: number) => void,
+  options: { kind?: "memory" } = {},
 ): UploadHandle {
   const xhr = new XMLHttpRequest();
   const query = new URLSearchParams({ filename: file.name, description });
+  // M8: a memory image (its own size limit, restricted from the upload, no automatic analysis).
+  if (options.kind) query.set("kind", options.kind);
   const url =
     `/api/v1/orgs/${encodeURIComponent(orgId)}/investigations/` +
     `${encodeURIComponent(investigationId)}/evidence?${query}`;

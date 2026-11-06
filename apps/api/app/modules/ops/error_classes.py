@@ -10,7 +10,10 @@ can store on a failed job, run or render:
 - TI runs store no error code (NULL); their item reasons are classified for completeness;
 - AI runs: `AiErrorCode`;
 - report renders: `RENDER_ERROR_CODES`, the renderer's `snapshot_too_large`, the reaper's
-  `timeout`.
+  `timeout`;
+- memory jobs (M8): `cyberlab_jobs.memory.MEMORY_ERROR_CODES` (the memory analyzer, its
+  ingest and the API refusals). `symbols_missing` is `input` (an operator gap, not a worker
+  failure; RT25), so it never inflates the §14 worker failure rate.
 `tests/unit/test_error_classes.py` fails on any code found in those sources that is missing.
 """
 
@@ -28,7 +31,7 @@ class ErrorClass(enum.StrEnum):
     OTHER = "other"
 
 
-# The untrusted analyzers' codes (apps/workers/{pcap,static}, packages/py-worker-kit). They
+# The untrusted analyzers' codes (apps/workers/{pcap,static,memory}, py-worker-kit). They
 # are not importable from the api image, so they are listed here and pinned by the test.
 ANALYZER_CODES = (
     "unsupported_capture_format",
@@ -45,6 +48,7 @@ ANALYZER_CODES = (
     "evidence_unavailable",
     "integrity_mismatch",
     "result_upload_failed",
+    # memory (M8): its JobFailed codes are MEMORY_ERROR_CODES (classified below).
 )
 
 _P, _I, _Y, _V, _N, _O = (
@@ -78,6 +82,19 @@ ERROR_CLASS: Mapping[str, ErrorClass] = MappingProxyType(
         "analyzer_failed": _O,
         "enqueue_failed": _I,
         "never_started": _I,
+        # --- memory jobs (M8, cyberlab_jobs.memory.MEMORY_ERROR_CODES) ---
+        "symbols_missing": _N,
+        "symbols_corrupt": _I,
+        "memory_parse_failed": _P,
+        "os_undetermined": _P,
+        "unsupported_memory_format": _N,
+        "memory_image_too_large": _N,
+        "memory_image_empty": _N,
+        "insufficient_disk": _I,
+        "identify_timeout": _I,
+        "plugin_timeout": _I,
+        "plugin_failed": _P,
+        "engine_unavailable": _I,
         # --- threat intel item reasons (runs store no error code) ---
         "rate_limited": _V,
         "quota_exhausted": _V,

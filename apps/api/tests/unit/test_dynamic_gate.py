@@ -65,7 +65,8 @@ needs_repo = pytest.mark.skipif(
 def test_analyzer_has_no_dynamic_value() -> None:
     from app.modules.analysis.models import Analyzer
 
-    assert {a.value for a in Analyzer} == {"pcap", "static"}
+    # M8 adds `memory` (an offline, untrusted analyzer that never executes anything).
+    assert {a.value for a in Analyzer} == {"pcap", "static", "memory"}
     assert not [a for a in Analyzer if WORDS.search(a.name) or WORDS.search(a.value)]
 
 

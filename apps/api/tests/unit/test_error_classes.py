@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 
 import pytest
+from cyberlab_jobs.memory import MEMORY_ERROR_CODES
 from cyberlab_jobs.report import RENDER_ERROR_CODES
 
 from app.modules.ai.contracts import AiErrorCode
@@ -57,6 +58,7 @@ def _api_codes() -> set[str]:
         *(APP / "workers").glob("*.py"),
         *(APP / "modules" / "analysis").glob("*.py"),
         *(APP / "modules" / "reports").glob("*.py"),
+        *(APP / "modules" / "memory_analysis").glob("*.py"),
     ]
     return set().union(*(_literal_codes(p) for p in paths))
 
@@ -68,6 +70,7 @@ def test_every_contract_code_is_classified() -> None:
         *ITEM_REASONS,
         *REAPER_CODES.values(),
         *ANALYZER_CODES,
+        *MEMORY_ERROR_CODES,  # M8: the memory analyzer, its ingest and the API refusals
         "snapshot_too_large",  # the renderer's download cap (report-worker tasks.py)
     }
     missing = sorted(codes - set(ERROR_CLASS))
@@ -85,11 +88,23 @@ def test_every_literal_code_of_the_api_is_classified() -> None:
 def test_analyzer_codes_match_the_worker_sources() -> None:  # pragma: no cover - host only
     paths = [
         p
-        for sub in ("pcap/pcap_worker", "static/static_worker")
+        for sub in ("pcap/pcap_worker", "static/static_worker", "memory/memory_worker")
         for p in (WORKERS / sub).rglob("*.py")
     ]
     found = set().union(*(_literal_codes(p) for p in paths))
-    assert found - set(ANALYZER_CODES) == set()
+    assert found - set(ANALYZER_CODES) - set(MEMORY_ERROR_CODES) == set()
+
+
+def test_memory_codes_have_the_planned_classes() -> None:
+    """M8 (plan Frozen interfaces 6; RT25: a missing symbol is an operator gap)."""
+    assert classify("symbols_missing") is ErrorClass.INPUT
+    assert classify("memory_parse_failed") is ErrorClass.PARSE
+    assert classify("os_undetermined") is ErrorClass.PARSE
+    assert classify("unsupported_memory_format") is ErrorClass.INPUT
+    assert classify("memory_image_too_large") is ErrorClass.INPUT
+    assert classify("insufficient_disk") is ErrorClass.INFRA
+    assert classify("plugin_timeout") is ErrorClass.INFRA
+    assert set(MEMORY_ERROR_CODES) <= set(ERROR_CLASS)
 
 
 def test_classes_and_fallbacks() -> None:

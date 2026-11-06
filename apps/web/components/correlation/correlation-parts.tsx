@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { IocValue } from "@/components/ioc-collections/ioc-parts";
 import { Badge } from "@/components/ui/badge";
+import { ANALYZER_MODULES } from "@/lib/analysis";
 import { caseTabHref, visText } from "@/lib/case";
 import {
   type CorrelationKind,
@@ -123,7 +124,7 @@ export function OccurrenceList({ orgId, items }: { orgId: string; items: readonl
               )}
               {jobHref && (
                 <Link href={jobHref} className="underline-offset-4 hover:underline">
-                  {o.analyzer === "pcap" ? "capture analysis" : "file analysis"}
+                  {ANALYZER_MODULES[o.analyzer].source}
                 </Link>
               )}
             </span>

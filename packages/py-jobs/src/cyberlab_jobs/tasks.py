@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 PCAP_ANALYZE = "pcap.analyze"
 STATIC_ANALYZE = "static.analyze"
+# Memory forensics (M8): consumed only by the untrusted memory analyzer (queue `memory`).
+MEMORY_ANALYZE = "memory.analyze"
 INGEST_EVENT = "ingest.event"
 REAP = "ingest.reap"
 # Threat intel (M4): consumed only by the trusted enrich worker. They live here so that the
@@ -40,6 +42,10 @@ class Queues:
     @property
     def static(self) -> str:
         return f"{self.prefix}static"
+
+    @property
+    def memory(self) -> str:
+        return f"{self.prefix}memory"
 
     @property
     def ingest(self) -> str:

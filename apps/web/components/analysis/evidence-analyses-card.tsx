@@ -11,6 +11,7 @@ import { AnalysisStatusBadge } from "@/components/analysis/analysis-status-badge
 import { AnalyzerBadge } from "@/components/analysis/analyzer-badge";
 import { FindingCount } from "@/components/analysis/finding-count";
 import { SignatureCount } from "@/components/malware/signature-count";
+import { RunMemoryAnalysis } from "@/components/memory/run-memory-analysis";
 import { Pager } from "@/components/pager";
 import { QueryError } from "@/components/query-error";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -138,6 +139,19 @@ export function EvidenceAnalysesCard({
         </CardTitle>
         {runnable && (
           <CardAction className="flex flex-wrap justify-end gap-2">
+            {/* M8: the memory run dialog (phase 9); never automatic. */}
+            <RunMemoryAnalysis
+              orgId={orgId}
+              evidence={evidence}
+              canRun={runnable && !disabled}
+              active={activeAnalyzers.has("memory")}
+              onRequested={() => {
+                setOffset(0);
+                void queryClient.invalidateQueries({ queryKey: [...evidenceKey, "analyses"] });
+                void queryClient.invalidateQueries({ queryKey: ["org", orgId, "analyses"] });
+                void refreshCustody();
+              }}
+            />
             {primary.map((kind, index) => (
               <Button
                 key={kind}

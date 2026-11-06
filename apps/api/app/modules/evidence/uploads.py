@@ -23,7 +23,7 @@ from app.modules.audit import service as audit
 from app.modules.evidence import repository as repo
 from app.modules.evidence.locking import discard_version, lock_version
 from app.modules.evidence.models import CustodyAction, Evidence, EvidenceHash, HashAlgorithm
-from app.modules.evidence.schemas import EvidenceOut
+from app.modules.evidence.schemas import EvidenceOut, UploadKind
 from app.modules.evidence.service import ensure_open_investigation, record_event, to_out
 from app.modules.organizations import storage as quota
 
@@ -165,6 +165,7 @@ async def upload(
     user: CurrentUser,
     filename: str,
     description: str,
+    kind: UploadKind | None = None,
 ) -> EvidenceOut:
     settings = get_settings()
     declared = _check_request(request)
@@ -216,5 +217,10 @@ async def upload(
         finally:
             spooled.path.unlink(missing_ok=True)
     # Best effort, after commit: uploads are analyzed automatically (never fails the upload).
-    await analysis_service.auto_request(org_id, user, out.id, spooled.head, spooled.size, request)
+    # M8 RT3: never a memory image (an automatic static `av` run would read its contents
+    # before the TLP:RED default applies); a memory run is always an explicit request.
+    if kind != "memory":
+        await analysis_service.auto_request(
+            org_id, user, out.id, spooled.head, spooled.size, request
+        )
     return out

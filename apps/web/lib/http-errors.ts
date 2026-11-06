@@ -12,6 +12,14 @@ export const HTTP_ERROR_TEXT: Readonly<Record<string, string>> = {
   retention_acknowledgement_required:
     "Enforcing retention deletes data. Confirm that you understand before turning it on.",
   search_query_invalid: "Search terms must be 2 to 256 characters long.",
+  // M8: memory forensics.
+  memory_image_too_large: "The memory image is larger than this platform accepts.",
+  memory_image_empty: "An empty file cannot be analyzed as a memory image.",
+  memory_sensitivity_restricted:
+    "This evidence is a restricted memory image. An administrator must release it before AI or threat-intel use is allowed.",
+  memory_sensitivity_released: "This memory evidence was already released.",
+  acknowledgement_required: "Confirm that you understand what releasing this memory image allows.",
+  insufficient_storage: "The platform does not have enough free space for this upload right now. Try again later.",
 };
 
 /** The message for an error code, or null when the code has no specific text. */

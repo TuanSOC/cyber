@@ -43,6 +43,7 @@ from app.modules.ai import postprocess
 from app.modules.ai import text as ai_text
 from app.modules.ai.context.pseudonymize import Pseudonymizer, neutralize
 from app.modules.ai.models import AiOrgSettings
+from app.modules.memory_analysis.models import MemoryProcess
 from app.modules.organizations.models import OrganizationMember
 from app.modules.pcap_analysis.models import NetworkRecord
 from app.modules.reports.citations import CaseScope, fields_sha256
@@ -210,6 +211,23 @@ async def seed(
             .limit(SEED_ROWS)
         )
         for value in strings:
+            if isinstance(value, str) and value:
+                p.text(value)
+    # M8 (RT1): memory jobs seed from their process command lines, like static strings (the
+    # internal hosts and users they name); bounded the same way.
+    memory_jobs = sorted(j for j, a in scope.jobs.items() if a == "memory")
+    if memory_jobs:
+        cmdlines = await session.scalars(
+            select(MemoryProcess.cmdline)
+            .where(
+                MemoryProcess.organization_id == scope.org_id,
+                MemoryProcess.job_id.in_(memory_jobs),
+                MemoryProcess.cmdline.is_not(None),
+            )
+            .order_by(MemoryProcess.id)
+            .limit(SEED_ROWS)
+        )
+        for value in cmdlines:
             if isinstance(value, str) and value:
                 p.text(value)
 

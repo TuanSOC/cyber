@@ -31,6 +31,7 @@ from app.core import rate_limit
 from app.core.config import get_settings
 from app.core.errors import AppError, SearchQueryInvalid
 from app.core.rbac import OrgContext
+from app.modules.analysis.models import analyzer_route
 from app.modules.correlation.normalize import candidate_keys
 from app.modules.investigations.repository import escape_like
 from app.modules.investigations.schemas import case_ref
@@ -133,7 +134,8 @@ def _like(q: str) -> str:
 
 
 def _job_href(analyzer: str, job_id: uuid.UUID, tab: str) -> str:
-    route = "pcap" if analyzer == "pcap" else "malware"
+    # Every analyzer's own page (M8 RT1: memory jobs link to /memory, never /malware).
+    route = analyzer_route(analyzer) or "malware"
     return f"/{route}/{job_id}?tab={tab}"
 
 

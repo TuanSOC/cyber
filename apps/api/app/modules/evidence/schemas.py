@@ -36,6 +36,15 @@ class EvidenceOut(BaseModel):
     legal_hold: bool = False
     declared_type: str | None = None
     type_mismatch: bool | None = None
+    # M8: the memory sensitivity (`memory_sensitivity`, filled by phase 8): `restricted` (TLP:RED
+    # by default, AI and TI excluded until an admin releases it), `released`, or null when the
+    # evidence was never marked as a memory image.
+    memory_sensitivity: Literal["restricted", "released"] | None = None
+
+
+# `?kind=` of the upload route (M8): `memory` declares a memory image (its own size limit,
+# restricted from the upload transaction, never analyzed automatically; RT3).
+UploadKind = Literal["memory"]
 
 
 class EvidencePage(Page[EvidenceOut]):

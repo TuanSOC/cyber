@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Run api-test (or another test-profile service) against an isolated test lane (parallel
 # development agents).
-#   scripts/lane-test.sh <lane 2..8> [--service <test service>] <command...>
+#   scripts/lane-test.sh <lane 2..8> [--service <test service>] [--heavy] <command...>
 #   e.g. scripts/lane-test.sh 3 uv run pytest -q -p no:cacheprovider tests/unit/test_ai_providers.py
 #        scripts/lane-test.sh 4 --service report-worker-test pytest -q tests/   (M6, RT21)
+#        scripts/lane-test.sh 2 --service memory-worker-test --heavy pytest -q tests/engine  (M8)
+# `--heavy` (M8) takes two slots, atomically (both or wait): runs that load a memory image.
 # `--print-lock-root` prints the slot lock root and exits (M7 restore drill, RT25).
 # Lane N uses database cyberlab_bN_test, app Redis db N and broker db N, so lanes never
 # truncate or purge each other's state. The default lane (cyberlab_test, db 1) is untouched.
@@ -31,9 +33,14 @@ if [ "${1:-}" = "--service" ]; then
   shift 2
 fi
 case "$service" in
-  api-test|report-worker-test) ;;
+  api-test|report-worker-test|memory-worker-test) ;;
   *) echo "unsupported lane service: $service" >&2; exit 2 ;;
 esac
+need=1
+if [ "${1:-}" = "--heavy" ]; then
+  need=2
+  shift
+fi
 
 env_value() { grep -E "^$1=" .env | head -n1 | cut -d= -f2- || true; }
 db="cyberlab_b${lane}_test"
@@ -53,14 +60,33 @@ slots="${LANE_SLOTS:-3}"
 lock_root="${LANE_LOCK_ROOT:-${TMPDIR:-${TEMP:-/tmp}}/cyberlab-lane-slots}"
 export LANE_LOCK_ROOT="$lock_root"
 mkdir -p "$lock_root"
-slot=""
-while [ -z "$slot" ]; do
+if [ "$need" -gt "$slots" ]; then
+  echo "--heavy needs $need slots but LANE_SLOTS is $slots" >&2
+  exit 2
+fi
+# Take `need` slots. Several slots are taken under one acquisition mutex (`acquire`, a dir) and
+# released again unless all were free, so two heavy lanes never each hold half (M8).
+held=""
+release() { for s in $held; do rmdir "$s" 2>/dev/null || true; done; held=""; }
+trap 'release' EXIT INT TERM
+while :; do
+  mutex=""
+  if [ "$need" -gt 1 ]; then
+    if mkdir "$lock_root/acquire" 2>/dev/null; then mutex="$lock_root/acquire"; else sleep 5; continue; fi
+  fi
+  count=0
   for i in $(seq 1 "$slots"); do
-    if mkdir "$lock_root/slot-$i" 2>/dev/null; then slot="$lock_root/slot-$i"; break; fi
+    [ "$count" -ge "$need" ] && break
+    if mkdir "$lock_root/slot-$i" 2>/dev/null; then
+      held="$held $lock_root/slot-$i"
+      count=$((count + 1))
+    fi
   done
-  [ -n "$slot" ] || sleep 5
+  [ -n "$mutex" ] && rmdir "$mutex" 2>/dev/null
+  [ "$count" -ge "$need" ] && break
+  release
+  sleep 5
 done
-trap 'rmdir "$slot" 2>/dev/null || true' EXIT INT TERM
 
 export TEST_BROKER_DB="$lane" MSYS_NO_PATHCONV=1
 if [ "$service" = "api-test" ]; then
@@ -73,7 +99,7 @@ if [ "$service" = "api-test" ]; then
     -e TEST_LANE="$lane" \
     api-test "$@"
 else
-  # The renderer holds no DB or app Redis settings: only the lane's broker db, which
-  # compose interpolates into its BROKER_URL through TEST_BROKER_DB.
+  # The renderer and the memory analyzer hold no DB or app Redis settings: only the lane's
+  # broker db, which compose interpolates into its BROKER_URL through TEST_BROKER_DB.
   docker compose --profile test run --rm --no-deps "$service" "$@"
 fi

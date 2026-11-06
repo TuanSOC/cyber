@@ -46,6 +46,7 @@ from app.modules.ai.schemas import (
     AiOverallConfidenceOut,
     AiTimelineOut,
     AiVerificationOut,
+    DeepLinkRoute,
     DeepLinkTab,
     PseudonymMode,
 )
@@ -70,6 +71,19 @@ _STATIC_TABS: dict[RefKind, DeepLinkTab] = {
     RefKind.CAPABILITY: "capabilities",
     RefKind.STRING: "strings",
     RefKind.IOC: "iocs",
+}
+# M8: a memory job's page has the shared findings / IOCs / timeline tabs.
+_MEMORY_TABS: dict[RefKind, DeepLinkTab] = {
+    RefKind.JOB: "overview",
+    RefKind.FINDING: "findings",
+    RefKind.IOC: "iocs",
+    RefKind.TIMELINE: "timeline",
+}
+# Analyzer -> (route, tabs): every analyzer (RT1: no "else" mislabels a memory job).
+ANALYZER_LINKS: dict[str, tuple[DeepLinkRoute, dict[RefKind, DeepLinkTab]]] = {
+    "pcap": ("pcap", _PCAP_TABS),
+    "static": ("malware", _STATIC_TABS),
+    "memory": ("memory", _MEMORY_TABS),
 }
 _RECORD_TABS: dict[str, DeepLinkTab] = {"dns": "dns", "http": "http", "tls": "tls"}
 # A job overview / sample / PE summary link carries no row ref.
@@ -293,18 +307,15 @@ def deep_link(row: AiCitation | None, links: LinkContext) -> AiDeepLink | None:
     if row.job_id is None:
         return None
     analyzer = links.analyzers.get(row.job_id)
-    tab: DeepLinkTab | None
-    if analyzer == "pcap":
-        route = "pcap"
-        if kind is RefKind.RECORD:
-            tab = _RECORD_TABS.get(links.record_kinds.get(row.ref_id, ""))
-        else:
-            tab = _PCAP_TABS.get(kind)
-    elif analyzer == "static":
-        route = "malware"
-        tab = _STATIC_TABS.get(kind)
-    else:
+    found = ANALYZER_LINKS.get(analyzer or "")
+    if found is None:
         return None
+    route, tabs = found
+    tab: DeepLinkTab | None
+    if analyzer == "pcap" and kind is RefKind.RECORD:
+        tab = _RECORD_TABS.get(links.record_kinds.get(row.ref_id, ""))
+    else:
+        tab = tabs.get(kind)
     if tab is None:
         return None
     ref = None if kind in _NO_REF else row.ref_id

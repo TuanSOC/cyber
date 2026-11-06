@@ -31,7 +31,7 @@ from app.modules.ai.context import fields as F
 from app.modules.ai.contracts import RefKind
 from app.modules.ai.models import AiCitation
 from app.modules.ai.service_outputs import LinkContext, deep_link
-from app.modules.analysis.models import AnalysisJob
+from app.modules.analysis.models import AnalysisJob, analyzer_route
 from app.modules.evidence.models import Evidence, EvidenceCustodyEvent, EvidenceHash, HashAlgorithm
 from app.modules.investigations.models import Investigation, InvestigationStatusEvent
 from app.modules.investigations.schemas import case_ref
@@ -99,17 +99,18 @@ _JOB_TABLES: dict[str, Any] = {
     "malware_strings": MalwareString,
     "malware_samples": MalwareSample,
 }
-# Table -> (pcap tab, static tab) of the cited job's page; None: no link.
-_TABS: dict[str, tuple[str | None, str | None]] = {
-    "analysis_findings": ("findings", "findings"),
-    "network_alerts": ("alerts", None),
-    "network_flows": ("flows", None),
-    "iocs": ("iocs", "iocs"),
-    "analysis_timeline": ("timeline", None),
-    "analysis_jobs": ("overview", "overview"),
-    "malware_signature_matches": (None, "signatures"),
-    "malware_capabilities": (None, "capabilities"),
-    "malware_strings": (None, "strings"),
+# Table -> {analyzer: tab} of the cited job's page; absent: no link (M8 RT1: memory jobs
+# link their findings, IOCs, timeline and overview to their own page).
+_TABS: dict[str, dict[str, str]] = {
+    "analysis_findings": {"pcap": "findings", "static": "findings", "memory": "findings"},
+    "network_alerts": {"pcap": "alerts"},
+    "network_flows": {"pcap": "flows"},
+    "iocs": {"pcap": "iocs", "static": "iocs", "memory": "iocs"},
+    "analysis_timeline": {"pcap": "timeline", "memory": "timeline"},
+    "analysis_jobs": {"pcap": "overview", "static": "overview", "memory": "overview"},
+    "malware_signature_matches": {"static": "signatures"},
+    "malware_capabilities": {"static": "capabilities"},
+    "malware_strings": {"static": "strings"},
 }
 _RECORD_TABS = {"dns": "dns", "http": "http", "tls": "tls"}
 
@@ -556,13 +557,10 @@ def _path(scope: CaseScope, kind: str, table: str, ref_id: str, found: _Found) -
     if table == "network_records":
         tab = _RECORD_TABS.get(found.record_kind or "")
         return _job_path(org, "pcap", job_id, tab, ref_id) if tab and analyzer == "pcap" else None
-    tabs = _TABS.get(table)
-    if tabs is None or analyzer not in ("pcap", "static"):
+    tab = _TABS.get(table, {}).get(analyzer or "")
+    route = analyzer_route(analyzer)
+    if tab is None or route is None:
         return None
-    tab = tabs[0] if analyzer == "pcap" else tabs[1]
-    if tab is None:
-        return None
-    route = "pcap" if analyzer == "pcap" else "malware"
     return _job_path(org, route, job_id, tab, None if table == "analysis_jobs" else ref_id)
 
 

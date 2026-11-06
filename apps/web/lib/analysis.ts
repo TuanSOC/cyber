@@ -3,22 +3,49 @@ import type { Schemas } from "@cyberlab/contracts";
 export type AnalysisJob = Schemas["AnalysisJobOut"];
 export type AnalysisStatus = Schemas["AnalysisStatus"];
 export type Analyzer = Schemas["Analyzer"];
-export type StaticProfile = Schemas["Profile"];
+/** A job's profile: static `full` / `av`, memory `triage` / `full` (M8); null for pcap. */
+export type JobProfile = Schemas["JobProfile"];
+export type StaticProfile = Extract<JobProfile, "full" | "av">;
+export type MemoryProfile = Extract<JobProfile, "triage" | "full">;
+export type OsHint = Schemas["OsHint"];
 
 export const PROFILE_LABELS: Record<StaticProfile, string> = { full: "Full", av: "AV scan" };
+export const MEMORY_PROFILE_LABELS: Record<MemoryProfile, string> = { triage: "Triage", full: "Full" };
+export const OS_HINT_LABELS: Record<OsHint, string> = { auto: "Detect automatically", windows: "Windows", linux: "Linux" };
 
-/** Short label of what ran: "PCAP", "Static (full)", "AV scan". */
+/** Every analyzer's job page route segment (M8 RT1: one map, no two-way "else"). */
+export const ANALYZER_ROUTES: Record<Analyzer, "pcap" | "malware" | "memory"> = {
+  pcap: "pcap",
+  static: "malware",
+  memory: "memory",
+};
+
+/** The module that shows a job, for "open it in ..." text (M8 RT1: every analyzer). */
+export const ANALYZER_MODULES: Record<Analyzer, { article: string; module: string; source: string }> = {
+  pcap: { article: "a PCAP analysis", module: "the PCAP Analyzer", source: "capture analysis" },
+  static: { article: "a static analysis", module: "the Malware Lab", source: "file analysis" },
+  memory: { article: "a memory analysis", module: "Memory Analysis", source: "memory analysis" },
+};
+
+/** Short label of what ran: "PCAP", "Static (full)", "AV scan", "Memory (triage)", "Memory (full)". */
 export function analysisKindLabel(job: Pick<AnalysisJob, "analyzer" | "profile">): string {
-  if (job.analyzer === "pcap") return "PCAP";
-  return job.profile === "av" ? "AV scan" : "Static (full)";
+  switch (job.analyzer) {
+    case "pcap":
+      return "PCAP";
+    case "memory":
+      return job.profile === "full" ? "Memory (full)" : "Memory (triage)";
+    default:
+      return job.profile === "av" ? "AV scan" : "Static (full)";
+  }
 }
 
 /** Route segment of a job's detail page (each analyzer has its own module). */
 export function analysisSegment(job: Pick<AnalysisJob, "id" | "analyzer">): string {
-  return job.analyzer === "static" ? `malware/${job.id}` : `pcap/${job.id}`;
+  return `${ANALYZER_ROUTES[job.analyzer]}/${job.id}`;
 }
 
-/** A run the user can request: the analyzer plus, for static, its profile. */
+/** A run the user can request from the analyses card: the analyzer plus, for static, its
+ * profile. Memory runs have their own dialog (profile + OS hint; `components/memory`). */
 export type RunKind = "pcap" | "static_full" | "static_av";
 
 export const RUN_KINDS: Record<RunKind, { label: string; analyzer: Analyzer; profile?: StaticProfile; hint: string }> = {
@@ -82,9 +109,11 @@ export function offeredRuns(kind: EvidenceKind): { primary: RunKind[]; more: Run
   }
 }
 
-/** The run kind of an existing job (for "an X is already running" checks). */
-export function runKindOf(job: Pick<AnalysisJob, "analyzer" | "profile">): RunKind {
+/** The run kind of an existing job (for "an X is already running" checks); null for memory
+ * jobs (they are not offered from the run buttons). */
+export function runKindOf(job: Pick<AnalysisJob, "analyzer" | "profile">): RunKind | null {
   if (job.analyzer === "pcap") return "pcap";
+  if (job.analyzer === "memory") return null;
   return job.profile === "av" ? "static_av" : "static_full";
 }
 
@@ -144,6 +173,22 @@ const ERROR_TEXT: Record<string, string> = {
   result_upload_failed: "The analyzer could not upload its result.",
   result_too_large: "The analysis result exceeded the size limit.",
   tool_timeout: "An analysis tool did not finish in time.",
+  // memory analyzer (M8)
+  not_implemented: "Memory analysis is not available yet on this platform.",
+  symbols_missing:
+    "The symbol table for this kernel is not in the platform's symbol store. An operator must import it, then re-run.",
+  symbols_corrupt: "A symbol table in the platform's store failed its integrity check. Ask your operator.",
+  memory_parse_failed: "The memory image could not be analyzed (the process list did not parse).",
+  os_undetermined: "The operating system of the memory image could not be determined.",
+  unsupported_memory_format:
+    "Not a supported memory image (raw, LiME, AVML, ELF core, VMware .vmem or a Windows crash dump; compressed or archived files are refused).",
+  memory_image_too_large: "The memory image is larger than the memory analyzer accepts.",
+  memory_image_empty: "An empty file cannot be analyzed as a memory image.",
+  insufficient_disk: "The memory analyzer did not have enough free disk space for this image.",
+  identify_timeout: "Identifying the memory image did not finish in time.",
+  plugin_timeout: "A memory analysis step did not finish in time.",
+  plugin_failed: "A memory analysis step failed.",
+  engine_unavailable: "The memory analysis engine was not available.",
   // static analyzer
   sample_too_large: "The file is larger than the static analyzer accepts.",
   av_unavailable: "The antivirus engine (ClamAV) was not available, so the file was not scanned.",
@@ -215,11 +260,11 @@ export function hasSummary(summary: Summary | null | undefined): boolean {
   return isRecord(summary) && Object.keys(summary).length > 0;
 }
 
-/** Jobs of one analyzer (and, for static, optionally one profile), order preserved. */
+/** Jobs of one analyzer (and optionally one profile), order preserved. */
 export function jobsOf<T extends Pick<AnalysisJob, "analyzer" | "profile">>(
   jobs: readonly T[],
   analyzer: Analyzer,
-  profile?: StaticProfile,
+  profile?: JobProfile,
 ): T[] {
   return jobs.filter((job) => job.analyzer === analyzer && (profile === undefined || job.profile === profile));
 }
@@ -230,7 +275,7 @@ export function jobsOf<T extends Pick<AnalysisJob, "analyzer" | "profile">>(
  * and an AV scan keeps one row each.
  */
 export function latestPerEvidence<
-  T extends Pick<AnalysisJob, "evidence_id"> & { analyzer?: Analyzer; profile?: StaticProfile | null },
+  T extends Pick<AnalysisJob, "evidence_id"> & { analyzer?: Analyzer; profile?: JobProfile | null },
 >(jobs: readonly T[]): T[] {
   const seen = new Set<string>();
   return jobs.filter((job) => {

@@ -8,6 +8,10 @@ A success report is only accepted with its result: the exact reported version is
 downloaded, fully validated outside any transaction, then written together with the final
 state in one transaction (all rows or none). What "validated" and "written" mean depends on
 the job's analyzer (one ingester per analyzer, see SUCCESS_INGESTERS).
+
+M8: a memory job may also report `failed` / `symbols_missing` WITH a result version: its
+diagnostic stream (the symbols it needs) goes to DIAGNOSTIC_INGESTERS; a failed report of any
+other analyzer, or with another code, never has its result read.
 """
 
 import errno
@@ -54,6 +58,7 @@ from app.modules.evidence.models import (
     EvidenceCustodyEvent,
     EvidenceHash,
 )
+from app.modules.memory_analysis import ingest as memory_ingest
 from app.modules.pcap_analysis import ingest as pcap_ingest
 from app.modules.pcap_analysis import stream
 from app.modules.static_analysis import ingest as static_ingest
@@ -372,7 +377,13 @@ Ingester = Callable[[AnalysisJob, IngestMessageV1, Path], Awaitable[None]]
 SUCCESS_INGESTERS: dict[Analyzer, Ingester] = {
     Analyzer.PCAP: _ingest_pcap,
     Analyzer.STATIC: _ingest_static,
+    Analyzer.MEMORY: memory_ingest.ingest_memory,
 }
+# M8: failed reports that carry a diagnostic result (memory `symbols_missing` only).
+DIAGNOSTIC_INGESTERS: dict[Analyzer, Ingester] = {
+    Analyzer.MEMORY: memory_ingest.ingest_memory_diagnostic,
+}
+DIAGNOSTIC_CODES = frozenset({"symbols_missing"})
 
 
 async def ingest_success(job: AnalysisJob, msg: IngestMessageV1) -> None:
@@ -385,7 +396,28 @@ async def ingest_success(job: AnalysisJob, msg: IngestMessageV1) -> None:
     """
     if job.status not in ACTIVE or not msg.result_version_id:
         return  # already final (unlocked read; ingesters re-check under the row lock)
-    ingester = SUCCESS_INGESTERS[job.analyzer]
+    await _ingest_result(job, msg, SUCCESS_INGESTERS[job.analyzer])
+
+
+def is_diagnostic(job: AnalysisJob, msg: IngestMessageV1) -> bool:
+    """A failed report whose result must be read (M8: memory `symbols_missing`)."""
+    return (
+        msg.outcome == Outcome.FAILED
+        and msg.result_version_id is not None
+        and job.analyzer in DIAGNOSTIC_INGESTERS
+        and msg.error_code in DIAGNOSTIC_CODES
+    )
+
+
+async def ingest_diagnostic(job: AnalysisJob, msg: IngestMessageV1) -> None:
+    """The diagnostic stream of a failed memory job (phase-6 body in memory_analysis)."""
+    if job.status not in ACTIVE or not msg.result_version_id:
+        return
+    await _ingest_result(job, msg, DIAGNOSTIC_INGESTERS[job.analyzer])
+
+
+async def _ingest_result(job: AnalysisJob, msg: IngestMessageV1, ingester: Ingester) -> None:
+    assert msg.result_version_id is not None  # noqa: S101 - checked by both callers
     settings = get_settings()
     with tempfile.TemporaryDirectory(prefix=TMP_PREFIX, dir=settings.ingest_tmp_dir) as tmp:
         path = Path(tmp) / "result.ndjson.gz"
@@ -449,6 +481,9 @@ async def handle_event(raw: dict[str, Any]) -> None:
     try:
         if msg.outcome == Outcome.SUCCEEDED:
             await ingest_success(job, msg)
+            return
+        if is_diagnostic(job, msg):
+            await ingest_diagnostic(job, msg)
             return
         async with tenant_session(org_id, None) as session:
             locked = await repo.get_for_update(session, org_id, msg.job_id)

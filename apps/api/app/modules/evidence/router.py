@@ -15,7 +15,13 @@ from app.core.pagination import PageParamsDep
 from app.core.rbac import OrgContext, Permission, require
 from app.modules.audit import service as audit
 from app.modules.evidence import service, share_policy, transfer, uploads
-from app.modules.evidence.schemas import CustodyPage, EvidenceOut, EvidencePage, VerifyOut
+from app.modules.evidence.schemas import (
+    CustodyPage,
+    EvidenceOut,
+    EvidencePage,
+    UploadKind,
+    VerifyOut,
+)
 from app.modules.investigations.schemas import EvidenceSharePolicyIn, EvidenceSharePolicyOut
 
 router = APIRouter(prefix="/orgs/{org_id}", tags=["evidence"])
@@ -83,8 +89,12 @@ async def upload_evidence(
     request: Request,
     filename: Annotated[Filename, Query()],
     description: Annotated[Description, Query()] = "",
+    kind: Annotated[UploadKind | None, Query()] = None,
 ) -> EvidenceOut:
-    """Raw request body = the evidence bytes (streamed, hashed, stored; never parsed)."""
+    """Raw request body = the evidence bytes (streamed, hashed, stored; never parsed).
+
+    `kind=memory` (M8): a memory image. It gets no automatic analysis of any kind (RT3); the
+    memory size limit, the declared type and the TLP:RED default land with phase 6."""
     return await uploads.upload(
         request,
         org_id=org_id,
@@ -92,6 +102,7 @@ async def upload_evidence(
         user=user,
         filename=filename,
         description=description,
+        kind=kind,
     )
 
 

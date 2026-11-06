@@ -596,8 +596,22 @@ class CitationsSection(_Section):
     dropped_out_of_scope: int = Field(default=0, ge=0)
 
 
+class Omissions(Strict):
+    """Items left out of a report by a platform rule, counted so the reader knows (M8, RT10).
+
+    `memory_restricted`: memory-derived rows of restricted evidence (TLP:RED by default until
+    an admin releases it) omitted from a report below TLP:RED.
+    """
+
+    memory_restricted: int = Field(default=0, ge=0)
+
+
 class ReportSnapshot(Strict):
-    """The whole signed document (`cyberlab.report.v1`)."""
+    """The whole signed document (`cyberlab.report.v1`).
+
+    `omissions` is additive (M8): `canonical_json` leaves the key out when it is None, so every
+    snapshot signed before M8 re-serializes to identical bytes (test_report_canonical_golden).
+    """
 
     schema_version: Literal["cyberlab.report.v1"] = REPORT_SCHEMA
     report: ReportInfo
@@ -615,6 +629,7 @@ class ReportSnapshot(Strict):
     notes: NotesSection = NotesSection()
     ai: AiRunsSection = AiRunsSection()
     citations: CitationsSection = CitationsSection()
+    omissions: Omissions | None = None
 
     @model_validator(mode="after")
     def _citations_resolve(self) -> Self:
@@ -701,6 +716,9 @@ def _reject_floats(value: Any) -> None:
 def canonical_json(obj: Strict | dict[str, Any] | list[Any]) -> bytes:
     """Sorted keys, no insignificant whitespace, UTF-8, no floats (raises TypeError)."""
     data = obj.model_dump(mode="json") if isinstance(obj, Strict) else obj
+    if isinstance(obj, ReportSnapshot) and obj.omissions is None:
+        # Additive M8 field (RT10): absent, not null, so pre-M8 signed bytes never change.
+        data.pop("omissions", None)
     _reject_floats(data)
     return json.dumps(
         data, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
@@ -901,6 +919,7 @@ __all__ = [
     "Manifest",
     "NoteItem",
     "NotesSection",
+    "Omissions",
     "Profile",
     "ReportProfile",
     "RenderErrorCode",

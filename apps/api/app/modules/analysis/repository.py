@@ -1,13 +1,18 @@
 import uuid
 from dataclasses import dataclass
 
-from cyberlab_jobs.static import Profile
 from sqlalchemy import Select, func, select, text
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.pagination import PageParams
-from app.modules.analysis.models import ACTIVE, AnalysisJob, AnalysisStatus, Analyzer
+from app.modules.analysis.models import (
+    ACTIVE,
+    AnalysisJob,
+    AnalysisStatus,
+    Analyzer,
+    JobProfile,
+)
 from app.modules.evidence.models import Evidence
 from app.modules.users.models import User
 
@@ -46,7 +51,7 @@ def matching_jobs(
     evidence_id: uuid.UUID | None = None,
     status: AnalysisStatus | None = None,
     analyzer: Analyzer | None = None,
-    profile: Profile | None = None,
+    profile: JobProfile | None = None,
     investigation_id: uuid.UUID | None = None,
     latest_per_evidence: bool = False,
 ) -> Select[uuid.UUID]:
@@ -90,7 +95,7 @@ async def list_rows(
     evidence_id: uuid.UUID | None = None,
     status: AnalysisStatus | None = None,
     analyzer: Analyzer | None = None,
-    profile: Profile | None = None,
+    profile: JobProfile | None = None,
     investigation_id: uuid.UUID | None = None,
     latest_per_evidence: bool = False,
 ) -> tuple[list[JobRow], int]:

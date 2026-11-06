@@ -6,6 +6,7 @@
 import type { Schemas } from "@cyberlab/contracts";
 
 import { isUuid } from "@/lib/ai";
+import { ANALYZER_ROUTES, type AnalysisJob, analysisKindLabel } from "@/lib/analysis";
 import { api, unwrap } from "@/lib/api";
 
 export type OrgOpsMetrics = Schemas["OrgOpsMetricsOut"];
@@ -20,11 +21,12 @@ export const WINDOWS: readonly { value: OpsWindow; label: string }[] = [
   { value: "7d", label: "Last 7 days" },
 ];
 
-export const KINDS: readonly OutcomeKind[] = ["pcap", "static", "ti", "ai", "report"];
+export const KINDS: readonly OutcomeKind[] = ["pcap", "static", "memory", "ti", "ai", "report"];
 
 export const KIND_LABELS: Record<OutcomeKind, string> = {
   pcap: "PCAP analysis",
   static: "Static analysis",
+  memory: "Memory analysis",
   ti: "Threat-intel enrichment",
   ai: "AI analyst",
   report: "Report rendering",
@@ -96,16 +98,15 @@ export function errorCodeText(code: string | null | undefined): string {
 
 export const RECENT_FAILURES = 5;
 
-/** "PCAP", "Static (full)", "AV scan" (the analyses list wording). */
+/** "PCAP", "Static (full)", "AV scan", "Memory (triage)" (the analyses list wording). */
 export function failureKindLabel(failure: Pick<RecentFailure, "kind" | "subkind">): string {
-  if (failure.kind === "pcap") return "PCAP";
-  return failure.subkind === "av" ? "AV scan" : "Static (full)";
+  return analysisKindLabel({ analyzer: failure.kind, profile: failure.subkind as AnalysisJob["profile"] });
 }
 
 /** The job page of a failure, under `/o/{org}` (built from the id, never from free text). */
 export function failureHref(orgId: string, failure: Pick<RecentFailure, "kind" | "job_id">): string | null {
   if (!isUuid(orgId) || !isUuid(failure.job_id)) return null;
-  return `/o/${orgId}/${failure.kind === "static" ? "malware" : "pcap"}/${failure.job_id}`;
+  return `/o/${orgId}/${ANALYZER_ROUTES[failure.kind]}/${failure.job_id}`;
 }
 
 /** Total active jobs, runs and renders (queued or running) across the known kinds. */

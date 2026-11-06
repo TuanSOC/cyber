@@ -1,8 +1,11 @@
 import enum
 import uuid
+from collections.abc import Mapping
 from datetime import datetime
+from types import MappingProxyType
 from typing import Any
 
+from cyberlab_jobs.memory import MemoryProfile, OsHint
 from cyberlab_jobs.static import Profile
 from sqlalchemy import (
     Enum,
@@ -22,6 +25,49 @@ from app.core.models_base import Base, UUIDPk, pg_enum
 class Analyzer(enum.StrEnum):
     PCAP = "pcap"
     STATIC = "static"
+    MEMORY = "memory"  # M8 (migration 0016)
+
+
+class JobProfile(enum.StrEnum):
+    """What a run was asked to do: static `full` / `av` (0006), memory `triage` / `full`
+    (0016); NULL for pcap. One column for both analyzers, so `full` is shared."""
+
+    FULL = "full"
+    AV = "av"
+    TRIAGE = "triage"
+
+
+# The profiles each analyzer takes (the 0016 checks agree; test_analyzer_exhaustive).
+PROFILES: Mapping[Analyzer, frozenset[JobProfile]] = MappingProxyType(
+    {
+        Analyzer.PCAP: frozenset(),
+        Analyzer.STATIC: frozenset(JobProfile(p.value) for p in Profile),
+        Analyzer.MEMORY: frozenset(JobProfile(p.value) for p in MemoryProfile),
+    }
+)
+DEFAULT_PROFILE: Mapping[Analyzer, JobProfile | None] = MappingProxyType(
+    {Analyzer.PCAP: None, Analyzer.STATIC: JobProfile.FULL, Analyzer.MEMORY: JobProfile.TRIAGE}
+)
+# The web route segment of each analyzer's job page (`/o/{org}/{route}/{job}`): every deep
+# link the API builds goes through this map (RT1: no two-way "else" sends memory to pcap).
+ANALYZER_ROUTES: Mapping[Analyzer, str] = MappingProxyType(
+    {Analyzer.PCAP: "pcap", Analyzer.STATIC: "malware", Analyzer.MEMORY: "memory"}
+)
+ANALYZER_TITLES: Mapping[Analyzer, str] = MappingProxyType(
+    {
+        Analyzer.PCAP: "PCAP analysis",
+        Analyzer.STATIC: "Static analysis",
+        Analyzer.MEMORY: "Memory analysis",
+    }
+)
+
+
+def analyzer_route(analyzer: str | None) -> str | None:
+    """The route segment of a stored analyzer value; None for an unknown one."""
+    try:
+        return ANALYZER_ROUTES[Analyzer(analyzer)] if analyzer is not None else None
+    except ValueError:
+        return None
 
 
 class AnalysisStatus(enum.StrEnum):
@@ -33,7 +79,15 @@ class AnalysisStatus(enum.StrEnum):
 
 # Stored as text with a CHECK (not a Postgres enum): new profiles need no ALTER TYPE.
 PROFILE = Enum(
-    Profile,
+    JobProfile,
+    native_enum=False,
+    create_constraint=False,
+    length=16,
+    values_callable=lambda e: [m.value for m in e],
+)
+
+OS_HINT = Enum(
+    OsHint,
     native_enum=False,
     create_constraint=False,
     length=16,
@@ -68,8 +122,10 @@ class AnalysisJob(UUIDPk, Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"))
     evidence_id: Mapped[uuid.UUID]
     analyzer: Mapped[Analyzer] = mapped_column(pg_enum(Analyzer, "analyzer"))
-    # Static runs only (`full` or `av`); NULL for every other analyzer (DB check).
-    profile: Mapped[Profile | None] = mapped_column(PROFILE)
+    # Static (`full` / `av`) and memory (`triage` / `full`) runs; NULL for pcap (DB checks).
+    profile: Mapped[JobProfile | None] = mapped_column(PROFILE)
+    # Memory runs only (`auto` / `windows` / `linux`), NULL otherwise (0016 check); write-once.
+    os_hint: Mapped[OsHint | None] = mapped_column(OS_HINT)
     status: Mapped[AnalysisStatus] = mapped_column(
         pg_enum(AnalysisStatus, "analysis_status"),
         server_default=AnalysisStatus.QUEUED.value,

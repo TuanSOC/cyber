@@ -23,6 +23,14 @@ from app.modules.investigations.models import (
     InvestigationStatusEvent,
 )
 from app.modules.ioc_collections.models import IocCollection, IocCollectionItem
+from app.modules.memory_analysis.models import (
+    MemoryArtifact,
+    MemoryConnection,
+    MemoryImage,
+    MemoryInjection,
+    MemoryProcess,
+    MemorySensitivity,
+)
 from app.modules.notes.models import AnalystNote, AnalystNoteVersion
 from app.modules.ops.models import JobOutcome
 from app.modules.organizations.models import Organization, OrganizationMember
@@ -109,6 +117,12 @@ __all__ = [
     "MalwareSection",
     "MalwareSignatureMatch",
     "MalwareString",
+    "MemoryArtifact",
+    "MemoryConnection",
+    "MemoryImage",
+    "MemoryInjection",
+    "MemoryProcess",
+    "MemorySensitivity",
     "NetworkAlert",
     "NetworkFlow",
     "NetworkRecord",

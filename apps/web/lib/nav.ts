@@ -71,8 +71,7 @@ export const NAV: NavItem[] = [
     label: "Memory Analysis",
     icon: Cpu,
     segment: "memory",
-    plannedFor: "a later milestone",
-    summary: "Volatility 3 memory forensics.",
+    summary: "Volatility 3 triage of memory images, offline: processes, network, memory regions and more.",
   },
   {
     key: "re",

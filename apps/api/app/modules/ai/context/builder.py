@@ -355,9 +355,19 @@ async def _attack_mapping(
     return [await sel.job_items(session, org_id, jobs), *selections]
 
 
+async def _memory_digest(
+    session: AsyncSession, org_id: uuid.UUID, job: AnalysisJob, opts: Options
+) -> list[Selection]:
+    """M8 phase 8 (STUB): a memory job's digest is its findings and IOCs only, after the
+    evidence's memory sensitivity was released (never a pcap summary, RT1)."""
+    raise NotImplementedError("the memory job digest lands in M8 phase 8")
+
+
 async def _digest_selections(
     session: AsyncSession, org_id: uuid.UUID, job: AnalysisJob, opts: Options
 ) -> list[Selection]:
+    if job.analyzer == Analyzer.MEMORY:
+        return await _memory_digest(session, org_id, job, opts)
     if job.analyzer == Analyzer.STATIC:
         return await _static_summary(session, org_id, job, opts)
     return await _pcap_summary(session, org_id, job, opts)

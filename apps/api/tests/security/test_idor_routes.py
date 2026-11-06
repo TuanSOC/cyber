@@ -33,6 +33,8 @@ from tests.security import (
     idor_cases_attack,
     idor_cases_case,
     idor_cases_correlation,
+    idor_cases_memory,
+    idor_cases_memory_sensitivity,
     idor_cases_ops,
     idor_cases_reads,
     idor_cases_renders,
@@ -57,7 +59,9 @@ M6_CASE_MODULES = (idor_cases_case, idor_cases_reports, idor_cases_renders, idor
 # M7: the per-owner modules of phases 3, 4 and 5 (same `PENDING_ROUTES` rule; phase 11
 # asserts every set is empty).
 M7_CASE_MODULES = (idor_cases_retention, idor_cases_correlation, idor_cases_ops)
-PENDING_MODULES = (*M6_CASE_MODULES, *M7_CASE_MODULES)
+# M8: the memory read API (phase 7) and the memory sensitivity routes (phase 8, RT24).
+M8_CASE_MODULES = (idor_cases_memory, idor_cases_memory_sensitivity)
+PENDING_MODULES = (*M6_CASE_MODULES, *M7_CASE_MODULES, *M8_CASE_MODULES)
 CASE_MODULES = (*CASE_MODULES, *PENDING_MODULES)
 PENDING_ROUTES: frozenset[tuple[str, str]] = frozenset().union(
     *(module.PENDING_ROUTES for module in PENDING_MODULES)

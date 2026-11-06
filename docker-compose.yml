@@ -61,6 +61,13 @@ x-api-env: &api-env
   # applies to a lowered policy, an enforce switch and a hold release (RT1).
   RATE_LIMIT_USER_PER_MIN: ${RATE_LIMIT_USER_PER_MIN:-600}
   RETENTION_POLICY_DELAY_DAYS: ${RETENTION_POLICY_DELAY_DAYS:-7}
+  # M8 memory forensics: the image cap (<= 16 GiB, RT14; CADDY_EVIDENCE_MAX must cover it),
+  # the job timeouts and the active-job caps (a run costs minutes to an hour, GiBs of disk).
+  MEMORY_MAX_BYTES: ${MEMORY_MAX_BYTES:-8589934592}
+  ANALYSIS_MEMORY_TIMEOUT_S: ${ANALYSIS_MEMORY_TIMEOUT_S:-5400}
+  ANALYSIS_MEMORY_PLUGIN_TIMEOUT_S: ${ANALYSIS_MEMORY_PLUGIN_TIMEOUT_S:-1200}
+  MEMORY_MAX_ACTIVE_PER_ORG: ${MEMORY_MAX_ACTIVE_PER_ORG:-1}
+  MEMORY_MAX_ACTIVE_TOTAL: ${MEMORY_MAX_ACTIVE_TOTAL:-2}
 
 # Least-privilege env of the retention worker (M7). Never merged with *api-env: its DB role is
 # `cyberlab_retention` (NOBYPASSRLS), its MinIO user `cyberlab-purge`, its broker user
@@ -257,6 +264,55 @@ x-report-worker: &report-worker
   restart: unless-stopped
   networks: [analysis]
 
+# Untrusted memory analyzer (M8): Volatility 3 over an attacker-controlled memory image, offline,
+# one confined plugin process each (uid 10006, seccomp AF_UNIX only + no io_uring). The static
+# worker's isolation: root process with the analyzers' capabilities, `analysis` only (broker +
+# MinIO presigned URLs, no egress), env BROKER_URL only (as broker user `memory`). `/work` is a
+# named volume (images are GiBs, not a tmpfs) and the symbol store is mounted read-only.
+x-memory-worker: &memory-worker
+  image: cyberlab/memory-worker:dev
+  build:
+    context: ./apps/workers/memory
+    target: dev
+    additional_contexts:
+      jobs: ./packages/py-jobs
+      worker_kit: ./packages/py-worker-kit
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  cap_add: [SETUID, SETGID, KILL, CHOWN, DAC_OVERRIDE, FOWNER]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 256
+  mem_limit: 3g
+  cpus: 2
+  tmpfs:
+    - /tmp:size=64m,mode=1700
+    - /dev/shm:size=1m,mode=1700
+  restart: unless-stopped
+  networks: [analysis]
+
+# Trusted operator tool (M8): fetches Windows kernel PDBs over verified HTTPS on request and
+# imports operator ISFs into the symbol store. Profile `tools` only (never part of `up`), the
+# memory image as uid 10005, its own `symbols_egress` network and nothing else: no broker,
+# Postgres, MinIO, backend, analysis or shared `egress` network (RT17), no secrets.
+x-memory-symbols: &memory-symbols
+  image: cyberlab/memory-worker:dev
+  pull_policy: never
+  profiles: ["tools"]
+  user: "10005:10005"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 64
+  mem_limit: 2g
+  tmpfs:
+    - /tmp:size=512m,mode=1777
+  entrypoint: ["python", "-I", "-m", "memory_worker.symbols"]
+  networks: [symbols_egress]
+  depends_on:
+    memory-symbols-init:
+      condition: service_completed_successfully
+
 x-api-healthcheck: &api-healthcheck
   test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=4)"]
   interval: 5s
@@ -280,6 +336,9 @@ networks:
   # Parser network: no egress (internal), only the broker and MinIO (presigned URLs) on it.
   analysis:
     internal: true
+  # M8: the memory-symbols tool's own way out (Microsoft's symbol server, verified HTTPS),
+  # used by nothing else (RT17): not the shared `egress` of the enrich / analyst workers.
+  symbols_egress:
 
 services:
   postgres:
@@ -384,6 +443,8 @@ services:
       BROKER_REPORT_PASSWORD: ${BROKER_REPORT_PASSWORD:-change-me-broker-report}
       # M7 retention worker: the same default rule.
       BROKER_RETENTION_PASSWORD: ${BROKER_RETENTION_PASSWORD:-change-me-broker-retention}
+      # M8 memory analyzer: the same default rule.
+      BROKER_MEMORY_PASSWORD: ${BROKER_MEMORY_PASSWORD:-change-me-broker-memory}
     volumes:
       - ./infra/redis-broker:/init:ro
     networks: [backend, analysis, enrich]
@@ -560,6 +621,54 @@ services:
       redis-broker:
         condition: service_healthy
 
+  # Memory analyzer (M8): consumes `memory.analyze` (queue `memory`). Phase 1: every job fails
+  # `not_implemented` (the Volatility runner lands in phase 2).
+  memory-worker:
+    <<: *memory-worker
+    environment:
+      BROKER_URL: redis://memory:${BROKER_MEMORY_PASSWORD:-change-me-broker-memory}@redis-broker:6379/0
+    volumes:
+      - ./apps/workers/memory/memory_worker:/srv/workers/memory/memory_worker:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+      - ./packages/py-worker-kit:/packages/py-worker-kit:ro
+      - memory_work:/work
+      - memory_symbols:/symbols:ro
+    depends_on:
+      redis-broker:
+        condition: service_healthy
+
+  # The symbol volumes are owned by the tool's uid 10005 and world-readable (the worker reads
+  # them read-only as root and as uid 10006). One-shot, profile `tools`, no network.
+  memory-symbols-init:
+    image: cyberlab/memory-worker:dev
+    pull_policy: never
+    profiles: ["tools"]
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c", "chown 10005:10005 /symbols /symbols-test && chmod 0755 /symbols /symbols-test"]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER]
+    security_opt: ["no-new-privileges:true"]
+    network_mode: none
+    volumes:
+      - memory_symbols:/symbols
+      - memory_symbols_test:/symbols-test
+
+  # `pnpm memory:symbols -- <command>`: the operator's symbol store (rw at /symbols) and the
+  # read-only import dir `./.memory-import` (operator-built ISFs and local ISF zips).
+  memory-symbols:
+    <<: *memory-symbols
+    volumes:
+      - memory_symbols:/symbols
+      - ./.memory-import:/import:ro
+
+  # `pnpm memory:symbols -- --store test <command>`: the same tool on the test store, mounted
+  # at /symbols too, so `reindex` always records `file:///symbols/...` locations (RT5).
+  memory-symbols-test:
+    <<: *memory-symbols
+    volumes:
+      - memory_symbols_test:/symbols
+      - ./.memory-import:/import:ro
+
   # Report renderer (M6): consumes `report.render` (queue `report`), renders the signed
   # snapshot in its sandboxed subprocess, uploads the artifact through the presigned POST
   # and answers `report.rendered` on `ingest` (the ingest worker re-hashes and records it).
@@ -688,6 +797,12 @@ services:
       TEST_MINIO_PURGE_SECRET_KEY: ${MINIO_PURGE_SECRET_KEY:-change-me-minio-purge}
       TEST_BROKER_RETENTION_URL: redis://retention:${BROKER_RETENTION_PASSWORD:-change-me-broker-retention}@redis-broker:6379/${TEST_BROKER_DB:-1}
       RATE_LIMIT_USER_PER_MIN: "100000"
+      # M8: a small memory cap for the intake tests (never more than 64 MiB uploaded), high
+      # active-job caps (tests create many jobs) and the memory analyzer's broker user.
+      MEMORY_MAX_BYTES: "67108864"
+      MEMORY_MAX_ACTIVE_PER_ORG: "100"
+      MEMORY_MAX_ACTIVE_TOTAL: "1000"
+      TEST_BROKER_MEMORY_URL: redis://memory:${BROKER_MEMORY_PASSWORD:-change-me-broker-memory}@redis-broker:6379/${TEST_BROKER_DB:-1}
     volumes:
       - ./apps/api:/srv/api
       - ./packages/py-jobs:/packages/py-jobs
@@ -886,6 +1001,39 @@ services:
       redis-broker:
         condition: service_healthy
 
+  # Memory analyzer tests (M8): `scripts/lane-test.sh <lane> --service memory-worker-test
+  # [--heavy] pytest -q tests/` (broker db only). `/work` is a per-container tmpfs (sparse files
+  # cost nothing), so concurrent lanes never share or reset each other's work dir (RT6); the
+  # test symbol store is used only by phase 11's pipeline run (tests build temp stores). Not a
+  # dependency of api-test.
+  memory-worker-test:
+    <<: *memory-worker
+    profiles: ["test"]
+    environment:
+      BROKER_URL: redis://memory:${BROKER_MEMORY_PASSWORD:-change-me-broker-memory}@redis-broker:6379/${TEST_BROKER_DB:-1}
+      QUEUE_PREFIX: "test."
+      WORKER_QUEUE: memory
+      # The replay engine (hand-written rows) is refused unless this is set (test profile).
+      TEST_PROFILE: "1"
+      RUFF_CACHE_DIR: /tmp/ruff
+      MYPY_CACHE_DIR: /tmp/mypy
+    tmpfs:
+      - /tmp:size=64m,mode=1700
+      - /dev/shm:size=1m,mode=1700
+      - /work:size=512m,mode=0711
+    volumes:
+      - ./apps/workers/memory/memory_worker:/srv/workers/memory/memory_worker:ro
+      - ./apps/workers/memory/tests:/srv/workers/memory/tests:ro
+      - ./apps/workers/memory/samples:/srv/workers/memory/samples:ro
+      - ./apps/workers/memory/dataset:/srv/workers/memory/dataset:ro
+      - ./apps/workers/memory/pyproject.toml:/srv/workers/memory/pyproject.toml:ro
+      - ./packages/py-jobs:/packages/py-jobs:ro
+      - ./packages/py-worker-kit:/packages/py-worker-kit:ro
+      - memory_symbols_test:/symbols:ro
+    depends_on:
+      redis-broker:
+        condition: service_healthy
+
   # Retention worker tests (M7): the test DB (retention role), the test buckets and the lane's
   # broker db with the `test.` prefix. Not a dependency of api-test (memory): phase 3 runs the
   # purge in-process in api-test; phase 11 starts this one explicitly.
@@ -967,6 +1115,11 @@ volumes:
   ingest_tmp:
   static_work:
   static_work_test:
+  # M8: the memory worker's scratch (an image can be GiBs) and the symbol stores (written only
+  # by memory-symbols; read-only in the workers). No corpus volume (parent decision).
+  memory_work:
+  memory_symbols:
+  memory_symbols_test:
   # ai-mock's test-only request mirror (its /tmp; read-only in api-test): see ai-mock.
   ai_mock_state:
   # Created and refreshed by scripts/e2e.mjs (fixed name so the script can address it).

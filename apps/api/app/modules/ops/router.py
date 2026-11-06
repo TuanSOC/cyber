@@ -21,6 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rbac import OrgContext, Permission, require
+from app.modules.analysis.models import analyzer_route
 from app.modules.ops.error_classes import ErrorClass, classify
 from app.modules.ops.metrics import (
     ACTIVE_STATUSES,
@@ -215,7 +216,8 @@ async def org_ops_metrics(
             finished_at=row["finished_at"],
             investigation_id=row["investigation_id"],
             evidence_id=row["evidence_id"],
-            href=f"/{'pcap' if row['kind'] == 'pcap' else 'malware'}/{row['id']}",
+            # Every analyzer's own page (M8 RT1: memory jobs link to /memory).
+            href=f"/{analyzer_route(row['kind']) or 'malware'}/{row['id']}",
         )
         for row in (
             await session.execute(_RECENT_FAILURES_SQL, {"org": org_id, "limit": RECENT_FAILURES})

@@ -64,28 +64,29 @@ export function vis(text: string | null | undefined): string {
 // ---------------------------------------------------------------------------------------------
 // Deep links (internal routes only, from ids)
 
-type JobRoute = "pcap" | "malware";
+type JobRoute = "pcap" | "malware" | "memory";
 type Tab = NonNullable<AiDeepLink["tab"]>;
 
 /** The tab of each cited kind on each job route; a kind missing here links to the job overview. */
 const KIND_TABS: Record<string, Partial<Record<JobRoute, Tab>>> = {
-  finding: { pcap: "findings", malware: "findings" },
+  finding: { pcap: "findings", malware: "findings", memory: "findings" },
   alert: { pcap: "alerts" },
   flow: { pcap: "flows" },
-  ioc: { pcap: "iocs", malware: "iocs" },
-  ti_result: { pcap: "iocs", malware: "iocs" },
-  timeline: { pcap: "timeline" },
+  ioc: { pcap: "iocs", malware: "iocs", memory: "iocs" },
+  ti_result: { pcap: "iocs", malware: "iocs", memory: "iocs" },
+  timeline: { pcap: "timeline", memory: "timeline" },
   signature: { malware: "signatures" },
   capability: { malware: "capabilities" },
   string: { malware: "strings" },
   pe_summary: { malware: "sections" },
 };
 const JOB_KINDS = new Set([...Object.keys(KIND_TABS), "job", "record", "sample"]);
-const PATH_ROUTE = /^\/o\/[0-9a-f-]{36}\/(pcap|malware)\//i;
+const PATH_ROUTE = /^\/o\/[0-9a-f-]{36}\/(pcap|malware|memory)\//i;
 
 export function jobRouteFor(analyzer: string | null | undefined): JobRoute | null {
   if (analyzer === "pcap") return "pcap";
   if (analyzer === "static") return "malware";
+  if (analyzer === "memory") return "memory";
   return null;
 }
 

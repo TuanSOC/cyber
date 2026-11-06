@@ -7,7 +7,7 @@ import { AnalyzerBadge } from "@/components/analysis/analyzer-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { type AnalysisJob, analysisErrorText, analysisSegment, isActiveStatus, jobDurationText } from "@/lib/analysis";
+import { type AnalysisJob, analysisErrorText, ANALYZER_MODULES, analysisSegment, isActiveStatus, jobDurationText } from "@/lib/analysis";
 import { formatDate } from "@/lib/format";
 import { orgPath } from "@/lib/nav";
 
@@ -107,11 +107,11 @@ export function WrongModuleNotice({ orgId, job }: { orgId: string; job: Analysis
   return (
     <Alert className="mb-6">
       <AlertTitle>
-        This is {job.analyzer === "static" ? "a static analysis" : "a PCAP analysis"} of {job.evidence_filename}
+        This is {ANALYZER_MODULES[job.analyzer].article} of {job.evidence_filename}
       </AlertTitle>
       <AlertDescription>
         <Link className="underline underline-offset-4" href={orgPath(orgId, analysisSegment(job))}>
-          Open it in {job.analyzer === "static" ? "the Malware Lab" : "the PCAP Analyzer"}
+          Open it in {ANALYZER_MODULES[job.analyzer].module}
         </Link>
       </AlertDescription>
     </Alert>

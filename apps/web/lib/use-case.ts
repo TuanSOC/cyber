@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { useInvestigationAnalyses } from "@/components/analysis/investigation-analyses";
 import type { JobRoute } from "@/lib/ai";
+import { ANALYZER_ROUTES } from "@/lib/analysis";
 import { api } from "@/lib/api";
 import type { AttackMappingCreate, AttackMappingUpdate } from "@/lib/case-attack";
 import {
@@ -150,7 +151,7 @@ export function useJobRoutes(orgId: string, investigationId: string): ReadonlyMa
   return useMemo(
     () =>
       new Map<string, JobRoute>(
-        (analyses.data?.items ?? []).map((job) => [job.id, job.analyzer === "static" ? "malware" : "pcap"]),
+        (analyses.data?.items ?? []).map((job) => [job.id, ANALYZER_ROUTES[job.analyzer]]),
       ),
     [analyses.data],
   );

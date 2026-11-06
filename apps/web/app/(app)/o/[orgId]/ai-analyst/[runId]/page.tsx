@@ -9,6 +9,7 @@ import { RunView } from "@/components/ai/run-view";
 import { NotFoundCard } from "@/components/not-found-card";
 import { PageHeader } from "@/components/page-header";
 import { childFlags, isUuid, routeForTask, runTargetHref, runTargetText, taskLabel } from "@/lib/ai";
+import { ANALYZER_ROUTES } from "@/lib/analysis";
 import { ApiError, api, unwrap } from "@/lib/api";
 import { orgPath } from "@/lib/nav";
 import { useOrg } from "@/lib/org-context";
@@ -40,7 +41,7 @@ export default function AiRunPage() {
     return <NotFoundCard title="AI run not found" backHref={back} backLabel="AI Analyst" />;
   }
   const route = detail
-    ? (routeForTask(detail.task) ?? (job.data ? (job.data.analyzer === "static" ? "malware" : "pcap") : null))
+    ? (routeForTask(detail.task) ?? (job.data ? ANALYZER_ROUTES[job.data.analyzer] : null))
     : null;
   const target = detail ? runTargetHref(orgId, detail, route) : null;
 

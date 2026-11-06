@@ -84,6 +84,8 @@ describe("key drawer", () => {
     expect(occurrenceJobHref(ORG, { analyzer: "pcap", job_id: JOB })).toBe(`/o/${ORG}/pcap/${JOB}?tab=iocs`);
     expect(occurrenceJobHref(ORG, { analyzer: "static", job_id: JOB })).toBe(`/o/${ORG}/malware/${JOB}?tab=iocs`);
     expect(occurrenceJobHref(ORG, { analyzer: "pcap", job_id: "../x" })).toBeNull();
+    // M8 RT1: memory occurrences link to the memory job page's IOC tab.
+    expect(occurrenceJobHref(ORG, { analyzer: "memory", job_id: JOB })).toBe(`/o/${ORG}/memory/${JOB}?tab=iocs`);
   });
 
   it("maps kinds to threat intel lookup types (none for JA3 / certificates)", () => {

@@ -64,6 +64,13 @@ async def test_every_tenant_table_has_forced_rls(owner_engine: AsyncEngine) -> N
         "evidence_purges",
         "correlation_keys",
         "correlation_job_state",
+        # M8 (migration 0016)
+        "memory_images",
+        "memory_processes",
+        "memory_connections",
+        "memory_injections",
+        "memory_artifacts",
+        "memory_sensitivity",
     }
     unprotected = [r.relname for r in rows if not (r.relrowsecurity and r.relforcerowsecurity)]
     assert unprotected == []

@@ -1,7 +1,6 @@
 import uuid
 from typing import Annotated
 
-from cyberlab_jobs.static import Profile
 from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.core import rate_limit
@@ -10,7 +9,7 @@ from app.core.pagination import PageParamsDep
 from app.core.rbac import OrgContext, Permission, require
 from app.modules.analysis import repository as repo
 from app.modules.analysis import service
-from app.modules.analysis.models import AnalysisStatus, Analyzer
+from app.modules.analysis.models import AnalysisStatus, Analyzer, JobProfile
 from app.modules.analysis.schemas import AnalysisCreate, AnalysisJobOut, AnalysisJobPage
 from app.modules.investigations.timeline import ensure_investigation
 
@@ -35,7 +34,13 @@ async def run_analysis(
     """Queue an analyzer run over the evidence (re-runs keep earlier jobs as history)."""
     await rate_limit.hit(f"analysis:run:{user.id}", MANUAL_RUNS_PER_10MIN, 600)
     return await service.request_analysis(
-        org_id, user, evidence_id, request, analyzer=body.analyzer, profile=body.profile
+        org_id,
+        user,
+        evidence_id,
+        request,
+        analyzer=body.analyzer,
+        profile=body.profile,
+        os_hint=body.os_hint,
     )
 
 
@@ -52,7 +57,7 @@ async def list_analyses(
     page: PageParamsDep,
     status: Annotated[AnalysisStatus | None, Query()] = None,
     analyzer: Annotated[Analyzer | None, Query()] = None,
-    profile: Annotated[Profile | None, Query()] = None,
+    profile: Annotated[JobProfile | None, Query()] = None,
     investigation_id: Annotated[uuid.UUID | None, Query()] = None,
     latest_per_evidence: Annotated[bool, Query()] = False,
 ) -> AnalysisJobPage:

@@ -7,7 +7,7 @@ import uuid
 from datetime import timedelta
 
 from cyberlab_jobs.capture import capture_format, executable_format
-from cyberlab_jobs.static import Profile
+from cyberlab_jobs.memory import OsHint
 from sqlalchemy import func, select
 from starlette.requests import HTTPConnection
 
@@ -22,15 +22,19 @@ from app.modules.analysis import analyzers, dispatch, lifecycle
 from app.modules.analysis import repository as repo
 from app.modules.analysis.models import (
     ACTIVE,
+    PROFILES,
     AnalysisJob,
     AnalysisJobIndex,
     AnalysisStatus,
     Analyzer,
+    JobProfile,
 )
 from app.modules.analysis.schemas import AnalysisJobOut, AnalysisJobPage
 from app.modules.audit import service as audit
 from app.modules.evidence import service as evidence_service
 from app.modules.evidence.models import CustodyAction, EvidenceStatus
+from app.modules.memory_analysis.errors import MemoryImageEmpty, MemoryImageTooLarge
+from app.modules.memory_analysis.sensitivity import apply_memory_default
 
 log = logging.getLogger(__name__)
 
@@ -61,8 +65,17 @@ class SampleTooLarge(AppError):
 TOO_LARGE: dict[Analyzer, type[AppError]] = {
     Analyzer.PCAP: CaptureTooLarge,
     Analyzer.STATIC: SampleTooLarge,
+    Analyzer.MEMORY: MemoryImageTooLarge,
 }
+# Automatic runs only (never memory: a memory run is always an explicit request, M8).
 SKIPPABLE = (AnalysisActive, AnalysisQueueFull, CaptureTooLarge, SampleTooLarge, TooManyRequests)
+
+
+def _active_caps(settings: Settings, analyzer: Analyzer) -> tuple[int, int]:
+    """(per org, global) active jobs of one analyzer (M8: memory has its own, lower caps)."""
+    if analyzer == Analyzer.MEMORY:
+        return settings.memory_max_active_per_org, settings.memory_max_active_total
+    return settings.max_active_analyses_per_org, settings.max_active_analyses_global
 
 
 def to_out(row: repo.JobRow) -> AnalysisJobOut:
@@ -74,6 +87,7 @@ def to_out(row: repo.JobRow) -> AnalysisJobOut:
         evidence_filename=row.evidence_filename,
         analyzer=job.analyzer,
         profile=job.profile,
+        os_hint=job.os_hint,
         status=job.status,
         error_code=job.error_code,
         auto=job.auto,
@@ -94,7 +108,7 @@ async def _global_queue_full(analyzer: Analyzer) -> bool:
                 AnalysisJobIndex.analyzer == analyzer, AnalysisJobIndex.status.in_(ACTIVE)
             )
         )
-    return int(active or 0) >= get_settings().max_active_analyses_global
+    return int(active or 0) >= _active_caps(get_settings(), analyzer)[1]
 
 
 async def _create(
@@ -103,7 +117,8 @@ async def _create(
     request: HTTPConnection,
     *,
     analyzer: Analyzer,
-    profile: Profile | None,
+    profile: JobProfile | None,
+    os_hint: OsHint | None,
     auto: bool,
     token: str,
 ) -> dispatch.DispatchInput:
@@ -116,6 +131,8 @@ async def _create(
     await evidence_service.ensure_open_investigation(ctx, evidence.investigation_id)
     if evidence.size_bytes > analyzers.max_bytes(settings, analyzer):
         raise TOO_LARGE[analyzer]()
+    if analyzer == Analyzer.MEMORY and evidence.size_bytes == 0:
+        raise MemoryImageEmpty()
 
     await repo.lock_org_queue(ctx.session, ctx.org_id)
     active = await ctx.session.execute(
@@ -129,7 +146,7 @@ async def _create(
     if active.first() is not None:
         raise AnalysisActive()
     active_count = await repo.count_active(ctx.session, ctx.org_id, analyzer)
-    if active_count >= settings.max_active_analyses_per_org:
+    if active_count >= _active_caps(settings, analyzer)[0]:
         raise AnalysisQueueFull()
 
     job = AnalysisJob(
@@ -137,6 +154,7 @@ async def _create(
         evidence_id=evidence_id,
         analyzer=analyzer,
         profile=profile,
+        os_hint=os_hint,
         requested_by=ctx.user.id,
         auto=auto,
         ingest_token_sha256=hashlib.sha256(token.encode()).hexdigest(),
@@ -155,6 +173,11 @@ async def _create(
     details: dict[str, object] = {"job_id": str(job.id), "analyzer": analyzer.value, "auto": auto}
     if profile is not None:
         details["profile"] = profile.value
+    if os_hint is not None:
+        details["os_hint"] = os_hint.value
+    if analyzer == Analyzer.MEMORY:
+        # TLP:RED by default (RT3), in this transaction; idempotent (phase-8 entry point).
+        await apply_memory_default(ctx.session, ctx.org_id, evidence_id, ctx.user.id)
     evidence_service.record_event(
         ctx,
         evidence_id=evidence_id,
@@ -176,6 +199,7 @@ async def _create(
         ingest_token=token,
         analyzer=analyzer,
         profile=profile,
+        os_hint=os_hint,
     )
 
 
@@ -207,18 +231,31 @@ async def request_analysis(
     request: HTTPConnection,
     *,
     analyzer: Analyzer = Analyzer.PCAP,
-    profile: Profile | None = None,
+    profile: JobProfile | None = None,
+    os_hint: OsHint | None = None,
     auto: bool = False,
 ) -> AnalysisJobOut:
     """Create the job (committed first), then enqueue it. A lost enqueue is a failed job."""
-    if (profile is not None) != (analyzer == Analyzer.STATIC):
-        raise ValueError("static jobs need a profile; other analyzers take none")
+    allowed = PROFILES[analyzer]
+    if (profile is None) != (not allowed) or (profile is not None and profile not in allowed):
+        raise ValueError(f"{analyzer} jobs take a profile of {sorted(allowed)}")
+    if (os_hint is not None) != (analyzer == Analyzer.MEMORY):
+        raise ValueError("memory jobs need an os_hint; other analyzers take none")
+    if analyzer == Analyzer.MEMORY and auto:
+        raise ValueError("memory analysis is never automatic")
     if await _global_queue_full(analyzer):
         raise AnalysisQueueFull()
     token = secrets.token_urlsafe(32)
     async with org_session(org_id, user, Permission.EVIDENCE_WRITE) as ctx:
         item = await _create(
-            ctx, evidence_id, request, analyzer=analyzer, profile=profile, auto=auto, token=token
+            ctx,
+            evidence_id,
+            request,
+            analyzer=analyzer,
+            profile=profile,
+            os_hint=os_hint,
+            auto=auto,
+            token=token,
         )
     # The job is committed: nothing below may turn this request into an error.
     try:
@@ -235,20 +272,22 @@ async def request_analysis(
 
 def auto_choice(
     head: bytes, size: int, settings: Settings
-) -> tuple[Analyzer, Profile | None] | None:
+) -> tuple[Analyzer, JobProfile | None] | None:
     """Which analysis an upload gets automatically (from its first bytes), if any.
 
     - pcap / pcapng magic: the pcap analyzer (an oversized capture is refused and audited);
     - PE (in-bounds PE header) or non-core ELF: static `full` (oversized: refused, audited);
     - any other non-empty file within the static size cap: static `av` (ClamAV + YARA).
-    Empty files and other files over the cap get nothing.
+    Empty files and other files over the cap get nothing. Never memory (M8: a memory run is
+    always an explicit request), and a `kind=memory` upload gets no automatic run at all
+    (RT3: the upload route skips `auto_request`).
     """
     if capture_format(head) is not None:
         return Analyzer.PCAP, None
     if executable_format(head) is not None:
-        return Analyzer.STATIC, Profile.FULL
+        return Analyzer.STATIC, JobProfile.FULL
     if 0 < size <= settings.static_max_bytes:
-        return Analyzer.STATIC, Profile.AV
+        return Analyzer.STATIC, JobProfile.AV
     return None
 
 
@@ -306,7 +345,7 @@ async def list_jobs(
     evidence_id: uuid.UUID | None = None,
     status: AnalysisStatus | None = None,
     analyzer: Analyzer | None = None,
-    profile: Profile | None = None,
+    profile: JobProfile | None = None,
 ) -> AnalysisJobPage:
     if evidence_id is not None:
         await evidence_service.get_row(ctx, evidence_id)  # 404 for foreign/unknown evidence

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { UploadRow, type UploadItem } from "@/components/evidence/upload-row";
+import { MemoryUploadOption } from "@/components/memory/memory-upload-option";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError, errorMessage } from "@/lib/api";
@@ -36,6 +37,8 @@ export function EvidenceUploader({ orgId, investigationId }: { orgId: string; in
   const dragDepth = useRef(0);
   const [items, setItems] = useState<Item[]>([]);
   const [description, setDescription] = useState("");
+  // M8: upload the next files as memory images (`?kind=memory`, RT3); phase 9's option sets it.
+  const [memory, setMemory] = useState(false);
   const [dragging, setDragging] = useState(false);
   const busy = items.some((item) => item.state === "uploading" || item.state === "queued");
 
@@ -65,8 +68,13 @@ export function EvidenceUploader({ orgId, investigationId }: { orgId: string; in
     while ((item = queue.current.shift())) {
       const { id } = item;
       update(id, { state: "uploading", progress: 0, error: undefined });
-      current.current = uploadEvidence(orgId, investigationId, item.file, item.description, (p) =>
-        update(id, { progress: p }),
+      current.current = uploadEvidence(
+        orgId,
+        investigationId,
+        item.file,
+        item.description,
+        (p) => update(id, { progress: p }),
+        item.memory ? { kind: "memory" } : {},
       );
       try {
         const evidence = await current.current.promise;
@@ -98,6 +106,7 @@ export function EvidenceUploader({ orgId, investigationId }: { orgId: string; in
       id: nextId++,
       file,
       description: description.trim(),
+      memory,
       progress: 0,
       state: "queued" as const,
     }));
@@ -124,6 +133,7 @@ export function EvidenceUploader({ orgId, investigationId }: { orgId: string; in
         value={description}
         onChange={(event) => setDescription(event.target.value)}
       />
+      <MemoryUploadOption value={memory} onChange={setMemory} disabled={busy} />
       <button
         type="button"
         onClick={() => input.current?.click()}

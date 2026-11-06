@@ -48,6 +48,8 @@ const ENRICHING_REFRESH_MS = 10_000;
  * e.g. `javascript:`): shown as text with a copy button, never as a link. With threat intel (M4)
  * each row carries the latest attributed answer per provider, or why the value is never sent.
  * `citedRef` (an AI citation link) narrows the list to that observable.
+ * `enrichDisabledReason` (M8, RT16) hides the Enrich button and shows why instead (e.g. restricted
+ * memory evidence); the API refuses the enrichment server-side either way.
  */
 export function IocsTab({
   orgId,
@@ -55,13 +57,16 @@ export function IocsTab({
   source = "capture",
   citedRef,
   onClearRef,
+  enrichDisabledReason,
 }: {
   orgId: string;
   jobId: string;
-  /** What the observables were extracted from ("capture", "file"). */
+  /** What the observables were extracted from ("capture", "file", "memory image"). */
   source?: string;
   citedRef?: string | null;
   onClearRef?: () => void;
+  /** When set, no Enrich button: this text is shown in its place. */
+  enrichDisabledReason?: string;
 }) {
   const cited = parseRowRef(citedRef);
   const [type, setType] = useState<IocType | typeof ALL>(ALL);
@@ -130,7 +135,13 @@ export function IocsTab({
             onChange={(event) => setSearch(event.target.value)}
           />
           <div className="ml-auto">
-            <EnrichButton orgId={orgId} jobId={jobId} busy={enriching} />
+            {enrichDisabledReason ? (
+              <p className="max-w-sm text-right text-xs text-muted-foreground" data-testid="enrich-disabled">
+                {enrichDisabledReason}
+              </p>
+            ) : (
+              <EnrichButton orgId={orgId} jobId={jobId} busy={enriching} />
+            )}
           </div>
         </>
         )
