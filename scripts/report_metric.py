@@ -27,6 +27,9 @@ Options:
   --deps          let compose start api-test's dependencies (default lane only)
   --verapdf       validate the golden PDF as PDF/A-3a with a one-off `verapdf/cli` container
                   (recorded as pass / fail / not run; never affects the exit status)
+  --verapdf-image IMAGE@sha256:DIGEST
+                  the veraPDF image (default: verapdf/cli pinned by digest); must be
+                  pinned by an @sha256 digest, a bare tag is refused
 
 Exit status: the test's (non-zero when a floor fails or the table is missing).
 """
@@ -57,7 +60,12 @@ PYTEST = [
     "metric",
     "tests/reports_metric",
 ]
-VERAPDF_IMAGE = "verapdf/cli:latest"
+# Pinned by digest (Docker Hub `verapdf/cli`, tag v1.30.3 = `latest` on 2026-10-27): never a
+# moving tag. `--verapdf-image` overrides it, and must be pinned by digest too.
+VERAPDF_IMAGE = (
+    "verapdf/cli:v1.30.3@sha256:d74b7026c18a0f171e73c153b617fe6520e1511feb24ca98a348b2bb897669fb"
+)
+PINNED_IMAGE = re.compile(r"^[a-z0-9][a-z0-9._/:-]*@sha256:[0-9a-f]{64}$")
 HEADER = """# M6 report metrics (§14)
 
 Generated {date} by `{command}` (test
@@ -98,8 +106,10 @@ def renderer_running() -> bool | None:
     return "report-worker-test" in proc.stdout.split()
 
 
-def verapdf(pdf: Path) -> str:
+def verapdf(pdf: Path, image: str = VERAPDF_IMAGE) -> str:
     """PDF/A-3a validation of the golden PDF: `pass`, `fail` or `not run (...)`."""
+    if not PINNED_IMAGE.fullmatch(image):
+        return "not run (the veraPDF image is not pinned by @sha256 digest)"
     if not pdf.is_file():
         return "not run (no golden PDF was rendered)"
     if shutil.which("docker") is None:
@@ -113,7 +123,7 @@ def verapdf(pdf: Path) -> str:
             "none",
             "-v",
             f"{pdf.parent.resolve()}:/data:ro",
-            VERAPDF_IMAGE,
+            image,
             "--flavour",
             "3a",
             f"/data/{pdf.name}",
@@ -143,7 +153,15 @@ def main() -> int:
     parser.add_argument("--lane", type=int, default=None)
     parser.add_argument("--deps", action="store_true", help="start api-test's dependencies")
     parser.add_argument("--verapdf", action="store_true", help="run veraPDF (not gating)")
+    parser.add_argument(
+        "--verapdf-image",
+        default=VERAPDF_IMAGE,
+        metavar="IMAGE@sha256:DIGEST",
+        help="the veraPDF image, pinned by digest (default: the pinned verapdf/cli)",
+    )
     args = parser.parse_args()
+    if not PINNED_IMAGE.fullmatch(args.verapdf_image):
+        parser.error("--verapdf-image must be pinned by digest (name@sha256:<64 hex>)")
     if args.cases < 4:
         parser.error("--cases must be at least 4")
     if args.lane is not None and not 2 <= args.lane <= 8:
@@ -183,10 +201,11 @@ def main() -> int:
         sys.stderr.write(proc.stdout[-4000:] + proc.stderr[-4000:])
         sys.stderr.write("\nreport_metric: the metric table was not printed (see above)\n")
         return proc.returncode or 1
-    verapdf_result = verapdf(OUT_HOST / "golden.pdf") if args.verapdf else "not run"
+    golden = OUT_HOST / "golden.pdf"
+    verapdf_result = verapdf(golden, args.verapdf_image) if args.verapdf else "not run"
     vera = (
         "\n\n## veraPDF (recorded, never gating)\n\n"
-        f"- PDF/A-3a validation of the golden PDF (`{VERAPDF_IMAGE}`, one-off container, no "
+        f"- PDF/A-3a validation of the golden PDF (`{args.verapdf_image}`, one-off container, no "
         f"network): **{verapdf_result}**.\n"
     )
     print(table + vera)
@@ -202,6 +221,8 @@ def main() -> int:
             flags.insert(0, f"--lane {args.lane}")
         if args.verapdf:
             flags.append("--verapdf")
+            if args.verapdf_image != VERAPDF_IMAGE:
+                flags.append(f"--verapdf-image {args.verapdf_image}")
         header = HEADER.format(
             date=now.strftime("%Y-%m-%d %H:%M UTC"),
             command="python scripts/report_metric.py " + " ".join(flags),

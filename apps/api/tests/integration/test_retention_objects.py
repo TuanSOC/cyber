@@ -12,8 +12,10 @@ the purge MinIO user:
 - the api user cannot delete in `reports` and has no legal-hold action.
 """
 
+import asyncio
 import io
 import uuid
+from typing import Any
 
 import pytest
 from minio.error import S3Error
@@ -21,6 +23,7 @@ from sqlalchemy import text
 
 from app.core.clients import get_minio
 from app.core.tenancy import tenant_session
+from app.modules.evidence.models import Evidence
 from app.workers import retention as worker_module
 from tests.analysis_helpers import tiny_pcap
 from tests.case_helpers import seed_case
@@ -34,7 +37,7 @@ from tests.ops_helpers import (
     seed_retention_policy,
 )
 from tests.report_helpers import new_signing_keys, reports_test_bucket, seed_report, seed_version
-from tests.storage_helpers import lane_key, root_minio
+from tests.storage_helpers import evidence_test_bucket, lane_key, root_minio
 
 API = "/api/v1/orgs"
 __all__ = ["captured"]
@@ -143,13 +146,15 @@ async def test_off_after_the_delay_unless_another_hold_covers(captured: Captured
     assert await _synced_at(t, shared_released) is not None  # nothing to do: stamped
     assert _held(org_objs) == [True, True, True]  # no hold at all: never touched
 
-    # An org hold keeps a released case's objects ON too, and turns every evidence version
-    # of the org ON itself (the lone case's two; its snapshot is not the org hold's).
+    # An org hold keeps a released case's evidence ON, and turns every evidence version of
+    # the org ON itself (the lone case's two; its snapshot is not the org hold's). The
+    # released case hold's snapshot is not the org hold's either: it goes OFF (review L1).
     org_released = await seed_released_hold(t, 30, investigation_id=org_case)
     await seed_hold(t)
-    assert await worker_module.sync_holds(t.org_id) == 2
-    assert _held(org_objs) == [True, True, True]
+    assert await worker_module.sync_holds(t.org_id) == 3
+    assert _held(org_objs) == [True, True, False]
     assert _held(lone_objs) == [True, True, False]
+    assert _held(shared_objs) == [True, True, True]  # its active case hold keeps the snapshot
     assert await _synced_at(t, org_released) is not None
 
 
@@ -223,6 +228,21 @@ async def test_an_org_hold_is_mirrored_on_every_evidence_version(captured: Captu
     assert await worker_module.sync_holds(t.org_id) == 0
 
 
+async def _sync_state(t: Tenant, hold_id: uuid.UUID) -> dict[str, Any]:
+    async with tenant_session(t.org_id, None) as s:
+        row = (
+            await s.execute(
+                text(
+                    "SELECT s3_synced_at, s3_full_synced_at, s3_sync_cursor_at, "
+                    "s3_sync_cursor_id, s3_sync_pass_at, placed_at FROM legal_holds "
+                    "WHERE id = :h"
+                ),
+                {"h": hold_id},
+            )
+        ).one()
+    return dict(row._mapping)
+
+
 async def test_an_org_hold_resumes_where_the_budget_ran_out(
     captured: Captured, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -234,18 +254,19 @@ async def test_an_org_hold_resumes_where_the_budget_ran_out(
 
     assert await worker_module.sync_holds(t.org_id) == 3
     assert _held(objs) == [True, True, True, False, False]
-    async with tenant_session(t.org_id, None) as s:
-        mark, placed_at = (
-            await s.execute(
-                text("SELECT s3_synced_at, placed_at FROM legal_holds WHERE id = :h"),
-                {"h": hold_id},
-            )
-        ).one()
-    assert mark is not None and mark < placed_at  # a resume watermark: still pending
-    # The next pass resumes at the watermark (re-inspecting the last handled one only).
+    state = await _sync_state(t, hold_id)
+    # A cursor (0015), no completed pass: still `s3_sync: pending`.
+    assert state["s3_sync_cursor_at"] is not None and state["s3_sync_cursor_id"] is not None
+    assert state["s3_sync_pass_at"] is not None
+    assert state["s3_synced_at"] is None and state["s3_full_synced_at"] is None
+    # The next pass resumes right after the cursor (nothing re-inspected) and completes.
     assert await worker_module.sync_holds(t.org_id) == 2
     assert _held(objs) == [True] * 5
-    assert await _synced_at(t, hold_id) >= placed_at  # type: ignore[operator]
+    done = await _sync_state(t, hold_id)
+    assert done["s3_sync_cursor_at"] is None and done["s3_sync_pass_at"] is None
+    assert done["s3_full_synced_at"] is not None
+    # A completed ON pass stores its START (the next incremental pass's lower bound).
+    assert done["s3_synced_at"] == state["s3_sync_pass_at"]
 
 
 async def test_a_released_org_hold_turns_off_except_case_held(captured: Captured) -> None:
@@ -272,3 +293,160 @@ async def test_a_released_org_hold_turns_off_except_case_held(captured: Captured
     await seed_released_hold(u, 1)
     assert await worker_module.sync_holds(u.org_id) == 0
     assert _held(recent) == [True, True]
+
+
+# --- M7 review M1/M2/L2: resumable passes, budget shares, the sync's advisory lock ----------
+# The real budget is SYNC_INSPECT_MAX = 5000 inspected versions per sync; these tests shrink
+# it (monkeypatch) so a handful of rows stands for more than 5000, including many at ONE
+# `uploaded_at` (one transaction), where a time-only watermark cannot advance.
+
+
+async def _same_instant_evidence(
+    t: Tenant, case_id: uuid.UUID, n: int
+) -> list[tuple[str, str, str]]:
+    """`n` evidence versions in `evidence-test` whose rows share one `uploaded_at` (one
+    transaction: `now()` is its start)."""
+    bucket = evidence_test_bucket()
+    stored = []
+    for _ in range(n):
+        key = f"{t.org_id}/{uuid.uuid4()}"
+        version = root_minio().put_object(bucket, key, io.BytesIO(b"x"), 1).version_id
+        stored.append((bucket, key, str(version)))
+    async with tenant_session(t.org_id, t.owner_id) as s:
+        s.add_all(
+            Evidence(
+                organization_id=t.org_id,
+                investigation_id=case_id,
+                original_filename=f"same-{i}.bin",
+                detected_mime="application/octet-stream",
+                detected_description="data",
+                size_bytes=1,
+                storage_bucket=b,
+                storage_key=k,
+                storage_version_id=v,
+                uploaded_by=t.owner_id,
+            )
+            for i, (b, k, v) in enumerate(stored)
+        )
+    return stored
+
+
+async def _passes_in_progress(org_id: uuid.UUID) -> int:
+    async with tenant_session(org_id, None) as s:
+        found = await s.execute(
+            text("SELECT count(*) FROM legal_holds WHERE s3_sync_cursor_at IS NOT NULL")
+        )
+        return int(found.scalar_one())
+
+
+async def _sync_until_idle(org_id: uuid.UUID, max_syncs: int = 20) -> list[int]:
+    """Changes per sync until a sync changes nothing and no pass is in progress (bounded: a
+    stalled pass fails the test)."""
+    changed: list[int] = []
+    for _ in range(max_syncs):
+        changed.append(await worker_module.sync_holds(org_id))
+        if changed[-1] == 0 and not await _passes_in_progress(org_id):
+            return changed
+    raise AssertionError(f"the hold sync never settled: {changed}")
+
+
+async def test_an_org_hold_first_pass_finishes_past_one_timestamp(
+    captured: Captured, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M2: more uploads at one instant (and after the placement) than one sync's budget: the
+    keyset cursor (uploaded_at, id) advances inside the instant, the first pass completes."""
+    reg, t = await owner_tenant()
+    await seed_retention_policy(t)
+    hold_id = await seed_hold(t)
+    objs = await _same_instant_evidence(t, t.investigation_id, 7)  # all after placed_at
+    monkeypatch.setattr(worker_module, "SYNC_INSPECT_MAX", 3)
+
+    assert await worker_module.sync_holds(t.org_id) == 3
+    assert (await _sync_state(t, hold_id))["s3_full_synced_at"] is None
+    listed = (await reg.client.get(f"{API}/{t.org_id}/legal-holds")).json()["items"]
+    assert listed[0]["s3_sync"] == "pending"
+    assert await worker_module.sync_holds(t.org_id) == 3
+    assert await worker_module.sync_holds(t.org_id) == 1
+    assert _held(objs) == [True] * 7
+    state = await _sync_state(t, hold_id)
+    assert state["s3_full_synced_at"] is not None and state["s3_sync_cursor_at"] is None
+    listed = (await reg.client.get(f"{API}/{t.org_id}/legal-holds")).json()["items"]
+    assert listed[0]["s3_sync"] == "synced"
+
+    # Incremental passes re-inspect SYNC_SKEW before the last pass's start (all of the rows
+    # here), resumably too: a later burst at one instant is mirrored, then nothing changes.
+    late = await _same_instant_evidence(t, t.investigation_id, 5)
+    changed = await _sync_until_idle(t.org_id)
+    assert sum(changed) == 5 and max(changed) <= 3
+    assert _held(late) == [True] * 5
+
+
+async def test_an_org_off_pass_resumes_instead_of_restarting(
+    captured: Captured, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M1: a released org hold's OFF pass larger than the budget continues after its cursor
+    (an OFF pass used to restart from the beginning, re-inspecting the versions it had
+    already cleared, and never got past the budget)."""
+    _, t = await owner_tenant()
+    await seed_retention_policy(t)
+    objs = await _same_instant_evidence(t, t.investigation_id, 7)
+    _turn_on(objs)
+    hold_id = await seed_released_hold(t, 30)  # the delay is over
+    monkeypatch.setattr(worker_module, "SYNC_INSPECT_MAX", 3)
+
+    assert await worker_module.sync_holds(t.org_id) == 3
+    state = await _sync_state(t, hold_id)
+    assert state["s3_synced_at"] is None and state["s3_sync_cursor_at"] is not None
+    assert await worker_module.sync_holds(t.org_id) == 3  # not 0: no restart
+    assert await worker_module.sync_holds(t.org_id) == 1
+    assert _held(objs) == [False] * 7
+    done = await _sync_state(t, hold_id)
+    assert done["s3_synced_at"] is not None and done["s3_sync_cursor_at"] is None
+    assert await worker_module.sync_holds(t.org_id) == 0  # the OFF pass is done: skipped
+
+
+async def test_on_passes_run_first_and_every_pass_gets_a_share(
+    captured: Captured, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M1: the passes share the budget equally (none starves the ones after it), and ON
+    passes run before OFF passes whatever the placement order."""
+    _, t = await owner_tenant()
+    await seed_retention_policy(t)
+    held_case, released_case = await seed_case(t, title="Held"), await seed_case(t, title="Old")
+    released_objs = await _case_objects(t, released_case)
+    _turn_on(released_objs)
+    await seed_released_hold(t, 30, investigation_id=released_case)  # placed first (60 d ago)
+    held_objs = await _case_objects(t, held_case)
+    await seed_hold(t, investigation_id=held_case)
+
+    # A budget of one: only the first pass runs, and it is the ON pass.
+    monkeypatch.setattr(worker_module, "SYNC_INSPECT_MAX", 1)
+    assert await worker_module.sync_holds(t.org_id) == 1
+    assert sum(_held(held_objs)) == 1 and _held(released_objs) == [True] * 3
+    # A budget of two: one version each.
+    monkeypatch.setattr(worker_module, "SYNC_INSPECT_MAX", 2)
+    assert await worker_module.sync_holds(t.org_id) == 2
+    assert sum(_held(held_objs)) == 2 and sum(_held(released_objs)) == 2
+    await _sync_until_idle(t.org_id)
+    assert _held(held_objs) == [True] * 3  # evidence and the report snapshot
+    assert _held(released_objs) == [False] * 3
+
+
+async def test_the_sync_waits_for_the_orgs_advisory_lock(captured: Captured) -> None:
+    """L2: a sync takes the org's retention advisory lock for its whole transaction, so two
+    syncs (the sweep, a run, a placed hold's message) never interleave."""
+    _, t = await owner_tenant()
+    await seed_retention_policy(t)
+    objs = await _case_objects(t, t.investigation_id)
+    await seed_hold(t, investigation_id=t.investigation_id)
+    async with tenant_session(t.org_id, None) as holder:
+        await holder.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+            {"k": f"retention:{t.org_id}"},
+        )
+        task = asyncio.create_task(worker_module.sync_holds(t.org_id))
+        await asyncio.sleep(1.0)
+        assert not task.done()  # waiting for the lock
+        assert _held(objs) == [False] * 3
+    assert await asyncio.wait_for(task, timeout=30) == 3
+    assert _held(objs) == [True] * 3

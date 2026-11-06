@@ -3,6 +3,7 @@ import os
 import time
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -180,6 +181,37 @@ async def test_db_failure_under_a_legal_hold_keeps_the_version(
     assert response.status_code == 500
     assert await _evidence_rows(reg.org_id) == []
     # Kept (an orphan `reconcile_orphans.py` reports), never deleted under a hold.
+    assert [marker for _, _, marker in all_entries(prefix=f"{reg.org_id}/")] == [False]
+
+
+async def test_a_failed_commit_keeps_the_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    """M7 review L3: when the records' COMMIT itself fails (a lost connection), its outcome
+    is unknown, so the cleanup keeps the version instead of checking and deleting it (the
+    row could still be committing). `reconcile_orphans.py` reports the orphan."""
+    reg = await register()
+    case_id = await _new_case(reg)
+    real_session = uploads.org_session
+    calls = 0
+
+    @asynccontextmanager
+    async def commit_fails(*args: Any, **kwargs: Any) -> AsyncIterator[Any]:
+        nonlocal calls
+        calls += 1
+        async with real_session(*args, **kwargs) as ctx:
+            yield ctx
+            if calls == 2:  # the records' session: fail where its COMMIT runs
+                raise ConnectionResetError("simulated connection loss during COMMIT")
+
+    monkeypatch.setattr(uploads, "org_session", commit_fails)
+    client = AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False, client=("10.0.0.1", 40000)),
+        base_url=str(reg.client.base_url),
+        cookies=reg.client.cookies,
+    )
+    response = await _upload(client, reg.org_id, case_id, b"commit outcome unknown")
+    assert response.status_code == 500
+    assert calls == 2
+    assert await _evidence_rows(reg.org_id) == []  # rolled back here, but the api cannot know
     assert [marker for _, _, marker in all_entries(prefix=f"{reg.org_id}/")] == [False]
 
 

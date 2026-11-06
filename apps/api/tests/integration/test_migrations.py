@@ -1,5 +1,5 @@
-"""Migrations replay from scratch in one alembic run (M3 RT7); 0014, 0013, 0012, 0011, 0010,
-0009 and 0006 downgrade cleanly (0014 leaves its enum values and the inactive system user).
+"""Migrations replay from scratch in one alembic run (M3 RT7); 0015, 0014, 0013, 0012, 0011,
+0010, 0009 and 0006 downgrade cleanly (0014 leaves its enum values and the inactive system user).
 
 `env.py` applies every pending revision in a single transaction; 0006 adds an enum value,
 which Postgres will not let that same transaction use. The session fixture already upgrades
@@ -152,6 +152,10 @@ M7_EVIDENCE_COLUMNS = (
     "SELECT column_name FROM information_schema.columns WHERE table_name = 'evidence' "
     "AND column_name IN ('declared_type', 'type_mismatch') ORDER BY column_name"
 )
+HOLD_SYNC_COLUMNS = (
+    "SELECT column_name FROM information_schema.columns WHERE table_name = 'legal_holds' "
+    "AND column_name LIKE 's3%' ORDER BY column_name"
+)
 EXCEPTION_TRIGGERS = (
     "SELECT c.relname::text || ':' || p.proname::text FROM pg_trigger g "
     "JOIN pg_class c ON c.oid = g.tgrelid JOIN pg_proc p ON p.oid = g.tgfoid "
@@ -180,6 +184,8 @@ def _exception_triggers(function: str) -> list[str]:
 async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine) -> None:
     await get_engine().dispose()
     try:
+        _alembic("downgrade", "0014")  # 0015 (M7 review) drops the hold-sync state columns
+        assert await _scalars(owner_engine, HOLD_SYNC_COLUMNS) == ["s3_synced_at"]
         _alembic("downgrade", "0013")  # 0014 (M7) goes away; enum values and the user stay
         assert await _m7_tables(owner_engine) == []
         assert await _scalars(owner_engine, M7_FUNCTIONS) == []
@@ -230,7 +236,14 @@ async def test_downgrade_0006_then_fresh_upgrade_head(owner_engine: AsyncEngine)
         _alembic("upgrade", "head")  # never leave the shared test database half-migrated
         await get_engine().dispose()
 
-    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0014"]
+    assert await _scalars(owner_engine, "SELECT version_num FROM alembic_version") == ["0015"]
+    assert await _scalars(owner_engine, HOLD_SYNC_COLUMNS) == [
+        "s3_full_synced_at",
+        "s3_sync_cursor_at",
+        "s3_sync_cursor_id",
+        "s3_sync_pass_at",
+        "s3_synced_at",
+    ]
     assert await _m7_tables(owner_engine) == list(M7_TABLES)
     assert await _scalars(owner_engine, M7_FUNCTIONS) == [
         "forbid_mutation_except_retention",

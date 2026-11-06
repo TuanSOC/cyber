@@ -167,13 +167,38 @@ for (const [what, value] of [
 if (configs.dev.services["retention-worker"]?.image !== "cyberlab/api:dev") problems.push("dev retention-worker: not the dev image");
 
 // RT5: the api MinIO user can never clear (or set) an S3 legal hold or bypass GOVERNANCE.
-const apiPolicy = readFileSync(resolve("infra/minio/api-policy.template.json"), "utf8");
-if (/LegalHold|BypassGovernance|s3:\*/.test(apiPolicy)) {
-  problems.push("infra/minio/api-policy.template.json grants a legal-hold, bypass or wildcard action");
+// The policies are parsed: every Allow action is compared by name (IAM action names are
+// case-insensitive), any `*` in an Allow action (`s3:*`, `s3:Put*`, `*LegalHold`) and any
+// Allow `NotAction` is refused, since a wildcard could grant what the names below exclude.
+function allowedActions(path) {
+  const where = `infra/minio/${path}`;
+  let policy;
+  try {
+    policy = JSON.parse(readFileSync(resolve("infra/minio", path), "utf8"));
+  } catch (error) {
+    problems.push(`${where}: not valid JSON (${error.message})`);
+    return [];
+  }
+  const statements = [policy?.Statement ?? []].flat();
+  const actions = [];
+  for (const st of statements) {
+    if (st?.Effect !== "Allow") continue;
+    if (st.NotAction !== undefined) problems.push(`${where}: an Allow statement uses NotAction`);
+    for (const action of [st.Action ?? []].flat()) {
+      const name = String(action);
+      if (name.includes("*")) problems.push(`${where}: Allow action ${name} has a wildcard`);
+      actions.push(name.toLowerCase());
+    }
+  }
+  return actions;
 }
-const purgePolicy = readFileSync(resolve("infra/minio/purge-policy.template.json"), "utf8");
-if (/BypassGovernance|PutObject"|PutObjectRetention|s3:\*/.test(purgePolicy)) {
-  problems.push("infra/minio/purge-policy.template.json grants PutObject, retention, bypass or a wildcard");
+const apiActions = allowedActions("api-policy.template.json");
+if (apiActions.some((a) => a.includes("legalhold") || a.includes("bypassgovernance"))) {
+  problems.push("infra/minio/api-policy.template.json grants a legal-hold or bypass action");
+}
+const purgeForbidden = new Set(["s3:putobject", "s3:putobjectretention", "s3:bypassgovernanceretention"]);
+if (allowedActions("purge-policy.template.json").some((a) => purgeForbidden.has(a) || a.includes("bypassgovernance"))) {
+  problems.push("infra/minio/purge-policy.template.json grants PutObject, retention or bypass");
 }
 
 // The gateway proxies /api/* (and the evidence upload under it) to the api, the rest to web:

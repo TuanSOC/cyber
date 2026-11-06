@@ -46,7 +46,11 @@ async def discard_version(
     retention-locked). This is the api's only evidence delete (its MinIO delete grant, RT5),
     and it refuses (keeps the version; `reconcile_orphans.py` reports it) when an evidence
     row records the key, when a legal hold covers the case or the org, or when that cannot be
-    checked: the api never deletes committed or held evidence, whatever the lock says."""
+    checked: the api never deletes committed or held evidence, whatever the lock says.
+
+    Only for a failure BEFORE the records' COMMIT: when the COMMIT itself fails its outcome
+    is unknown (the row may be committed, or still committing, after this check), so the
+    caller (`uploads.upload`) keeps the version and never calls this (M7 review L3)."""
     with anyio.CancelScope(shield=True):
         try:
             allowed = await _may_discard(org_id, user, investigation_id, key)

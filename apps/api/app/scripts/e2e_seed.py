@@ -15,8 +15,13 @@ container through the environment only). stdout: one JSON line `{"email", "org_i
 "evidence_id"}`; the password is never printed or logged.
 
 Guard (exit 1 before any request or write): `CYBERLAB_E2E_SEED=1`, and the compose model's
-dev api env: `ENV=dev` and `COOKIE_SECURE` not true (the prod overlay sets `ENV=prod` and
-secure cookies). This writes as the owner and fabricates a purge: never on a prod stack.
+dev api env: `ENV=dev` set explicitly (an unset ENV is refused, though the settings default to
+dev) and read back through `get_settings()`, secure cookies off (the prod overlay sets
+`ENV=prod` and secure cookies). The target must be the dev stack too: `E2E_API_URL` is plain
+http on the compose network or loopback, the owner URL names this api's own database (host,
+port and name of `DATABASE_URL`), and the API must serve `/api/docs` (only an `ENV=dev` api
+does) before the seed user is registered. This writes as the owner and fabricates a purge:
+never on a prod stack.
 """
 
 import asyncio
@@ -30,43 +35,93 @@ from typing import Any
 
 import httpx
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.core.config import RETENTION_SYSTEM_USER_ID
+from app.core.config import RETENTION_SYSTEM_USER_ID, Settings, get_settings
 from app.scripts.drill_seed import DrillError, Session
 
 API = "/api/v1"
 LABEL = json.dumps({"label": "e2e"})
 MIN_PASSWORD = 12
+DEFAULT_API_URL = "http://api:8000"
+# The dev compose network's service names, or loopback (a dev api published on the host).
+DEV_API_HOSTS = frozenset({"api", "localhost", "127.0.0.1", "::1"})
+DEV_DB_HOSTS = frozenset({"postgres", "localhost", "127.0.0.1", "::1"})
 
 
 class SeedError(Exception):
     pass
 
 
-def require_dev(env: Mapping[str, str] | None = None) -> str:
+def _dev_api_url(url: str) -> str:
+    parts = httpx.URL(url)
+    if parts.scheme != "http" or parts.host not in DEV_API_HOSTS:
+        raise SeedError("refusing to run: E2E_API_URL is not the dev api (http on api/loopback)")
+    return url
+
+
+def _same_database(owner_url: str, api_url: str) -> None:
+    """The owner URL must name this api's own database (and a dev database host)."""
+    try:
+        owner, api = make_url(owner_url), make_url(api_url)
+    except Exception as exc:  # noqa: BLE001 - never echo a URL (it carries a password)
+        raise SeedError("refusing to run: a database URL does not parse") from exc
+    same = (owner.host, owner.port or 5432, owner.database) == (
+        api.host,
+        api.port or 5432,
+        api.database,
+    )
+    if owner.host not in DEV_DB_HOSTS or not same:
+        raise SeedError("refusing to run: E2E_OWNER_DATABASE_URL is not the dev api's database")
+
+
+def require_dev(env: Mapping[str, str] | None = None, settings: Settings | None = None) -> str:
     """The seed password, or SeedError unless this is the dev e2e's one-off seed container."""
     env = os.environ if env is None else env
     if env.get("CYBERLAB_E2E_SEED") != "1":
         raise SeedError("refusing to run: CYBERLAB_E2E_SEED=1 is not set (pnpm e2e only)")
-    if env.get("ENV", "dev") != "dev":
-        raise SeedError("refusing to run: ENV is not dev (the e2e seed is dev only)")
-    if env.get("COOKIE_SECURE", "false").lower() in ("1", "true", "yes"):
+    # Explicitly dev: an unset ENV would read as the settings' default (dev).
+    if env.get("ENV") != "dev":
+        raise SeedError("refusing to run: ENV=dev is not set (the e2e seed is dev only)")
+    if settings is None:
+        try:
+            settings = get_settings()
+        except Exception as exc:  # noqa: BLE001 - a settings error names no secret here
+            raise SeedError("refusing to run: the api settings do not load") from exc
+    if settings.env != "dev":
+        raise SeedError("refusing to run: the api settings are not ENV=dev")
+    if settings.cookie_secure or env.get("COOKIE_SECURE", "false").lower() in ("1", "true", "yes"):
         raise SeedError("refusing to run: COOKIE_SECURE is on (a prod-like api env)")
-    if not env.get("E2E_OWNER_DATABASE_URL"):
+    owner_url = env.get("E2E_OWNER_DATABASE_URL")
+    if not owner_url:
         raise SeedError("E2E_OWNER_DATABASE_URL is not set")
+    _same_database(owner_url, settings.database_url)
+    _dev_api_url(env.get("E2E_API_URL", DEFAULT_API_URL))
     password = env.get("E2E_SEED_PASSWORD", "")
     if len(password) < MIN_PASSWORD:
         raise SeedError(f"E2E_SEED_PASSWORD must have at least {MIN_PASSWORD} characters")
     return password
 
 
+def require_dev_api(client: httpx.Client) -> None:
+    """The target api runs ENV=dev: only then does it serve the interactive docs."""
+    try:
+        response = client.get("/api/docs")
+    except httpx.HTTPError as exc:
+        raise SeedError("refusing to run: the api did not answer /api/docs") from exc
+    if response.status_code != 200:
+        raise SeedError("refusing to run: the api is not ENV=dev (/api/docs is not served)")
+
+
 def _seed_api(password: str) -> dict[str, Any]:
     tag = secrets.token_hex(4)
     email = f"e2e-seed-{tag}@example.com"
-    client = httpx.Client(base_url=os.environ.get("E2E_API_URL", "http://api:8000"), timeout=60)
+    url = _dev_api_url(os.environ.get("E2E_API_URL", DEFAULT_API_URL))
+    client = httpx.Client(base_url=url, timeout=60)
     with client:
+        require_dev_api(client)
         user = Session(client)
         body = user.json(
             "POST",

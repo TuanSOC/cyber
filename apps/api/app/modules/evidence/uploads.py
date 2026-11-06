@@ -187,6 +187,7 @@ async def upload(
             key = f"{org_id}/{uuid.uuid4()}"
             version_id = await storage.put_file(key, spooled.path)
             committed = False
+            committing = False
             try:
                 # Re-authorized: membership may have changed during a long upload.
                 async with org_session(org_id, user, Permission.EVIDENCE_WRITE) as ctx:
@@ -200,10 +201,16 @@ async def upload(
                         filename=filename,
                         description=description,
                     )
+                    committing = True  # leaving the block commits
                 committed = True
                 await lock_version(org_id, user, out.id, key, version_id, request)
             except BaseException:
-                if not committed:
+                if committing and not committed:
+                    # The COMMIT itself failed (or was cancelled): its outcome is unknown,
+                    # the row may be committed or still committing, so a check now could
+                    # race it. Keep the version (`reconcile_orphans.py` reports an orphan).
+                    log.error("kept upload %s %s: commit outcome unknown", key, version_id)
+                elif not committed:
                     await discard_version(org_id, user, investigation_id, key, version_id)
                 raise
         finally:

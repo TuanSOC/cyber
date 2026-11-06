@@ -46,7 +46,7 @@ export const HOLD_STATE_LABELS: Record<HoldState, string> = {
 
 /**
  * The object-store mirror (case and org holds, RT5): "pending" until the worker's sync covered
- * it. The API's `s3_sync` decides: an org hold's `s3_synced_at` can be a resume watermark.
+ * it. The API's `s3_sync` decides (an active hold: its first full pass completed).
  */
 export function s3SyncLabel(hold: Pick<LegalHold, "s3_sync">): string {
   return hold.s3_sync === "synced" ? "Object-store hold: synced" : "Object-store hold: pending";
