@@ -35,6 +35,7 @@ from tests.security import (
     idor_cases_correlation,
     idor_cases_disk,
     idor_cases_disk_exports,
+    idor_cases_disk_sensitivity,
     idor_cases_memory,
     idor_cases_memory_sensitivity,
     idor_cases_ops,
@@ -64,8 +65,9 @@ M7_CASE_MODULES = (idor_cases_retention, idor_cases_correlation, idor_cases_ops)
 # M8: the memory read API (phase 7) and the memory sensitivity routes (phase 8, RT24).
 M8_CASE_MODULES = (idor_cases_memory, idor_cases_memory_sensitivity)
 # M9: the disk read API (phase 8) and file exports (phase 10); the generic sensitivity routes
-# (phase 1) are in `idor_cases_memory_sensitivity`.
-M9_CASE_MODULES = (idor_cases_disk, idor_cases_disk_exports)
+# (phase 1) are in `idor_cases_memory_sensitivity`, the disk sensitivity state (phase 9) in
+# `idor_cases_disk_sensitivity`.
+M9_CASE_MODULES = (idor_cases_disk, idor_cases_disk_exports, idor_cases_disk_sensitivity)
 PENDING_MODULES = (*M6_CASE_MODULES, *M7_CASE_MODULES, *M8_CASE_MODULES, *M9_CASE_MODULES)
 CASE_MODULES = (*CASE_MODULES, *PENDING_MODULES)
 PENDING_ROUTES: frozenset[tuple[str, str]] = frozenset().union(

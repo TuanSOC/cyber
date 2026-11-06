@@ -3,7 +3,8 @@
 Beside M8's `/memory-sensitivity` routes (unchanged, not deprecated): these answer for every
 source (`memory`, `disk`, `derived`) with the state and the source. The release keeps M8's
 rules (`org.update`, acknowledged, reasoned, once, audited); its code and audit action follow
-the source. The batch arm (`job_id`) answers 501 until phase 9.
+the source. The batch arm (`job_id`, M9 phase 9, RT20) releases every restricted segment of
+a disk job in one request.
 """
 
 import uuid
@@ -37,7 +38,8 @@ async def release_evidence_sensitivity(
     request: Request,
 ) -> EvidenceSensitivityDetailOut:
     """Once per evidence: 409 `memory_sensitivity_released` / `evidence_sensitivity_released`
-    afterwards; `422 acknowledgement_required`; 404 for evidence never marked; 501 with
-    `job_id` (batch release, phase 9). Audited `memory.sensitivity_released` or
-    `disk.sensitivity_released`."""
+    afterwards; `422 acknowledgement_required`; 404 for evidence never marked. With
+    `job_id`: every still-restricted segment of that disk job (one audit row each; 404 for a
+    job whose segments do not include this evidence, 409 when none is left). Audited
+    `memory.sensitivity_released` or `disk.sensitivity_released`."""
     return await sensitivity.release(ctx, evidence_id, body, request)

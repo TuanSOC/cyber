@@ -256,3 +256,49 @@ def test_the_line_alone_keeps_the_findings_section(golden: ReportSnapshot) -> No
 
 def test_a_zero_count_prints_nothing(golden: ReportSnapshot) -> None:
     assert "memory item" not in visible(render("gfm", _doc(_omitting(golden, 0))))
+
+
+# --- M9: the omitted disk items line (RT23) -------------------------------------------------
+
+DISK_LINE_4 = "4 disk items omitted (restricted evidence; TLP:RED required)"
+
+
+def _omitting_disk(
+    snapshot: ReportSnapshot, disk: int, memory: int = 0, *, findings: bool = True
+) -> ReportSnapshot:
+    update: dict[str, object] = {
+        "omissions": Omissions(memory_restricted=memory, disk_restricted=disk)
+    }
+    if not findings:
+        update["findings"] = FindingsSection()
+    return snapshot.model_copy(update=update)
+
+
+def test_a_memory_only_omission_prints_no_disk_line(golden: ReportSnapshot) -> None:
+    assert "disk item" not in visible(render("gfm", _doc(_omitting(golden, 3))))
+
+
+@pytest.mark.parametrize("parser", list(PARSERS))
+def test_the_disk_line_follows_the_memory_line(parser: str, golden: ReportSnapshot) -> None:
+    doc = _doc(_omitting_disk(golden, 4, memory=3))
+    out = render(parser, doc)
+    shown = visible(out)
+    assert LINE_3 in shown and DISK_LINE_4 in shown
+    findings_at = out.index("<h2>Findings</h2>")
+    memory_at = out.index("memory items omitted")
+    disk_at = out.index("disk items omitted")
+    assert findings_at < memory_at < disk_at < out.index("<h2>Alerts</h2>")
+    assert not set(tokens(parser, doc)) & {"html_block", "html_inline", "image"}
+
+
+def test_the_disk_line_alone_keeps_the_findings_section(golden: ReportSnapshot) -> None:
+    out = render("gfm", _doc(_omitting_disk(golden, 1, findings=False)))
+    assert "<h2>Findings</h2>" in out
+    shown = visible(out)
+    assert "1 disk item omitted (restricted evidence; TLP:RED required)" in shown
+    assert "memory item" not in shown
+    assert "<th>Severity</th>" not in out[out.index("<h2>Findings</h2>") : out.index("<h2>Alerts")]
+
+
+def test_a_zero_disk_count_prints_nothing(golden: ReportSnapshot) -> None:
+    assert "disk item" not in visible(render("gfm", _doc(_omitting_disk(golden, 0, memory=1))))

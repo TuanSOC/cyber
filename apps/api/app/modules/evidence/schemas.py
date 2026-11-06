@@ -31,7 +31,7 @@ class EvidenceSensitivityDetailOut(BaseModel):
 class SensitivityReleaseIn(BaseModel):
     """Admin release of restricted evidence (once, audited). `job_id` (a disk job whose
     segments include this evidence) releases every restricted segment of the job in one
-    request (RT20; 501 until phase 9). Derived evidence is never part of a batch."""
+    request (RT20). Derived evidence is never part of a batch."""
 
     model_config = ConfigDict(extra="forbid")
 

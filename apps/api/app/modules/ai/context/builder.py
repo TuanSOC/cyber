@@ -35,6 +35,7 @@ and then the root.
 import uuid
 from dataclasses import dataclass
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -56,6 +57,7 @@ from app.modules.ai.contracts import (
 from app.modules.ai.labels import format_label
 from app.modules.ai.models import AiOrgSettings
 from app.modules.analysis.models import AnalysisJob, AnalysisStatus, Analyzer
+from app.modules.disk_forensics.models import AnalysisJobSegment
 from app.modules.investigations import policy
 from app.modules.investigations.models import Investigation
 from app.modules.pcap_analysis.models import AnalysisFinding, NetworkAlert
@@ -372,9 +374,17 @@ async def _memory_digest(
 async def _disk_digest(
     session: AsyncSession, org_id: uuid.UUID, job: AnalysisJob, opts: Options
 ) -> list[Selection]:
-    """M9 phase 9 owns the body (findings and IOCs only, masked; never file listings, shell
-    history or events). Until then a disk job never reaches a digest silently as pcap (RT1)."""
-    raise NotImplementedError("the disk digest lands with M9 phase 9")
+    """M9 phase 9: a disk job's digest is its findings and IOCs only (with the TI answers of
+    those IOCs when asked), like the memory arm and never a pcap summary (RT1). Quoted text
+    in findings and IOC context is masked by the worker (`cyberlab_worker.mask`); file
+    listings (`disk_files`), events (`disk_events`), partitions and shell history never enter
+    a context, and there is no disk-specific AI task (`JOB_TASKS.disk = []`). The job only
+    gets here once every segment is no longer AI-excluded (released, then the flags cleared):
+    the case builder skips a disk job with an excluded segment and the run request refuses
+    it (`409 policy_blocked`)."""
+    jobs = [job.id]
+    iocs = await sel.iocs(session, org_id, jobs)
+    return [await sel.findings(session, org_id, jobs), iocs, await _ti(session, org_id, iocs, opts)]
 
 
 async def _digest_selections(
@@ -433,11 +443,9 @@ async def _case_jobs(
         raise ContextBuildError("target_not_found")
     found = await policy.load_policy(session, org_id, investigation_id=investigation_id)
     excluded = found.excluded_evidence_ids
-    jobs = [
-        j
-        for j in await sel.latest_succeeded_jobs(session, org_id, investigation_id)
-        if j.evidence_id not in excluded
-    ]
+    latest = await sel.latest_succeeded_jobs(session, org_id, investigation_id)
+    blocked = await _excluded_segment_jobs(session, org_id, latest, excluded)
+    jobs = [j for j in latest if j.evidence_id not in excluded and j.id not in blocked]
     if not jobs:
         raise ContextBuildError("context_empty")
     omitted = max(len(jobs) - opts.max_jobs, 0)
@@ -450,6 +458,28 @@ async def _case_jobs(
         evidence_ids=tuple(e for e in evidence_ids if e not in excluded),
     )
     return _Case(investigation, jobs, omitted, scope, excluded)
+
+
+async def _excluded_segment_jobs(
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    jobs: list[AnalysisJob],
+    excluded: frozenset[uuid.UUID],
+) -> set[uuid.UUID]:
+    """M9: the disk jobs with an AI-excluded segment beyond ordinal 0 (the job's own
+    `evidence_id`); the builder skips them like a job of excluded evidence."""
+    disk = [j.id for j in jobs if j.analyzer == Analyzer.DISK]
+    if not disk or not excluded:
+        return set()
+    seg = AnalysisJobSegment
+    rows = await session.scalars(
+        select(seg.job_id).where(
+            seg.organization_id == org_id,
+            seg.job_id.in_(disk),
+            seg.evidence_id.in_(list(excluded)),
+        )
+    )
+    return set(rows)
 
 
 def _with_policy_count(ctx: FrozenContext, excluded: frozenset[uuid.UUID]) -> FrozenContext:

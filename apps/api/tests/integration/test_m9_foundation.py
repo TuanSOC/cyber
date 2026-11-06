@@ -156,7 +156,8 @@ async def test_generic_routes_keep_m8_codes_for_memory_evidence() -> None:
     assert "memory.sensitivity_released" in await _actions(owner.org_id, evidence_id)
 
 
-async def test_batch_release_answers_501_until_phase_9() -> None:
+async def test_batch_release_of_an_unknown_job_is_404() -> None:
+    """Phase 9 implements the batch arm (RT20; `test_disk_batch_release.py`)."""
     owner = await register(org_name="M9 Batch Org")
     case_id = uuid.UUID(await new_case(owner))
     evidence_id = await restricted_disk_evidence(Tenant(owner.org_id, owner.user_id, case_id))
@@ -165,4 +166,4 @@ async def test_batch_release_answers_501_until_phase_9() -> None:
         json={"acknowledge": True, "reason": "batch", "job_id": str(uuid.uuid4())},
         headers=csrf(owner.client),
     )
-    assert response.status_code == 501, response.text
+    assert response.status_code == 404, response.text

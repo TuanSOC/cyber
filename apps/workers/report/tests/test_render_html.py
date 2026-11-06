@@ -356,3 +356,63 @@ def test_the_omitted_line_keeps_the_markup_allowlist(golden: ReportSnapshot) -> 
     for tag, attrs in parse(render(_omitting(golden, 2))).tags:
         for name in (attrs.get("class") or "").split():
             assert tag in ALLOWED_TAGS and name in FIXED_CLASSES, (tag, name)
+
+
+# --- M9: the omitted disk items line (RT23) -------------------------------------------------
+
+DISK_LINE_4 = "4 disk items omitted (restricted evidence; TLP:RED required)"
+
+
+def _omitting_disk(
+    snapshot: ReportSnapshot, disk: int, memory: int = 0, *, findings: bool = True
+) -> ReportSnapshot:
+    update: dict[str, object] = {
+        "omissions": Omissions(memory_restricted=memory, disk_restricted=disk)
+    }
+    if not findings:
+        update["findings"] = FindingsSection()
+    return snapshot.model_copy(update=update)
+
+
+def test_no_disk_count_no_disk_line(golden: ReportSnapshot) -> None:
+    snapshot = _omitting(golden, 3)
+    assert snapshot.omissions is not None and snapshot.omissions.disk_restricted is None
+    assert render_html.omissions_lines(snapshot) == [LINE_3]
+    assert "disk item" not in render(snapshot)
+    assert render_html.omissions_lines(golden) == []
+
+
+@pytest.mark.parametrize("mode", ["pdf", "html"])
+def test_the_disk_line_follows_the_memory_line_under_the_findings(
+    mode: str, golden: ReportSnapshot
+) -> None:
+    html = render(_omitting_disk(golden, 4, memory=3), mode)
+    start = html.index('<section id="findings">')
+    section = html[start : html.index("</section>", start)]
+    assert f'<p class="shown">{LINE_3}</p>' in section
+    assert f'<p class="shown">{DISK_LINE_4}</p>' in section
+    assert section.index(LINE_3) < section.index(DISK_LINE_4)
+    assert html.count("disk items omitted") == 1
+
+
+def test_the_disk_line_alone_keeps_the_findings_section(golden: ReportSnapshot) -> None:
+    snapshot = _omitting_disk(golden, 1, findings=False)
+    assert render_html.omissions_line(snapshot) is None  # no memory sentence
+    html = render(snapshot)
+    start = html.index('<section id="findings">')
+    section = html[start : html.index("</section>", start)]
+    assert "<table>" not in section
+    assert "1 disk item omitted (restricted evidence; TLP:RED required)" in section
+    assert "memory item" not in section
+    assert any(e.anchor == "findings" for e in render_html.context(snapshot, "0" * 64)["toc"])
+
+
+def test_a_zero_disk_count_prints_nothing(golden: ReportSnapshot) -> None:
+    assert render_html.omissions_lines(_omitting_disk(golden, 0)) == []
+    assert "disk item" not in render(_omitting_disk(golden, 0, memory=2))
+
+
+def test_the_disk_line_keeps_the_markup_allowlist(golden: ReportSnapshot) -> None:
+    for tag, attrs in parse(render(_omitting_disk(golden, 2, memory=1))).tags:
+        for name in (attrs.get("class") or "").split():
+            assert tag in ALLOWED_TAGS and name in FIXED_CLASSES, (tag, name)

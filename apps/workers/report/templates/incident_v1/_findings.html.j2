@@ -19,9 +19,9 @@
 </tbody>
 </table>
 {% endif %}
-{% if omitted_line %}
-<p class="shown">{{ omitted_line }}</p>
-{% endif %}
+{% for line in omitted_lines %}
+<p class="shown">{{ line }}</p>
+{% endfor %}
 </section>
 {% endif %}
 {% if present.alerts %}

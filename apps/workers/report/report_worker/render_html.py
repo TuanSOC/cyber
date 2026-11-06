@@ -14,6 +14,7 @@
 - M8 (RT10): a snapshot whose `omissions.memory_restricted` is set prints
   "N memory items omitted (restricted evidence; TLP:RED required)" under the findings (the
   section is shown for the line alone when no finding is left); the PDF follows the HTML.
+  M9 (RT23): `omissions.disk_restricted` prints "N disk items omitted (...)" next to it.
 - The HTML artifact carries the trusted constant CSS inline and the meta CSP
   `default-src 'none'; style-src 'unsafe-inline'` (RT19). The CSS is inserted by replacing
   the template's own empty `<style id="report-css"></style>` element in the head: the
@@ -186,14 +187,25 @@ def platform_links(snapshot: ReportSnapshot) -> dict[int, str]:
     return links
 
 
-def omissions_line(snapshot: ReportSnapshot) -> str | None:
-    """The fixed sentence of the snapshot's omitted count (M8), or None when nothing was
-    left out. Only an integer comes from the snapshot."""
-    n = snapshot.omissions.memory_restricted if snapshot.omissions is not None else 0
-    if n <= 0:
-        return None
+def _omitted(n: int, what: str) -> str:
     noun = "item" if n == 1 else "items"
-    return f"{_num(n)} memory {noun} omitted (restricted evidence; TLP:RED required)"
+    return f"{_num(n)} {what} {noun} omitted (restricted evidence; TLP:RED required)"
+
+
+def omissions_lines(snapshot: ReportSnapshot) -> list[str]:
+    """The fixed sentences of the snapshot's omitted counts, memory first (M8), then disk
+    (M9); empty when nothing was left out. Only integers come from the snapshot."""
+    o = snapshot.omissions
+    if o is None:
+        return []
+    counts = (("memory", o.memory_restricted), ("disk", o.disk_restricted or 0))
+    return [_omitted(n, what) for what, n in counts if n > 0]
+
+
+def omissions_line(snapshot: ReportSnapshot) -> str | None:
+    """The memory sentence alone (M8's entry point), or None."""
+    n = snapshot.omissions.memory_restricted if snapshot.omissions is not None else 0
+    return _omitted(n, "memory") if n > 0 else None
 
 
 def _ai_entries(snapshot: ReportSnapshot) -> list[AiEntry]:
@@ -213,8 +225,8 @@ def context(snapshot: ReportSnapshot, sha256: str) -> dict[str, Any]:
         if getattr(snapshot.sections, name)
     ]
     present = {name: bool(getattr(snapshot, name).items) for name, _, _ in DATA_SECTIONS}
-    omitted = omissions_line(snapshot)
-    if omitted is not None:
+    omitted = omissions_lines(snapshot)
+    if omitted:
         present["findings"] = True
     toc = [TocEntry(a.anchor, a.title) for a in analyst]
     toc.append(TocEntry("case", "Case"))
@@ -231,7 +243,7 @@ def context(snapshot: ReportSnapshot, sha256: str) -> dict[str, Any]:
         "links": platform_links(snapshot),
         "ioc_values": {i.ioc_key: i.value for i in snapshot.iocs.items},
         "ai_runs": _ai_entries(snapshot),
-        "omitted_line": omitted,
+        "omitted_lines": omitted,
     }
 
 

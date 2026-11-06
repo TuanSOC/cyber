@@ -13,12 +13,13 @@ points, never the routers:
 
 Manual TI lookups carry no case scope and are not checked (documented residual).
 
-Resolution: the given jobs are mapped to their evidence, the evidence (given + of the jobs)
-to their cases, and the given investigation joins them. Case flags and TLP:RED of any of
-those cases block; the share-policy rows of the *targeted* evidence block too. With an
-`investigation_id`, every excluded evidence item of that case is listed in
-`excluded_evidence_ids` (AI) / `ti_excluded_evidence_ids` (TI) without blocking: the
-builders skip those items. Unknown ids are ignored here (the callers 404 on them).
+Resolution: the given jobs are mapped to their evidence (M9: a disk job to every segment of
+its `analysis_job_segments` set), the evidence (given + of the jobs) to their cases, and the
+given investigation joins them. Case flags and TLP:RED of any of those cases block; the
+share-policy rows of the *targeted* evidence block too. With an `investigation_id`, every
+excluded evidence item of that case is listed in `excluded_evidence_ids` (AI) /
+`ti_excluded_evidence_ids` (TI) without blocking: the builders skip those items. Unknown
+ids are ignored here (the callers 404 on them).
 """
 
 import uuid
@@ -31,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import Conflict
 from app.modules.analysis.models import AnalysisJob
+from app.modules.disk_forensics.models import AnalysisJobSegment
 from app.modules.evidence.models import Evidence
 from app.modules.investigations.models import EvidenceSharePolicy, Investigation
 
@@ -133,6 +135,14 @@ async def load_policy(
             )
         )
         targeted.update(job_evidence)
+        # M9: every segment of a disk job is its evidence too (ordinal 0 is `evidence_id`).
+        segment_evidence = await session.scalars(
+            select(AnalysisJobSegment.evidence_id).where(
+                AnalysisJobSegment.organization_id == org_id,
+                AnalysisJobSegment.job_id.in_(list(job_ids)),
+            )
+        )
+        targeted.update(segment_evidence)
     cases: set[uuid.UUID] = {investigation_id} if investigation_id is not None else set()
     if targeted:
         evidence_cases = await session.scalars(

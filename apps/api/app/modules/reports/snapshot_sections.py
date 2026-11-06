@@ -16,6 +16,15 @@ the restricted jobs' sightings removed), job-scope AI runs, citations of its row
 row's summary (tool versions). `memory_guard` finds those jobs once per build; every left-out
 item is counted and `omissions()` gives the snapshot's additive `omissions` field (None when
 nothing was left out, so a report without such evidence keeps byte-identical canonical JSON).
+
+M9 (phase 9, RT23): the same guard covers restricted disk evidence (source `disk`) and files
+exported from it (source `derived`). A disk job is withheld when **any** of its segments
+(`analysis_job_segments`) is restricted; a static job on derived evidence follows its
+evidence's state. Its findings, IOCs seen only there, timeline entries, citations, job-scope
+AI runs and the job row's summary are left out below TLP:RED and counted in
+`omissions.disk_restricted` (absent from the canonical bytes when 0, so M8 snapshots with
+memory omissions keep their bytes). An item is counted once: as memory when the job's
+restriction is a memory image (`omissions.memory_restricted`), else as disk.
 """
 
 import re
@@ -35,7 +44,7 @@ from cyberlab_jobs.report import (
     truncate_text,
 )
 from sqlalchemy import case as sql_case
-from sqlalchemy import func, select, union_all
+from sqlalchemy import func, or_, select, union_all
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -51,6 +60,7 @@ from app.modules.ai.service_outputs import LinkContext, build, has_canary_leak
 from app.modules.analysis.models import AnalysisJob, AnalysisStatus, Analyzer
 from app.modules.attack.index import label as attack_label
 from app.modules.case_attack.models import CaseAttackMapping
+from app.modules.disk_forensics.models import AnalysisJobSegment
 from app.modules.evidence.models import (
     CustodyAction,
     Evidence,
@@ -62,7 +72,11 @@ from app.modules.investigations.models import Investigation, InvestigationStatus
 from app.modules.investigations.schemas import case_ref
 from app.modules.ioc_collections import case_iocs as case_iocs_mod
 from app.modules.ioc_collections.models import IocCollection, IocCollectionItem
-from app.modules.memory_analysis.models import MemorySensitivity, SensitivityState
+from app.modules.memory_analysis.models import (
+    MemorySensitivity,
+    SensitivitySource,
+    SensitivityState,
+)
 from app.modules.notes.models import AnalystNote, AnalystNoteVersion
 from app.modules.pcap_analysis.models import AnalysisFinding, Ioc, NetworkAlert
 from app.modules.reports.citations import CaseScope, CiteKey, Registry, Resolved, cite_key
@@ -167,10 +181,14 @@ class Build:
     # (pseudonym, original) of every reversed run map, in run order: the external profile
     # seeds its report-level map with them (`redact.seed_run_maps`, RT2).
     run_originals: list[tuple[str, str]] = field(default_factory=list)
-    # M8: jobs of restricted memory evidence (empty at TLP:RED; `memory_guard`) and the
-    # number of items left out because of them (`omissions.memory_restricted`).
+    # M8: jobs of restricted evidence (empty at TLP:RED; `memory_guard`) and the number of
+    # items left out because of them (`omissions.memory_restricted`).
     withheld_jobs: frozenset[uuid.UUID] = frozenset()
     withheld: int = 0
+    # M9: the subset of `withheld_jobs` restricted as disk or derived evidence, and the items
+    # left out because of them (`omissions.disk_restricted`).
+    withheld_disk_jobs: frozenset[uuid.UUID] = frozenset()
+    withheld_disk: int = 0
 
     async def name_of(self, user_ids: Sequence[uuid.UUID | None]) -> None:
         missing = [u for u in user_ids if u is not None and u not in self.names]
@@ -181,6 +199,13 @@ class Build:
 
     def count(self, section: str, **values: int) -> None:
         self.counts.setdefault(section, {}).update(values)
+
+    def omit(self, job_id: uuid.UUID | None, n: int = 1) -> None:
+        """Count `n` items of a withheld job into its omission (disk or memory)."""
+        if job_id is not None and job_id in self.withheld_disk_jobs:
+            self.withheld_disk += n
+        else:
+            self.withheld += n
 
 
 # --- the memory sensitivity guard (M8 phase 8) ----------------------------------------------
@@ -193,27 +218,59 @@ _WITHHELD_TIMELINE_KINDS = frozenset({"timeline", "finding", "alert"})
 
 
 async def memory_guard(b: Build) -> None:
-    """Below TLP:RED, the jobs of the case's restricted memory evidence (any analyzer: every
-    result of a memory image is memory-derived)."""
+    """Below TLP:RED, the jobs of the case's restricted evidence (any analyzer: every result
+    of a memory or disk image is derived from it). M9: a disk job is withheld when any of its
+    segments is restricted; disk jobs and jobs of `disk` / `derived` evidence count as disk."""
     if b.report.tlp == "red" or not b.scope.evidence_ids:
         return
     m = MemorySensitivity
-    restricted = select(m.evidence_id).where(
-        m.organization_id == b.org_id,
-        m.state == SensitivityState.RESTRICTED.value,
-        m.evidence_id.in_(list(b.scope.evidence_ids)),
+    restricted: dict[uuid.UUID, str] = {
+        evidence_id: str(source)
+        for evidence_id, source in (
+            await b.session.execute(
+                select(m.evidence_id, m.source).where(
+                    m.organization_id == b.org_id,
+                    m.state == SensitivityState.RESTRICTED.value,
+                    m.evidence_id.in_(list(b.scope.evidence_ids)),
+                )
+            )
+        ).all()
+    }
+    if not restricted:
+        return
+    seg = AnalysisJobSegment
+    via_segments = select(seg.job_id).where(
+        seg.organization_id == b.org_id, seg.evidence_id.in_(list(restricted))
     )
-    jobs = await b.session.scalars(
-        select(AnalysisJob.id).where(
-            AnalysisJob.organization_id == b.org_id, AnalysisJob.evidence_id.in_(restricted)
+    rows = (
+        await b.session.execute(
+            select(AnalysisJob.id, AnalysisJob.analyzer, AnalysisJob.evidence_id).where(
+                AnalysisJob.organization_id == b.org_id,
+                or_(
+                    AnalysisJob.evidence_id.in_(list(restricted)),
+                    AnalysisJob.id.in_(via_segments),
+                ),
+            )
         )
+    ).all()
+    memory = SensitivitySource.MEMORY.value
+    b.withheld_jobs = frozenset(job_id for job_id, _, _ in rows)
+    b.withheld_disk_jobs = frozenset(
+        job_id
+        for job_id, analyzer, evidence_id in rows
+        if analyzer == Analyzer.DISK or restricted.get(evidence_id, memory) != memory
     )
-    b.withheld_jobs = frozenset(jobs)
 
 
 def omissions(b: Build) -> dict[str, int] | None:
-    """The snapshot's `omissions` (absent unless something was left out, RT10)."""
-    return {"memory_restricted": b.withheld} if b.withheld else None
+    """The snapshot's `omissions` (absent unless something was left out, RT10). M9:
+    `disk_restricted` only when disk items were left out (RT23)."""
+    if not (b.withheld or b.withheld_disk):
+        return None
+    out = {"memory_restricted": b.withheld}
+    if b.withheld_disk:
+        out["disk_restricted"] = b.withheld_disk
+    return out
 
 
 def withhold_citations(b: Build, resolved: dict[CiteKey, Resolved]) -> int:
@@ -227,8 +284,8 @@ def withhold_citations(b: Build, resolved: dict[CiteKey, Resolved]) -> int:
         if r.job_id in b.withheld_jobs and r.ref_table not in _WITHHELD_EXEMPT_TABLES
     ]
     for key in gone:
+        b.omit(resolved[key].job_id)
         del resolved[key]
-    b.withheld += len(gone)
     return len(gone)
 
 
@@ -236,6 +293,18 @@ async def _withheld_count(b: Build, model: Any, where: Sequence[Any]) -> int:
     """Rows of the withheld jobs among `job_ids` matching a section's other filters."""
     found = await b.session.scalar(select(func.count(model.id)).where(*where))
     return int(found or 0)
+
+
+async def _omit_rows(
+    b: Build, model: Any, where: Sequence[Any], hidden: Sequence[uuid.UUID]
+) -> None:
+    """Count a section's rows of the withheld jobs `hidden` into their omission."""
+    memory = [j for j in hidden if j not in b.withheld_disk_jobs]
+    disk = [j for j in hidden if j in b.withheld_disk_jobs]
+    if memory:
+        b.withheld += await _withheld_count(b, model, [*where, model.job_id.in_(memory)])
+    if disk:
+        b.withheld_disk += await _withheld_count(b, model, [*where, model.job_id.in_(disk)])
 
 
 async def _latest_job_ids(b: Build) -> set[uuid.UUID]:
@@ -292,12 +361,16 @@ async def _open_sightings(
     return out
 
 
-async def _restricted_only_iocs(b: Build, latest: set[uuid.UUID]) -> int:
-    """Distinct case IOCs (type, value) seen only in withheld jobs."""
-    withheld = [j for j in latest if j in b.withheld_jobs]
+async def _restricted_only_iocs(
+    b: Build, latest: set[uuid.UUID], among: frozenset[uuid.UUID] | None = None
+) -> int:
+    """Distinct case IOCs (type, value) seen only in withheld jobs (`among`: only in those
+    withheld jobs, e.g. the disk ones)."""
+    among = b.withheld_jobs if among is None else among
+    withheld = [j for j in latest if j in among]
     if not withheld:
         return 0
-    open_jobs = [j for j in latest if j not in b.withheld_jobs]
+    open_jobs = [j for j in latest if j not in among]
     r = aliased(Ioc)
     where: list[Any] = [r.organization_id == b.org_id, r.job_id.in_(withheld)]
     if open_jobs:
@@ -556,7 +629,7 @@ async def jobs(b: Build) -> tuple[dict[str, Any], list[uuid.UUID]]:
     for j in kept:
         withheld = j.id in b.withheld_jobs
         if withheld:
-            b.withheld += 1  # the job row stays; its summary (tool versions) does not
+            b.omit(j.id)  # the job row stays; its summary (tool versions) does not
         items.append(
             {
                 "job_id": str(j.id),
@@ -600,7 +673,7 @@ async def findings(b: Build, job_ids: Sequence[uuid.UUID]) -> dict[str, Any]:
     where = [m.organization_id == b.org_id, rank >= SEVERITY_RANK[sel.min_severity]]
     hidden = [j for j in job_ids if j in b.withheld_jobs]
     if hidden:
-        b.withheld += await _withheld_count(b, m, [*where, m.job_id.in_(hidden)])
+        await _omit_rows(b, m, where, hidden)
     shown = [j for j in job_ids if j not in b.withheld_jobs]
     if not shown:
         return {"items": [], "total": 0}
@@ -643,7 +716,7 @@ async def alerts(b: Build, job_ids: Sequence[uuid.UUID]) -> dict[str, Any]:
     where = [m.organization_id == b.org_id, m.severity.in_(allowed)]
     hidden = [j for j in job_ids if j in b.withheld_jobs]
     if hidden:
-        b.withheld += await _withheld_count(b, m, [*where, m.job_id.in_(hidden)])
+        await _omit_rows(b, m, where, hidden)
     shown = [j for j in job_ids if j not in b.withheld_jobs]
     if not shown:
         return {"items": [], "total": 0}
@@ -689,7 +762,14 @@ async def iocs(b: Build) -> dict[str, Any]:
     latest = await _latest_job_ids(b) if guarded else set()
     open_jobs = sorted(j for j in latest if j not in b.withheld_jobs)
     restricted_only = await _restricted_only_iocs(b, latest) if guarded else 0
-    b.withheld += restricted_only
+    # M9: an IOC seen only in withheld jobs counts as disk when every such job is a disk one.
+    disk_only = (
+        await _restricted_only_iocs(b, latest, b.withheld_disk_jobs)
+        if guarded and b.withheld_disk_jobs
+        else 0
+    )
+    b.withheld += restricted_only - disk_only
+    b.withheld_disk += disk_only
     if sel.case_iocs and cap > 0:
         cursor: str | None = None
         first = True
@@ -924,7 +1004,7 @@ async def timeline(b: Build) -> dict[str, Any]:
             if wanted is not None and e.ref_kind not in wanted:
                 continue
             if e.job_id in b.withheld_jobs and e.ref_kind in _WITHHELD_TIMELINE_KINDS:
-                b.withheld += 1
+                b.omit(e.job_id)
                 continue
             total += 1
             if len(items) < min(sel.max, CAPS["timeline"]):
@@ -1059,7 +1139,7 @@ async def ai_runs(b: Build) -> dict[str, Any]:
             dropped += 1
             continue
         if run.job_id is not None and run.job_id in b.withheld_jobs:
-            b.withheld += 1  # a job-scope run over restricted memory evidence
+            b.omit(run.job_id)  # a job-scope run over restricted memory or disk evidence
             continue
         output = await ai_repo.output_of(b.session, b.org_id, run.id)
         if output is None or has_canary_leak(output):

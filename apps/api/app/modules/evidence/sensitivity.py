@@ -15,8 +15,15 @@ is a one-line wrapper over `apply_restricted_default(..., source="memory")`.
   carry `source`). Idempotent: an existing row (any source, any state) changes nothing.
 - `get` / `release` back the generic routes `GET /evidence/{id}/sensitivity` and
   `POST …/sensitivity/release`: the same rules as M8's (`org.update`, acknowledged, reasoned,
-  once), with the code and audit action chosen by the row's source. The batch arm (`job_id`:
-  every restricted segment of a disk job, RT20) answers 501 until phase 9.
+  once), with the code and audit action chosen by the row's source.
+- The batch arm (`job_id`, M9 phase 9, RT20): the body names a disk `triage` / `full` job of
+  the org whose segment set includes the path evidence; every still-restricted segment of
+  that job is released in one transaction with the one acknowledgement and reason, one audit
+  row per item (details carry `job_id`). `404` for a job that is unknown, of another org,
+  not a disk analysis, or whose segments do not include the path evidence (a job of another
+  investigation never does: the segment trigger keeps a set in its job's case); `409` when
+  no segment is left to release. Derived evidence is never part of a batch: a released
+  image does not release a file exported from it (each derived item is released alone).
 
 Both write paths first take the evidence's share-policy lock (`lock_evidence_for_policy`), as
 in M8, so a concurrent share-policy PUT never clears flags the default has just set.
@@ -33,8 +40,9 @@ from starlette.requests import HTTPConnection
 
 from app.core.errors import AppError, NotFound
 from app.core.rbac import OrgContext
-from app.core.stubs import not_implemented
+from app.modules.analysis.models import AnalysisJob, Analyzer, JobProfile
 from app.modules.audit import service as audit
+from app.modules.disk_forensics.models import AnalysisJobSegment
 from app.modules.evidence import repository as evidence_repo
 from app.modules.evidence.schemas import EvidenceSensitivityDetailOut, SensitivityReleaseIn
 from app.modules.evidence.sensitivity_errors import (
@@ -56,6 +64,8 @@ from app.modules.users.models import User
 
 Source = Literal["memory", "disk", "derived"]
 RESTRICTED = SensitivityState.RESTRICTED.value
+# The disk jobs a batch release may name (an `extract` job is a file export, not an analysis).
+BATCH_PROFILES = (JobProfile.TRIAGE, JobProfile.FULL)
 RELEASED = SensitivityState.RELEASED.value
 _EXCLUDED = {"ai_excluded": True, "ti_excluded": True}
 
@@ -198,28 +208,15 @@ async def get(ctx: OrgContext, evidence_id: uuid.UUID) -> EvidenceSensitivityDet
     return await _out(ctx.session, evidence_id, await _row(ctx.session, ctx.org_id, evidence_id))
 
 
-async def release(
+def _mark_released(
     ctx: OrgContext,
-    evidence_id: uuid.UUID,
-    body: SensitivityReleaseIn,
+    row: MemorySensitivity,
+    reason: str,
     request: HTTPConnection,
-) -> EvidenceSensitivityDetailOut:
-    """Once per evidence. 404 when the evidence is unknown or was never marked; `422
-    acknowledgement_required`; 409 `memory_sensitivity_released` (memory) or
-    `evidence_sensitivity_released` (disk / derived). With `job_id`: 501 until phase 9."""
-    if body.job_id is not None:
-        raise not_implemented()  # the batch release of a disk job's segments (phase 9, RT20)
-    evidence = await evidence_repo.lock_evidence_for_policy(ctx.session, ctx.org_id, evidence_id)
-    if evidence is None:
-        raise NotFound()
-    if not body.acknowledge:
-        raise AcknowledgementRequired()
-    row = await _row(ctx.session, ctx.org_id, evidence_id, for_update=True)
-    if row is None:
-        raise NotFound()
-    if row.state != RESTRICTED:
-        raise _released_error(row.source)
-    reason = body.reason.strip() or body.reason
+    *,
+    job_id: uuid.UUID | None = None,
+) -> None:
+    """Release one row and audit it (one audit row per item, RT20)."""
     row.state = RELEASED
     row.released_by = ctx.user.id
     row.released_at = datetime.now(UTC)
@@ -232,17 +229,117 @@ async def release(
     }
     if row.source != SensitivitySource.MEMORY.value:
         details["source"] = row.source
+    if job_id is not None:
+        details["job_id"] = str(job_id)
     audit.record(
         ctx.session,
         action=_action(row.source, "released"),
         org_id=ctx.org_id,
         actor_id=ctx.user.id,
         target_type="evidence",
-        target_id=evidence_id,
+        target_id=row.evidence_id,
         details=details,
         request=request,
     )
+
+
+async def release(
+    ctx: OrgContext,
+    evidence_id: uuid.UUID,
+    body: SensitivityReleaseIn,
+    request: HTTPConnection,
+) -> EvidenceSensitivityDetailOut:
+    """Once per evidence. 404 when the evidence is unknown or was never marked; `422
+    acknowledgement_required`; 409 `memory_sensitivity_released` (memory) or
+    `evidence_sensitivity_released` (disk / derived). With `job_id`: the batch release of a
+    disk job's segments (`release_job_segments`)."""
+    if body.job_id is not None:
+        return await release_job_segments(ctx, evidence_id, body.job_id, body, request)
+    evidence = await evidence_repo.lock_evidence_for_policy(ctx.session, ctx.org_id, evidence_id)
+    if evidence is None:
+        raise NotFound()
+    if not body.acknowledge:
+        raise AcknowledgementRequired()
+    row = await _row(ctx.session, ctx.org_id, evidence_id, for_update=True)
+    if row is None:
+        raise NotFound()
+    if row.state != RESTRICTED:
+        raise _released_error(row.source)
+    _mark_released(ctx, row, body.reason.strip() or body.reason, request)
     await ctx.session.flush()
     out = await _out(ctx.session, evidence_id, row)
+    await ctx.session.commit()
+    return out
+
+
+async def _batch_segments(
+    session: AsyncSession, org_id: uuid.UUID, job_id: uuid.UUID
+) -> list[uuid.UUID] | None:
+    """The segment evidence of a disk triage / full job of the org (ordinal order), or None."""
+    job = await session.scalar(
+        select(AnalysisJob.id).where(
+            AnalysisJob.organization_id == org_id,
+            AnalysisJob.id == job_id,
+            AnalysisJob.analyzer == Analyzer.DISK,
+            AnalysisJob.profile.in_(BATCH_PROFILES),
+        )
+    )
+    if job is None:
+        return None
+    seg = AnalysisJobSegment
+    rows = await session.scalars(
+        select(seg.evidence_id)
+        .where(seg.organization_id == org_id, seg.job_id == job_id)
+        .order_by(seg.ordinal)
+    )
+    return list(rows)
+
+
+async def release_job_segments(
+    ctx: OrgContext,
+    evidence_id: uuid.UUID,
+    job_id: uuid.UUID,
+    body: SensitivityReleaseIn,
+    request: HTTPConnection,
+) -> EvidenceSensitivityDetailOut:
+    """RT20: release every still-restricted segment of a disk job in one transaction (one
+    acknowledgement and reason, one audit row per item). Derived evidence is never included.
+    Answers the path evidence's state."""
+    if await evidence_repo.get_row(ctx.session, ctx.org_id, evidence_id) is None:
+        raise NotFound()
+    if not body.acknowledge:
+        raise AcknowledgementRequired()
+    segments = await _batch_segments(ctx.session, ctx.org_id, job_id)
+    if segments is None or evidence_id not in segments:
+        raise NotFound()
+    # The share-policy lock of every segment, in one global order (no lock-order deadlock
+    # with another batch), before the rows: as the single release and the default do.
+    for segment in sorted(set(segments)):
+        await evidence_repo.lock_evidence_for_policy(ctx.session, ctx.org_id, segment)
+    m = MemorySensitivity
+    rows = list(
+        await ctx.session.scalars(
+            select(m)
+            .where(
+                m.organization_id == ctx.org_id,
+                m.evidence_id.in_(segments),
+                m.state == RESTRICTED,
+                m.source != SensitivitySource.DERIVED.value,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    )
+    if not rows:
+        found = await _row(ctx.session, ctx.org_id, evidence_id)
+        if found is None:
+            raise NotFound()
+        raise _released_error(found.source)
+    reason = body.reason.strip() or body.reason
+    order = {segment: i for i, segment in enumerate(segments)}
+    for row in sorted(rows, key=lambda r: order[r.evidence_id]):
+        _mark_released(ctx, row, reason, request, job_id=job_id)
+    await ctx.session.flush()
+    out = await _out(ctx.session, evidence_id, await _row(ctx.session, ctx.org_id, evidence_id))
     await ctx.session.commit()
     return out

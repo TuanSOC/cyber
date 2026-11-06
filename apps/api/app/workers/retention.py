@@ -14,6 +14,12 @@
   keyset cursor per hold, 0015), under the org's advisory lock. Returns the number of object
   versions changed.
 
+- `purge_expired_exports(org_id)` (M9 phase 9, RT19): every sweep, for every indexed org and
+  whatever its retention mode, holds or schedule, deletes the exact object version of each
+  `expired` disk export (an unpromoted file copy is never evidence) with the purge user, the
+  only MinIO user with Delete on the results bucket, and stamps `object_deleted_at`; a failed
+  delete leaves the row unstamped, so the next sweep retries it.
+
 Every org id comes from `retention_policy_index` or must be listed there (a message org that
 is not is dropped). The process runs as `cyberlab_retention` (DELETE on the purgeable tables
 only) and the MinIO user `cyberlab-purge` (no governance bypass, no snapshot delete).
@@ -227,12 +233,71 @@ async def sweep() -> int:
             run_id = await _schedule(org_id, at)
             if run_id is None:
                 await _sync(org_id, at)
-                continue
-            _enqueue(org_id, run_id)
-            started += 1
+            else:
+                _enqueue(org_id, run_id)
+                started += 1
         except Exception:  # noqa: BLE001 - one org's failure never stops the sweep
             log.exception("retention sweep failed for org %s", org_id)
+        try:
+            await purge_expired_exports(org_id)
+        except Exception:  # noqa: BLE001 - one org's failure never stops the sweep
+            log.exception("retention: expired export purge failed for org %s", org_id)
     return started
+
+
+# --- expired disk exports (M9 phase 9, RT19) -------------------------------------------------
+
+# An `expired` export (phase 10's beat marks unpromoted copies after DISK_EXPORT_TTL_S) whose
+# object version is not deleted yet; `skip` holds this pass's failed deletes.
+_EXPIRED_EXPORTS = text(
+    """
+SELECT id, object_key, object_version_id FROM disk_exports
+WHERE organization_id = :org AND state = 'expired' AND object_deleted_at IS NULL
+  AND object_key IS NOT NULL AND object_version_id IS NOT NULL
+  AND NOT (id = ANY(CAST(:skip AS uuid[])))
+ORDER BY created_at, id
+LIMIT :n
+"""
+)
+_STAMP_EXPORT = text(
+    "UPDATE disk_exports SET object_deleted_at = now() "
+    "WHERE organization_id = :org AND id = :id AND state = 'expired' "
+    "AND object_deleted_at IS NULL"
+)
+# Deletes attempted per org and sweep (the rest waits for the next sweep).
+EXPORT_PURGE_MAX = 5_000
+
+
+async def purge_expired_exports(org_id: uuid.UUID) -> int:
+    """Delete the exact object version of every `expired` disk export of the org (the purge
+    user; the api user has no Delete on the results bucket, RT19), then stamp the row's
+    `object_deleted_at` (set once, trigger). A version already gone counts as deleted; a
+    failed delete is logged and retried by the next sweep. Returns the number stamped."""
+    settings = get_settings()
+    batch = settings.retention_batch_objects
+    started = time.monotonic()
+    failed: list[uuid.UUID] = []
+    done = 0
+    while done + len(failed) < EXPORT_PURGE_MAX:
+        if time.monotonic() - started > settings.retention_run_slice_s:
+            break
+        async with _session(org_id) as s:
+            rows = (
+                await s.execute(_EXPIRED_EXPORTS, {"org": org_id, "skip": failed, "n": batch})
+            ).all()
+        for export_id, key, version in rows:
+            try:
+                await objects.delete_version(settings.results_bucket, key, version)
+            except S3Error as exc:
+                log.warning("retention: delete of an expired export failed (%s)", exc.code)
+                failed.append(export_id)
+                continue
+            async with _session(org_id) as s:
+                await s.execute(_STAMP_EXPORT, {"org": org_id, "id": export_id})
+            done += 1
+        if len(rows) < batch:
+            break
+    return done
 
 
 # --- S3 legal-hold sync (RT5) ----------------------------------------------------------------
