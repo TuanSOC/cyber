@@ -668,6 +668,7 @@
             "enum": [
               "pcap",
               "malware",
+              "memory",
               "evidence",
               "investigation"
             ],
@@ -3271,10 +3272,20 @@
             "$ref": "#/components/schemas/Analyzer",
             "default": "pcap"
           },
+          "os_hint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OsHint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "profile": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Profile"
+                "$ref": "#/components/schemas/JobProfile"
               },
               {
                 "type": "null"
@@ -3360,10 +3371,20 @@
             "title": "Investigation Id",
             "type": "string"
           },
+          "os_hint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OsHint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "profile": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Profile"
+                "$ref": "#/components/schemas/JobProfile"
               },
               {
                 "type": "null"
@@ -3510,7 +3531,8 @@
       "Analyzer": {
         "enum": [
           "pcap",
-          "static"
+          "static",
+          "memory"
         ],
         "title": "Analyzer",
         "type": "string"
@@ -3558,6 +3580,77 @@
           "rich_header_hash"
         ],
         "title": "AnalyzerDerivedHashes",
+        "type": "object"
+      },
+      "ArtifactOut": {
+        "properties": {
+          "attributes": {
+            "additionalProperties": true,
+            "title": "Attributes",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "pid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pid"
+          },
+          "type": {
+            "enum": [
+              "module",
+              "service",
+              "hive",
+              "userassist",
+              "ldr_unlinked",
+              "bash",
+              "open_file",
+              "syscall_hook",
+              "hidden_module"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "pid",
+          "attributes"
+        ],
+        "title": "ArtifactOut",
+        "type": "object"
+      },
+      "ArtifactPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).",
+            "maximum": 10001.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ArtifactPage",
         "type": "object"
       },
       "AttackItem": {
@@ -4938,6 +5031,161 @@
         "title": "CollectionRefOut",
         "type": "object"
       },
+      "ConnectionOut": {
+        "properties": {
+          "created": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "local_addr": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Addr"
+          },
+          "local_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Port"
+          },
+          "offset": {
+            "anyOf": [
+              {
+                "examples": [
+                  "0xfffff8000000"
+                ],
+                "pattern": "^0x[0-9a-f]{1,16}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offset"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "pid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pid"
+          },
+          "proto": {
+            "title": "Proto",
+            "type": "string"
+          },
+          "remote_addr": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Addr"
+          },
+          "remote_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Port"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          }
+        },
+        "required": [
+          "id",
+          "proto",
+          "local_addr",
+          "local_port",
+          "remote_addr",
+          "remote_port",
+          "state",
+          "pid",
+          "owner",
+          "created",
+          "offset"
+        ],
+        "title": "ConnectionOut",
+        "type": "object"
+      },
+      "ConnectionPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).",
+            "maximum": 10001.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ConnectionPage",
+        "type": "object"
+      },
       "ContextItem": {
         "additionalProperties": false,
         "description": "One labelled item exactly as sent. `fields` keys are the only valid citation `field`\nvalues for this item; values are already sanitized, pseudonymized, defanged, truncated.",
@@ -5980,6 +6228,21 @@
             "title": "Legal Hold",
             "type": "boolean"
           },
+          "memory_sensitivity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "restricted",
+                  "released"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Sensitivity"
+          },
           "original_filename": {
             "title": "Original Filename",
             "type": "string"
@@ -7011,6 +7274,148 @@
           "notable_truncated"
         ],
         "title": "ImportsSummary",
+        "type": "object"
+      },
+      "InjectionOut": {
+        "properties": {
+          "commit_charge": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit Charge"
+          },
+          "disasm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disasm"
+          },
+          "end": {
+            "examples": [
+              "0xfffff8000000"
+            ],
+            "pattern": "^0x[0-9a-f]{1,16}$",
+            "title": "End",
+            "type": "string"
+          },
+          "has_pe": {
+            "title": "Has Pe",
+            "type": "boolean"
+          },
+          "head_hex": {
+            "title": "Head Hex",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "pid": {
+            "title": "Pid",
+            "type": "integer"
+          },
+          "private": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Private"
+          },
+          "process": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Process"
+          },
+          "protection": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protection"
+          },
+          "start": {
+            "examples": [
+              "0xfffff8000000"
+            ],
+            "pattern": "^0x[0-9a-f]{1,16}$",
+            "title": "Start",
+            "type": "string"
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag"
+          }
+        },
+        "required": [
+          "id",
+          "pid",
+          "process",
+          "start",
+          "end",
+          "protection",
+          "tag",
+          "private",
+          "commit_charge",
+          "has_pe",
+          "head_hex",
+          "disasm"
+        ],
+        "title": "InjectionOut",
+        "type": "object"
+      },
+      "InjectionPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InjectionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).",
+            "maximum": 10001.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "InjectionPage",
         "type": "object"
       },
       "IntegrationOut": {
@@ -8681,6 +9086,16 @@
         "title": "JobItem",
         "type": "object"
       },
+      "JobProfile": {
+        "description": "What a run was asked to do: static `full` / `av` (0006), memory `triage` / `full`\n(0016); NULL for pcap. One column for both analyzers, so `full` is shared.",
+        "enum": [
+          "full",
+          "av",
+          "triage"
+        ],
+        "title": "JobProfile",
+        "type": "string"
+      },
       "JobsSection": {
         "additionalProperties": false,
         "properties": {
@@ -8734,6 +9149,7 @@
             "enum": [
               "pcap",
               "static",
+              "memory",
               "ti",
               "ai",
               "report"
@@ -9162,6 +9578,20 @@
         "title": "LimitsOut",
         "type": "object"
       },
+      "LinuxBannerOut": {
+        "description": "Attacker-chosen text: shown inert, never put into a command (RT12).",
+        "properties": {
+          "banner": {
+            "title": "Banner",
+            "type": "string"
+          }
+        },
+        "required": [
+          "banner"
+        ],
+        "title": "LinuxBannerOut",
+        "type": "object"
+      },
       "LoginIn": {
         "properties": {
           "email": {
@@ -9530,6 +9960,257 @@
           "role"
         ],
         "title": "MembershipOut",
+        "type": "object"
+      },
+      "MemoryPlugin": {
+        "description": "The allow-list (Volatility 3 v2.28.2 names, never the deprecated shims). No\n`windows.handles` (RT9), no YARA scanner (RT8), no credential, envars, dump or extraction\nplugin: nothing else can ever be requested or reported.",
+        "enum": [
+          "windows.info",
+          "windows.pslist",
+          "windows.psscan",
+          "windows.cmdline",
+          "windows.dlllist",
+          "windows.netscan",
+          "windows.malware.malfind",
+          "windows.svcscan",
+          "windows.registry.hivelist",
+          "windows.registry.userassist",
+          "windows.malware.ldrmodules",
+          "linux.pslist",
+          "linux.psaux",
+          "linux.bash",
+          "linux.sockstat",
+          "linux.lsof",
+          "linux.malware.malfind",
+          "linux.malware.check_syscall",
+          "linux.malware.hidden_modules"
+        ],
+        "title": "MemoryPlugin",
+        "type": "string"
+      },
+      "MemoryProfile": {
+        "enum": [
+          "triage",
+          "full"
+        ],
+        "title": "MemoryProfile",
+        "type": "string"
+      },
+      "MemorySensitivityOut": {
+        "description": "`GET /evidence/{id}/memory-sensitivity`: `none` when the evidence was never marked.",
+        "properties": {
+          "defaulted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Defaulted At"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "release_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Reason"
+          },
+          "released_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Released At"
+          },
+          "released_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Released By Name"
+          },
+          "state": {
+            "enum": [
+              "none",
+              "restricted",
+              "released"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "state"
+        ],
+        "title": "MemorySensitivityOut",
+        "type": "object"
+      },
+      "MemorySummaryOut": {
+        "description": "`GET /analyses/{job}/memory`: the image facts, the symbols outcome and every plugin's\nstatus (a partial run is never shown as complete).",
+        "properties": {
+          "arch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arch"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "engine": {
+            "enum": [
+              "volatility3",
+              "replay"
+            ],
+            "title": "Engine",
+            "type": "string"
+          },
+          "engine_errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Engine Errors",
+            "type": "array"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layer"
+          },
+          "nt_build": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nt Build"
+          },
+          "os": {
+            "enum": [
+              "windows",
+              "linux"
+            ],
+            "title": "Os",
+            "type": "string"
+          },
+          "plugins": {
+            "items": {
+              "$ref": "#/components/schemas/PluginStatusOut"
+            },
+            "title": "Plugins",
+            "type": "array"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/MemoryProfile"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "symbols": {
+            "$ref": "#/components/schemas/SymbolsOut"
+          },
+          "system_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Time"
+          },
+          "tool_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Tool Versions",
+            "type": "object"
+          },
+          "truncated": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Truncated",
+            "type": "object"
+          }
+        },
+        "required": [
+          "job_id",
+          "evidence_id",
+          "profile",
+          "os",
+          "arch",
+          "layer",
+          "engine",
+          "nt_build",
+          "system_time",
+          "size_bytes",
+          "sha256",
+          "symbols",
+          "tool_versions",
+          "plugins",
+          "counts",
+          "truncated",
+          "engine_errors"
+        ],
+        "title": "MemorySummaryOut",
         "type": "object"
       },
       "MispAttribute": {
@@ -10326,6 +11007,20 @@
         "title": "OccurrenceOut",
         "type": "object"
       },
+      "Omissions": {
+        "additionalProperties": false,
+        "description": "Items left out of a report by a platform rule, counted so the reader knows (M8, RT10).\n\n`memory_restricted`: memory-derived rows of restricted evidence (TLP:RED by default until\nan admin releases it) omitted from a report below TLP:RED.",
+        "properties": {
+          "memory_restricted": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Memory Restricted",
+            "type": "integer"
+          }
+        },
+        "title": "Omissions",
+        "type": "object"
+      },
       "OrgCreate": {
         "properties": {
           "name": {
@@ -10352,6 +11047,7 @@
               "enum": [
                 "pcap",
                 "static",
+                "memory",
                 "ti",
                 "ai",
                 "report"
@@ -10413,6 +11109,15 @@
         ],
         "title": "OrgUpdate",
         "type": "object"
+      },
+      "OsHint": {
+        "enum": [
+          "auto",
+          "windows",
+          "linux"
+        ],
+        "title": "OsHint",
+        "type": "string"
       },
       "OtxPulse": {
         "additionalProperties": false,
@@ -10697,13 +11402,307 @@
         "title": "PeOut",
         "type": "object"
       },
-      "Profile": {
-        "enum": [
-          "full",
-          "av"
+      "PluginStatusOut": {
+        "properties": {
+          "duration_ms": {
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "plugin": {
+            "$ref": "#/components/schemas/MemoryPlugin"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "failed",
+              "timeout",
+              "skipped",
+              "unsupported"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "plugin",
+          "status",
+          "rows",
+          "truncated",
+          "duration_ms"
         ],
-        "title": "Profile",
-        "type": "string"
+        "title": "PluginStatusOut",
+        "type": "object"
+      },
+      "ProcessDetailOut": {
+        "description": "One process with what references it (bounded lists).",
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactOut"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/ProcessOut"
+            },
+            "title": "Children",
+            "type": "array"
+          },
+          "connections": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionOut"
+            },
+            "title": "Connections",
+            "type": "array"
+          },
+          "injections": {
+            "items": {
+              "$ref": "#/components/schemas/InjectionOut"
+            },
+            "title": "Injections",
+            "type": "array"
+          },
+          "instances": {
+            "title": "Instances",
+            "type": "integer"
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProcessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "process": {
+            "$ref": "#/components/schemas/ProcessOut"
+          }
+        },
+        "required": [
+          "process",
+          "parent",
+          "children",
+          "connections",
+          "injections",
+          "artifacts",
+          "instances"
+        ],
+        "title": "ProcessDetailOut",
+        "type": "object"
+      },
+      "ProcessOut": {
+        "properties": {
+          "children": {
+            "default": 0,
+            "title": "Children",
+            "type": "integer"
+          },
+          "cmdline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cmdline"
+          },
+          "create_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Create Time"
+          },
+          "exit_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Time"
+          },
+          "handles": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handles"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "image_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Path"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "offset": {
+            "anyOf": [
+              {
+                "examples": [
+                  "0xfffff8000000"
+                ],
+                "pattern": "^0x[0-9a-f]{1,16}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offset"
+          },
+          "pid": {
+            "title": "Pid",
+            "type": "integer"
+          },
+          "ppid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ppid"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "sources": {
+            "items": {
+              "enum": [
+                "pslist",
+                "psscan",
+                "pstree"
+              ],
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "threads": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threads"
+          },
+          "wow64": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wow64"
+          }
+        },
+        "required": [
+          "id",
+          "pid",
+          "ppid",
+          "name",
+          "offset",
+          "create_time",
+          "exit_time",
+          "threads",
+          "handles",
+          "session_id",
+          "wow64",
+          "sources",
+          "cmdline",
+          "image_path"
+        ],
+        "title": "ProcessOut",
+        "type": "object"
+      },
+      "ProcessPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProcessOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "description": "Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).",
+            "maximum": 10001.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ProcessPage",
+        "type": "object"
       },
       "ProviderName": {
         "enum": [
@@ -10769,7 +11768,8 @@
           "kind": {
             "enum": [
               "pcap",
-              "static"
+              "static",
+              "memory"
             ],
             "title": "Kind",
             "type": "string"
@@ -11101,6 +12101,29 @@
           "common_keys_excluded"
         ],
         "title": "RelatedCasesOut",
+        "type": "object"
+      },
+      "ReleaseIn": {
+        "additionalProperties": false,
+        "description": "Admin release of restricted memory evidence (once, audited; phase 8). The analyst\nthen clears the share-policy flags through the M6 route.",
+        "properties": {
+          "acknowledge": {
+            "description": "Must be true: the image may hold passwords, keys and personal data.",
+            "title": "Acknowledge",
+            "type": "boolean"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "acknowledge",
+          "reason"
+        ],
+        "title": "ReleaseIn",
         "type": "object"
       },
       "RenderCreate": {
@@ -12279,7 +13302,7 @@
       },
       "ReportSnapshot": {
         "additionalProperties": false,
-        "description": "The whole signed document (`cyberlab.report.v1`).",
+        "description": "The whole signed document (`cyberlab.report.v1`).\n\n`omissions` is additive (M8): `canonical_json` leaves the key out when it is None, so every\nsnapshot signed before M8 re-serializes to identical bytes (test_report_canonical_golden).",
         "properties": {
           "ai": {
             "$ref": "#/components/schemas/AiRunsSection",
@@ -12354,6 +13377,16 @@
               "items": [],
               "total": 0
             }
+          },
+          "omissions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Omissions"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "report": {
             "$ref": "#/components/schemas/ReportInfo"
@@ -15633,6 +16666,54 @@
         "title": "StringPage",
         "type": "object"
       },
+      "SymbolsOut": {
+        "properties": {
+          "isf_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isf Sha256"
+          },
+          "linux_banner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LinuxBannerOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "missing"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "windows_pdb": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WindowsPdbOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "SymbolsOut",
+        "type": "object"
+      },
       "TLP": {
         "enum": [
           "clear",
@@ -16929,6 +18010,30 @@
         },
         "title": "VtVotes",
         "type": "object"
+      },
+      "WindowsPdbOut": {
+        "description": "Validated at ingest (kernel PDB allow-list, 32 hex GUID, age); the UI may build the\noperator's `fetch-windows` command from these fields only (RT12).",
+        "properties": {
+          "age": {
+            "title": "Age",
+            "type": "integer"
+          },
+          "guid": {
+            "title": "Guid",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "guid",
+          "age"
+        ],
+        "title": "WindowsPdbOut",
+        "type": "object"
       }
     }
   },
@@ -18132,7 +19237,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/Profile"
+                  "$ref": "#/components/schemas/JobProfile"
                 },
                 {
                   "type": "null"
@@ -19352,6 +20457,688 @@
         "summary": "List Iocs",
         "tags": [
           "pcap-analysis"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/memory": {
+      "get": {
+        "description": "The image facts, symbols outcome and per-plugin status of a memory job (a\n`symbols_missing` job has a summary with the requirement; `404 results_not_available`\nfor a terminal job without a stored result).",
+        "operationId": "get_memory_summary_api_v1_orgs__org_id__analyses__job_id__memory_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemorySummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Memory Summary",
+        "tags": [
+          "memory-analysis"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/memory/artifacts": {
+      "get": {
+        "description": "`q`: substring of an attribute value (never a key).",
+        "operationId": "list_artifacts_api_v1_orgs__org_id__analyses__job_id__memory_artifacts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "module",
+                    "service",
+                    "hive",
+                    "userassist",
+                    "ldr_unlinked",
+                    "bash",
+                    "open_file",
+                    "syscall_hook",
+                    "hidden_module"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pid",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "pattern": "^[^\\x00]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Artifacts",
+        "tags": [
+          "memory-analysis"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/memory/connections": {
+      "get": {
+        "description": "`q`: substring of either address, the owner or the state.",
+        "operationId": "list_connections_api_v1_orgs__org_id__analyses__job_id__memory_connections_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pid",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "pattern": "^[^\\x00]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Connections",
+        "tags": [
+          "memory-analysis"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/memory/injections": {
+      "get": {
+        "description": "Private executable regions: the hex head and disassembly are plain text.",
+        "operationId": "list_injections_api_v1_orgs__org_id__analyses__job_id__memory_injections_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pid",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InjectionPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Injections",
+        "tags": [
+          "memory-analysis"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/memory/processes": {
+      "get": {
+        "description": "`q`: substring of name, image path or command line; `hidden`: seen by psscan only.\n\n`view=tree`: the whole job in depth-first pre-order (siblings oldest first; orphans and\ncycle breakers are roots; `children` counts tree children), no filters (422). A job with\nmore than `MEMORY_TREE_MAX_NODES` processes answers the list order instead, with a\n`total` above that cap.",
+        "operationId": "list_processes_api_v1_orgs__org_id__analyses__job_id__memory_processes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "pattern": "^[^\\x00]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ppid",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 4294967295,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ppid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hidden",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hidden"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
+            }
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "default": "list",
+              "enum": [
+                "list",
+                "tree"
+              ],
+              "title": "View",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Processes",
+        "tags": [
+          "memory-analysis"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/memory/processes/{pid}": {
+      "get": {
+        "description": "One process with its parent, children, connections, private executable regions and\nartifacts (each at most 200); 404 for a pid the job does not have.",
+        "operationId": "get_process_api_v1_orgs__org_id__analyses__job_id__memory_processes__pid__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "pid",
+            "required": true,
+            "schema": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "title": "Pid",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Process",
+        "tags": [
+          "memory-analysis"
         ]
       }
     },
@@ -20804,6 +22591,124 @@
         ]
       }
     },
+    "/api/v1/orgs/{org_id}/evidence/{evidence_id}/memory-sensitivity": {
+      "get": {
+        "description": "`state: none` when the evidence was never marked as a memory image.",
+        "operationId": "get_memory_sensitivity_api_v1_orgs__org_id__evidence__evidence_id__memory_sensitivity_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemorySensitivityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Memory Sensitivity",
+        "tags": [
+          "memory-analysis"
+        ]
+      }
+    },
+    "/api/v1/orgs/{org_id}/evidence/{evidence_id}/memory-sensitivity/release": {
+      "post": {
+        "description": "Once per evidence: `409 memory_sensitivity_released` afterwards; `422\nacknowledgement_required` unless `acknowledge` is true; 404 for evidence never marked.\nAudited `memory.sensitivity_released`.",
+        "operationId": "release_memory_sensitivity_api_v1_orgs__org_id__evidence__evidence_id__memory_sensitivity_release_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemorySensitivityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Release Memory Sensitivity",
+        "tags": [
+          "memory-analysis"
+        ]
+      }
+    },
     "/api/v1/orgs/{org_id}/evidence/{evidence_id}/share-policy": {
       "get": {
         "description": "The evidence's \"do not send to AI / TI\" flags and its effective policy.",
@@ -21713,7 +23618,7 @@
         ]
       },
       "post": {
-        "description": "Raw request body = the evidence bytes (streamed, hashed, stored; never parsed).",
+        "description": "Raw request body = the evidence bytes (streamed, hashed, stored; never parsed).\n\n`kind=memory` (M8): a memory image. It gets no automatic analysis of any kind (RT3); the\nmemory size limit, the declared type and the TLP:RED default land with phase 6.",
         "operationId": "upload_evidence_api_v1_orgs__org_id__investigations__investigation_id__evidence_post",
         "parameters": [
           {
@@ -21758,6 +23663,23 @@
               "pattern": "^[^\\x00]*$",
               "title": "Description",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "memory",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
             }
           }
         ],

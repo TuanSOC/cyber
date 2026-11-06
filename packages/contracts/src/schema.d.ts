@@ -583,6 +583,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/memory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Memory Summary
+         * @description The image facts, symbols outcome and per-plugin status of a memory job (a
+         *     `symbols_missing` job has a summary with the requirement; `404 results_not_available`
+         *     for a terminal job without a stored result).
+         */
+        get: operations["get_memory_summary_api_v1_orgs__org_id__analyses__job_id__memory_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/memory/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Artifacts
+         * @description `q`: substring of an attribute value (never a key).
+         */
+        get: operations["list_artifacts_api_v1_orgs__org_id__analyses__job_id__memory_artifacts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/memory/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Connections
+         * @description `q`: substring of either address, the owner or the state.
+         */
+        get: operations["list_connections_api_v1_orgs__org_id__analyses__job_id__memory_connections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/memory/injections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Injections
+         * @description Private executable regions: the hex head and disassembly are plain text.
+         */
+        get: operations["list_injections_api_v1_orgs__org_id__analyses__job_id__memory_injections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/memory/processes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Processes
+         * @description `q`: substring of name, image path or command line; `hidden`: seen by psscan only.
+         *
+         *     `view=tree`: the whole job in depth-first pre-order (siblings oldest first; orphans and
+         *     cycle breakers are roots; `children` counts tree children), no filters (422). A job with
+         *     more than `MEMORY_TREE_MAX_NODES` processes answers the list order instead, with a
+         *     `total` above that cap.
+         */
+        get: operations["list_processes_api_v1_orgs__org_id__analyses__job_id__memory_processes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/analyses/{job_id}/memory/processes/{pid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Process
+         * @description One process with its parent, children, connections, private executable regions and
+         *     artifacts (each at most 200); 404 for a pid the job does not have.
+         */
+        get: operations["get_process_api_v1_orgs__org_id__analyses__job_id__memory_processes__pid__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/analyses/{job_id}/records": {
         parameters: {
             query?: never;
@@ -892,6 +1020,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orgs/{org_id}/evidence/{evidence_id}/memory-sensitivity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Memory Sensitivity
+         * @description `state: none` when the evidence was never marked as a memory image.
+         */
+        get: operations["get_memory_sensitivity_api_v1_orgs__org_id__evidence__evidence_id__memory_sensitivity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orgs/{org_id}/evidence/{evidence_id}/memory-sensitivity/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release Memory Sensitivity
+         * @description Once per evidence: `409 memory_sensitivity_released` afterwards; `422
+         *     acknowledgement_required` unless `acknowledge` is true; 404 for evidence never marked.
+         *     Audited `memory.sensitivity_released`.
+         */
+        post: operations["release_memory_sensitivity_api_v1_orgs__org_id__evidence__evidence_id__memory_sensitivity_release_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orgs/{org_id}/evidence/{evidence_id}/share-policy": {
         parameters: {
             query?: never;
@@ -1107,6 +1277,9 @@ export interface paths {
         /**
          * Upload Evidence
          * @description Raw request body = the evidence bytes (streamed, hashed, stored; never parsed).
+         *
+         *     `kind=memory` (M8): a memory image. It gets no automatic analysis of any kind (RT3); the
+         *     memory size limit, the declared type and the TLP:RED default land with phase 6.
          */
         post: operations["upload_evidence_api_v1_orgs__org_id__investigations__investigation_id__evidence_post"];
         delete?: never;
@@ -2240,7 +2413,7 @@ export interface components {
              * Route
              * @enum {string}
              */
-            route: "pcap" | "malware" | "evidence" | "investigation";
+            route: "pcap" | "malware" | "memory" | "evidence" | "investigation";
             /** Tab */
             tab: ("overview" | "findings" | "alerts" | "flows" | "dns" | "http" | "tls" | "iocs" | "timeline" | "signatures" | "capabilities" | "sections" | "strings") | null;
         };
@@ -3018,7 +3191,8 @@ export interface components {
         AnalysisCreate: {
             /** @default pcap */
             analyzer: components["schemas"]["Analyzer"];
-            profile?: components["schemas"]["Profile"] | null;
+            os_hint?: components["schemas"]["OsHint"] | null;
+            profile?: components["schemas"]["JobProfile"] | null;
         };
         /**
          * IocType
@@ -3057,7 +3231,8 @@ export interface components {
              * Format: uuid
              */
             investigation_id: string;
-            profile: components["schemas"]["Profile"] | null;
+            os_hint?: components["schemas"]["OsHint"] | null;
+            profile: components["schemas"]["JobProfile"] | null;
             /**
              * Requested By
              * Format: uuid
@@ -3135,7 +3310,7 @@ export interface components {
          * Analyzer
          * @enum {string}
          */
-        Analyzer: "pcap" | "static";
+        Analyzer: "pcap" | "static" | "memory";
         /**
          * AnalyzerDerivedHashes
          * @description Computed by the (untrusted) analyzer from the sample; never used as identity.
@@ -3147,6 +3322,35 @@ export interface components {
             rich_header_hash: string | null;
             /** Ssdeep */
             ssdeep: string | null;
+        };
+        /** ArtifactOut */
+        ArtifactOut: {
+            /** Attributes */
+            attributes: {
+                [key: string]: unknown;
+            };
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Pid */
+            pid: number | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "module" | "service" | "hive" | "userassist" | "ldr_unlinked" | "bash" | "open_file" | "syscall_hook" | "hidden_module";
+        };
+        /** ArtifactPage */
+        ArtifactPage: {
+            /** Items */
+            items: components["schemas"]["ArtifactOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
         };
         /** AttackItem */
         AttackItem: {
@@ -3686,6 +3890,44 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** ConnectionOut */
+        ConnectionOut: {
+            /** Created */
+            created: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Local Addr */
+            local_addr: string | null;
+            /** Local Port */
+            local_port: number | null;
+            /** Offset */
+            offset: string | null;
+            /** Owner */
+            owner: string | null;
+            /** Pid */
+            pid: number | null;
+            /** Proto */
+            proto: string;
+            /** Remote Addr */
+            remote_addr: string | null;
+            /** Remote Port */
+            remote_port: number | null;
+            /** State */
+            state: string | null;
+        };
+        /** ConnectionPage */
+        ConnectionPage: {
+            /** Items */
+            items: components["schemas"]["ConnectionOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
         /**
          * ContextItem
          * @description One labelled item exactly as sent. `fields` keys are the only valid citation `field`
@@ -4180,6 +4422,8 @@ export interface components {
              * @default false
              */
             legal_hold: boolean;
+            /** Memory Sensitivity */
+            memory_sensitivity?: ("restricted" | "released") | null;
             /** Original Filename */
             original_filename: string;
             /** Purged At */
@@ -4547,6 +4791,52 @@ export interface components {
             /** Top Libraries */
             top_libraries: components["schemas"]["LibraryCount"][];
             /** Total */
+            total: number;
+        };
+        /** InjectionOut */
+        InjectionOut: {
+            /** Commit Charge */
+            commit_charge: number | null;
+            /** Disasm */
+            disasm: string | null;
+            /**
+             * End
+             * @example 0xfffff8000000
+             */
+            end: string;
+            /** Has Pe */
+            has_pe: boolean;
+            /** Head Hex */
+            head_hex: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Pid */
+            pid: number;
+            /** Private */
+            private: boolean | null;
+            /** Process */
+            process: string | null;
+            /** Protection */
+            protection: string | null;
+            /**
+             * Start
+             * @example 0xfffff8000000
+             */
+            start: string;
+            /** Tag */
+            tag: string | null;
+        };
+        /** InjectionPage */
+        InjectionPage: {
+            /** Items */
+            items: components["schemas"]["InjectionOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
             total: number;
         };
         /** IntegrationOut */
@@ -5113,6 +5403,13 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /**
+         * JobProfile
+         * @description What a run was asked to do: static `full` / `av` (0006), memory `triage` / `full`
+         *     (0016); NULL for pcap. One column for both analyzers, so `full` is shared.
+         * @enum {string}
+         */
+        JobProfile: "full" | "av" | "triage";
         /** JobsSection */
         JobsSection: {
             /**
@@ -5140,7 +5437,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "pcap" | "static" | "ti" | "ai" | "report";
+            kind: "pcap" | "static" | "memory" | "ti" | "ai" | "report";
             /** Parse Success Ratio */
             parse_success_ratio: number | null;
             /** Queue P50 Ms */
@@ -5260,6 +5557,14 @@ export interface components {
             per_day: number | null;
             /** Per Minute */
             per_minute: number | null;
+        };
+        /**
+         * LinuxBannerOut
+         * @description Attacker-chosen text: shown inert, never put into a command (RT12).
+         */
+        LinuxBannerOut: {
+            /** Banner */
+            banner: string;
         };
         /** LoginIn */
         LoginIn: {
@@ -5392,6 +5697,100 @@ export interface components {
             /** Organization Name */
             organization_name: string;
             role: components["schemas"]["MemberRole"];
+        };
+        /**
+         * MemoryPlugin
+         * @description The allow-list (Volatility 3 v2.28.2 names, never the deprecated shims). No
+         *     `windows.handles` (RT9), no YARA scanner (RT8), no credential, envars, dump or extraction
+         *     plugin: nothing else can ever be requested or reported.
+         * @enum {string}
+         */
+        MemoryPlugin: "windows.info" | "windows.pslist" | "windows.psscan" | "windows.cmdline" | "windows.dlllist" | "windows.netscan" | "windows.malware.malfind" | "windows.svcscan" | "windows.registry.hivelist" | "windows.registry.userassist" | "windows.malware.ldrmodules" | "linux.pslist" | "linux.psaux" | "linux.bash" | "linux.sockstat" | "linux.lsof" | "linux.malware.malfind" | "linux.malware.check_syscall" | "linux.malware.hidden_modules";
+        /**
+         * MemoryProfile
+         * @enum {string}
+         */
+        MemoryProfile: "triage" | "full";
+        /**
+         * MemorySensitivityOut
+         * @description `GET /evidence/{id}/memory-sensitivity`: `none` when the evidence was never marked.
+         */
+        MemorySensitivityOut: {
+            /** Defaulted At */
+            defaulted_at?: string | null;
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /** Release Reason */
+            release_reason?: string | null;
+            /** Released At */
+            released_at?: string | null;
+            /** Released By Name */
+            released_by_name?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "none" | "restricted" | "released";
+        };
+        /**
+         * MemorySummaryOut
+         * @description `GET /analyses/{job}/memory`: the image facts, the symbols outcome and every plugin's
+         *     status (a partial run is never shown as complete).
+         */
+        MemorySummaryOut: {
+            /** Arch */
+            arch: string | null;
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /**
+             * Engine
+             * @enum {string}
+             */
+            engine: "volatility3" | "replay";
+            /** Engine Errors */
+            engine_errors: string[];
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Layer */
+            layer: string | null;
+            /** Nt Build */
+            nt_build: string | null;
+            /**
+             * Os
+             * @enum {string}
+             */
+            os: "windows" | "linux";
+            /** Plugins */
+            plugins: components["schemas"]["PluginStatusOut"][];
+            profile: components["schemas"]["MemoryProfile"];
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            symbols: components["schemas"]["SymbolsOut"];
+            /** System Time */
+            system_time: string | null;
+            /** Tool Versions */
+            tool_versions: {
+                [key: string]: string;
+            };
+            /** Truncated */
+            truncated: {
+                [key: string]: boolean;
+            };
         };
         /** MispAttribute */
         MispAttribute: {
@@ -5712,6 +6111,20 @@ export interface components {
             /** Title */
             title: string;
         };
+        /**
+         * Omissions
+         * @description Items left out of a report by a platform rule, counted so the reader knows (M8, RT10).
+         *
+         *     `memory_restricted`: memory-derived rows of restricted evidence (TLP:RED by default until
+         *     an admin releases it) omitted from a report below TLP:RED.
+         */
+        Omissions: {
+            /**
+             * Memory Restricted
+             * @default 0
+             */
+            memory_restricted: number;
+        };
         /** OrgCreate */
         OrgCreate: {
             /** Name */
@@ -5743,6 +6156,11 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * OsHint
+         * @enum {string}
+         */
+        OsHint: "auto" | "windows" | "linux";
         /** OtxPulse */
         OtxPulse: {
             /**
@@ -5846,11 +6264,90 @@ export interface components {
             /** Tls Callbacks */
             tls_callbacks: number;
         };
+        /** PluginStatusOut */
+        PluginStatusOut: {
+            /** Duration Ms */
+            duration_ms: number;
+            /** Error Code */
+            error_code?: string | null;
+            plugin: components["schemas"]["MemoryPlugin"];
+            /** Rows */
+            rows: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "failed" | "timeout" | "skipped" | "unsupported";
+            /** Truncated */
+            truncated: boolean;
+        };
         /**
-         * Profile
-         * @enum {string}
+         * ProcessDetailOut
+         * @description One process with what references it (bounded lists).
          */
-        Profile: "full" | "av";
+        ProcessDetailOut: {
+            /** Artifacts */
+            artifacts: components["schemas"]["ArtifactOut"][];
+            /** Children */
+            children: components["schemas"]["ProcessOut"][];
+            /** Connections */
+            connections: components["schemas"]["ConnectionOut"][];
+            /** Injections */
+            injections: components["schemas"]["InjectionOut"][];
+            /** Instances */
+            instances: number;
+            parent: components["schemas"]["ProcessOut"] | null;
+            process: components["schemas"]["ProcessOut"];
+        };
+        /** ProcessOut */
+        ProcessOut: {
+            /**
+             * Children
+             * @default 0
+             */
+            children: number;
+            /** Cmdline */
+            cmdline: string | null;
+            /** Create Time */
+            create_time: string | null;
+            /** Exit Time */
+            exit_time: string | null;
+            /** Handles */
+            handles: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Image Path */
+            image_path: string | null;
+            /** Name */
+            name: string;
+            /** Offset */
+            offset: string | null;
+            /** Pid */
+            pid: number;
+            /** Ppid */
+            ppid: number | null;
+            /** Session Id */
+            session_id: number | null;
+            /** Sources */
+            sources: ("pslist" | "psscan" | "pstree")[];
+            /** Threads */
+            threads: number | null;
+            /** Wow64 */
+            wow64: boolean | null;
+        };
+        /** ProcessPage */
+        ProcessPage: {
+            /** Items */
+            items: components["schemas"]["ProcessOut"][];
+            /**
+             * Total
+             * @description Matching rows, counted up to 10001: 10001 means at least that many (offset is capped at 10000).
+             */
+            total: number;
+        };
         /**
          * ProviderName
          * @enum {string}
@@ -5888,7 +6385,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "pcap" | "static";
+            kind: "pcap" | "static" | "memory";
             /** Subkind */
             subkind: string | null;
         };
@@ -5996,6 +6493,20 @@ export interface components {
             investigation_id: string;
             /** Items */
             items: components["schemas"]["RelatedCaseOut"][];
+        };
+        /**
+         * ReleaseIn
+         * @description Admin release of restricted memory evidence (once, audited; phase 8). The analyst
+         *     then clears the share-policy flags through the M6 route.
+         */
+        ReleaseIn: {
+            /**
+             * Acknowledge
+             * @description Must be true: the image may hold passwords, keys and personal data.
+             */
+            acknowledge: boolean;
+            /** Reason */
+            reason: string;
         };
         /** RenderCreate */
         RenderCreate: {
@@ -6548,6 +7059,9 @@ export interface components {
         /**
          * ReportSnapshot
          * @description The whole signed document (`cyberlab.report.v1`).
+         *
+         *     `omissions` is additive (M8): `canonical_json` leaves the key out when it is None, so every
+         *     snapshot signed before M8 re-serializes to identical bytes (test_report_canonical_golden).
          */
         ReportSnapshot: {
             /**
@@ -6622,6 +7136,7 @@ export interface components {
              *     }
              */
             notes: components["schemas"]["NotesSection"];
+            omissions?: components["schemas"]["Omissions"] | null;
             report: components["schemas"]["ReportInfo"];
             /**
              * Schema Version
@@ -7792,6 +8307,18 @@ export interface components {
              */
             total: number;
         };
+        /** SymbolsOut */
+        SymbolsOut: {
+            /** Isf Sha256 */
+            isf_sha256?: string | null;
+            linux_banner?: components["schemas"]["LinuxBannerOut"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "resolved" | "missing";
+            windows_pdb?: components["schemas"]["WindowsPdbOut"] | null;
+        };
         /**
          * TLP
          * @enum {string}
@@ -8222,6 +8749,19 @@ export interface components {
              * @default 0
              */
             malicious: number;
+        };
+        /**
+         * WindowsPdbOut
+         * @description Validated at ingest (kernel PDB allow-list, 32 hex GUID, age); the UI may build the
+         *     operator's `fetch-windows` command from these fields only (RT12).
+         */
+        WindowsPdbOut: {
+            /** Age */
+            age: number;
+            /** Guid */
+            guid: string;
+            /** Name */
+            name: string;
         };
     };
     responses: never;
@@ -8953,7 +9493,7 @@ export interface operations {
             query?: {
                 status?: components["schemas"]["AnalysisStatus"] | null;
                 analyzer?: components["schemas"]["Analyzer"] | null;
-                profile?: components["schemas"]["Profile"] | null;
+                profile?: components["schemas"]["JobProfile"] | null;
                 investigation_id?: string | null;
                 latest_per_evidence?: boolean;
                 limit?: number;
@@ -9353,6 +9893,225 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IocPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_memory_summary_api_v1_orgs__org_id__analyses__job_id__memory_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemorySummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_artifacts_api_v1_orgs__org_id__analyses__job_id__memory_artifacts_get: {
+        parameters: {
+            query?: {
+                type?: ("module" | "service" | "hive" | "userassist" | "ldr_unlinked" | "bash" | "open_file" | "syscall_hook" | "hidden_module") | null;
+                pid?: number | null;
+                q?: string | null;
+                ref?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_connections_api_v1_orgs__org_id__analyses__job_id__memory_connections_get: {
+        parameters: {
+            query?: {
+                pid?: number | null;
+                q?: string | null;
+                ref?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_injections_api_v1_orgs__org_id__analyses__job_id__memory_injections_get: {
+        parameters: {
+            query?: {
+                pid?: number | null;
+                ref?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InjectionPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_processes_api_v1_orgs__org_id__analyses__job_id__memory_processes_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                ppid?: number | null;
+                hidden?: boolean | null;
+                ref?: string | null;
+                view?: "list" | "tree";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_process_api_v1_orgs__org_id__analyses__job_id__memory_processes__pid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                pid: number;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -10002,6 +10761,74 @@ export interface operations {
             };
         };
     };
+    get_memory_sensitivity_api_v1_orgs__org_id__evidence__evidence_id__memory_sensitivity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evidence_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemorySensitivityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    release_memory_sensitivity_api_v1_orgs__org_id__evidence__evidence_id__memory_sensitivity_release_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evidence_id: string;
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemorySensitivityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_share_policy_api_v1_orgs__org_id__evidence__evidence_id__share_policy_get: {
         parameters: {
             query?: never;
@@ -10512,6 +11339,7 @@ export interface operations {
             query: {
                 filename: string;
                 description?: string;
+                kind?: "memory" | null;
             };
             header?: never;
             path: {
