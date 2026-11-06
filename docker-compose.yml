@@ -295,13 +295,17 @@ services:
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
       - ./infra/postgres/bootstrap.sh:/opt/cyberlab/bootstrap.sh:ro
     networks: [backend, enrich]
+    # A recreate (`up --renew-anon-volumes` in the gate) right after the API suite has written
+    # for an hour can need more than the default 10 s to checkpoint: a SIGKILL then forces a
+    # crash recovery whose data-directory fsync took over 10 minutes on the dev volume.
+    stop_grace_period: 2m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d cyberlab"]
       interval: 3s
       timeout: 3s
       retries: 20
       # Crash recovery after an unclean stop can take a while; don't count it as unhealthy.
-      start_period: 60s
+      start_period: 300s
 
   redis:
     image: redis:7.4-alpine

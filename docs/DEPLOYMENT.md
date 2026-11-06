@@ -29,7 +29,7 @@ pnpm prod:down
 
 Differences from dev: API `prod` target (non-root, no reload, `ENV=prod` refuses insecure cookies and `change-me` secrets), Next.js standalone server, Swagger UI disabled, MinIO console not published, HSTS + COOP headers, nonce CSP without `'unsafe-eval'` (dev adds it, and `ws:` for HMR), prod worker images (no test tooling).
 
-**M7 prod secrets.** The prod overlay requires `POSTGRES_RETENTION_PASSWORD`, `BROKER_RETENTION_PASSWORD` and `MINIO_PURGE_SECRET_KEY` (no `change-me` fallback) and reads `.secrets/minio_kms_key` ([SSE-S3 and the KMS key](#sse-s3-and-the-kms-key)) and `.secrets/metrics_token` ([Runtime metrics](#runtime-metrics)). The prod retention-worker runs `cyberlab/api:prod` with `ENV=prod` and still no JWT secret, app Redis, api MinIO user or key material. Run `pnpm verify:prod` on a fresh compose project while the dev volume's KMS key differs from the prod one (see the shared-volume caveat).
+**M7 prod secrets.** The prod overlay requires `POSTGRES_RETENTION_PASSWORD`, `BROKER_RETENTION_PASSWORD` and `MINIO_PURGE_SECRET_KEY` (no `change-me` fallback) and reads `.secrets/minio_kms_key` ([SSE-S3 and the KMS key](#sse-s3-and-the-kms-key)) and `.secrets/metrics_token` ([Runtime metrics](#runtime-metrics)). The prod retention-worker runs `cyberlab/api:prod` with `ENV=prod` and still no JWT secret, app Redis, api MinIO user or key material. `pnpm verify:prod` runs the prod stack in its own compose project (`<dev project>-prod`), so the dev volume's KMS key never meets the prod one (see the volume note).
 
 **Threat-intel seal keys (M4).** `ENV=prod` refuses the committed dev seal key (`dev-` kids). Before the first prod start, generate a key pair from the repo root:
 
@@ -313,7 +313,7 @@ After the restore:
   ```bash
   python -c "import os,base64;print('cyberlab-kms-1:'+base64.b64encode(os.urandom(32)).decode())" > .secrets/minio_kms_key
   ```
-- **Shared volume caveat for `pnpm verify:prod`:** the dev and prod-like stacks run in one compose project and share the `miniodata` volume. Once dev MinIO has written its IAM with the dev key, starting the prod overlay with `.secrets/minio_kms_key` (a different key) leaves MinIO unable to read its users. Run the prod gate on a fresh project (`COMPOSE_PROJECT_NAME=cyberlab-clean pnpm verify:prod`, then `COMPOSE_PROJECT_NAME=cyberlab-clean docker compose down -v`) until the gate's key handling is settled (M7 phase 11). Do not "fix" it by copying the dev key into `.secrets/`: prod refuses it.
+- **Separate volumes for `pnpm verify:prod`:** once dev MinIO has written its IAM with the dev key, a MinIO started on that volume with `.secrets/minio_kms_key` (a different key) cannot read its users. The gate therefore runs the prod phase in its own compose project, `cyberlab-prod` (or `$COMPOSE_PROJECT_NAME-prod`), with its own volumes, and never with `-v`. Do not "fix" a key mismatch by copying the dev key into `.secrets/`: prod refuses it.
 - The key sits on the same host: SSE-S3 protects against the loss of a volume or disk, not against a host compromise. A restore refuses a key with another fingerprint than the backup's.
 
 ## Object-store image
