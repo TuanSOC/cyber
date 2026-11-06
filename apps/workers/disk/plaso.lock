@@ -1,5 +1,7 @@
 # PENDING phase 3a (the Plaso packaging spike, group A'): the hash-pinned requirement set of
-# /opt/plaso, `plaso==20261027` and every dependency with `--hash=sha256:...` lines (pip
+# /opt/plaso compiled from plaso.in (`uv pip compile --generate-hashes plaso.in -o plaso.lock`
+# in the one-off builder container), `plaso==20261027` and every dependency with
+# `--hash=sha256:...` lines (pip
 # --require-hashes format), including the sdist-only libyal bindings the builder stage compiles
 # (libevtx, libregf, libfsntfs, libfsext, libfsfat, libbde, libfsapfs, libvsgpt; RT11) and the
 # hard requirements pyzmq, redis, opensearch-py (installed, never used: RT11).

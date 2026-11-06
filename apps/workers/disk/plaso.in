@@ -1,0 +1,6 @@
+# The Plaso requirement of /opt/plaso (M9 phase 3; never a dependency of the worker venv).
+# plaso.lock is compiled from this file with hashes by the phase-3a spike, in the one-off
+# builder container (never here):
+#   uv pip compile --python-version 3.12 --generate-hashes plaso.in -o plaso.lock
+# A Plaso upgrade is a deliberate change: edit this pin, recompile, re-run the engine tests.
+plaso==20261027

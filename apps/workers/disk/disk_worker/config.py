@@ -61,6 +61,12 @@ def _timeline_engine(env: Env) -> TimelineEngine:
     raise ConfigError(f"unknown DISK_TIMELINE_ENGINE {value!r}")
 
 
+def timeline_engine(env: Env | None = None) -> TimelineEngine:
+    """`DISK_TIMELINE_ENGINE` alone (phase 3's runner; `replay` refused outside the test
+    profile, as in `load`)."""
+    return _timeline_engine(os.environ if env is None else env)
+
+
 def load(env: Env | None = None) -> Config:
     env = os.environ if env is None else env
     min_free = int(env.get("DISK_WORK_MIN_FREE_BYTES", str(DEFAULT_MIN_FREE_BYTES)))

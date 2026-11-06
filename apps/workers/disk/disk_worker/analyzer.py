@@ -13,7 +13,8 @@ Root never parses image bytes beyond the magic check (`formats`):
    opened file system (OS partitions first, RT5) → `collect` per OS partition (phase 3's
    catalog plan after `never_collect()` over every name of each inode, RT7) → `scan` (phase 5)
    → the timeline (phase 3);
-5. hash-set matching (phase 5), detections (phase 6), assembly → `disk.v1`.
+5. hash-set matching (phase 5), detections over every event (phase 6; pass 1), the stored
+   events (phase 3; pass 2: the quotas plus every cited event, RT10), assembly → `disk.v1`.
 
 Job success: the downloads, `layout`, `verify` (when EWF; a timeout or skip leaves
 `not_verified`) and at least one `walk`. No file system opened, or none walked: the diagnostic
@@ -27,7 +28,6 @@ Phases 3 / 5 / 6 plug in through their frozen entry points; a stub that still ra
 """
 
 import hashlib
-import importlib
 import json
 import os
 import re
@@ -65,9 +65,10 @@ from pydantic import ValidationError
 
 from disk_worker import detections, formats, scan, stage, timeline
 from disk_worker.budget import Budget
-from disk_worker.config import Config, tool_versions
+from disk_worker.config import Config, ConfigError, tool_versions
 from disk_worker.hashsets.store import HashSetStore
 from disk_worker.normalize import BAD_ROW_RATIO
+from disk_worker.normalize.events import EventSource
 from disk_worker.normalize.models import CollectedRow, FileRow, HashRow, PartitionRow
 from disk_worker.normalize.reader import ReadStats, read_jsonl
 from disk_worker.normalize.records import (
@@ -80,6 +81,7 @@ from disk_worker.normalize.records import (
 from disk_worker.probe.names import is_safe_relative
 from disk_worker.result import RunFacts, ewf_mismatch_finding, write_diagnostic, write_result
 from disk_worker.timeline import catalog
+from disk_worker.timeline.replay import ReplayRefused
 
 GIB = 1024**3
 MIB = 1024**2
@@ -526,6 +528,8 @@ def _collect(j: Job) -> dict[DiskArtifact, ArtifactStat]:
                 DiskStage.COLLECT, partition_index=p.index, status="skipped", reason="not_available"
             )
             continue
+        if any(plan.dropped.get(k) for k in ("budget", "max_files", "category_cap")):
+            j.facts.truncate("collect")  # a catalog budget cut matched files (phase 3)
         case_insensitive = p.row.fs_type in CASE_INSENSITIVE_FS
         items: list[dict[str, Any]] = []
         refused = plan.refused_never_collect
@@ -722,12 +726,24 @@ def _no_events() -> Iterator[DiskEventRecord]:
 
 @dataclass
 class Events:
-    """The two event passes (RT10) through phase 3's normalizer, when it exists:
-    `disk_worker.normalize.events.iter_events(path, limits)` (every event, for detections) and
-    `select_events(path, limits, cited)` (the stored subset). Without it: no events."""
+    """The two event passes (RT10) through phase 3's normalizer (`normalize.events`):
+    `pass1()` streams every event to the detections; `EventSource.select(cited)` then fixes the
+    stored subset and the per-category counts before the stream is written (`_stored`).
+    Without a timeline: no events."""
 
-    pass1: Callable[[], Iterator[DiskEventRecord]] = _no_events
-    pass2: Callable[[set[int]], Iterator[DiskEventRecord]] = lambda _cited: iter(())
+    source: EventSource | None = None
+
+    def pass1(self) -> Iterator[DiskEventRecord]:
+        return self.source.events() if self.source is not None else _no_events()
+
+
+def _merge_artifacts(j: Job, counts: dict[DiskArtifact, tuple[int, int]]) -> None:
+    """Per-category `events_read` / `events_stored` into the collect statistics."""
+    merged = {a.artifact: a for a in j.facts.artifacts}
+    for artifact, (read, stored) in counts.items():
+        base = merged.get(artifact) or ArtifactStat(artifact=artifact)
+        merged[artifact] = base.model_copy(update={"events_read": read, "events_stored": stored})
+    j.facts.artifacts = list(merged.values())
 
 
 def _timeline(j: Job) -> Events:
@@ -740,34 +756,42 @@ def _timeline(j: Job) -> Events:
     except NotImplementedError:
         j.facts.report(DiskStage.TIMELINE, status="skipped", reason="not_available")
         return Events()
+    except (ConfigError, ReplayRefused):
+        j.facts.report(DiskStage.TIMELINE, status="skipped", reason="refused")
+        return Events()
     j.facts.timeline_engine = out.engine
-    for res in out.stages:
-        j.facts.report(DiskStage.TIMELINE, res)
-    merged = {a.artifact: a for a in j.facts.artifacts}
-    for a in out.artifacts:
-        base = merged.get(a.artifact)
-        merged[a.artifact] = (
-            a
-            if base is None
-            else base.model_copy(
-                update={"events_read": a.events_read, "events_stored": a.events_stored}
-            )
-        )
-    j.facts.artifacts = list(merged.values())
+    for i, res in enumerate(out.stages):
+        index = out.stage_partitions[i] if i < len(out.stage_partitions) else None
+        j.facts.report(DiskStage.TIMELINE, res, partition_index=index)
+    _merge_artifacts(j, {a.artifact: (a.events_read, a.events_stored) for a in out.artifacts})
     if out.events_path is None:
         return Events()
     try:
-        ev: Any = importlib.import_module("disk_worker.normalize.events")  # phase 3's module
-        iter_events = ev.iter_events
-        select_events = ev.select_events
-    except (ImportError, AttributeError):
+        return Events(EventSource(out.events_path, j.limits))
+    except (OSError, ValueError, KeyError, TypeError):
         j.facts.error("events_unavailable")
         return Events()
-    path, limits = out.events_path, j.limits
-    return Events(
-        pass1=lambda: iter_events(path, limits),
-        pass2=lambda cited: select_events(path, limits, cited),
+
+
+def _stored(j: Job, events: Events, cited: set[int]) -> Callable[[], Iterator[DiskEventRecord]]:
+    """Pass 2's stored events (quotas + every cited ordinal); the header counts first."""
+    if events.source is None:
+        return _no_events
+    try:
+        selection = events.source.select(cited)
+    except (OSError, ValueError):
+        j.facts.error("events_unavailable")
+        return _no_events
+    categories = set(selection.read) | set(selection.stored)
+    _merge_artifacts(
+        j,
+        {a: (selection.read.get(a, 0), selection.stored.get(a, 0)) for a in categories},
     )
+    if selection.counts.dropped or selection.counts.bad_lines:
+        j.facts.error("timeline_events_dropped")
+    if selection.counts.truncated:
+        j.facts.truncate("events")
+    return selection.records
 
 
 # --- assembly ---------------------------------------------------------------------------------
@@ -837,13 +861,13 @@ def analyze(job: DiskJobV1, dirs: sandbox.JobDirs, config: Config) -> Path:
     yara_severity = _scan(j)
     events = _timeline(j)
     found = _detect(j, events, yara_severity)
-    cited = set(found.cited_events)
+    stored = _stored(j, events, set(found.cited_events))
     return write_result(
         dirs.root / RESULT,
         facts,
         [p.record() for p in j.partitions],
         j.files,
-        lambda: events.pass2(cited),
+        stored,
         found,
         job.limits.max_result_bytes,
     )
