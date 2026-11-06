@@ -1,0 +1,13 @@
+{"Variable": "Kernel Base", "Value": "0xf80672800000"}
+{"Variable": "DTB", "Value": "0x1aa000"}
+{"Variable": "Symbols", "Value": "file:///symbols/windows/ntkrnlmp.pdb/0123456789ABCDEF0123456789ABCDEF-1.json.xz"}
+{"Variable": "Is64Bit", "Value": "True"}
+{"Variable": "IsPAE", "Value": "False"}
+{"Variable": "layer_name", "Value": "0 WindowsIntel32e"}
+{"Variable": "memory_layer", "Value": "1 WindowsCrashDump64Layer"}
+{"Variable": "NTBuildLab", "Value": "19041.1.amd64fre.vb_release.191206-1406"}
+{"Variable": "Major/Minor", "Value": "15.19041"}
+{"Variable": "KeNumberProcessors", "Value": "4"}
+{"Variable": "SystemTime", "Value": "2026-11-01 09:30:00+00:00"}
+{"Variable": "NtSystemRoot", "Value": "C:\\Windows"}
+{"Variable": "NtMajorVersion", "Value": "10"}

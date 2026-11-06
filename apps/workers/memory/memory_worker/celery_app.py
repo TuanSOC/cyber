@@ -8,6 +8,7 @@ via the reaper instead of looping). One task per child process, one child at a t
 """
 
 import logging
+import sys
 from typing import Any
 
 from celery import Celery
@@ -21,7 +22,13 @@ from memory_worker import config, pipeline
 # httpx logs full request URLs at INFO: presigned URLs are bearer credentials.
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-CONFIG = config.load()
+# A refused configuration (e.g. `MEMORY_ENGINE=replay` outside the test profile) stops the
+# worker before it consumes anything: EX_CONFIG (78), M8 phase 2.
+try:
+    CONFIG = config.load()
+except config.ConfigError as exc:
+    print(f"memory-worker: refused configuration: {exc}", file=sys.stderr)
+    sys.exit(78)
 queues = Queues(CONFIG.queue_prefix)
 
 celery_app = Celery("cyberlab-memory", broker=CONFIG.broker_url)

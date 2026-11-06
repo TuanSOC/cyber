@@ -1,9 +1,13 @@
-"""One job: validate -> started -> analyze -> upload -> finished (phase-1 skeleton; phase 2
-owns this file and `analyzer.py`, never `celery_app.py`'s call `run_job(message, config,
-send)`).
+"""One job: validate -> started -> analyze -> upload -> finished (M8 phase 2; the call
+`run_job(message, config, send)` from `celery_app.py` is frozen).
 
-Phase 1: `analyzer.analyze` raises `JobFailed("not_implemented")`, so every memory job reports
-`started` then `failed / not_implemented`, and no result is ever uploaded.
+- A full result is uploaded and reported `succeeded` with its version id.
+- Missing symbols: the analyzer wrote the diagnostic stream (header with `symbols.required`,
+  image, trailer); it is uploaded and reported `failed` / `symbols_missing` WITH its version
+  id (the ingest stores only the requirement).
+- Any other failure is `failed` with its code and no upload. `sandbox.prepare` runs once per
+  job (it resets the whole work dir, RT26); `sandbox.cleanup` kills every tool process and
+  removes the job dir whatever happened.
 """
 
 import logging
@@ -17,7 +21,7 @@ from cyberlab_worker.errors import JobFailed
 from cyberlab_worker.transfer import upload
 from pydantic import ValidationError
 
-from memory_worker.analyzer import analyze
+from memory_worker.analyzer import DiagnosticResult, analyze
 from memory_worker.config import WORKER_VERSION, Config
 
 log = logging.getLogger(__name__)
@@ -49,7 +53,20 @@ def run_job(raw: object, config: Config, send: SendIngest) -> None:
     dirs: sandbox.JobDirs | None = None
     try:
         dirs = sandbox.prepare(config.work_dir, str(job.job_id))
-        result = analyze(job, dirs, config)
+        try:
+            result = analyze(job, dirs, config)
+        except DiagnosticResult as diagnostic:
+            version_id = upload(job.result_post, diagnostic.path)
+            send(
+                message(
+                    job,
+                    IngestEvent.FINISHED,
+                    outcome=Outcome.FAILED,
+                    error_code="symbols_missing",
+                    result_version_id=version_id,
+                )
+            )
+            return
         version_id = upload(job.result_post, result)
         send(
             message(

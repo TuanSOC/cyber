@@ -99,3 +99,39 @@ Volatility runs **offline in library mode** against `/symbols` (read-only). Rese
 - **Repeated layer stacking cost:** only the probe smoke's sparse-file scan time is measured (no real large image is used); if it projects `triage` beyond the job timeout for an 8 GiB image, the parent decides between grouping plugins per process and raising the timeout (recorded).
 - **Windows never executed in CI** (RT4): the column-drift test, the row fixtures and the replay engine are the guards; the docs state it.
 - **TreeGrid memory:** stopping the grid at the cap bounds rows, but Volatility may still build large internal structures; `RLIMIT_AS` and the plugin timeout are the backstop.
+
+## Implementation notes (as built, untested in Docker)
+
+Code-only commit `feat(memory): Volatility runner, normalizers, replay engine (M8 phase 2, untested in Docker)`. Host checks that passed (Python 3.14, Windows, no Volatility installed): `pytest --noconftest tests/unit` minus `test_skeleton.py` (celery) — 577 passed, the sandbox / Volatility tests skip; `test_plugin_columns.py` run once with the 2.28.2 wheel *source* on `PYTHONPATH` (AST only, never imported): every allow-listed plugin's `TreeGrid` columns and every fixed option name match; `ruff check` / `ruff format` on the phase-2 files. `mypy` not run.
+
+**2.28.2 API findings (read from the wheel source):**
+- `volatility3.symbols.__path__` *is* `constants.SYMBOL_BASEPATHS`; `[0..1]` = `volatility3/symbols`, `volatility3/framework/symbols`, `[2]` = `<CACHE_PATH>/symbols` (dropped). `CACHE_PATH` = `$XDG_CACHE_HOME/volatility3`, created (`os.makedirs`) at import of `framework.constants`.
+- `cli` only sets `constants.OFFLINE`; `resources.OfflineHandler.default_open` raises `OfflineException` for http(s) when set; `ResourceAccessor.open` goes through `urllib.request.urlopen` for **every** location, so the audit hook must allow `file:` / `jar:file:` `urllib.Request` events.
+- `plugins.construct_plugin(ctx, automagics, plugin, base, progress, open_method)`; config keys are `plugins.<Class>.<requirement name>` with names verbatim (`dump-regions`, `decorate_comm`, `files_only`, `include-corrupt`, `hexdump-size`).
+- `TreeGrid.populate(visitor, acc, fail_on_errors=True)` re-raises the visitor's exception (row cap).
+- `pdbutil.PdbSignatureScanner(names)` yields `(GUID upper hex, age, name bytes, offset)`; the Linux banner regex is `plugins/banners.py`'s; `LayerStacker.stack_layer(ctx, layer, stackers)` returns names highest first. The Linux stackers need banners from the cache (symbols), the Windows page-table stacker does not.
+- `windows.pslist` / `psscan` default to virtual offsets (`Offset(V)`); `windows.info` reports `Symbols` (ISF URL), `NTBuildLab`, `Major/Minor`, `SystemTime`; `linux.malware.check_syscall` lists every table entry (`UNKNOWN` when unresolved); `windows.registry.userassist` is a tree (Key / Subkey / Value rows); `ModuleDisplayPlugin.columns_results` (hidden_modules) lives in `symbols/linux/utilities/modules.py`.
+- No layer `mmap`s the image (`FileLayer` reads through the resource accessor); confirm with the sparse-file smoke.
+
+**Design (deviations / additions):**
+- One process per step: `identify`, then one probe per plugin (`python -I -s -B -m memory_worker.probe`); stdout = `rows.jsonl` (root-created), `status.json` written by the probe. Each out dir is **sealed** after its run (chowned to root): a later probe (same uid) cannot alter an earlier plugin's rows.
+- Pure modules (host-testable): `identify.py` (OS choice, `ACCEPTED_LAYERS` → QEMU / Xen = `unsupported_memory_format`), `normalize/` (reader, row models, Windows / Linux), `result.py` (header, view, writer), `probe/{plugins,guard,encode}.py`, `engines/magic.py`. Sandbox-bound: `analyzer.py`, `engines/{workspace,volatility,replay}.py`.
+- Diagnostic: `analyzer.DiagnosticResult(JobFailed)` carries the written stream; the pipeline uploads it and reports `failed / symbols_missing` with the version id.
+- `os_undetermined` / identify refusals are `JobFailed` (no stream; the reason is logged).
+- Replay scenario = the evidence file's marker line `CYBERLAB-REPLAY <scenario>` (tests/fixtures/vol_rows/{windows,linux}); `<plugin>.status.json` overrides (`_end`: failed / timeout). `celery_app.py` exits **78** on a refused config (only edit there).
+- Free-space headroom 1 GiB; **16 MiB under `TEST_PROFILE=1`** (the 512 MiB test tmpfs could never hold size + 1 GiB).
+- A failed or timed-out plugin keeps its rows, flagged `truncated` (partial, never "complete"); a status that is not provably offline drops the rows (`probe_offline_unverified`).
+- Linux banner normalization uses phase 5's `normalize_banner` (store / probe agree).
+- Processes merge by (pid, offset, create time), then a psscan-only twin with the same (pid, create time) merges into the single pslist entry. The first `dlllist` module of a pid becomes `image_path` and is not repeated as a `module` artifact (this reproduces the phase-1 fixture counts).
+- Address attributes: int while ≤ 2**63-1, else `0x…` text (kernel addresses; the jsonb bigint check).
+
+**Attribute keys emitted** (phase 3 reads the bold ones): `service` {**name**, **state**, **binary**, **type**, start, display, dll, order}; `ldr_unlinked` {**in_load**, **in_init**, **in_mem**, **path**, **base**} (only rows missing from ≥ 1 list); `bash` {**command**, **time**}; `module` {name, path, base, size, load_count, load_time}; `hive` {path, offset}; `userassist` {hive, path, key, count, focus_count, time_focused, last_updated}; `open_file` {fd, path, type, inode, mode, size, device}; `syscall_hook` {table, index, handler, table_address} (UNKNOWN handlers only); `hidden_module` {name, offset, code_size, taints, args}. Engine errors: `<plugin_key>_{failed,timeout,rows_skipped,unknown_columns}`, `probe_offline_unverified`, `isf_unreported`, `isf_mismatch`.
+
+**Phase-1 test fixed:** `tests/unit/test_skeleton.py` — `test_detections_stub_and_view_types` asserted an empty `DetectionOutput`; with phase 3 an image-only view yields one `system_time` timeline event (now `test_detections_on_an_image_only_view`); the `not_implemented` test became three pipeline tests (failure, diagnostic upload, success).
+
+**Remains to run (Docker, lane 2, `memory-worker-test`):**
+1. `ruff check . && ruff format --check . && mypy memory_worker tests`.
+2. `pytest -q tests/unit` — in particular `test_runner.py` (replay end to end, sealing, hostile rows files, sandbox arguments), `test_offline.py`, `test_symbol_paths.py`, `test_plugin_columns.py` against the installed wheel, `test_skeleton.py`.
+3. `pytest -q -s tests/engine` (random 16 MiB blob: real probe, offline, zero audit events, `unsupported` pslist); then `--heavy` with `MEMORY_PROBE_HEAVY=1` (sparse 8 GiB: identify duration = baseline scan time, peak child RSS < `RLIMIT_AS`). Record the timings here.
+4. Confirm in the image: `ctypes.util.find_library` / imports trigger no audit event after `prepare_imports`; `RefusingFileHandler` satisfies `set_open_method`; `ctx.config` iteration yields the `.isf_url` keys (else `isf_unreported` appears in every header); the probe's `RLIMIT_NOFILE` 512 suffices.
+5. Isolation tests of the plan (inet / netlink / vsock / io_uring from the probe, writes outside the out dir, HOME unreadable, no process left after a timeout) are not written yet beyond the kit's own suite: add them to `tests/test_isolation.py` when the image builds.

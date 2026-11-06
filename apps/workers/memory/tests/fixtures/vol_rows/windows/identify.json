@@ -1,0 +1,13 @@
+{
+  "layers": [
+    "FileLayer",
+    "WindowsCrashDump64Layer",
+    "WindowsIntel32e"
+  ],
+  "pdb": {
+    "name": "ntkrnlmp.pdb",
+    "guid": "0123456789ABCDEF0123456789ABCDEF",
+    "age": 1
+  },
+  "banner": null
+}

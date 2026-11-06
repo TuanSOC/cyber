@@ -1,0 +1,9 @@
+{"OFFSET (V)": 18446631923540295680, "PID": 1, "TID": 1, "PPID": 0, "COMM": "systemd", "UID": 0, "GID": 0, "EUID": 0, "EGID": 0, "CREATION TIME": "2026-11-01T08:00:00+00:00", "File output": "Disabled"}
+{"OFFSET (V)": 18446631923540303872, "PID": 2, "TID": 2, "PPID": 0, "COMM": "kthreadd", "UID": 0, "GID": 0, "EUID": 0, "EGID": 0, "CREATION TIME": "2026-11-01T08:01:00+00:00", "File output": "Disabled"}
+{"OFFSET (V)": 18446631923540312064, "PID": 412, "TID": 412, "PPID": 1, "COMM": "systemd-journal", "UID": 0, "GID": 0, "EUID": 0, "EGID": 0, "CREATION TIME": "2026-11-01T08:02:00+00:00", "File output": "Disabled"}
+{"OFFSET (V)": 18446631923540320256, "PID": 640, "TID": 640, "PPID": 1, "COMM": "sshd", "UID": 0, "GID": 0, "EUID": 0, "EGID": 0, "CREATION TIME": "2026-11-01T08:03:00+00:00", "File output": "Disabled"}
+{"OFFSET (V)": 18446631923540328448, "PID": 701, "TID": 701, "PPID": 1, "COMM": "cron", "UID": 0, "GID": 0, "EUID": 0, "EGID": 0, "CREATION TIME": "2026-11-01T08:04:00+00:00", "File output": "Disabled"}
+{"OFFSET (V)": 18446631923540336640, "PID": 1022, "TID": 1022, "PPID": 640, "COMM": "sshd", "UID": 1000, "GID": 1000, "EUID": 1000, "EGID": 1000, "CREATION TIME": "2026-11-01T08:05:00+00:00", "File output": "Disabled"}
+{"OFFSET (V)": 18446631923540344832, "PID": 1030, "TID": 1030, "PPID": 1022, "COMM": "bash", "UID": 1000, "GID": 1000, "EUID": 1000, "EGID": 1000, "CREATION TIME": "2026-11-01T08:06:00+00:00", "File output": "Disabled"}
+{"OFFSET (V)": 18446631923540353024, "PID": 1101, "TID": 1101, "PPID": 1030, "COMM": "sh", "UID": 1000, "GID": 1000, "EUID": 1000, "EGID": 1000, "CREATION TIME": "2026-11-01T08:07:00+00:00", "File output": "Disabled"}
+{"OFFSET (V)": 18446631923540361216, "PID": 1102, "TID": 1102, "PPID": 1101, "COMM": "nc", "UID": 1000, "GID": 1000, "EUID": 1000, "EGID": 1000, "CREATION TIME": "2026-11-01T08:08:00+00:00", "File output": "Disabled"}

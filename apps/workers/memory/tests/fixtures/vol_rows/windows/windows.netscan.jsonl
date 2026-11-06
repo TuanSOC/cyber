@@ -1,0 +1,3 @@
+{"Offset": 18446639135079006208, "Proto": "TCPv4", "LocalAddr": "10.0.0.15", "LocalPort": 49712, "ForeignAddr": "203.0.113.50", "ForeignPort": 443, "State": "ESTABLISHED", "PID": 6112, "Owner": "svch0st.exe", "Created": "2026-11-01T09:01:00+00:00"}
+{"Offset": 18446639135079010304, "Proto": "TCPv4", "LocalAddr": "0.0.0.0", "LocalPort": 445, "ForeignAddr": "0.0.0.0", "ForeignPort": 0, "State": "LISTENING", "PID": 4, "Owner": "System", "Created": null, "_unreadable": ["Created"]}
+{"Offset": 18446639135079014400, "Proto": "UDPv6", "LocalAddr": "::", "LocalPort": 5353, "ForeignAddr": "*", "ForeignPort": 0, "State": "", "PID": 4388, "Owner": "msedge.exe", "Created": null, "_unreadable": ["Created"]}

