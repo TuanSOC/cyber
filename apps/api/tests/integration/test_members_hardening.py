@@ -9,9 +9,10 @@ from app.core.errors import Conflict
 from app.core.rbac import OrgContext
 from app.core.tenancy import tenant_session
 from app.modules.organizations import members, repository
-from app.modules.organizations.models import MemberRole
-from app.modules.users.models import User
+from app.modules.organizations.models import MemberRole, OrganizationMember
+from app.modules.users.models import User, UserKind
 from tests.factories import csrf, make_user, register, unique_email
+from tests.identity_helpers import seed_api_key, session_id_of, set_step_up
 from tests.integration.test_orgs_members import org_with_roles
 
 
@@ -20,6 +21,7 @@ async def test_member_mutations_wait_for_the_org_lock() -> None:
     org = await org_with_roles()
     owner, admin = org.clients["owner"], org.clients["admin"]
     base = f"/api/v1/orgs/{org.org_id}/members"
+    await set_step_up(session_id_of(owner), seconds_ago=0)
     await owner.patch(
         f"{base}/{org.member_ids['admin']}", json={"role": "owner"}, headers=csrf(owner)
     )
@@ -112,17 +114,14 @@ async def test_cannot_remove_self() -> None:
 
 async def test_inactive_user_cannot_be_added() -> None:
     org = await org_with_roles()
-    email = unique_email("gone")
-    user_id = await make_user(email)
-    async with tenant_session(None, None) as s:
-        await s.execute(update(User).where(User.id == user_id).values(is_active=False))
     admin = org.clients["admin"]
     response = await admin.post(
         f"/api/v1/orgs/{org.org_id}/members",
-        json={"email": email, "role": "viewer"},
+        json={"email": "inactive@example.com", "role": "viewer"},
         headers=csrf(admin),
     )
-    assert (response.status_code, response.json()["error"]["code"]) == (404, "user_not_found")
+    assert response.status_code == 410
+    assert response.json()["error"]["code"] == "members_direct_add_removed"
 
 
 async def test_list_endpoints_cap_offset_and_limit() -> None:
@@ -163,17 +162,120 @@ async def test_org_creation_is_rate_limited(monkeypatch: pytest.MonkeyPatch) -> 
     assert statuses == [201, 201, 429]
 
 
-async def test_concurrent_duplicate_adds_never_500() -> None:
-    """Exactly one 201, the other a clean 409; one membership row."""
+async def test_direct_add_is_decommissioned_answers_410() -> None:
+    """POST /orgs/{org}/members is permanently replaced by invitations and answers 410."""
     org = await org_with_roles()
-    email = unique_email("dup")
-    await make_user(email)
-    admin, owner = org.clients["admin"], org.clients["owner"]
+    admin = org.clients["admin"]
     url = f"/api/v1/orgs/{org.org_id}/members"
-    results = await asyncio.gather(
-        admin.post(url, json={"email": email, "role": "viewer"}, headers=csrf(admin)),
-        owner.post(url, json={"email": email, "role": "analyst"}, headers=csrf(owner)),
+    resp = await admin.post(
+        url,
+        json={"email": "candidate@example.com", "role": "analyst"},
+        headers=csrf(admin),
     )
-    assert sorted(r.status_code for r in results) == [201, 409]
-    page = (await owner.get(url)).json()
-    assert [m["email"] for m in page["items"]].count(email) == 1
+    assert resp.status_code == 410
+    assert resp.json()["error"]["code"] == "members_direct_add_removed"
+
+
+async def test_member_elevation_and_removal_require_step_up() -> None:
+    org = await org_with_roles()
+    owner = org.clients["owner"]
+    viewer_id = org.member_ids["viewer"]
+    base = f"/api/v1/orgs/{org.org_id}/members"
+
+    # 1. Elevate to admin without step-up -> 403 step_up_required
+    elevate_resp = await owner.patch(
+        f"{base}/{viewer_id}",
+        json={"role": "admin"},
+        headers=csrf(owner),
+    )
+    assert elevate_resp.status_code == 403
+    assert elevate_resp.json()["error"]["code"] == "step_up_required"
+
+    # 2. Elevate with step-up succeeds
+    await set_step_up(session_id_of(owner), seconds_ago=0)
+    elevate_ok = await owner.patch(
+        f"{base}/{viewer_id}",
+        json={"role": "admin"},
+        headers=csrf(owner),
+    )
+    assert elevate_ok.status_code == 200
+    assert elevate_ok.json()["role"] == "admin"
+
+    # 3. Remove without step-up -> 403 step_up_required
+    await set_step_up(session_id_of(owner), seconds_ago=None)
+    remove_resp = await owner.delete(
+        f"{base}/{viewer_id}",
+        headers=csrf(owner),
+    )
+    assert remove_resp.status_code == 403
+    assert remove_resp.json()["error"]["code"] == "step_up_required"
+
+    # 4. Remove with step-up succeeds
+    await set_step_up(session_id_of(owner), seconds_ago=0)
+    remove_ok = await owner.delete(
+        f"{base}/{viewer_id}",
+        headers=csrf(owner),
+    )
+    assert remove_ok.status_code == 204
+
+
+async def test_service_accounts_refused_by_members_routes() -> None:
+    """RT14: Service accounts cannot be modified or removed through members routes."""
+    org = await org_with_roles()
+    owner = org.clients["owner"]
+    await set_step_up(session_id_of(owner), seconds_ago=0)
+
+    # Seed a service account with API key
+    seeded = await seed_api_key(org.org_id, org.user_ids["owner"])
+    # Look up member_id for service account
+    members_page = (await owner.get(f"/api/v1/orgs/{org.org_id}/members")).json()
+    svc_member = next(m for m in members_page["items"] if m["user_id"] == str(seeded.service_user_id))
+    svc_member_id = svc_member["id"]
+
+    base = f"/api/v1/orgs/{org.org_id}/members/{svc_member_id}"
+
+    # Try modifying service account role -> 409 service_account_member
+    patch_resp = await owner.patch(
+        base,
+        json={"role": "viewer"},
+        headers=csrf(owner),
+    )
+    assert patch_resp.status_code == 409
+    assert patch_resp.json()["error"]["code"] == "service_account_member"
+
+    # Try removing service account through members -> 409 service_account_member
+    del_resp = await owner.delete(base, headers=csrf(owner))
+    assert del_resp.status_code == 409
+    assert del_resp.json()["error"]["code"] == "service_account_member"
+
+
+async def test_count_owners_counts_human_members_only() -> None:
+    """RT14: repo.count_owners ignores service accounts even if assigned owner role."""
+    reg = await register()
+    async with tenant_session(reg.org_id, reg.user_id) as session:
+        human_owners = await repository.count_owners(session, reg.org_id)
+        assert human_owners == 1
+
+        # Add a service account with OWNER role directly
+        svc_user_id = uuid.uuid4()
+        session.add(
+            User(
+                id=svc_user_id,
+                email="svc_owner@service.invalid",
+                password_hash="!svc",
+                display_name="Service Owner",
+                kind="service",
+            )
+        )
+        await session.flush()
+        session.add(
+            OrganizationMember(
+                organization_id=reg.org_id,
+                user_id=svc_user_id,
+                role=MemberRole.OWNER,
+            )
+        )
+        await session.flush()
+
+        # count_owners must STILL be 1 (human owner only)
+        assert await repository.count_owners(session, reg.org_id) == 1

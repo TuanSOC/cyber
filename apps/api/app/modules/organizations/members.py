@@ -10,9 +10,10 @@ from sqlalchemy.exc import IntegrityError
 from starlette.requests import HTTPConnection
 
 from app.core import rate_limit
-from app.core.errors import Conflict, Forbidden, NotFound
+from app.core.errors import Conflict, Forbidden, Gone, NotFound
 from app.core.pagination import PageParams
 from app.core.rbac import OrgContext, Permission, check, membership_role
+from app.core.stepup import StepUpAction, require_recent_auth
 from app.modules.audit import service as audit
 from app.modules.organizations import repository as repo
 from app.modules.organizations.models import MemberRole, OrganizationMember
@@ -74,34 +75,10 @@ async def _get_other_member(
 async def add_member(
     ctx: OrgContext, email: str, role: MemberRole, request: HTTPConnection
 ) -> MemberOut:
-    # Bounds probing which emails are registered (user_not_found vs created).
-    await rate_limit.hit(f"member:add:{ctx.user.id}", MEMBER_ADD_LIMIT_PER_10MIN, 600)
-    actor_role = await _lock_and_reauthorize(ctx)
-    _ensure_may_manage(actor_role, None, role)
-    user = await users.get_by_email(ctx.session, email)
-    if user is None or not user.is_active:
-        raise NotFound("No active user with this email", code="user_not_found")
-    if await repo.find_member_by_user(ctx.session, ctx.org_id, user.id) is not None:
-        raise Conflict("User is already a member", code="already_member")
-    member = OrganizationMember(organization_id=ctx.org_id, user_id=user.id, role=role)
-    ctx.session.add(member)
-    try:
-        await ctx.session.flush()
-    except IntegrityError as exc:  # concurrent add of the same user
-        raise Conflict("User is already a member", code="already_member") from exc
-    audit.record(
-        ctx.session,
-        action="member.added",
-        org_id=ctx.org_id,
-        actor_id=ctx.user.id,
-        target_type="member",
-        target_id=member.id,
-        details={"user_id": str(user.id), "role": role.value},
-        request=request,
+    raise Gone(
+        "Direct member addition is removed; invite members instead",
+        code="members_direct_add_removed",
     )
-    out = _to_out(member, user)
-    await ctx.session.commit()
-    return out
 
 
 async def change_role(
@@ -109,7 +86,11 @@ async def change_role(
 ) -> MemberOut:
     actor_role = await _lock_and_reauthorize(ctx)
     member, user = await _get_other_member(ctx, member_id)
+    if user.kind == "service":
+        raise Conflict("Service accounts cannot be modified via members", code="service_account_member")
     _ensure_may_manage(actor_role, member.role, role)
+    if role in (MemberRole.ADMIN, MemberRole.OWNER):
+        await require_recent_auth(ctx.session, ctx.user, action=StepUpAction.MEMBER_ELEVATE)
     if member.role == role:
         return _to_out(member, user)
     if role != MemberRole.OWNER:
@@ -134,8 +115,11 @@ async def change_role(
 
 async def remove_member(ctx: OrgContext, member_id: uuid.UUID, request: HTTPConnection) -> None:
     actor_role = await _lock_and_reauthorize(ctx)
-    member, _ = await _get_other_member(ctx, member_id)
+    member, user = await _get_other_member(ctx, member_id)
+    if user.kind == "service":
+        raise Conflict("Service accounts cannot be modified via members", code="service_account_member")
     _ensure_may_manage(actor_role, member.role, None)
+    await require_recent_auth(ctx.session, ctx.user, action=StepUpAction.MEMBER_REMOVE)
     await ensure_other_owner_remains(ctx, member)
     audit.record(
         ctx.session,

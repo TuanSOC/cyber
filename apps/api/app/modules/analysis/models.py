@@ -19,6 +19,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.models_base import Base, UUIDPk, pg_enum
@@ -170,7 +171,7 @@ class AnalysisJob(UUIDPk, Base):
     # succeeded static `full` job of the same evidence it starts from (same-org FK, trigger),
     # and what was asked (`{"decompile_addresses": [decimal strings]}`, <= 2 KiB).
     source_job_id: Mapped[uuid.UUID | None]
-    re_params: Mapped[dict[str, Any] | None]
+    re_params: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     status: Mapped[AnalysisStatus] = mapped_column(
         pg_enum(AnalysisStatus, "analysis_status"),
         server_default=AnalysisStatus.QUEUED.value,

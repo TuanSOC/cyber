@@ -47,3 +47,4 @@ celery_app.conf.update(
     broker_connection_timeout=3,
     broker_connection_max_retries=1,
 )
+

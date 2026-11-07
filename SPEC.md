@@ -1,112 +1,159 @@
-# SPEC: Milestone 11 - Phase 2: Mail Outbox Worker & Mailpit Delivery
+# SPEC: Milestone 11 - Phase 3: Invitations, Email Verification & Registration Modes
 
 ## 1. Context & Objectives
 
-In **Milestone 11 (Identity & Access)**, Phase 1 established the database schema (`email_outbox`, migration `0019_m11_identity`), templates specification (`MailTemplate`), sealing mechanism for link tokens (`cyberlab.mail.v1`), and outbox enqueue functions.
-
-**Phase 2 Objective:** Implement the outbox delivery worker and Mailpit integration:
-1. **Renderer (`render.py`):** Deterministic, strictly plain-text rendering with template parameter safety, injection defense, name neutralizers, and URL fragment `#t=<token>` links.
-2. **Transport (`transport.py`):** Multi-backend email delivery (`smtp`, `capture`, `disabled`) with TLS enforcement and startup safety guards preventing live SMTP in test environments.
-3. **Worker (`worker.py`, `mail_tasks.py`, `mail_app.py`):** Celery mail delivery worker running under the least-privileged `cyberlab_mail` database role with atomic claims, exponential backoff, crash recovery sweep, and immediate NULLing of sensitive token secrets upon completion.
-4. **Service Pinning & Network Isolation:** Pin Mailpit container images (`axllent/mailpit:v1.33.0`) with immutable digests, non-root, read-only rootfs, and confined to the internal `mail` network.
-5. **Comprehensive Testing:** Unit and integration test suites proving anti-injection, error recovery, unseal handling, and role isolation.
-
----
-
-## 2. Architecture & Security Invariants
-
-### 2.1 Least-Privilege Role Separation
-* The mail worker runs as dedicated PostgreSQL user `cyberlab_mail`.
-* `cyberlab_mail` can SELECT/UPDATE `email_outbox` only; attempts to query `users`, `organizations`, or any other table must fail with `permission denied`.
-* The mail worker environment (`x-mail-env`) has `PROCESS_ROLE=mail`. `Settings` enforces this role, refuses JWT secrets, MinIO credentials, and any unsealing keys other than `MAIL_SEAL_PRIVATE_KEYS_FILE`.
-
-### 2.2 Template & Phishing Defenses
-* **Plain text only:** No HTML, no multipart/alternative, no remote assets, no tracking pixels.
-* **URL fragment links:** Secrets are passed strictly in the fragment (`#t=<token>`), preventing them from leaking via HTTP referrers, proxies, or server request logs.
-* **Header injection prevention:** Subject and recipient headers strictly checked for `\r` and `\n`.
-* **Phishing mitigation (RT20):** Any organization name or user name containing URL/domain indicators (`://`, `www.`, or dotted host tokens) is sanitized to a neutral label ("an organization on CyberLab").
-
-### 2.3 Secret Lifecycle & Atomic Sweeps
-* The worker atomically claims due rows:
-  ```sql
-  UPDATE email_outbox
-  SET status='sending', attempts=attempts+1, claimed_at=now()
-  WHERE id=:id AND status='pending' AND next_attempt_at <= now()
-  RETURNING ...
-  ```
-* Once sent, `status='sent'`, `sent_at=now()`, and `secret_epk`, `secret_nonce`, `secret_ct`, `secret_kid` are immediately set to `NULL`.
-* On transient errors: `status='pending'`, exponential backoff: `next_attempt_at = now() + (2 ^ attempts) * interval '1 minute'` (up to 5 attempts, then `failed`).
-* Sweep job (`mail.sweep` every 60s): Recovers stalled `sending` rows older than 5 minutes back to `pending`.
+Phase 3 transitions CyberLab from direct, unconsented member addition to secure, invitation-based membership. It closes the fundamental security gaps accepted in M1:
+- **No Unconsented Membership:** Users must explicitly accept an invitation token sent to their email.
+- **Timing & Enumeration Resistance:** Creating an invitation answers `201 Created` with identical timing whether the email is registered or unknown (no user table query).
+- **Email Verification:** Email verification tokens are single-use, 24-hour expiring, URL fragment-based (`#t=<token>`), and verify accounts only when signed in as the token's recipient.
+- **Registration Modes:** Supports `open` and `invite_only`. In `invite_only` mode, registration without an invitation token immediately returns `403 registration_closed`.
+- **Legacy Direct Add Removal:** `POST /orgs/{org}/members` is decommissioned with `410 members_direct_add_removed`.
+- **Operator Bootstrap:** `admin_bootstrap.py` creates the first owner invitation for a fresh installation.
 
 ---
 
-## 3. Component Breakdown & Implementation Plan
+## 2. Architecture & Data Flow
 
-### 3.1 Template Renderer (`apps/api/app/modules/mail/render.py`)
-* Functions mapping each `MailTemplate` to `(subject, body: str)`.
-* Enforce size cap (`<= 8 KiB`).
-* Validate headers with Python `email.message.EmailMessage(policy=email.policy.SMTP)`.
-* Sanitize names and format date/time and parameters cleanly.
+```mermaid
+sequenceDiagram
+    participant A as Admin
+    participant API as FastAPI API
+    participant DB as Postgres
+    participant OB as Email Outbox
+    participant MW as Mail Worker
+    participant U as Invitee
 
-### 3.2 Transports (`apps/api/app/modules/mail/transport.py`)
-* Base transport interface `MailTransport`.
-* `SmtpTransport`:
-  - `aiosmtplib` / `smtplib` connection with 10s timeout.
-  - Require STARTTLS or implicit TLS for non-local addresses.
-  - Safety guard: Raise error if `ENV=test` and `SMTP_HOST != 'mailpit-test'`.
-* `CaptureTransport`: Writes payload `{subject, body, to}` into `email_outbox.captured` (used in unit/integration tests).
-* `DisabledTransport`: Marks status as `failed` with `last_error='mail_disabled'`.
-
-### 3.3 Worker & Delivery Loop (`apps/api/app/modules/mail/worker.py`)
-* `claim_outbox_item(session, outbox_id)` -> `EmailOutbox | None`
-* `process_outbox_item(outbox_id)`:
-  - Load private keys via `app.modules.mail.unseal`.
-  - Open sealed link token (if template requires one).
-  - Render message.
-  - Send via active transport.
-  - Update status and clear secrets in one transaction.
-* `sweep_stalled_outbox(session)`: Recover zombie rows and re-publish due pending rows.
-
-### 3.4 Celery App & Tasks (`apps/api/app/workers/mail_app.py`, `mail_tasks.py`)
-* Dedicated Celery application configured with broker ACL user `mail` and queue `mail`.
-* Tasks:
-  - `mail.send`: Dispatches single delivery.
-  - `mail.sweep`: Beat schedule task every 60 seconds.
-
-### 3.5 Compose & Infra Integration
-* Check and pin `axllent/mailpit:v1.33.0` with sha256 digest in `docker-compose.yml`.
-* Ensure mail worker service `mail-worker` and test service `mail-worker-test` are configured with `PROCESS_ROLE=mail`, `cyberlab_mail` DB credentials, and `mail` network.
+    A->>API: POST /orgs/{org}/invitations {email, role}
+    API->>DB: Lock org, verify permissions & step-up, check allowlist
+    API->>DB: Revoke any existing pending invitation for (org, email)
+    API->>DB: Insert org_invitations & invitation_index
+    API->>OB: Enqueue mail outbox (invite template, sealed token)
+    API-->>A: 201 InvitationOut (no token in response)
+    
+    MW->>OB: Claim row, unseal token, render plain text
+    MW->>U: Deliver email with link: /invite#t=<token>
+    
+    U->>API: POST /invitations/inspect {token}
+    API-->>U: 200 InvitationInspectOut (org name, inviter, role, email)
+    
+    U->>API: POST /invitations/accept {token} (signed in as invitee)
+    API->>DB: Consume token atomically, check email match, add member, set email_verified_at
+    API-->>U: 200 InvitationAcceptOut
+```
 
 ---
 
-## 4. Files to Create & Modify
+## 3. Detailed Component Specification
 
-| File | Action | Description |
+### 3.1 Invitation Service & Repository (`app/modules/invitations/`)
+1. **`create_invitation(ctx, data, request)`**:
+   - `require(Permission.MEMBERS_MANAGE)`.
+   - Lock org (`repo.lock_org`).
+   - If `role` is `admin` or `owner`: check step-up `StepUpAction.member_elevate`. Only owners can invite owners.
+   - Validate `data.email` (refuse special-use domains).
+   - Check `OrgSecurityPolicy.invite_domain_allowlist` (if configured and non-empty, raise `422 invite_domain_not_allowed` if domain not in allowlist).
+   - Rate limits: `30 / 10m` per actor, `100 / day` per actor, `200 / day` per org.
+   - Revoke existing pending invitation for same `(org_id, email)`:
+     `UPDATE org_invitations SET revoked_at=now(), revoked_by=ctx.user.id WHERE organization_id=:org_id AND email=:email AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()`.
+   - Generate 256-bit token (`secrets.token_urlsafe(32)`), `token_hash = sha256(token)`.
+   - Expiry: `now() + interval '7 days'`.
+   - Insert `org_invitations` and `invitation_index`.
+   - Enqueue outbox: `outbox.enqueue(session, template=MailTemplate.INVITE, to=email, params={...}, secret=token)`.
+   - Audit: `invitation.created` (`details={"email": email, "role": role.value}`).
+   - Publish outbox after commit (`outbox.publish_after_commit`).
+   - Return `InvitationOut` (no token!). **Zero queries on `users` table**.
+
+2. **`list_invitations(ctx, page)`**:
+   - `require(Permission.MEMBERS_READ)`.
+   - Paginated list with computed status (`pending`, `accepted`, `revoked`, `expired`).
+
+3. **`resend_invitation(ctx, invitation_id, request)`**:
+   - `require(Permission.MEMBERS_MANAGE)`.
+   - Check `resend_count < 3` per day.
+   - Rotate token and hash, update `expires_at = now() + 7 days`, increment `resend_count`.
+   - Update `invitation_index`.
+   - Enqueue new outbox mail with new token.
+   - Audit `invitation.resent`.
+
+4. **`revoke_invitation(ctx, invitation_id, request)`**:
+   - `require(Permission.MEMBERS_MANAGE)`.
+   - Set `revoked_at = now()`, `revoked_by = ctx.user.id`.
+   - Audit `invitation.revoked`.
+
+5. **`inspect_invitation(token)`**:
+   - Public route. Rate limit `20 / 10m` per IP.
+   - Compute `sha256(token)`, lookup `invitation_index`.
+   - If not found -> `404 invitation_invalid`.
+   - Open tenant session for `org_id` (vetted in `tenant_session_guard`).
+   - Query `org_invitations`. If not pending or expired -> `404 invitation_invalid`.
+   - Return `InvitationInspectOut`.
+
+6. **`accept_invitation(user, token, request)`**:
+   - Must be signed in as human user (`user.kind == "human"`).
+   - Find org via `invitation_index`.
+   - Open tenant session for `org_id`.
+   - Query `org_invitations`. If invalid/expired -> `404 invitation_invalid`.
+   - Check email match: `user.email.lower() == row.email.lower()`. If mismatch -> `409 invitation_email_mismatch` (without consuming!).
+   - Atomic consume:
+     `UPDATE org_invitations SET accepted_at=now(), accepted_by=:user_id WHERE id=:id AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now() RETURNING ...`
+   - If user already member: return `InvitationAcceptOut` with current role.
+   - Else: insert `OrganizationMember(organization_id=org_id, user_id=user.id, role=row.role)`.
+   - Update `users.email_verified_at = coalesce(users.email_verified_at, now())`.
+   - Audits: `invitation.accepted`, `member.added` (`{"via": "invitation"}`).
+   - Auth event: `invitation_accepted`.
+
+7. **`register_with_invitation(data, password_hash, request)`**:
+   - Atomic flow called by `auth.service.register`.
+   - Consumes invitation, creates user with `email_verified_at = now()`, creates membership, starts session.
+
+### 3.2 Registration Modes & Auth (`app/modules/auth/service.py`)
+- In `register()`:
+  - If `settings.registration_mode == "invite_only"` and `not data.invitation_token`:
+    Raise `Forbidden("Registration is invite-only", code="registration_closed")`.
+
+### 3.3 Decommission Direct Add & Harden Members (`app/modules/organizations/members.py`)
+- Remove `add_member` / route returns `410 members_direct_add_removed`.
+- `change_role`: Add step-up `member_elevate` if changing to admin or owner. Refuse if target `user.kind == "service"` (`409 service_account_member`).
+- `remove_member`: Add step-up `member_remove`. Refuse if target `user.kind == "service"` (`409 service_account_member`).
+- `count_owners`: Filter by `User.kind == "human"`.
+
+### 3.4 Email Verification (`app/modules/identity/email_verify.py` & `router_email.py`)
+- `POST /auth/email/verify-request`:
+  - Signed in user. Rate limit 3 / hour.
+  - Insert `user_action_tokens(purpose="email_verify", email=user.email, expires_at=now() + 24h)`.
+  - Enqueue outbox `MailTemplate.EMAIL_VERIFY`.
+- `POST /auth/email/verify {token}`:
+  - Signed in user.
+  - Atomic consume: `UPDATE user_action_tokens SET consumed_at=now() WHERE token_hash=:h AND user_id=:user_id AND purpose='email_verify' AND consumed_at IS NULL AND expires_at > now() RETURNING ...`
+  - If no row -> `404 token_invalid`.
+  - Update `users.email_verified_at = now()`.
+  - Record auth event `email_verified`.
+
+### 3.5 Operator Bootstrap (`app/modules/invitations/admin_bootstrap.py`)
+- CLI command: `bootstrap-owner --email <email> --org-name <name> --yes`.
+- Creates org with `created_by = SYSTEM_USER_ID`, owner invitation with `invited_by = SYSTEM_USER_ID`.
+- Prints registration link `{PUBLIC_BASE_URL}/register#t={token}` once to stdout.
+
+---
+
+## 4. Files to Create / Modify
+
+| File | Status | Description |
 |---|:---:|---|
-| `apps/api/app/modules/mail/render.py` | Create | Template renderers, anti-injection checks, URL fragment generator |
-| `apps/api/app/modules/mail/transport.py` | Create | SMTP, capture, and disabled transports with test guards |
-| `apps/api/app/modules/mail/worker.py` | Create | Outbox claim, unseal, deliver, status updates, retry math, sweep |
-| `apps/api/app/workers/mail_app.py` | Create | Celery worker app instance for mail processing |
-| `apps/api/app/workers/mail_tasks.py` | Create | Celery task bindings (`mail.send`, `mail.sweep`) |
-| `docker-compose.yml` | Modify | Pin mailpit images with sha256 digest |
-| `apps/api/tests/unit/test_mail_render.py` | Create | Unit tests for rendering, length caps, bidi/header injection, name neutralization |
-| `apps/api/tests/unit/test_mail_transport_guard.py` | Create | Tests for SMTP test-profile guard and capture behavior |
-| `apps/api/tests/integration/test_mail_outbox_worker.py` | Create | Integration tests for worker claims, unseal failures, retries, sweeps |
-| `apps/api/tests/integration/test_mail_mailpit_delivery.py` | Create | End-to-end integration tests delivering to Mailpit REST API |
-
----
-
-## 5. Verification Steps
-
-1. **Unit Tests:**
-   - Execute `pytest tests/unit/test_mail_render.py`
-   - Execute `pytest tests/unit/test_mail_transport_guard.py`
-2. **Integration Tests:**
-   - Execute `pytest tests/integration/test_mail_outbox_worker.py`
-   - Execute `pytest tests/integration/test_mail_mailpit_delivery.py`
-3. **Role Isolation Check:**
-   - Verify that the mail worker connecting as `cyberlab_mail` cannot select from `users`.
-4. **Linting & Types:**
-   - Run `ruff check app/modules/mail app/workers/mail_* tests/*mail*`
-   - Run `mypy app/modules/mail app/workers/mail_*`
-
+| `app/modules/invitations/service.py` | Overwrite | Full implementation of invitation lifecycle |
+| `app/modules/invitations/repository.py` | Create | Database queries for invitations and index |
+| `app/modules/invitations/router.py` | Overwrite | Real endpoints replacing 501 stubs |
+| `app/modules/invitations/admin_bootstrap.py` | Overwrite | Operator CLI for initial owner bootstrap |
+| `app/modules/organizations/members.py` | Modify | 410 direct add, step-up on elevate/remove, human owner counts |
+| `app/modules/organizations/router.py` | Modify | Endpoint update for 410 decommission |
+| `app/modules/organizations/repository.py` | Modify | Filter human owners in `count_owners` |
+| `app/modules/auth/service.py` | Modify | `invite_only` gate and hook `register_with_invitation` |
+| `app/modules/identity/email_verify.py` | Create | Logic for request & verify email |
+| `app/modules/identity/router_email.py` | Overwrite | Real endpoints replacing 501 stubs |
+| `tests/security/idor_cases_invitations.py` | Create | IDOR security test matrix for invitations |
+| `tests/integration/test_invitations_create.py` | Create | Test create, limits, allowlist, email outbox |
+| `tests/integration/test_invitations_accept.py` | Create | Test inspect, single-use, email mismatch, already member |
+| `tests/integration/test_invitations_enumeration.py` | Create | Anti-enumeration timing and query invariants |
+| `tests/integration/test_email_verify.py` | Create | Email verify request, scanner protection, verification |
+| `tests/integration/test_registration_mode.py` | Create | `invite_only` vs `open` registration modes |
+| `tests/integration/test_admin_bootstrap.py` | Create | Bootstrap owner CLI tests |

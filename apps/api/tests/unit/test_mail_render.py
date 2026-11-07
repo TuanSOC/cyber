@@ -135,3 +135,4 @@ def test_render_refuses_non_ascii_token() -> None:
             {"display_name": "Alice"},
             token="token_with_unicode_\u2603",
         )
+

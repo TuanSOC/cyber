@@ -311,3 +311,4 @@ async def sweep() -> tuple[int, int]:
         log.info("mail sweep: recovered %d stalled row(s), republished %d due row(s)", recovered_count, republished)
 
     return recovered_count, republished
+

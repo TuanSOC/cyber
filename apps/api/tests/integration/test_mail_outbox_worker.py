@@ -242,3 +242,4 @@ async def test_cyberlab_mail_role_cannot_read_users() -> None:
             await conn.execute(text("SELECT id FROM users LIMIT 1"))
         # Reset role
         await conn.execute(text("RESET ROLE"))
+

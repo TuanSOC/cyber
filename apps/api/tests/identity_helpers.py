@@ -39,12 +39,9 @@ from app.modules.users.models import User, UserKind
 TOTP_SECRET = base64.b32encode(b"12345678901234567890").decode()
 
 # The non-org M11 routes frozen as 501 stubs in phase 1 (method, path under /api/v1).
+# Phase 3 moves out email verification and invitation inspect/accept.
 M11_NON_ORG_STUBS: frozenset[tuple[str, str]] = frozenset(
     {
-        ("POST", "/auth/email/verify-request"),
-        ("POST", "/auth/email/verify"),
-        ("POST", "/invitations/inspect"),
-        ("POST", "/invitations/accept"),
         ("POST", "/auth/password/forgot"),
         ("POST", "/auth/password/reset"),
         ("POST", "/auth/password/change"),
@@ -152,10 +149,13 @@ async def seed_invitation(
     role: MemberRole = MemberRole.VIEWER,
     *,
     ttl: timedelta = timedelta(days=7),
+    created_at: datetime | None = None,
 ) -> SeededInvitation:
     token = secrets.token_urlsafe(32)
     invitation_id = uuid.uuid4()
-    expires_at = datetime.now(UTC) + ttl
+    base_time = created_at or datetime.now(UTC)
+    expires_at = base_time + ttl
+    kwargs = {"created_at": created_at} if created_at is not None else {}
     async with tenant_session(org_id, invited_by) as session:
         session.add(
             OrgInvitation(
@@ -166,6 +166,7 @@ async def seed_invitation(
                 token_hash=hash_token(token),
                 invited_by=invited_by,
                 expires_at=expires_at,
+                **kwargs,
             )
         )
         await session.flush()

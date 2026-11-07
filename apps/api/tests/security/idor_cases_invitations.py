@@ -1,26 +1,57 @@
-"""IDOR cases owned by M11 phase 3 (org invitations).
+"""IDOR cases owned by M11 phase 3 (Invitations).
 
-M11 phase 1 froze the routes as 501 stubs: every one is in `PENDING_ROUTES` (skipped and
-reported, never silently passed). Phase 3 adds a victim extender that creates a pending
-invitation in the victim org (`tests/identity_helpers.seed_invitation`), points
-`{invitation_id}` at it through `PATH_OVERRIDES`, moves each route into `ROUTE_CASES`, adds a
-state hook (the victim's invitations unchanged) and empties `PENDING_ROUTES`.
+Ensures that invitation management routes (/orgs/{org_id}/invitations/{invitation_id}/...)
+strictly enforce organization boundaries: an attacker from org A cannot resend or revoke
+an invitation belonging to org B.
 """
 
-from tests.security.idor_types import PathOverrides, RouteCases, StateHook, VictimExtender
+from typing import Any
 
-_ORG = "/api/v1/orgs/{org_id}/invitations"
-
-ROUTE_CASES: RouteCases = {}
-PATH_OVERRIDES: PathOverrides = {}
-RESOURCE_PARAMS: tuple[str, ...] = ()
-VICTIM_EXTENDERS: list[VictimExtender] = []
-STATE_HOOKS: list[StateHook] = []
-PENDING_ROUTES: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("GET", _ORG),
-        ("POST", _ORG),
-        ("POST", f"{_ORG}/{{invitation_id}}/resend"),
-        ("POST", f"{_ORG}/{{invitation_id}}/revoke"),
-    }
+from tests.factories import Registered
+from tests.identity_helpers import seed_invitation
+from tests.security.idor_types import (
+    PathOverrides,
+    RouteCases,
+    StateHook,
+    Victim,
+    VictimExtender,
 )
+
+_ORG = "/api/v1/orgs/{org_id}"
+_INV = f"{_ORG}/invitations/{{invitation_id}}"
+
+ROUTE_CASES: RouteCases = {
+    ("GET", f"{_ORG}/invitations"): lambda v: {},
+    ("POST", f"{_ORG}/invitations"): lambda v: {
+        "json": {"email": "idor_probe@example.com", "role": "analyst"}
+    },
+    ("POST", f"{_INV}/resend"): lambda v: {},
+    ("POST", f"{_INV}/revoke"): lambda v: {},
+}
+
+PATH_OVERRIDES: PathOverrides = {}
+
+
+async def _extend(owner: Registered, victim: Victim) -> dict[str, Any]:
+    seeded = await seed_invitation(
+        victim.org_id, owner.user_id, email="victim_idor_invitee@example.com"
+    )
+    return {"invitation_id": str(seeded.id)}
+
+
+VICTIM_EXTENDERS: list[VictimExtender] = [_extend]
+RESOURCE_PARAMS: tuple[str, ...] = ("{invitation_id}",)
+
+
+async def _invitation_state(owner: Registered, victim: Victim) -> dict[str, Any]:
+    invs = (await owner.client.get(f"/api/v1/orgs/{victim.org_id}/invitations")).json()
+    return {
+        "invitations": sorted(
+            (i["id"], i["email"], i["role"], i["status"])
+            for i in invs.get("items", [])
+        )
+    }
+
+
+STATE_HOOKS: list[StateHook] = [_invitation_state]
+PENDING_ROUTES: frozenset[tuple[str, str]] = frozenset()

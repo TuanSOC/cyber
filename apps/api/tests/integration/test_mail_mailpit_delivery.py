@@ -98,3 +98,4 @@ async def test_mailpit_end_to_end_delivery() -> None:
             assert '"SecOps Team"' in body_text
     finally:
         worker.set_worker_seams()
+

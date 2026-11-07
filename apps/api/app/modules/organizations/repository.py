@@ -107,8 +107,14 @@ async def count_owned(session: AsyncSession, user_id: uuid.UUID) -> int:
 
 
 async def count_owners(session: AsyncSession, org_id: uuid.UUID) -> int:
-    stmt = select(func.count()).where(
-        OrganizationMember.organization_id == org_id,
-        OrganizationMember.role == MemberRole.OWNER,
+    stmt = (
+        select(func.count())
+        .select_from(OrganizationMember)
+        .join(User, OrganizationMember.user_id == User.id)
+        .where(
+            OrganizationMember.organization_id == org_id,
+            OrganizationMember.role == MemberRole.OWNER,
+            User.kind == "human",
+        )
     )
     return (await session.execute(stmt)).scalar_one()

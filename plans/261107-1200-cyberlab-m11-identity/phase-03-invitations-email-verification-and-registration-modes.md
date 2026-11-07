@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Invitations email verification and registration modes"
-status: pending
+status: complete
 priority: P2
 effort: "14h"
 dependencies: [1]
@@ -39,12 +39,12 @@ Members join only by consent: an admin invites an email, the invitee accepts thr
 5. Email verification routes; tests; enumeration suite; IDOR module.
 
 ## Success Criteria
-- [ ] An invitation is accepted once, only by the invited email, only before expiry and only if not revoked or rotated; concurrent accepts produce one membership.
-- [ ] Creating, inspecting and registering reveal nothing about whether an email is registered (enumeration suite).
-- [ ] Direct add answers 410; owner and admin invitations and elevations require step-up.
-- [ ] `invite_only` refuses uninvited registration; an invitation registration creates no org.
-- [ ] Email verification sets `email_verified_at` only for the address the token was sent to, and only in a session of that user (RT8).
-- [ ] A fresh install gets its first owner only through `bootstrap-owner` (RT12); service accounts can be neither re-roled nor removed through the members routes (RT14).
+- [x] An invitation is accepted once, only by the invited email, only before expiry and only if not revoked or rotated; concurrent accepts produce one membership.
+- [x] Creating, inspecting and registering reveal nothing about whether an email is registered (enumeration suite).
+- [x] Direct add answers 410; owner and admin invitations and elevations require step-up.
+- [x] `invite_only` refuses uninvited registration; an invitation registration creates no org.
+- [x] Email verification sets `email_verified_at` only for the address the token was sent to, and only in a session of that user (RT8).
+- [x] A fresh install gets its first owner only through `bootstrap-owner` (RT12); service accounts can be neither re-roled nor removed through the members routes (RT14).
 
 ## Risk Assessment
 - **Breaking existing tests and the e2e** that add members directly: phase 1 migrated the callers; this phase re-runs `test_orgs_members.py`, `test_members_hardening.py`, `test_rbac.py` and the IDOR suite.

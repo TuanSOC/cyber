@@ -23,8 +23,9 @@ def new_client(ip: str = "10.0.0.1") -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app, client=(ip, 40000)), base_url=BASE_URL)
 
 
-def csrf(client: AsyncClient) -> dict[str, str]:
-    return {"X-CSRF-Token": client.cookies.get(CSRF_COOKIE) or ""}
+def csrf(client: AsyncClient | Any) -> dict[str, str]:
+    c = getattr(client, "client", client)
+    return {"X-CSRF-Token": c.cookies.get(CSRF_COOKIE) or ""}
 
 
 def unique_email(prefix: str = "user") -> str:

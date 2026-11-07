@@ -46,3 +46,4 @@ def mail_sweep(message: dict[str, Any] | None = None) -> None:
     recovered, republished = run(worker.sweep())
     if recovered or republished:
         log.info("mail.sweep complete: %d recovered, %d republished", recovered, republished)
+

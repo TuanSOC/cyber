@@ -1,11 +1,12 @@
 import asyncio
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from httpx import AsyncClient
 
 from app.modules.organizations.models import MemberRole
 from tests.factories import add_member, csrf, login, make_user, register, unique_email
+from tests.identity_helpers import session_id_of, set_step_up
 
 
 @dataclass
@@ -14,23 +15,26 @@ class Org:
     clients: dict[str, AsyncClient]
     member_ids: dict[str, uuid.UUID]
     emails: dict[str, str]
+    user_ids: dict[str, uuid.UUID] = field(default_factory=dict)
 
 
 async def org_with_roles() -> Org:
     owner = await register()
     clients = {"owner": owner.client}
     emails = {"owner": owner.email}
+    user_ids = {"owner": owner.user_id}
     for role in (MemberRole.ADMIN, MemberRole.ANALYST, MemberRole.VIEWER):
         email = unique_email(role.value)
         user_id = await make_user(email)
         await add_member(owner.org_id, user_id, role)
         clients[role.value] = await login(email)
         emails[role.value] = email
+        user_ids[role.value] = user_id
     members = (await owner.client.get(f"/api/v1/orgs/{owner.org_id}/members")).json()["items"]
     member_ids = {
         next(k for k, v in emails.items() if v == m["email"]): uuid.UUID(m["id"]) for m in members
     }
-    return Org(org_id=owner.org_id, clients=clients, member_ids=member_ids, emails=emails)
+    return Org(org_id=owner.org_id, clients=clients, member_ids=member_ids, emails=emails, user_ids=user_ids)
 
 
 async def test_list_and_create_my_orgs() -> None:
@@ -80,19 +84,10 @@ async def test_rename_org_is_audited() -> None:
 async def test_add_member_by_email() -> None:
     org = await org_with_roles()
     admin = org.clients["admin"]
-    email = unique_email("new")
-    await make_user(email)
     url = f"/api/v1/orgs/{org.org_id}/members"
-    added = await admin.post(url, json={"email": email, "role": "analyst"}, headers=csrf(admin))
-    assert added.status_code == 201
-    assert (added.json()["email"], added.json()["role"]) == (email, "analyst")
-
-    again = await admin.post(url, json={"email": email, "role": "viewer"}, headers=csrf(admin))
-    assert (again.status_code, again.json()["error"]["code"]) == (409, "already_member")
-    unknown = await admin.post(
-        url, json={"email": "ghost@example.com", "role": "viewer"}, headers=csrf(admin)
-    )
-    assert (unknown.status_code, unknown.json()["error"]["code"]) == (404, "user_not_found")
+    resp = await admin.post(url, json={"email": "new@example.com", "role": "analyst"}, headers=csrf(admin))
+    assert resp.status_code == 410
+    assert resp.json()["error"]["code"] == "members_direct_add_removed"
 
 
 async def test_only_owners_touch_the_owner_role() -> None:
@@ -103,7 +98,7 @@ async def test_only_owners_touch_the_owner_role() -> None:
     await make_user(email)
 
     grant = await admin.post(base, json={"email": email, "role": "owner"}, headers=csrf(admin))
-    assert grant.status_code == 403
+    assert grant.status_code == 410
     demote_owner = await admin.patch(
         f"{base}/{org.member_ids['owner']}", json={"role": "viewer"}, headers=csrf(admin)
     )
@@ -111,6 +106,7 @@ async def test_only_owners_touch_the_owner_role() -> None:
     remove_owner = await admin.delete(f"{base}/{org.member_ids['owner']}", headers=csrf(admin))
     assert remove_owner.status_code == 403
 
+    await set_step_up(session_id_of(owner), seconds_ago=0)
     promote = await owner.patch(
         f"{base}/{org.member_ids['admin']}", json={"role": "owner"}, headers=csrf(owner)
     )
@@ -131,6 +127,7 @@ async def test_members_cannot_change_their_own_membership() -> None:
 async def test_removed_member_loses_access() -> None:
     org = await org_with_roles()
     admin, analyst = org.clients["admin"], org.clients["analyst"]
+    await set_step_up(session_id_of(admin), seconds_ago=0)
     response = await admin.delete(
         f"/api/v1/orgs/{org.org_id}/members/{org.member_ids['analyst']}", headers=csrf(admin)
     )
@@ -142,6 +139,7 @@ async def test_concurrent_owner_demotions_keep_one_owner() -> None:
     org = await org_with_roles()
     owner, admin = org.clients["owner"], org.clients["admin"]
     base = f"/api/v1/orgs/{org.org_id}/members"
+    await set_step_up(session_id_of(owner), seconds_ago=0)
     promote = await owner.patch(
         f"{base}/{org.member_ids['admin']}", json={"role": "owner"}, headers=csrf(owner)
     )

@@ -19,7 +19,7 @@ NAMING_CONVENTION = {
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
     type_annotation_map = {
-        dict[str, Any]: JSONB,
+        dict[str, Any]: JSONB(none_as_null=True),
         datetime: DateTime(timezone=True),
     }
 

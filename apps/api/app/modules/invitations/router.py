@@ -1,20 +1,13 @@
-"""Invitations (M11 phase 3; phase 1 stubs answering 501, on the frozen paths and schemas).
-
-Org routes: list (`members.read`), create / resend / revoke (`members.manage`; inviting an
-admin or owner needs step-up `member_elevate`; only owners invite owners). The create answer
-is the same `201` whether the email is registered or not. Public: `inspect` (CSRF-exempt,
-RT4; 20 / 10 min per IP); signed in: `accept`.
-"""
+"""Invitations API endpoints (M11 phase 3)."""
 
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 
 from app.core.deps import CurrentUserDep
 from app.core.pagination import PageParamsDep
 from app.core.rbac import OrgContext, Permission, require
-from app.core.stubs import not_implemented
 from app.modules.identity.schemas import (
     InvitationAcceptIn,
     InvitationAcceptOut,
@@ -24,6 +17,7 @@ from app.modules.identity.schemas import (
     InvitationOut,
     InvitationPage,
 )
+from app.modules.invitations import service
 
 router = APIRouter(tags=["invitations"])
 
@@ -34,29 +28,39 @@ _ORG = "/orgs/{org_id}/invitations"
 
 @router.get(_ORG, response_model=InvitationPage)
 async def list_invitations(ctx: MembersRead, page: PageParamsDep) -> InvitationPage:
-    raise not_implemented()
+    return await service.list_invitations(ctx, page)
 
 
 @router.post(_ORG, response_model=InvitationOut, status_code=status.HTTP_201_CREATED)
-async def create_invitation(body: InvitationCreate, ctx: MembersManage) -> InvitationOut:
-    raise not_implemented()
+async def create_invitation(
+    body: InvitationCreate, ctx: MembersManage, request: Request
+) -> InvitationOut:
+    return await service.create_invitation(ctx, body, request)
 
 
 @router.post(f"{_ORG}/{{invitation_id}}/resend", response_model=InvitationOut)
-async def resend_invitation(invitation_id: uuid.UUID, ctx: MembersManage) -> InvitationOut:
-    raise not_implemented()
+async def resend_invitation(
+    invitation_id: uuid.UUID, ctx: MembersManage, request: Request
+) -> InvitationOut:
+    return await service.resend_invitation(ctx, invitation_id, request)
 
 
 @router.post(f"{_ORG}/{{invitation_id}}/revoke", response_model=InvitationOut)
-async def revoke_invitation(invitation_id: uuid.UUID, ctx: MembersManage) -> InvitationOut:
-    raise not_implemented()
+async def revoke_invitation(
+    invitation_id: uuid.UUID, ctx: MembersManage, request: Request
+) -> InvitationOut:
+    return await service.revoke_invitation(ctx, invitation_id, request)
 
 
 @router.post("/invitations/inspect", response_model=InvitationInspectOut)
-async def inspect_invitation(body: InvitationInspectIn) -> InvitationInspectOut:
-    raise not_implemented()
+async def inspect_invitation(
+    body: InvitationInspectIn, request: Request
+) -> InvitationInspectOut:
+    return await service.inspect_invitation(body.token, request)
 
 
 @router.post("/invitations/accept", response_model=InvitationAcceptOut)
-async def accept_invitation(body: InvitationAcceptIn, user: CurrentUserDep) -> InvitationAcceptOut:
-    raise not_implemented()
+async def accept_invitation(
+    body: InvitationAcceptIn, user: CurrentUserDep, request: Request
+) -> InvitationAcceptOut:
+    return await service.accept_invitation(user, body.token, request)

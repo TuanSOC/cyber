@@ -63,9 +63,9 @@ async def list_members(ctx: MembersRead, page: PageParamsDep) -> MemberPage:
     return await members.list_members(ctx, page)
 
 
-@router.post("/{org_id}/members", response_model=MemberOut, status_code=status.HTTP_201_CREATED)
-async def add_member(body: MemberAdd, ctx: MembersManage, request: Request) -> MemberOut:
-    return await members.add_member(ctx, str(body.email), body.role, request)
+@router.post("/{org_id}/members", status_code=status.HTTP_410_GONE)
+async def add_member(body: MemberAdd, ctx: MembersManage, request: Request) -> None:
+    await members.add_member(ctx, str(body.email), body.role, request)
 
 
 @router.patch("/{org_id}/members/{member_id}", response_model=MemberOut)
