@@ -21,7 +21,7 @@ flowchart LR
   A --> M
 ```
 
-The analysis, threat-intel, AI, report and retention workers attach to this core; each has its own section below. Platform operations (backup and restore, retention, correlation, search, metrics) are described in [Platform operations (M7)](#platform-operations-m7). Memory forensics (M8, in progress) adds a third analyzer and an operator symbol tool: [Memory forensics (M8)](#memory-forensics-m8). Disk forensics (M9, in progress) adds a fourth analyzer, its own trusted ingest worker and an offline hash-set tool: [Disk forensics (M9)](#disk-forensics-m9).
+The analysis, threat-intel, AI, report and retention workers attach to this core; each has its own section below. Platform operations (backup and restore, retention, correlation, search, metrics) are described in [Platform operations (M7)](#platform-operations-m7). Memory forensics (M8, in progress) adds a third analyzer and an operator symbol tool: [Memory forensics (M8)](#memory-forensics-m8). Disk forensics (M9, in progress) adds a fourth analyzer, its own trusted ingest worker and an offline hash-set tool: [Disk forensics (M9)](#disk-forensics-m9). Reverse engineering (M10, in progress) adds a fifth analyzer (Ghidra / radare2) and a platform-wide cap on heavy analyses: [Reverse engineering (M10)](#reverse-engineering-m10).
 
 - **One origin.** The gateway serves both the app and `/api`, so session cookies are first-party and `SameSite=Strict`.
 - **Networks.** `web` cannot reach `api` directly; only the gateway (and data services) share the api's network. uvicorn trusts `X-Forwarded-For` from its peers, which is safe only because of this isolation. Since M4 `backend` is `internal` (no egress); only the enrich-worker and (M5) the analyst-worker have a route out ([Networks](#networks-m4-m5-m6)).
@@ -235,7 +235,7 @@ flowchart LR
 | `backend` | **yes** since M4 | postgres, redis, redis-broker, minio, minio-init, migrate, api, ingest-worker, ingest-beat, gateway, api-test | no service here has a route out; the API cannot reach the internet even if compromised |
 | `enrich` | yes | postgres, redis-broker, enrich-worker(-test), analyst-worker(-test) | the trusted internet-facing workers' way to their data, and nothing else (no app Redis, MinIO, API or gateway) |
 | `egress` | no | enrich-worker(-test), analyst-worker(-test), ti-mock, ai-mock | the only route out |
-| `analysis` | yes | pcap-worker(-test), static-worker(-test), report-worker(-test) (M6), memory-worker(-test) (M8), disk-worker(-test) (M9), redis-broker, minio | the untrusted parsers and the renderer: the broker and presigned MinIO URLs only |
+| `analysis` | yes | pcap-worker(-test), static-worker(-test), report-worker(-test) (M6), memory-worker(-test) (M8), disk-worker(-test) (M9), re-worker(-test) (M10), redis-broker, minio | the untrusted parsers and the renderer: the broker and presigned MinIO URLs only |
 | `symbols_egress` | no | memory-symbols, memory-symbols-test (M8, profile `tools`) | the operator symbol tool's own way out (Microsoft's symbol server); used by nothing else: no broker, Postgres, MinIO or other network |
 
 M7 adds `db-bootstrap` (one-shot) and `retention-worker(-test)` to `backend` only: Postgres, the broker and MinIO, no egress, no `analysis` network. M9 adds `disk-ingest-worker(-test)` to `backend` only; the operator tool `disk-hashsets(-test)` and its init have **no network at all** (`network_mode: none`).
@@ -484,3 +484,36 @@ flowchart LR
 - **Sensitivity without a rename (RT2).** M8's `memory_sensitivity` (PK `evidence_id`) gains a `source` column (`memory` / `disk` / `derived`) and serves as the evidence-level sensitivity table; the rename is "Later". `evidence/sensitivity.py:apply_restricted_default(…, source)` generalizes M8's function (now a wrapper); generic routes `GET /evidence/{id}/sensitivity` and `POST …/sensitivity/release` (with a batch arm for a disk job's segments, RT20) sit beside M8's unchanged `/memory-sensitivity` routes. The share-policy guard answers `evidence_sensitivity_restricted` for disk / derived and keeps `memory_sensitivity_restricted` for memory.
 - **Platform integration (phase 9).** Reports withhold restricted disk rows below TLP:RED (`omissions.disk_restricted`, absent from the canonical bytes when unused); AI and job-scope TI answer `policy_blocked`; `disk_files` and `disk_events` join the retention `BULK_TABLES`; the correlation indexer reads disk `iocs` rows like any other.
 - **Web** (phase 11, in progress): the Forensics section (`/o/{org}/forensics`, a job at `/o/{org}/forensics/{job}`), the disk upload option and the run dialog with the segment picker (`components/disk/`).
+
+## Reverse engineering (M10)
+
+**In progress.** Phases 1–10 are committed and untested in a container; the Ghidra-in-sandbox spike has not run and phase 12 (pipeline, e2e, fuzz-lite, metrics, gate) is written, not run. Details and the build status per phase: [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md).
+
+```mermaid
+flowchart LR
+  U[Analyst: Reverse engineer<br/>from a static full job] --> A[API<br/>source static job, x86 / x64 check,<br/>heavy-analysis cap]
+  A -->|reverse.analyze<br/>capa file VAs, decompile addresses| RB[(redis-broker<br/>ACL user reverse)]
+  RB -->|queue reverse| RW[re-worker<br/>UNTRUSTED, offline<br/>root: magic check, priority list, validation]
+  RW -->|JVM 1, uid 10010| AN[analyze<br/>Ghidra import + auto-analysis + export]
+  RW -->|JVM 2, uid 10010| DC[decompile<br/>DecompInterface + native child]
+  RW -.->|quick, uid 10010| R2[radare2 + reducer]
+  RW -->|presigned GET sample / POST result| M[(MinIO)]
+  RW -->|ingest.event| RB
+  RB --> IW[ingest-worker<br/>trusted, solo]
+  IW -->|re.v1 + capa join, one transaction| P[(PostgreSQL)]
+  subgraph analysis [analysis network: internal, no egress]
+    RW
+    AN
+    DC
+    R2
+  end
+```
+
+- **Fifth analyzer, same pattern.** `Analyzer.REVERSE` (PG enum value `reverse`, 0018), Celery task `reverse.analyze` (`re.v1`), queue `reverse`, broker ACL user `reverse` (`analyzer_keys reverse`: its own queue keys, write-only to `ingest*`), profiles `full` and `quick` (`JobProfile.QUICK`, gated by `RE_QUICK_ENABLED`). **Never automatic**: an RE job names a succeeded static `full` job of the same evidence (`analysis_jobs.source_job_id`, a same-org FK and the `analysis_jobs_re_source` trigger) and optional `re_params.decompile_addresses`.
+- **Untrusted side** (`apps/workers/reverse`): the M3 / M8 container isolation on `analysis` only (env `BROKER_URL` only), read-only rootfs, `cap_drop: ALL` + 6 caps, tini, fail-closed restart, `mem_limit 4g`, 2 CPUs, `pids_limit 512`, concurrency 1 with one task per child; `/work` is the named volume `re_work` (the test service: an anonymous per-container volume, RT22). The image holds the trimmed Ghidra 12.2, the Temurin JDK 25, PyGhidra 3.2 and radare2 6.2.6, all pinned by hash or digest.
+- **Stage-per-process model.** `analyze` and `decompile` are two separate JVMs (`python -I -s -B -m re_worker.probe <stage>`) as uid 10010 with seccomp (AF_UNIX only, no io_uring), per-stage rlimits (`RLIMIT_CPU` 2 × t + 60, `NPROC` 256, the decompiler child's `RLIMIT_AS` lowered by prlimit), a fresh out dir, kill-by-uid and sealing between stages. Root writes the decompile list into a root-owned `stage/` dir (RT23) from the validated `analyze` rows; the decompile stage opens the project without saving. A root thread watches the job dir size (`RE_MAX_WORK_BYTES`) and the cgroup's `memory.current` / `memory.events` (RT5, RT14). The `quick` profile is one fixed radare2 script plus a reducer probe; no r2pipe (RT9).
+- **Heavy-analysis cap (RT2).** Analyzer `mem_limit`s add up to about 16 GiB (pcap 2, static 3, report 1, memory 3, disk 3, reverse 4) on an 8–12 GB Docker VM. `ANALYSIS_HEAVY_MAX_ACTIVE` (default 1) counts active memory, disk (including `extract`) and reverse jobs platform-wide under one advisory lock (`analysis.repository.lock_heavy_analyses`); a refusal is `429 too_many_active_jobs` / `heavy_analysis_busy`. `reverse` has no per-analyzer total cap of its own; `RE_MAX_ACTIVE_PER_ORG` (1) applies per org.
+- **Trusted side.** The shared ingest worker (like memory; no hand-off) validates the whole stream with the RE framing bounds and the contract's `StreamChecker`, checks the program line against the evidence (sha256, size, format), then joins capa locations of the source static job to function bodies on file virtual addresses (RT8) and writes `re_programs`, the eight bulk `re_*` tables, `re_function_capabilities` and the shared `analysis_findings` / `iocs` in one transaction. A diagnostic stream (`unsupported_architecture`, `unsupported_managed_code`) writes `re_programs` only and fails the job with that code.
+- **Additive `static.v1` (phase 6).** The static worker keeps capa's absolute match addresses (`CapabilityRecord.locations`, ≤ 32) and `capa_base_address`; the static report and the M6 snapshot are unchanged (RT6), and the capability read route gains `CapabilityLinkedOut` (`locations`, `functions`).
+- **Platform integration (phase 9).** The AI task `explain_function` (labels G and Q), report citations of kinds `function` and `code` (never the code itself), the bulk RE tables in the retention `BULK_TABLES` (`re_programs` kept), deep links `/o/{org}/reverse-engineering/{job}?fn=0x…&tab=facts|code`.
+- **Web** (phase 10): Reverse Engineering (`/o/{org}/reverse-engineering`, a job at `/o/{org}/reverse-engineering/{job}`) with the stage strip, functions, imports, strings, findings and IOCs, the text-only code viewer, "Decompile this function", "Explain function", and the "Reverse engineer" / "Functions (n)" links in Malware Lab (`components/reverse/`).

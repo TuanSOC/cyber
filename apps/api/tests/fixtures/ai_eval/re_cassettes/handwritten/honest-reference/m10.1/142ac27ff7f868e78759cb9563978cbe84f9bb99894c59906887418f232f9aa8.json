@@ -1,0 +1,163 @@
+{
+ "case": "re_pe_full_inject_remote",
+ "format": "cyberlab.ai_eval.cassette.v1",
+ "key": {
+  "context_sha256": "142ac27ff7f868e78759cb9563978cbe84f9bb99894c59906887418f232f9aa8",
+  "model": "honest-reference",
+  "prompt_version": "m10.1",
+  "provider": "handwritten"
+ },
+ "metrics": [
+  {
+   "by_reason": {},
+   "canary_sha256": null,
+   "citation_accuracy": 1.0,
+   "citations_invalid": 0,
+   "citations_total": 10,
+   "citations_unverified": 0,
+   "citations_verified": 10,
+   "claims_total": 4,
+   "claims_unsupported": 0,
+   "cost_estimated": false,
+   "flags": [],
+   "invalid_attack": 0,
+   "invalid_ref_rate": 0.0,
+   "refusal_category": null,
+   "repaired": false,
+   "replayed": false,
+   "strip_counts": {},
+   "truncation": {
+    "lists": 0,
+    "size_trimmed": 0,
+    "strings": 0
+   },
+   "unsupported_claim_rate": 0.0,
+   "usage_unknown": false,
+   "version": "v1",
+   "weak_anchor": 0
+  }
+ ],
+ "recorded_at": "hand-written reference answer (M10 phase 9), not a live model call",
+ "runs": [
+  {
+   "error": null,
+   "parsed": {
+    "attack_techniques": [
+     {
+      "citations": [
+       {
+        "field": "attack_ids",
+        "quote": "T1055",
+        "ref": "C1"
+       }
+      ],
+      "rationale": "The allocation, write and remote thread sequence.",
+      "technique_id": "T1055"
+     }
+    ],
+    "hypotheses": [
+     {
+      "confidence": "low",
+      "contradicting": [],
+      "id": "e",
+      "supporting": [
+       {
+        "field": "code",
+        "quote": "FUN_140001700(pid)",
+        "ref": "Q1"
+       }
+      ],
+      "text": "The process handle may come from a lookup of the pid in FUN_140001700."
+     }
+    ],
+    "interpretation": [
+     {
+      "citations": [
+       {
+        "ref": "Q1"
+       },
+       {
+        "ref": "C1"
+       },
+       {
+        "ref": "F1"
+       }
+      ],
+      "confidence": "medium",
+      "id": "d",
+      "text": "Allocating memory in another process, writing data there and starting a thread at it is the pattern of remote process injection."
+     }
+    ],
+    "limitations": [
+     "Static analysis of decompiler output; the sample was never executed."
+    ],
+    "next_steps": [
+     {
+      "rationale": "The function's inputs decide what is written and where.",
+      "refs": [
+       "G1"
+      ],
+      "text": "Review the caller main to see which process id and payload it passes."
+     }
+    ],
+    "observed": [
+     {
+      "citations": [
+       {
+        "field": "code",
+        "quote": "pvVar1 = VirtualAllocEx(hProcess,(LPVOID)0x0,len,0x3000,0x40);",
+        "ref": "Q1"
+       }
+      ],
+      "confidence": "high",
+      "id": "a",
+      "text": "inject_remote calls VirtualAllocEx on the process handle with protection 0x40 and keeps the returned address."
+     },
+     {
+      "citations": [
+       {
+        "field": "code",
+        "quote": "WriteProcessMemory(hProcess,pvVar1,payload,len,(SIZE_T *)0x0);",
+        "ref": "Q1"
+       },
+       {
+        "field": "imports_called.01",
+        "quote": "CreateRemoteThread",
+        "ref": "G1"
+       }
+      ],
+      "confidence": "high",
+      "id": "b",
+      "text": "It then calls WriteProcessMemory with the payload and CreateRemoteThread with the allocated address as the start routine."
+     },
+     {
+      "citations": [
+       {
+        "field": "name",
+        "quote": "inject thread",
+        "ref": "C1"
+       }
+      ],
+      "confidence": "medium",
+      "id": "c",
+      "text": "The capa rule inject thread is located in this function."
+     }
+    ],
+    "overall_confidence": {
+     "level": "medium",
+     "rationale": "The code and the import usage agree; the target process and the payload are not known from this function alone."
+    },
+    "timeline": []
+   },
+   "refusal_category": null,
+   "served_model": "honest-reference",
+   "stop_reason": "end_turn",
+   "usage": {
+    "input_tokens": 0,
+    "output_tokens": 0
+   }
+  }
+ ],
+ "stage": "base",
+ "task": "explain_function"
+}

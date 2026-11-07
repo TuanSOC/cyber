@@ -1,0 +1,79 @@
+{"kind":"program_facts","language_id":"x86:LE:64:default","compiler_spec":"windows","image_base":5368709120,"entry":5368713216,"analysis_status":"complete"}
+{"kind":"function","entry":5368713216,"rva":4096,"name":"entry","name_source":"export","size":96,"body":[{"start":4096,"end":4192}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":24}
+{"kind":"function","entry":5368713312,"rva":4192,"name":"main","name_source":"symbol","size":384,"body":[{"start":4192,"end":4576}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":"int main(int argc, char ** argv)","calling_convention":"__fastcall","instructions":96}
+{"kind":"function","entry":5368713696,"rva":4576,"name":"inject_remote","name_source":"symbol","size":320,"body":[{"start":4576,"end":4896}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":"int inject_remote(unsigned long pid, void * payload, size_t len)","calling_convention":"__fastcall","instructions":80}
+{"kind":"function","entry":5368714016,"rva":4896,"name":"resolve_apis","name_source":"symbol","size":288,"body":[{"start":4896,"end":5184}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":"void resolve_apis(void)","calling_convention":"__fastcall","instructions":72}
+{"kind":"function","entry":5368714304,"rva":5184,"name":"beacon","name_source":"symbol","size":272,"body":[{"start":5184,"end":5456}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":"int beacon(char * host)","calling_convention":"__fastcall","instructions":68}
+{"kind":"function","entry":5368714576,"rva":5456,"name":"install_run_key","name_source":"symbol","size":192,"body":[{"start":5456,"end":5648}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":"int install_run_key(char * path)","calling_convention":"__fastcall","instructions":48}
+{"kind":"function","entry":5368714768,"rva":5648,"name":"decode_config","name_source":"symbol","size":416,"body":[{"start":5648,"end":6064}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":"void decode_config(unsigned char * buf, size_t len)","calling_convention":"__fastcall","instructions":104}
+{"kind":"function","entry":5368715184,"rva":6064,"name":"print_banner","name_source":"symbol","size":64,"body":[{"start":6064,"end":6128}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":"void print_banner(void)","calling_convention":"__fastcall","instructions":16}
+{"kind":"function","entry":5368715248,"rva":6128,"name":"ServiceMain","name_source":"export","size":144,"body":[{"start":6128,"end":6272}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":"void ServiceMain(unsigned long argc, char ** argv)","calling_convention":"__fastcall","instructions":36}
+{"kind":"function","entry":5368715392,"rva":6272,"name":"__security_init_cookie","name_source":"fid_library","size":112,"body":[{"start":6272,"end":6384}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":true,"signature":null,"calling_convention":"__fastcall","instructions":28}
+{"kind":"function","entry":5368715504,"rva":6384,"name":"_initterm","name_source":"fid_library","size":80,"body":[{"start":6384,"end":6464}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":true,"signature":null,"calling_convention":"__fastcall","instructions":20}
+{"kind":"function","entry":5368715584,"rva":6464,"name":"FUN_140001940","name_source":"generated","size":48,"body":[{"start":6464,"end":6512}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":12}
+{"kind":"function","entry":5368715696,"rva":6576,"name":"FUN_1400019b0","name_source":"generated","size":64,"body":[{"start":6576,"end":6640}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":16}
+{"kind":"function","entry":5368715808,"rva":6688,"name":"FUN_140001a20","name_source":"generated","size":80,"body":[{"start":6688,"end":6768}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":20}
+{"kind":"function","entry":5368715920,"rva":6800,"name":"FUN_140001a90","name_source":"generated","size":96,"body":[{"start":6800,"end":6896}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":24}
+{"kind":"function","entry":5368716032,"rva":6912,"name":"FUN_140001b00","name_source":"generated","size":48,"body":[{"start":6912,"end":6960}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":12}
+{"kind":"function","entry":5368716144,"rva":7024,"name":"FUN_140001b70","name_source":"generated","size":64,"body":[{"start":7024,"end":7088}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":16}
+{"kind":"function","entry":5368716256,"rva":7136,"name":"FUN_140001be0","name_source":"generated","size":80,"body":[{"start":7136,"end":7216}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":20}
+{"kind":"function","entry":5368716368,"rva":7248,"name":"FUN_140001c50","name_source":"generated","size":96,"body":[{"start":7248,"end":7344}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":24}
+{"kind":"function","entry":5368716480,"rva":7360,"name":"FUN_140001cc0","name_source":"generated","size":48,"body":[{"start":7360,"end":7408}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":12}
+{"kind":"function","entry":5368716592,"rva":7472,"name":"FUN_140001d30","name_source":"generated","size":64,"body":[{"start":7472,"end":7536}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":16}
+{"kind":"function","entry":5368716704,"rva":7584,"name":"FUN_140001da0","name_source":"generated","size":80,"body":[{"start":7584,"end":7664}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":20}
+{"kind":"function","entry":5368716816,"rva":7696,"name":"FUN_140001e10","name_source":"generated","size":96,"body":[{"start":7696,"end":7792}],"body_truncated":false,"is_thunk":false,"is_external":false,"is_library":false,"signature":null,"calling_convention":"__fastcall","instructions":24}
+{"kind":"function","entry":5368745984,"rva":36864,"name":"VirtualAllocEx","name_source":"import","size":8,"body":[],"body_truncated":false,"is_thunk":true,"is_external":true,"is_library":false,"signature":null,"calling_convention":null,"instructions":0}
+{"kind":"function","entry":5368745992,"rva":36872,"name":"WriteProcessMemory","name_source":"import","size":8,"body":[],"body_truncated":false,"is_thunk":true,"is_external":true,"is_library":false,"signature":null,"calling_convention":null,"instructions":0}
+{"kind":"function","entry":5368746000,"rva":36880,"name":"CreateRemoteThread","name_source":"import","size":8,"body":[],"body_truncated":false,"is_thunk":true,"is_external":true,"is_library":false,"signature":null,"calling_convention":null,"instructions":0}
+{"kind":"function","entry":5368746008,"rva":36888,"name":"GetProcAddress","name_source":"import","size":8,"body":[],"body_truncated":false,"is_thunk":true,"is_external":true,"is_library":false,"signature":null,"calling_convention":null,"instructions":0}
+{"kind":"function","entry":5368746016,"rva":36896,"name":"LoadLibraryA","name_source":"import","size":8,"body":[],"body_truncated":false,"is_thunk":true,"is_external":true,"is_library":false,"signature":null,"calling_convention":null,"instructions":0}
+{"kind":"function","entry":5368746024,"rva":36904,"name":"RegSetValueExA","name_source":"import","size":8,"body":[],"body_truncated":false,"is_thunk":true,"is_external":true,"is_library":false,"signature":null,"calling_convention":null,"instructions":0}
+{"kind":"function","entry":5368746032,"rva":36912,"name":"InternetOpenUrlA","name_source":"import","size":8,"body":[],"body_truncated":false,"is_thunk":true,"is_external":true,"is_library":false,"signature":null,"calling_convention":null,"instructions":0}
+{"kind":"function","entry":5368746040,"rva":36920,"name":"Ordinal_4","name_source":"import","size":8,"body":[],"body_truncated":false,"is_thunk":true,"is_external":true,"is_library":false,"signature":null,"calling_convention":null,"instructions":0}
+{"kind":"call_edge","caller":5368713216,"callee":5368713312,"sites":1}
+{"kind":"call_edge","caller":5368713312,"callee":5368715184,"sites":1}
+{"kind":"call_edge","caller":5368713312,"callee":5368714768,"sites":1}
+{"kind":"call_edge","caller":5368713312,"callee":5368714016,"sites":1}
+{"kind":"call_edge","caller":5368713312,"callee":5368714304,"sites":2}
+{"kind":"call_edge","caller":5368713312,"callee":5368713696,"sites":1}
+{"kind":"call_edge","caller":5368713312,"callee":5368714576,"sites":1}
+{"kind":"call_edge","caller":5368714768,"callee":5368714768,"sites":1}
+{"kind":"call_edge","caller":5368714304,"callee":5368715584,"sites":3}
+{"kind":"call_edge","caller":5368713696,"callee":5368745984,"sites":1}
+{"kind":"call_edge","caller":5368713696,"callee":5368745992,"sites":1}
+{"kind":"call_edge","caller":5368713696,"callee":5368746000,"sites":1}
+{"kind":"call_edge","caller":5368714016,"callee":5368746008,"sites":3}
+{"kind":"call_edge","caller":5368714016,"callee":5368746016,"sites":1}
+{"kind":"call_edge","caller":5368714576,"callee":5368746024,"sites":1}
+{"kind":"call_edge","caller":5368714304,"callee":5368746032,"sites":1}
+{"kind":"call_edge","caller":5368714304,"callee":5368746040,"sites":1}
+{"kind":"import","index":0,"library":"KERNEL32.DLL","name":"VirtualAllocEx","ordinal":null,"address":5368750080}
+{"kind":"import","index":1,"library":"KERNEL32.DLL","name":"WriteProcessMemory","ordinal":null,"address":5368750088}
+{"kind":"import","index":2,"library":"KERNEL32.DLL","name":"CreateRemoteThread","ordinal":null,"address":5368750096}
+{"kind":"import","index":3,"library":"KERNEL32.DLL","name":"GetProcAddress","ordinal":null,"address":5368750104}
+{"kind":"import","index":4,"library":"KERNEL32.DLL","name":"LoadLibraryA","ordinal":null,"address":5368750112}
+{"kind":"import","index":5,"library":"ADVAPI32.DLL","name":"RegSetValueExA","ordinal":null,"address":5368750120}
+{"kind":"import","index":6,"library":"WININET.DLL","name":"InternetOpenUrlA","ordinal":null,"address":5368750128}
+{"kind":"import","index":7,"library":"WS2_32.DLL","name":null,"ordinal":4,"address":5368750136}
+{"kind":"import_ref","import_index":0,"function_entry":5368713696,"count":1}
+{"kind":"import_ref","import_index":1,"function_entry":5368713696,"count":1}
+{"kind":"import_ref","import_index":2,"function_entry":5368713696,"count":1}
+{"kind":"import_ref","import_index":3,"function_entry":5368714016,"count":3}
+{"kind":"import_ref","import_index":4,"function_entry":5368714016,"count":1}
+{"kind":"import_ref","import_index":5,"function_entry":5368714576,"count":1}
+{"kind":"import_ref","import_index":6,"function_entry":5368714304,"count":1}
+{"kind":"import_ref","import_index":7,"function_entry":5368714304,"count":1}
+{"kind":"string","index":0,"address":5368758272,"encoding":"ascii","value":"http://203.0.113.10/gate.php","length":28}
+{"kind":"string","index":1,"address":5368758336,"encoding":"ascii","value":"Software\\Microsoft\\Windows\\CurrentVersion\\Run","length":45}
+{"kind":"string","index":2,"address":5368758400,"encoding":"ascii","value":"VirtualAllocEx","length":14}
+{"kind":"string","index":3,"address":5368758464,"encoding":"ascii","value":"WriteProcessMemory","length":18}
+{"kind":"string","index":4,"address":5368758528,"encoding":"ascii","value":"CreateRemoteThread","length":18}
+{"kind":"string","index":5,"address":5368758592,"encoding":"utf16le","value":"Hello from the synthetic sample","length":31}
+{"kind":"string","index":6,"address":5368758656,"encoding":"ascii","value":"config.dat","length":10}
+{"kind":"string_ref","string_index":0,"function_entry":5368714304,"count":1}
+{"kind":"string_ref","string_index":1,"function_entry":5368714576,"count":1}
+{"kind":"string_ref","string_index":2,"function_entry":5368714016,"count":1}
+{"kind":"string_ref","string_index":3,"function_entry":5368714016,"count":1}
+{"kind":"string_ref","string_index":4,"function_entry":5368714016,"count":1}
+{"kind":"string_ref","string_index":5,"function_entry":5368715184,"count":1}
+{"kind":"string_ref","string_index":6,"function_entry":5368714768,"count":2}

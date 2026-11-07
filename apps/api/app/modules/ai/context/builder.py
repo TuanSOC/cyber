@@ -24,6 +24,10 @@ order, so the same DB state always gives the same labels, bytes and sha256):
 | `ioc_correlation` | J…, I, T, F and A mentioning the IOCs |
 | `attack_mapping` | J…, F, C, S, A (by sid) |
 | `incident_summary` (root) | V, K, J1…Jn (one per child, in child order), E (merged) |
+| `explain_function` (M10) | target G, its Q, J, C linked to it, F citing it, I, ≤ 10 callee G |
+
+`explain_function` needs a succeeded `reverse` job; its scope also holds the job's source
+static job (the linked C rows live there). It is the only task that reads decompiled code.
 
 T items appear only with `include_ti`, X only with `include_strings`, V's title and
 description only with `include_case_text`. An incident has one `job_digest` child per latest
@@ -44,6 +48,7 @@ from app.modules.ai.context.assemble import Selection, assemble
 from app.modules.ai.context.estimate import context_budget
 from app.modules.ai.context.fields import RawItem
 from app.modules.ai.context.pseudonymize import Pseudonymizer
+from app.modules.ai.context.transform import MAX_CODE_CHARS
 from app.modules.ai.contracts import (
     AiRunRequest,
     AiScope,
@@ -64,6 +69,7 @@ from app.modules.pcap_analysis.models import AnalysisFinding, NetworkAlert
 
 PCAP_TASKS = frozenset({AiTask.SUMMARIZE_PCAP, AiTask.EXPLAIN_ALERT})
 STATIC_TASKS = frozenset({AiTask.EXPLAIN_STATIC})
+RE_TASKS = frozenset({AiTask.EXPLAIN_FUNCTION})
 
 
 @dataclass(frozen=True)
@@ -73,15 +79,23 @@ class Options:
     include_case_text: bool
     budget_tokens: int
     max_jobs: int
+    max_code_chars: int = MAX_CODE_CHARS  # M10: the `Q.code` cap (AI_MAX_CODE_CHARS)
 
 
-def options(settings_row: AiOrgSettings, *, max_input_tokens: int, max_jobs: int) -> Options:
+def options(
+    settings_row: AiOrgSettings,
+    *,
+    max_input_tokens: int,
+    max_jobs: int,
+    max_code_chars: int = MAX_CODE_CHARS,
+) -> Options:
     return Options(
         include_ti=bool(settings_row.include_ti),
         include_strings=bool(settings_row.include_strings),
         include_case_text=bool(settings_row.include_case_text),
         budget_tokens=context_budget(max_input_tokens),
         max_jobs=max_jobs,
+        max_code_chars=max_code_chars,
     )
 
 
@@ -106,6 +120,7 @@ async def build_run(
         settings_row,
         max_input_tokens=settings.ai_max_input_tokens,
         max_jobs=settings.ai_max_jobs_per_incident,
+        max_code_chars=settings.ai_max_code_chars,
     )
     return await build(session, org_id, req, settings_row, opts)
 
@@ -135,8 +150,14 @@ async def build(
     if req.job_id is not None:
         job = await _ready_job(session, org_id, req.job_id, req.task)
         selections = await _job_selections(session, org_id, job, req.task, req.target_id, opts)
-        scope = RunScope(scope=AiScope.JOB, job_ids=(job.id,))
-        root = assemble(req.task, scope, selections, pz, budget_tokens=opts.budget_tokens)
+        root = assemble(
+            req.task,
+            _job_scope(job, req.task),
+            selections,
+            pz,
+            budget_tokens=opts.budget_tokens,
+            max_code_chars=opts.max_code_chars,
+        )
         return BuiltRun(root=root)
     if req.investigation_id is None:  # AiRunRequest validates the shape
         raise ContextBuildError("task_not_applicable")
@@ -158,7 +179,19 @@ async def _ready_job(
         raise ContextBuildError("task_not_applicable")
     if task in STATIC_TASKS and job.analyzer != Analyzer.STATIC:
         raise ContextBuildError("task_not_applicable")
+    if task in RE_TASKS and job.analyzer != Analyzer.REVERSE:
+        raise ContextBuildError("task_not_applicable")
     return job
+
+
+def _job_scope(job: AnalysisJob, task: AiTask) -> RunScope:
+    """The rows a job-scope run may cite: its job, plus (M10, `explain_function`) the RE
+    job's source static job, whose capability rows the function's C items are. Both are the
+    same evidence (the 0018 trigger), so the share policy check of the job covers them."""
+    jobs = [job.id]
+    if task in RE_TASKS and job.source_job_id is not None:
+        jobs.append(job.source_job_id)
+    return RunScope(scope=AiScope.JOB, job_ids=tuple(jobs))
 
 
 def _require(selections: list[Selection], kinds: set[RefKind]) -> None:
@@ -390,13 +423,19 @@ async def _disk_digest(
 async def _re_digest(
     session: AsyncSession, org_id: uuid.UUID, job: AnalysisJob, opts: Options
 ) -> list[Selection]:
-    """M10: a reverse-engineering job's digest is its findings and IOCs only (with the TI
-    answers of those IOCs when asked), like the disk arm and never a pcap summary (RT1).
-    Functions, strings and decompiled code never enter a job digest: code reaches the AI only
-    through `explain_function` (phase 9, `G` / `Q` items)."""
+    """M10: a reverse-engineering job's digest is its program summary (the J item: engine,
+    code kind, arch, bits, format), its findings and IOCs (with the TI answers of those IOCs
+    when asked), never a pcap summary (RT1). Functions, strings and decompiled code never
+    enter a job digest, so an incident never sends code: code reaches the AI only through
+    `explain_function` (phase 9, `G` / `Q` items)."""
     jobs = [job.id]
     iocs = await sel.iocs(session, org_id, jobs)
-    return [await sel.findings(session, org_id, jobs), iocs, await _ti(session, org_id, iocs, opts)]
+    return [
+        await sel.job_items(session, org_id, [job]),
+        await sel.findings(session, org_id, jobs),
+        iocs,
+        await _ti(session, org_id, iocs, opts),
+    ]
 
 
 async def _digest_selections(
@@ -425,6 +464,8 @@ async def _job_selections(
         return await _explain_finding(session, org_id, job, target_id, opts)
     if task is AiTask.EXPLAIN_ALERT and target_id is not None:
         return await _explain_alert(session, org_id, job, target_id, opts)
+    if task is AiTask.EXPLAIN_FUNCTION and target_id is not None:
+        return await sel.select_function_items(session, org_id, job, target_id)
     if task is AiTask.SUMMARIZE_PCAP:
         return await _pcap_summary(session, org_id, job, opts)
     if task is AiTask.EXPLAIN_STATIC:

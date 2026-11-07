@@ -10,6 +10,10 @@ Anything capped, skipped or not run is reported in the header (`truncated`,
 `engine_errors`); an AV scan that could not cover the whole file is `av_not_fully_scanned`,
 never a silent "clean". That includes an AV scan whose coverage is unknown because the
 archive pre-check (facts probe) produced no usable result.
+
+M10 phase 6: the header's `capa_base_address` is the base capa reported its locations
+against (`capa_base_address()`): capa's own `meta.analysis.base_address`, else the PE
+ImageBase (vivisect loads a PE there); None when capa did not run.
 """
 
 import hashlib
@@ -114,6 +118,21 @@ class Collected:
     capabilities: list[CapabilityRecord] = field(default_factory=list)
     facts: Facts = field(default_factory=Facts)
     info: PeInfo | ElfInfo | None = None
+    capa_meta: capa.CapaMeta | None = None  # set when capa ran (M10 phase 6)
+
+
+def capa_base_address(got: Collected) -> int | None:
+    """The base capa's locations are relative to: capa's report, else the PE ImageBase.
+
+    No fallback for ELF: `ElfInfo` carries no load address (the RE ingest then links
+    nothing for that job; capa 10.x always reports the base of a static analysis)."""
+    if got.capa_meta is None:
+        return None
+    if got.capa_meta.base_address is not None:
+        return got.capa_meta.base_address
+    if isinstance(got.info, PeInfo):
+        return got.info.image_base
+    return None
 
 
 def analyze(job: StaticJobV1, dirs: sandbox.JobDirs) -> Path:
@@ -264,6 +283,7 @@ def analyze_file(
         tool_versions=tool_versions(engines),
         engine_errors=unique_errors[:MAX_ERRORS],
         truncated=flags,
+        capa_base_address=capa_base_address(got),
     )
     result = dirs.root / "result.ndjson.gz"
     with ResultWriter(result) as writer:
@@ -343,9 +363,10 @@ def _full(
         errors.append("capa_skipped")
         truncated["capa_skipped_time"] = True
     else:
+        got.capa_meta = capa.CapaMeta()
         got.capabilities = capa.run(
             ws, engines, seconds, budget=budget, limit=limits.max_capabilities, errors=errors,
-            truncated=truncated,
+            truncated=truncated, meta=got.capa_meta,
         )  # fmt: skip
     # 8. FLOSS (emulation: last) ------------------------------------------------------------
     if not engines.floss_enabled:

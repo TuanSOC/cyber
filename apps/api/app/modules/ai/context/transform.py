@@ -14,6 +14,14 @@
 Digest claims (`D` items) are model output that already went through post-processing and
 carry real pseudonyms: they skip steps 1b-3 (no neutralization, no new pseudonyms).
 Non-string scalars pass through unchanged.
+
+M10 (phase 9): a `Q` item's `code` is the one exception to step 5. Before the transforms,
+`c_literals.cut` bounds each string / char literal to 96 characters and each identifier to 64
+(RT16; counted in `code_literals_truncated` / `code_identifiers_truncated`). Steps 1-1b run
+over the whole code; steps 2-4 (URL queries, pseudonyms, defanging) run inside literals and
+comments only, where free text lives, so code tokens such as `kernel32.dll` in a call or
+`local_10.field` are never rewritten as domains or hosts. Step 5 cuts the code at the last
+line break within `AI_MAX_CODE_CHARS` (12 000) with the same `…[truncated n]` marker.
 """
 
 import re
@@ -21,11 +29,15 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 from app.modules.ai import text as aitext
+from app.modules.ai.context import c_literals
 from app.modules.ai.context.fields import HostList, RawItem, RawValue, is_structural
 from app.modules.ai.context.pseudonymize import Pseudonymizer, neutralize
 from app.modules.ai.contracts import FieldValue, RefKind
 
 MAX_FIELD_CHARS = 256
+# M10: the `Q.code` cap (`AI_MAX_CODE_CHARS`, ≤ 12 000; the builder passes the setting).
+MAX_CODE_CHARS = 12_000
+CODE_FIELD = "code"
 REDACTED = "…"
 _URL = re.compile(r"\b[a-z][a-z0-9+.-]{1,15}://[^\s\"'<>]+", re.IGNORECASE)
 
@@ -68,6 +80,8 @@ class ItemCounts:
     stripped: aitext.StripCounts = field(default_factory=aitext.StripCounts)
     neutralized: int = 0
     truncated: int = 0
+    code_literals: int = 0  # M10: literals cut inside `Q.code` (RT16)
+    code_identifiers: int = 0  # M10: identifiers cut inside `Q.code` (RT16)
 
 
 @dataclass
@@ -76,6 +90,8 @@ class Totals:
     neutralized: int = 0
     truncated_fields: Counter[RefKind] = field(default_factory=Counter)
     dropped_keys: int = 0
+    code_literals: int = 0
+    code_identifiers: int = 0
 
     def add(self, kind: RefKind, item: RawItem, counts: ItemCounts) -> None:
         self.stripped.add(counts.stripped)
@@ -84,12 +100,32 @@ class Totals:
         if truncated:
             self.truncated_fields[kind] += truncated
         self.dropped_keys += item.dropped_keys
+        self.code_literals += counts.code_literals
+        self.code_identifiers += counts.code_identifiers
+
+
+def truncate_lines(text: str, max_chars: int) -> str:
+    """`text` cut at the last line break within `max_chars` (at `max_chars` when the first
+    line alone is longer), followed by the `…[truncated n]` marker on its own line."""
+    if len(text) <= max_chars:
+        return text
+    cut = text.rfind("\n", 0, max_chars + 1)
+    if cut <= 0:
+        cut = max_chars
+    return text[:cut].rstrip("\n") + "\n" + aitext.TRUNCATION_MARK.format(n=len(text) - cut)
 
 
 class Transformer:
-    def __init__(self, pseudonymizer: Pseudonymizer, *, max_chars: int = MAX_FIELD_CHARS) -> None:
+    def __init__(
+        self,
+        pseudonymizer: Pseudonymizer,
+        *,
+        max_chars: int = MAX_FIELD_CHARS,
+        max_code_chars: int = MAX_CODE_CHARS,
+    ) -> None:
         self.pseudonymizer = pseudonymizer
         self.max_chars = max_chars
+        self.max_code_chars = max_code_chars
 
     def _clean(self, value: str, counts: ItemCounts, *, trusted: bool) -> str:
         clean, stripped = aitext.sanitize(value)
@@ -155,12 +191,37 @@ class Transformer:
             )
         return value
 
+    def code(self, value: str, counts: ItemCounts) -> str:
+        """`Q.code` (see the module docstring): RT16 cuts, then the M5 steps per segment,
+        then the line-boundary cap."""
+        result = c_literals.cut(value)
+        counts.code_literals += result.literals_cut
+        counts.code_identifiers += result.identifiers_cut
+        parts: list[str] = []
+        for segment in result.segments:
+            clean = self._clean(segment.text, counts, trusted=True)
+            clean, n = neutralize(clean)
+            counts.neutralized += n
+            if segment.kind in c_literals.TEXT_KINDS:
+                clean = redact_urls(clean)
+                clean = aitext.defang(self.pseudonymizer.text(clean))
+            parts.append(clean)
+        joined = "".join(parts)
+        out = truncate_lines(joined, self.max_code_chars)
+        if out != joined:
+            counts.truncated += 1
+        return out
+
     def fields(
         self, item: RawItem, *, trusted: bool = False
     ) -> tuple[dict[str, FieldValue], ItemCounts]:
         counts = ItemCounts()
         out: dict[str, FieldValue] = {}
         for name in sorted(item.fields):
+            raw = item.fields[name]
+            if item.kind is RefKind.CODE and name == CODE_FIELD and isinstance(raw, str):
+                out[name] = self.code(raw, counts)
+                continue
             out[name] = self.value(
                 item.fields[name],
                 counts,

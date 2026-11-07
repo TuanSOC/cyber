@@ -12,6 +12,13 @@ never resolved: it is dropped and counted, never shown). Each resolved row gets:
 - the internal deep-link path, built from ids only (as `ai/service_outputs.deep_link`).
 
 The `C1…Cn` numbers are assigned by the snapshot builder in first-use order.
+
+M10 (phase 9): reverse-engineering function rows are citable (`function`, `re_functions`:
+name, entry, size, signature, linked capabilities). Decompiled code is **never** copied into
+a snapshot: a `code` citation (`re_decompilations`, from a verified `explain_function` `Q`
+citation) renders as "decompiled code of <name> (sha256 …)" with the code's sha256, so the
+row can be checked later without the snapshot carrying the text (size, signed-snapshot
+stability). Both link to `reverse-engineering/{job}?fn=<entry>&tab=facts|code`.
 """
 
 import hashlib
@@ -44,6 +51,11 @@ from app.modules.pcap_analysis.models import (
     NetworkRecord,
     TimelineEntry,
 )
+from app.modules.reverse_engineering.models import (
+    ReDecompilation,
+    ReFunction,
+    ReFunctionCapability,
+)
 from app.modules.static_analysis.models import (
     MalwareCapability,
     MalwareSample,
@@ -75,6 +87,9 @@ KIND_TABLES: dict[str, tuple[str, ...]] = {
     "ti_result": ("ti_results",),
     "note": ("analyst_notes",),
     "investigation": ("investigations",),
+    # M10: one RE function's facts, and its decompiled code (sha256 only, never the text).
+    "function": ("re_functions",),
+    "code": ("re_decompilations",),
     # A merged case-timeline entry points at one of the timeline's source tables
     # (`investigations/timeline.REF_TABLES`); AI refs name it, a selection is looked up.
     "timeline": (
@@ -129,7 +144,11 @@ _TABS: dict[str, dict[str, str]] = {
     "malware_signature_matches": {"static": "signatures"},
     "malware_capabilities": {"static": "capabilities"},
     "malware_strings": {"static": "strings"},
+    "re_functions": {"reverse": "facts"},
+    "re_decompilations": {"reverse": "code"},
 }
+# M10: function-level tabs of the RE job page take the function's entry as `fn`.
+_FUNCTION_TABS = frozenset({"facts", "code"})
 _RECORD_TABS = {"dns": "dns", "http": "http", "tls": "tls"}
 
 
@@ -287,6 +306,7 @@ class _Found:
     raw: dict[str, object]
     evidence_id: uuid.UUID | None = None
     record_kind: str | None = None
+    entry: str | None = None  # M10: the `0x…` entry of a function / code row
 
 
 async def _job_rows(
@@ -504,6 +524,109 @@ async def _status_events(
     }
 
 
+def _hex(value: object) -> str | None:
+    return F.hex_address(value)
+
+
+async def _capability_names(
+    session: AsyncSession, scope: CaseScope, rows: Sequence[ReFunction]
+) -> dict[tuple[uuid.UUID, str], list[str]]:
+    """(job, entry) -> the names of the capa capabilities linked to that function."""
+    if not rows:
+        return {}
+    link, cap = ReFunctionCapability, MalwareCapability
+    found = await session.execute(
+        select(link.job_id, link.function_entry, cap.name)
+        .join(cap, (cap.id == link.capability_id) & (cap.organization_id == link.organization_id))
+        .where(
+            link.organization_id == scope.org_id,
+            link.job_id.in_(sorted({r.job_id for r in rows})),
+            link.function_entry.in_(sorted({r.entry for r in rows})),
+        )
+        .order_by(link.job_id, link.function_entry, cap.namespace, cap.name, cap.id)
+    )
+    out: dict[tuple[uuid.UUID, str], list[str]] = {}
+    for job_id, entry, name in found.all():
+        key = (job_id, _hex(entry) or "")
+        if name not in out.setdefault(key, []):
+            out[key].append(name)
+    return out
+
+
+async def _re_functions(
+    session: AsyncSession, scope: CaseScope, ids: Sequence[uuid.UUID]
+) -> dict[str, _Found]:
+    """M10: a function's facts (name, entry, size, signature, linked capabilities)."""
+    if not ids or not scope.jobs:
+        return {}
+    f = ReFunction
+    rows = list(
+        await session.scalars(
+            select(f).where(
+                f.organization_id == scope.org_id,
+                f.id.in_(list(ids)),
+                f.job_id.in_(list(scope.jobs)),
+            )
+        )
+    )
+    names = await _capability_names(session, scope, rows)
+    out: dict[str, _Found] = {}
+    for row in rows:
+        entry = _hex(row.entry)
+        raw: dict[str, object] = {
+            "name": row.name,
+            "entry": entry,
+            "size": row.size,
+            "signature": row.signature,
+            "name_source": row.name_source,
+        }
+        capabilities = names.get((row.job_id, entry or ""), [])
+        if capabilities:
+            raw["capabilities"] = ", ".join(capabilities[:20])
+        out[str(row.id)] = _Found(row, row.job_id, raw, entry=entry)
+    return out
+
+
+async def _re_code(
+    session: AsyncSession, scope: CaseScope, ids: Sequence[uuid.UUID]
+) -> dict[str, _Found]:
+    """M10: a decompilation as "decompiled code of <name> (sha256 …)": never the code."""
+    if not ids or not scope.jobs:
+        return {}
+    d, f = ReDecompilation, ReFunction
+    rows = await session.execute(
+        select(d.id, d.job_id, d.function_entry, d.status, d.code_kind, d.lines, d.code_sha256)
+        .add_columns(f.name)
+        .join(
+            f,
+            (f.organization_id == d.organization_id)
+            & (f.job_id == d.job_id)
+            & (f.entry == d.function_entry),
+            isouter=True,
+        )
+        .where(
+            d.organization_id == scope.org_id,
+            d.id.in_(list(ids)),
+            d.job_id.in_(list(scope.jobs)),
+        )
+    )
+    out: dict[str, _Found] = {}
+    for row_id, job_id, entry_value, status, code_kind, lines, sha, name in rows.all():
+        entry = _hex(entry_value)
+        label = name or entry or "unknown function"
+        raw: dict[str, object] = {
+            "description": f"decompiled code of {label} (sha256 {sha or 'unknown'})",
+            "function": name,
+            "entry": entry,
+            "code_sha256": sha,
+            "code_kind": code_kind,
+            "status": status,
+            "lines": lines,
+        }
+        out[str(row_id)] = _Found(None, job_id, raw, entry=entry)
+    return out
+
+
 def _investigation(scope: CaseScope, ids: Sequence[uuid.UUID]) -> dict[str, _Found]:
     inv = scope.investigation
     if inv.id not in ids:
@@ -531,6 +654,10 @@ async def _lookup(
         return await _status_events(session, scope, ids)
     if table == "investigations":
         return _investigation(scope, ids)
+    if table == "re_functions":
+        return await _re_functions(session, scope, ids)
+    if table == "re_decompilations":
+        return await _re_code(session, scope, ids)
     return {}
 
 
@@ -538,6 +665,9 @@ async def _lookup(
 
 
 def _job_path(org_id: uuid.UUID, route: str, job_id: uuid.UUID, tab: str, ref: str | None) -> str:
+    if tab in _FUNCTION_TABS:
+        # M10: one function of an RE job (`ref` is its `0x…` entry, built from the row).
+        return f"/o/{org_id}/{route}/{job_id}?fn={quote(ref or '', safe='')}&tab={tab}"
     params = []
     if tab != "overview":
         params.append(f"tab={tab}")
@@ -568,7 +698,9 @@ def _path(scope: CaseScope, kind: str, table: str, ref_id: str, found: _Found) -
     if ref_kind is not None and table == KIND_TABLES[kind][0] and kind != "timeline":
         row = AiCitation(status="verified", kind=kind, ref_id=ref_id, job_id=job_id)
         record_kinds = {ref_id: found.record_kind} if found.record_kind else {}
-        link = deep_link(row, LinkContext({job_id: analyzer} if analyzer else {}, record_kinds))
+        entries = {ref_id: found.entry} if found.entry else {}
+        analyzers = {job_id: analyzer} if analyzer else {}
+        link = deep_link(row, LinkContext(analyzers, record_kinds, entries))
         if link is None or link.job_id is None or link.tab is None:
             return None
         return _job_path(org, link.route, link.job_id, link.tab, link.ref)

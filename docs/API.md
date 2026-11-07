@@ -152,7 +152,7 @@ M7 additions to `EvidenceOut`: `declared_type` (the extension family) and `type_
   - pcap/pcapng magic → `pcap`;
   - PE or non-core ELF → `static`, profile `full`;
   - any other non-empty file ≤ `STATIC_MAX_BYTES` → `static`, profile `av` (ClamAV + YARA).
-- **Manual runs:** `analyzer` defaults to `pcap`. `profile` is accepted for `static` (`full` default, `av`) and, since M8, `memory` (`triage` default, `full`); `os_hint` (`auto` default, `windows`, `linux`) only for `memory` and, since M9, `disk` (`triage` default, `full`; `extract` is reserved for file exports). A disk run also names its ordered `segments` (required for disk, refused otherwise). Memory and disk runs are never automatic.
+- **Manual runs:** `analyzer` defaults to `pcap`. `profile` is accepted for `static` (`full` default, `av`) and, since M8, `memory` (`triage` default, `full`); `os_hint` (`auto` default, `windows`, `linux`) only for `memory` and, since M9, `disk` (`triage` default, `full`; `extract` is reserved for file exports). A disk run also names its ordered `segments` (required for disk, refused otherwise). Since M10, `reverse` takes `full` (default) or `quick`, an optional `source_job_id` (a succeeded static `full` job of the same evidence; the latest one otherwise) and, for `full`, optional `decompile_addresses` (`0x…`, ≤ 64). Memory, disk and reverse runs are never automatic.
 - **Job fields:** `status` is `queued`, `running`, `succeeded` or `failed`; `error_code` is set on failure; `profile` is set for static jobs only.
 - **Results:** they appear only after the trusted ingest validated the whole result stream; see [PCAP_ANALYSIS.md](PCAP_ANALYSIS.md) and [MALWARE_ANALYSIS.md](MALWARE_ANALYSIS.md). Findings and IOCs of both analyzers are served by the shared `/findings` and `/iocs` routes.
 
@@ -160,10 +160,10 @@ Refusals when requesting a run:
 
 | Status | Code |
 |---|---|
-| 409 | `analysis_active` (a run of this evidence by the same analyzer is queued/running), `evidence_archived`, `investigation_archived` |
-| 413 | `capture_too_large` (> `PCAP_MAX_BYTES`), `sample_too_large` (> `STATIC_MAX_BYTES`, 64 MiB), `memory_image_too_large` (> `MEMORY_MAX_BYTES`, M8), `disk_image_too_large` / `disk_image_set_too_large` (M9) |
-| 422 | `memory_image_empty` (M8: an empty file as a memory image), `disk_image_empty`, `disk_segments_invalid` (M9, with `reason` and `ordinal`) |
-| 429 | `analysis_queue_full` (5 active per org / 50 overall, counted per analyzer; memory: 1 per org / 2 overall; disk: 1 per org / 1 overall), `rate_limited` |
+| 409 | `analysis_active` (a run of this evidence by the same analyzer is queued/running), `evidence_archived`, `investigation_archived`, `static_analysis_required` (M10) |
+| 413 | `capture_too_large` (> `PCAP_MAX_BYTES`), `sample_too_large` (> `STATIC_MAX_BYTES`, 64 MiB), `memory_image_too_large` (> `MEMORY_MAX_BYTES`, M8), `disk_image_too_large` / `disk_image_set_too_large` (M9), `re_sample_too_large` (> `RE_MAX_BYTES`, 16 MiB, M10) |
+| 422 | `memory_image_empty` (M8: an empty file as a memory image), `disk_image_empty`, `disk_segments_invalid` (M9, with `reason` and `ordinal`), `unsupported_architecture`, `unsupported_managed_code`, `profile_unavailable` (M10) |
+| 429 | `analysis_queue_full` (5 active per org / 50 overall, counted per analyzer; memory: 1 per org / 2 overall; disk: 1 per org / 1 overall; reverse: 1 per org), `too_many_active_jobs` with `reason: heavy_analysis_busy` (M10: active memory + disk + reverse jobs platform-wide ≥ `ANALYSIS_HEAVY_MAX_ACTIVE`, 1), `rate_limited` |
 
 Static result routes answer `404` for jobs of another analyzer, and `404 results_not_available` from `/sample` when the job has no stored results.
 
@@ -186,6 +186,8 @@ Job `error_code` values:
 - **Memory jobs** (M8, `MEMORY_ERROR_CODES`; written by the worker from phase 2): `symbols_missing` (with a diagnostic result naming the required symbols), `symbols_corrupt`, `memory_parse_failed`, `os_undetermined`, `unsupported_memory_format` (compressed or archived upload), `memory_image_too_large`, `memory_image_empty`, `insufficient_disk`, `identify_timeout`, `plugin_timeout`, `plugin_failed`, `engine_unavailable`, and `not_implemented` (every memory job until phase 2 lands). Per-plugin failures that do not fail the job are listed in the memory summary.
 
 - **Disk jobs** (M9, `DISK_ERROR_CODES`; classes in `ops/error_classes.py`): `unsupported_disk_format` (refused magic, an EWF set libewf will not open, or a claimed media size above `DISK_MAX_MEDIA_BYTES`; with a diagnostic result), `no_supported_filesystem` (no partition could be opened; with a diagnostic result naming the partitions), `disk_image_too_large`, `disk_image_set_too_large`, `disk_segments_invalid`, `disk_image_empty`, `disk_parse_failed`, `timeline_failed`, `walk_memory`, `insufficient_disk`, `stage_timeout`, `engine_unavailable`, `integrity_mismatch` (a segment differs from its evidence record), `export_hash_mismatch`, `disk_export_not_allowed`, `not_implemented`. Stages that fail, time out or are skipped (`deadline`) without failing the job are listed per stage and partition in the disk summary.
+
+- **Reverse jobs** (M10, `RE_ERROR_CODES`; classes in `ops/error_classes.py`): `unsupported_architecture`, `unsupported_managed_code` (both with a diagnostic result: the program line is stored), `unsupported_format`, `re_sample_too_large`, `re_out_of_memory` (a cgroup OOM kill or JVM exit 3), `re_work_too_large` (the job dir passed `RE_MAX_WORK_BYTES`), `re_parse_failed` (incl. a fail-closed loader option), `jvm_start_failed` (incl. effective JVM arguments that differ from the expected list), `analysis_timeout`, `decompile_timeout`, `insufficient_disk`, `profile_unavailable`, `static_analysis_required`, `engine_unavailable`, `not_implemented`. A decompile stage that fails, runs out of memory or out of time does not fail the job (partial result, listed per stage in the summary); a requested address that is not a function is the engine error `function_not_found`.
 
 Result lists are paged like every list. Text filters are case-insensitive substring matches with `%`/`_` escaped.
 
@@ -349,3 +351,32 @@ Design: [DISK_FORENSICS.md](DISK_FORENSICS.md). Built in phases 1 and 7–9 and 
 | 429 | `analysis_queue_full` (disk: 1 active per org, 1 overall) |
 | 501 | `not_implemented` (the file-export routes until phase 10) |
 | 507 | `insufficient_storage` (the API cannot spool the upload now, M8's check) |
+
+## Reverse engineering (M10, in progress)
+
+Design: [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md). Built in phases 1 and 7–9 and **untested in a container**; every route is in the IDOR enumerator (`security/idor_cases_reverse.py`, no pending entry). Paths are under `/api/v1/orgs/{org_id}`.
+
+| Method and path | Permission | Answer | Status |
+|---|---|---|---|
+| existing `POST /evidence/{evidence_id}/analyses` `{analyzer: reverse, profile: full \| quick, source_job_id?, decompile_addresses?}` | `evidence.write` | `AnalysisJobOut` (with `source_job_id`); never automatic; audited `analysis.requested` with `source_job_id` and the **count** of `decompile_addresses`, never the addresses | built (phases 1, 7) |
+| `GET /analyses/{job_id}/reverse` | `evidence.read` | `ReSummaryOut`: program facts, engine and versions, stages (status, duration, truncated, cgroup peak), counts (incl. `capa_linked`, `capa_unlocated`, `capabilities_linked`), decompile budget, the source static job, `newer_job_id` (the newest later RE job of the same evidence that did not fail); a diagnostic job has a summary; `404 results_not_available` for a failed job without a program row | built (phase 8) |
+| `GET /analyses/{job_id}/reverse/functions?q&decompiled&has_capability&calls_suspicious_import&references_ioc_string&include_library&ref` | `evidence.read` | `FunctionPage`, ordered by `priority_rank` (unranked last), then entry; FID library functions hidden unless `include_library=true` (or `ref`); `calls_suspicious_import`: calls an import named in the static report's notable APIs; `references_ioc_string`: references a string containing one of the job's URL / domain / IP / email IOCs; each ranked row carries `priority_reason` | built |
+| `GET /analyses/{job_id}/reverse/functions/{entry}` | `evidence.read` | `FunctionDetailOut`: facts, callers / callees (≤ 200 listed, totals counted), imports, strings, linked capabilities, `finding_ids` (findings whose `attributes.function_entry` is this entry), the decompilation status | built |
+| `GET /analyses/{job_id}/reverse/functions/{entry}/code` | `evidence.read` | `FunctionCodeOut` (code, kind, lines, sha256, truncation); JSON only, `Cache-Control: no-store`; `404 code_not_available` when the function has no decompiled line | built |
+| `GET /analyses/{job_id}/reverse/imports?q&library&ref` | `evidence.read` | `ImportPage` (library, name, ordinal, the calling functions), ordered by library, name | built |
+| `GET /analyses/{job_id}/reverse/strings?q&referenced&ref` | `evidence.read` | `StringPage` (address, encoding, value, the referencing functions), ordered by address | built |
+| `GET /analyses/{job_id}/capabilities/{capability_id}/functions` | `evidence.read` | `CapabilityFunctionsOut`: the functions of the newest succeeded RE job sourced from this static job that contain the capability's locations (≤ 50, by entry), `re_job_id`, and `unlocated` locations | built (phase 8) |
+| existing `GET /analyses/{job_id}/capabilities` (static) | `evidence.read` | items are `CapabilityLinkedOut`: `CapabilityOut` + `locations` (`0x…`) + `functions` (distinct linked functions in the newest RE job; `null` when none). `CapabilityOut` and the static JSON report are unchanged (RT6) | built (phases 1, 6, 8) |
+| existing `POST /ai/runs` `{task: explain_function, job_id: <reverse job>, target_id: <function row id>}` | `evidence.write` (M5) | `202 AiRunCreated`; the job must be a reverse job (`422 task_not_applicable`) | built (phase 9) |
+
+- **Addresses are strings.** `{entry}` and every address in the answers are `0x…` hex strings (pattern `HEX_ADDRESS_PATTERN`, < 2⁶⁴), because unsigned 64-bit values exceed JavaScript's safe integers; `decompile_addresses` in a request are `0x…` strings too (≤ 64, unique, `full` only).
+- **Read rules.** Every RE route answers `404` for unknown or foreign jobs and jobs of another analyzer (an RE job id on the capability route, a static job id on the RE routes), `404 function_not_found` for an entry that is not a function of the job, and `409 analysis_not_ready` while the job is queued or running. Reads run under a 5 s statement timeout. Pagination is the shared offset pagination (`limit` ≤ 100, `offset` ≤ 10 000, `total` capped at 10 001); there is no `sort` parameter. Names, signatures, strings and code are returned exactly as stored: sample-derived, inert text. Pages are not audited (the M7 evidence view audit covers the job page); `ref=<row id>` returns the page with just that row (citation deep links).
+- Findings and IOCs of RE jobs are served by the shared `/findings` and `/iocs` routes. There is no call-graph route (RT24).
+
+| Status | Code |
+|---|---|
+| 404 | `function_not_found`, `code_not_available`, `results_not_available` |
+| 409 | `static_analysis_required` (no succeeded static `full` job of this evidence with a PE / ELF sample row), `analysis_not_ready` |
+| 413 | `re_sample_too_large` (> `RE_MAX_BYTES`) |
+| 422 | `unsupported_architecture` (not x86 / x86-64, or missing facts), `unsupported_managed_code` (a PE importing `mscoree.dll!_CorExeMain` / `_CorDllMain`), `profile_unavailable` (`quick` while `RE_QUICK_ENABLED=false`), `task_not_applicable` (`explain_function` on a non-reverse job) |
+| 429 | `too_many_active_jobs` with `reason: heavy_analysis_busy` and `Retry-After: 60` (the platform-wide heavy-analysis cap over memory, disk and reverse jobs, RT2; no detail of another org's job), `analysis_queue_full` (`RE_MAX_ACTIVE_PER_ORG` 1 per org; the reverse total is the heavy cap) |

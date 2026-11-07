@@ -197,7 +197,7 @@ It writes `.secrets/report_signing_private.json` (mode 0400, chowned to uid 1000
 
 | Service | Image | Trust | Notes |
 |---|---|---|---|
-| `redis-broker` | redis 7.4 | — | separate from the app Redis; ACL users `api`, `ingest`, `pcap`, `static`, `enrich`, `analyst`, `report`, `retention` (M7), `memory` (M8), `disk` (M9) (+ `healthcheck`), no persistence, `maxmemory 256mb noeviction` |
+| `redis-broker` | redis 7.4 | — | separate from the app Redis; ACL users `api`, `ingest`, `pcap`, `static`, `enrich`, `analyst`, `report`, `retention` (M7), `memory` (M8), `disk` (M9), `reverse` (M10) (+ `healthcheck`), no persistence, `maxmemory 256mb noeviction` |
 | `db-bootstrap` | postgres 17.11-alpine | operator (superuser), one-shot | M7: creates / updates `cyberlab_retention` (`infra/postgres/bootstrap.sh`, idempotent) before `migrate`; `backend` only |
 | `retention-worker` | `cyberlab/api` | trusted, destructive | M7: `celery -A app.workers.retention_app worker -Q retention --pool solo` without gossip/mingle/heartbeat; `backend` only, uid 10001, read-only rootfs, tmpfs `/tmp`, `cap_drop: ALL`, no-new-privileges, 384 MiB; least-privilege env (`x-retention-env`, never `*api-env`); dry run unless the DB policy says `enforce` is effective |
 | `pcap-worker` | `cyberlab/pcap-worker` (Zeek 8 base + tshark + suricata) | untrusted | `analysis` network only, read-only rootfs, `cap_drop: ALL` + 6 caps, tini init, `restart: unless-stopped` (fails closed), 2 GiB / 2 CPUs |
@@ -205,6 +205,7 @@ It writes `.secrets/report_signing_private.json` (mode 0400, chowned to uid 1000
 | `memory-worker` | `cyberlab/memory-worker` (python 3.12-slim-trixie + volatility3 2.28.2, pefile, capstone, jsonschema; no symbols) | untrusted | M8 (in progress; phase 1 fails every job `not_implemented`): same isolation as static-worker (`analysis` only, env `BROKER_URL` only, read-only rootfs, caps, tini, fail-closed restart), 3 GiB / 2 CPUs, `pids_limit 256`, `/work` on the named volume `memory_work`, `memory_symbols` read-only at `/symbols`; tool uid 10006 |
 | `memory-symbols`, `memory-symbols-test` | `cyberlab/memory-worker` | trusted operator tool | M8 (CLI pending phase 5): profile `tools` (never part of `up`), uid 10005, read-only rootfs, `cap_drop: ALL`, 2 GiB, network `symbols_egress` only, no secrets; the target store rw at `/symbols` (`memory_symbols`, or `memory_symbols_test` for `--store test`) and `./.memory-import` read-only at `/import`. `memory-symbols-init` (one-shot, no network) chowns both volumes to 10005 |
 | `disk-worker`, `disk-ingest-worker`, `disk-hashsets(-test)`, `disk-hashsets-init` | `cyberlab/disk-worker`, `cyberlab/api` | untrusted / trusted / operator tool | M9 (in progress, untested): see [Disk forensics (M9)](#disk-forensics-m9) |
+| `re-worker`, `re-worker-test` | `cyberlab/re-worker` | untrusted | M10 (in progress, untested): see [Reverse engineering (M10)](#reverse-engineering-m10) |
 | `ingest-worker` | `cyberlab/api` | trusted | `celery worker --pool solo`, app DB role + scoped MinIO user |
 | `ingest-beat` | `cyberlab/api` | trusted | Celery beat: enqueues the reaper every 60 s |
 | `enrich-worker` | `cyberlab/api` | trusted, internet-facing | threat-intel lookups (M4); `celery -A app.workers.enrich_app worker -Q enrich --pool solo` without gossip/mingle/heartbeat; `enrich` + `egress` (never `backend` or `analysis`), uid 10001, read-only rootfs, `cap_drop: ALL`, no-new-privileges; least-privilege env (no JWT secret, MinIO credentials or app Redis); seal private keys as a compose secret |
@@ -550,3 +551,57 @@ CI never opens a real disk image (no third-party image or corpus is used; EVTX, 
 5. Export one benign file and add it to the case; check the trusted hash equals the worker's, the new evidence is restricted and its static job runs.
 6. Try `full` once and note the duration and the peak disk.
 7. Delete nothing by hand: retention and legal holds govern the case as usual.
+
+## Reverse engineering (M10)
+
+**In progress.** The service, volume, broker user and settings below exist since phase 1 and phases 2–10 fill the worker, the API, the ingest and the web, but **nothing has run in a container yet**: the image has never been built, `apps/workers/reverse/uv.lock` does not exist, and the Ghidra-in-sandbox spike (phase 2 A′) has not run, so the JVM limits, the trim list and the JVM arguments are provisional. Design: [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md).
+
+### Services
+
+| Service | Image | Trust | Notes |
+|---|---|---|---|
+| `re-worker` | `cyberlab/re-worker` (python 3.12-slim-trixie + Eclipse Temurin JDK 25, Ghidra 12.2 trimmed, PyGhidra 3.2 from the Ghidra zip, JPype1, radare2 6.2.6, libmagic, libseccomp) | untrusted | the static / memory isolation (`analysis` only, env `BROKER_URL` only as broker user `reverse`, read-only rootfs, `cap_drop: ALL` + 6 caps, tini, fail-closed restart), **4 GiB** / 2 CPUs, `pids_limit 512`, `/tmp` tmpfs 64 MiB, concurrency 1 with one task per child; `/work` on the named volume `re_work`; tool uid 10010 |
+| `re-worker-test` | `cyberlab/re-worker:dev` | test profile | `TEST_PROFILE=1` (replay engine allowed), `/work` an **anonymous per-container volume** (disk-backed, removed with `--rm`; a tmpfs would count against the 4 GiB cgroup, RT22); the worker's sources, tests, samples and dataset read-only; phase 12 adds `./apps/workers/static/samples` read-only at `/opt/samples/m3` (the M3 PE builder for the edge cases) |
+
+Volume: `re_work`. The prod overlay builds the `prod` target (no compilers, no tests, no samples) and requires `BROKER_REVERSE_PASSWORD`. The dev target adds gcc, mingw-w64 (x86 / x64) and binutils for the synthetic samples (compiled at test time, never run) and the M3 C sources at `/opt/samples/m3c`.
+
+### First start
+
+1. `cd apps/workers/reverse && uv lock` once (no lock is committed); check the JPype1 pin against PyGhidra 3.2's requirement; r2pipe must not appear.
+2. Re-check the pinned artefacts against their release pages: the Ghidra zip SHA-256 and the radare2 deb SHA-256 (`ARG`s in `apps/workers/reverse/Dockerfile`, read from the release API on 2026-11-07) and the Temurin image digest; confirm the zip's top dir (`ghidra_12.2_PUBLIC`), the PyGhidra wheel path and the decompiler path. A mismatch fails the build.
+3. In `.env`: `BROKER_REVERSE_PASSWORD` (required in prod).
+4. Heavy, alone: `docker compose build re-worker` (dev) and `docker build --target prod` once. `docker/finalize_image.py` asserts Ghidra 12.2 trimmed (x86 and DATA processors only, no Jython, debugger, server, docs or bundled extensions), our `launch.properties` byte for byte, JDK 25, PyGhidra 3.2.x without plugin entry points, no r2pipe / jython, radare2 6.2.6, root-owned install trees, the licence texts, and writes `/etc/cyberlab/versions.json`. **Image size: pending** (the plan expects 1.2–1.9 GB). Rebuild the api image, then pcap, static, memory, disk and report one at a time (py-jobs and the worker kit changed; the api before the static image, RT18).
+5. Recreate `redis-broker` (new ACL user `reverse`) and run `migrate` (0018).
+6. Run the phase-2 spike, then commit its measured values (trim list, JVM arguments, rlimits, loader and analysis option names).
+
+### Sizing
+
+| Resource | Need |
+|---|---|
+| RAM | `re-worker` 4 GiB while a job runs (analyze JVM heap `RE_JVM_HEAP` 2 GiB + metaspace, code cache and native memory; the decompile JVM 1 GiB + its native child ≤ 1.5 GiB). With M10 the analyzers' `mem_limit`s add up to about 16 GiB (pcap 2, static 3, report 1, memory 3, disk 3, reverse 4) on top of the stack: **keep `ANALYSIS_HEAVY_MAX_ACTIVE` at 1** (one memory, disk or RE job at a time, platform-wide) unless the host fits the sum of the heavy workers' limits that could then run together (e.g. 2 needs room for disk 3 + reverse 4 + the rest of the stack). Measured peaks: **pending** (`pnpm re:metrics`) |
+| Disk | per job: the sample (≤ 16 MiB) plus the Ghidra project and stage outputs in `re_work`, bounded by `RE_MAX_WORK_BYTES` (2 GiB; the root watchdog kills the stage above it, `re_work_too_large`) and wiped after the job; the worker refuses a job without the free space for it (`insufficient_disk`). Project sizes: **pending** |
+| Time | `ANALYSIS_RE_TIMEOUT_S` 1 h per job; each JVM stage ≤ 1 800 s by default; minutes per sample are expected (two JVM starts plus auto-analysis). Latency p50 / p95: **pending** |
+| Concurrency | one RE job per org (`RE_MAX_ACTIVE_PER_ORG`) and one heavy job on the platform by default; a refusal is `429 too_many_active_jobs` / `heavy_analysis_busy` with `Retry-After: 60` (no queue, RT30) |
+
+### Settings
+
+| Variable | Read by | Default and notes |
+|---|---|---|
+| `BROKER_REVERSE_PASSWORD` | redis-broker (ACL user `reverse`), re-worker(-test), api-test (`TEST_BROKER_REVERSE_URL`) | confined to `reverse*` / `test.reverse*`, write-only to `ingest*`; dev default `change-me-broker-reverse`, required in prod |
+| `RE_MAX_BYTES` | api | 16 MiB (≤ 64 MiB and ≤ `STATIC_MAX_BYTES`) |
+| `ANALYSIS_RE_TIMEOUT_S`, `RE_ANALYSIS_TIMEOUT_S`, `RE_DECOMPILE_TIMEOUT_S`, `RE_QUICK_TIMEOUT_S` | api (sent in every RE job) | 3 600 s (≤ 21 600), 1 500 s, 30 s per function, 300 s; decompile < analysis < job and quick < job are checked at start-up |
+| `RE_MAX_DECOMPILED`, `RE_MAX_WORK_BYTES` | api | 300 (≤ 2 000; always at least the number of requested addresses), 2 GiB (64 MiB..16 GiB) |
+| `RE_MAX_ACTIVE_PER_ORG`, `ANALYSIS_HEAVY_MAX_ACTIVE` | api | 1, 1 (api-test raises the heavy cap to 1 000; the M10 tests set it back to 1) |
+| `RE_QUICK_ENABLED` | api | `false`: the radare2 `quick` profile is refused `422 profile_unavailable`; set `true` only after `tests/engine/test_r2_smoke.py` has passed on the built image |
+| `RE_MAX_RESULT_BYTES`, `RE_MAX_RESULT_DECOMPRESSED_BYTES`, `RE_MAX_{FUNCTIONS,CALL_EDGES,IMPORTS,IMPORT_REFS,STRINGS,STRING_REFS,FINDINGS,IOCS}` | api | 256 MiB, 768 MiB, 20 000, 100 000, 10 000, 50 000, 20 000, 50 000, 2 000, 10 000; each can only be lowered below its contract ceiling |
+| `AI_MAX_CODE_CHARS` | api | 12 000 (256..12 000): the `Q` item of `explain_function` |
+| `RE_ENGINE` | re-worker | `ghidra`; `replay` only with `TEST_PROFILE=1` |
+| `RE_JVM_HEAP`, `RE_DECOMPILE_JVM_HEAP`, `RE_DECOMPILER_AS`, `RE_TOOL_RLIMIT_AS` | re-worker | 2 GiB (≤ 3 GiB), 1 GiB, 1.5 GiB (above the decompile heap), heap + 3 GiB; **provisional until the spike** |
+
+### Updating the pinned artefacts
+
+Ghidra, the JDK and radare2 are pinned by SHA-256 / digest in the `Dockerfile` and checked at build; `finalize_image.py` pins the expected versions and `re_worker/jvm_args.py` the expected JVM arguments. An upgrade is a deliberate change: update the `ARG`s and the version constants, re-run the spike checks (the JVM starts under the sandbox with our `launch.properties`, the effective arguments, the loader and analysis option names, the decompiler prlimit, the trim list, the PDB-path strace), then the engine smoke (`tests/engine/test_ghidra_smoke.py`, `test_r2_smoke.py`) and the recovery-quality run, and record the new image size. Licence notices: [`apps/workers/reverse/NOTICE.md`](../apps/workers/reverse/NOTICE.md) (in the image at `/usr/share/doc/cyberlab-re/NOTICE`).
+
+### Checks (phase 12, written, not run)
+
+`scripts/check-re-worker-env.mjs` checks the rendered dev and prod configs: `re-worker` gets only the broker URL, the `analysis` network and `re_work` (no DB, MinIO credentials, app Redis or egress network), `mem_limit` ≤ 4g, `pids_limit` above the probe's `nproc`, `re-worker-test`'s `/work` is not a tmpfs (RT22); with `--image cyberlab/re-worker:prod` it checks the built prod image (tool uid 10010, unique among the images; no compiler). `pnpm re:gen` builds the synthetic samples into the `cyberlab_e2e_samples` volume (`/samples/re`) for the pipeline test and the e2e. Fuzz-lite (`pnpm re:fuzz`) and the metric run (`pnpm re:metrics`) are heavy steps, each run alone with only the infra stack and the RE worker up, never part of the gate.

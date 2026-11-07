@@ -1,7 +1,7 @@
 ---
 phase: 11
 title: "Docs threat model and license notices"
-status: pending
+status: completed (code), numbers pending the phase-12 Docker runs
 priority: P2
 effort: "8h"
 dependencies: [2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -33,9 +33,19 @@ Document M10 after the group-B merge: a new `docs/REVERSE_ENGINEERING.md`, the M
 3. Link check and a final read for verdict words and unverified claims (every number has a source: a test, a table or the research report).
 
 ## Success Criteria
-- [ ] Every doc listed above has its M10 content; the threat model rows name their tests.
-- [ ] The NOTICE files list every third-party component with its license and the trim statement.
-- [ ] No doc presents synthetic numbers as real-world quality.
+- [x] Every doc listed above has its M10 content; the threat model rows name their tests.
+- [x] The NOTICE files list every third-party component with its license and the trim statement.
+- [x] No doc presents synthetic numbers as real-world quality.
 
 ## Risk Assessment
 - **Docs drifting from code:** written after the merge from the merged code; phase 12 may correct numbers with one-line edits.
+
+## Notes (as built)
+
+Code-only (docs and the notice; no container ran). Written from the merged code of phases 1–10 and their as-built notes; nothing of M10 has run in Docker and the phase-2 spike has not run, so every limit from the spike is marked provisional and every measurement pending.
+
+- **New:** `docs/REVERSE_ENGINEERING.md` (build status per phase, when it runs, engines, stages and limits, outputs and caps, decompile priority, capa linking and the "re-run static" caveat, findings, `explain_function`, code-viewer safety, sample set and quality with the caveat, limitations).
+- **M10 sections / rows:** ARCHITECTURE (flow diagram, stage-per-process design, network and volume, the heavy-analysis cap), THREAT_MODEL (scope, an assets bullet, boundary 17, `## M10: reverse engineering` with tests per row and residuals incl. RT12, RT15, RT29 and heavy-slot occupation), DATABASE (0018, tables, checks, grants, the §11 row), API (routes, codes, string addresses, the reverse job error codes, the Analyses refusals), AI_ANALYST (task row, G / Q labels, the `Q.code` exception and transforms, `m10.1`, the offline evaluation), MALWARE_ANALYSIS (capa locations, "Reverse engineer", "Functions (n)"), DEPLOYMENT (services, first start, sizing incl. when to raise `ANALYSIS_HEAVY_MAX_ACTIVE`, settings, updating the pinned artefacts, the phase-12 checks), TESTING (suites, the recorded host results, pending metrics, commands), ROADMAP (the M10 row and its "Later" list), PRD, README (feature, commands, layout, licences).
+- **Notice:** `apps/workers/reverse/NOTICE.md` (also the image's `/usr/share/doc/cyberlab-re/NOTICE`): component table with source links, licence texts in the image, the Ghidra modification-by-deletion notice, radare2 unmodified as a separate process, redistribution vs own use, no VSL-style adapter obligation, dev-only GPL compilers. Keeps the `Modification notice` string `test_isolation.py` asserts.
+- **Numbers with a source:** the scenario table from `apps/workers/reverse/dataset/quality.json` (host, phase 5); the `explain_function` block from `tests/ai_eval/test_ai_eval_explain_function.py` (run on the host 2026-11-07: 22 passed; `summary()` = 16 hostile runs, 32 citations, 10 verified, 8 invalid, flags `verdict_language` / `command_like` / `canary_leak` 4 each; the honest cassette 10 / 10 citations verified). Image size, latency, RSS, project size, recovery quality and ingest at caps are **pending phase 12** (one-line edits in REVERSE_ENGINEERING / TESTING / DEPLOYMENT then).
+- **Not verified:** the PyGhidra launcher behaviour, Ghidra 12.2 option names and the JVM start under seccomp (spike); what vivisect reports as capa's base for PE / ELF PIE / non-PIE (phase 12); the exact licences of Ghidra's bundled native helpers (stated generically: their texts are kept).

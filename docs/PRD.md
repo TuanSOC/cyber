@@ -41,7 +41,7 @@ A secure, multi-tenant investigation platform on a single node:
 |---|---|
 | Memory forensics (Volatility 3) | in progress (M8: foundation only; [MEMORY_ANALYSIS.md](MEMORY_ANALYSIS.md)) |
 | Disk forensics (TSK, Plaso; Autopsy analyst-side only) | in progress (M9; [DISK_FORENSICS.md](DISK_FORENSICS.md)): triage scope, no carving, no VSS or decryption; **Autopsy is not a server component** (analyst-side interop: segment download, body file, timeline CSV / JSONL, notable-hash list) |
-| Reverse engineering (Ghidra, radare2) | Later |
+| Reverse engineering (Ghidra, radare2) | in progress (M10; [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md)): static only, on request, x86 / x86-64 PE and ELF; **samples are never executed** (no debugger or emulation); radare2 `quick` optional and off by default. Later: other processors, managed code, similarity search, analyst renames and comments, a call-graph view, a heavy-analysis queue |
 | Dynamic analysis (sandbox execution) | designed and gated, not enabled ([SANDBOX_SECURITY.md](SANDBOX_SECURITY.md)) |
 | OpenSearch | deferred; Postgres search until the revisit criteria in ARCHITECTURE are met |
 | TCP stream reassembly, file carving, JA4, Mach-O, Detect It Easy | Later |

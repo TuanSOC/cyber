@@ -52,6 +52,7 @@ from app.modules.ai.schemas import (
 )
 from app.modules.analysis.models import AnalysisJob
 from app.modules.pcap_analysis.models import NetworkRecord
+from app.modules.reverse_engineering.models import ReDecompilation, ReFunction
 
 # Kind -> result tab of the cited job's page; kinds absent here get no link.
 _PCAP_TABS: dict[RefKind, DeepLinkTab] = {
@@ -82,12 +83,16 @@ _MEMORY_TABS: dict[RefKind, DeepLinkTab] = {
 # M9: a disk job's page (`/forensics/{job}`) has the same shared tabs.
 _DISK_TABS: dict[RefKind, DeepLinkTab] = dict(_MEMORY_TABS)
 # M10: an RE job's page (`/reverse-engineering/{job}`): overview, findings and IOCs (no
-# timeline); phase 9 adds the function / code links (`G` / `Q`).
+# timeline), and one function (`?fn=<entry>&tab=facts|code`): a `G` / `Q` link's `ref` is the
+# function's `0x…` entry, looked up from the cited row (never from model text).
 _RE_TABS: dict[RefKind, DeepLinkTab] = {
     RefKind.JOB: "overview",
     RefKind.FINDING: "findings",
     RefKind.IOC: "iocs",
+    RefKind.FUNCTION: "facts",
+    RefKind.CODE: "code",
 }
+_ENTRY_KINDS = frozenset({RefKind.FUNCTION, RefKind.CODE})
 # Analyzer -> (route, tabs): every analyzer (RT1: no "else" mislabels a memory job).
 ANALYZER_LINKS: dict[str, tuple[DeepLinkRoute, dict[RefKind, DeepLinkTab]]] = {
     "pcap": ("pcap", _PCAP_TABS),
@@ -126,6 +131,8 @@ _JOB_TIME_TABLES = frozenset(
         "malware_strings",
         "malware_signature_matches",
         "malware_capabilities",
+        "re_functions",
+        "re_decompilations",
     }
 )
 # When a citation's label has no stored ref (not expected), its kind names the table.
@@ -144,6 +151,8 @@ _KIND_TABLE: dict[RefKind, str] = {
     RefKind.STRING: "malware_strings",
     RefKind.TIMELINE: "analysis_timeline",
     RefKind.INVESTIGATION: "investigations",
+    RefKind.FUNCTION: "re_functions",
+    RefKind.CODE: "re_decompilations",
 }
 
 
@@ -158,12 +167,19 @@ def reverser(pseudonym_map: Mapping[str, str]) -> Callable[[str], str]:
 
 
 class LinkContext:
-    """What deep links need besides the citation row: each cited job's analyzer and the
-    kind (dns / http / tls) of each cited network record."""
+    """What deep links need besides the citation row: each cited job's analyzer, the kind
+    (dns / http / tls) of each cited network record and (M10) the `0x…` entry of each cited
+    function (`G`) or code (`Q`) row."""
 
-    def __init__(self, analyzers: dict[uuid.UUID, str], record_kinds: dict[str, str]) -> None:
+    def __init__(
+        self,
+        analyzers: dict[uuid.UUID, str],
+        record_kinds: dict[str, str],
+        entries: dict[str, str] | None = None,
+    ) -> None:
         self.analyzers = analyzers
         self.record_kinds = record_kinds
+        self.entries = entries or {}
 
     @classmethod
     async def load(
@@ -194,7 +210,32 @@ class LinkContext:
                 )
             )
             kinds = {str(rid): getattr(k, "value", str(k)) for rid, k in found_kinds}
-        return cls(analyzers, kinds)
+        return cls(analyzers, kinds, await _entries(session, org_id, verified))
+
+
+async def _entries(
+    session: AsyncSession, org_id: uuid.UUID, verified: Sequence[AiCitation]
+) -> dict[str, str]:
+    """M10: row id -> `0x…` entry of the cited `re_functions` / `re_decompilations` rows."""
+    wanted: dict[str, list[uuid.UUID]] = {"function": [], "code": []}
+    for r in verified:
+        if r.kind in wanted and r.ref_id:
+            try:
+                wanted[r.kind].append(uuid.UUID(r.ref_id))
+            except ValueError:
+                continue
+    out: dict[str, str] = {}
+    for model, column, ids in (
+        (ReFunction, ReFunction.entry, wanted["function"]),
+        (ReDecompilation, ReDecompilation.function_entry, wanted["code"]),
+    ):
+        if not ids:
+            continue
+        rows = await session.execute(
+            select(model.id, column).where(model.organization_id == org_id, model.id.in_(ids))
+        )
+        out.update({str(rid): f"0x{int(entry):x}" for rid, entry in rows if entry is not None})
+    return out
 
 
 def _first_verified_timeline(rows: Sequence[AiCitation]) -> dict[int, AiCitation]:
@@ -329,6 +370,11 @@ def deep_link(row: AiCitation | None, links: LinkContext) -> AiDeepLink | None:
         tab = tabs.get(kind)
     if tab is None:
         return None
+    if kind in _ENTRY_KINDS:
+        entry = links.entries.get(row.ref_id)
+        if entry is None:
+            return None
+        return AiDeepLink(route=route, job_id=row.job_id, tab=tab, ref=entry)
     ref = None if kind in _NO_REF else row.ref_id
     return AiDeepLink(route=route, job_id=row.job_id, tab=tab, ref=ref)
 

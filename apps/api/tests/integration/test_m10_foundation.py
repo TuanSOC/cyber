@@ -1,10 +1,10 @@
-"""M10 phase 1 plumbing: the frozen RE routes exist, check membership and answer 501 until
-phase 8; an RE request is validated by schema and refused before anything is created (the
-source resolution is phase 7's); `quick` is `422 profile_unavailable` while disabled; the
-platform-wide heavy-analysis cap (RT2) refuses a second memory / disk / reverse job without
-naming it; `explain_function` is a frozen task the run path refuses until phase 9; the
-capabilities route serves `CapabilityLinkedOut` while the static report keeps `CapabilityOut`
-(RT6)."""
+"""M10 phase 1 plumbing: the frozen RE routes exist and check membership (implemented in
+phase 8: `404` for an unknown job); an RE request is validated by schema and refused before
+anything is created (no static source: `409 static_analysis_required`, phase 7); `quick`
+is `422 profile_unavailable` while disabled; the platform-wide heavy-analysis cap (RT2)
+refuses a second memory / disk / reverse job without naming it; `explain_function` reaches
+the run path (phase 9; the AI checks apply); the capabilities route serves
+`CapabilityLinkedOut` while the static report keeps `CapabilityOut` (RT6)."""
 
 import uuid
 
@@ -21,7 +21,18 @@ from tests.memory_helpers import seed_memory_job
 from tests.reverse_helpers import seed_re_job, seed_static_source_job
 from tests.security import idor_cases_reverse
 
-PENDING = idor_cases_reverse.PENDING_ROUTES
+_JOB = "/api/v1/orgs/{org_id}/analyses/{job_id}/reverse"
+ROUTES = frozenset(
+    {
+        ("GET", _JOB),
+        ("GET", f"{_JOB}/functions"),
+        ("GET", f"{_JOB}/functions/{{entry}}"),
+        ("GET", f"{_JOB}/functions/{{entry}}/code"),
+        ("GET", f"{_JOB}/imports"),
+        ("GET", f"{_JOB}/strings"),
+        ("GET", "/api/v1/orgs/{org_id}/analyses/{job_id}/capabilities/{capability_id}/functions"),
+    }
+)
 
 
 def _org_routes() -> set[tuple[str, str]]:
@@ -33,12 +44,13 @@ def _org_routes() -> set[tuple[str, str]]:
     }
 
 
-def test_every_m10_route_is_frozen() -> None:
-    assert len(PENDING) == 7
-    assert PENDING <= _org_routes(), sorted(PENDING - _org_routes())
+def test_every_m10_route_is_frozen_and_has_its_idor_case() -> None:
+    assert ROUTES <= _org_routes(), sorted(ROUTES - _org_routes())
+    assert idor_cases_reverse.PENDING_ROUTES == frozenset()  # phase 8
+    assert set(idor_cases_reverse.ROUTE_CASES) == ROUTES
 
 
-async def test_m10_routes_answer_501_to_members_and_404_to_outsiders() -> None:
+async def test_m10_routes_answer_404_for_an_unknown_job() -> None:
     owner = await register(org_name="M10 Org")
     outsider = await register(org_name="M10 Outsider")
     ids = {
@@ -47,11 +59,10 @@ async def test_m10_routes_answer_501_to_members_and_404_to_outsiders() -> None:
         "entry": "0x401000",
         "capability_id": str(uuid.uuid4()),
     }
-    for method, template in sorted(PENDING):
+    for method, template in sorted(ROUTES):
         url = template.format(**ids)
         response = await owner.client.request(method, url)
-        assert response.status_code == 501, (url, response.text)
-        assert response.json()["error"]["code"] == "not_implemented"
+        assert response.status_code == 404, (url, response.text)
         foreign = await outsider.client.request(method, url)
         assert foreign.status_code in (403, 404), (url, foreign.status_code)
 
@@ -75,7 +86,9 @@ async def test_an_re_request_is_schema_checked_and_creates_nothing() -> None:
         assert response.status_code == 422, (bad, response.text)
     ok = {"analyzer": "reverse", "decompile_addresses": ["0x401000"]}
     response = await owner.client.post(url, json=ok, headers=csrf(owner.client))
-    assert response.status_code == 501, response.text  # phase 7 resolves the source
+    # Phase 7: no succeeded static `full` job of this evidence is a source.
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "static_analysis_required"
     jobs = await owner.client.get(f"/api/v1/orgs/{owner.org_id}/evidence/{evidence['id']}/analyses")
     assert all(j["analyzer"] != "reverse" for j in jobs.json()["items"])
 
@@ -125,7 +138,8 @@ async def test_the_heavy_cap_refuses_a_second_heavy_job(
     assert str(busy_job) not in response.text and str(other.org_id) not in response.text
 
 
-async def test_explain_function_is_refused_until_phase_9() -> None:
+async def test_explain_function_reaches_the_run_path() -> None:
+    """Phase 9 removed the pending refusal: the normal AI checks answer (AI is off here)."""
     owner = await register(org_name="M10 AI Org")
     case_id = uuid.UUID(await new_case(owner))
     t = Tenant(owner.org_id, owner.user_id, case_id)
@@ -135,8 +149,8 @@ async def test_explain_function_is_refused_until_phase_9() -> None:
         json={"task": "explain_function", "job_id": str(job_id), "target_id": str(uuid.uuid4())},
         headers=csrf(owner.client),
     )
-    assert response.status_code == 422, response.text
-    assert response.json()["error"]["code"] == "task_not_applicable"
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "ai_disabled"
 
 
 async def test_capabilities_route_carries_locations_and_report_does_not() -> None:

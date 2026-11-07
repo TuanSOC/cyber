@@ -70,6 +70,9 @@ DeepLinkTab = Literal[
     "capabilities",
     "sections",
     "strings",
+    # M10: one function of an RE job (`?fn=<entry>&tab=facts|code`; `ref` is the `0x…` entry).
+    "facts",
+    "code",
 ]
 ContextStageName = Literal["base", "reduce"]
 PseudonymMode = Literal["reversed", "kept"]

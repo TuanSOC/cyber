@@ -317,6 +317,7 @@ The retention role also has `USAGE` on the schema and `EXECUTE` on `app_org_id()
 | `api_keys` | the **sealed provider keys** in `ti_provider_configs` and `ai_provider_configs` (sealed boxes per domain; the API encrypts only) | **platform API keys** (programmatic or service-account access to CyberLab) are not implemented: ROADMAP "Later" |
 | `memory_findings` | `analysis_findings` of memory jobs (M8, schema in `0016`) | shared with the pcap and static analyzers; the memory ingest that writes them is pending (M8 phase 6) |
 | `forensic_artifacts` | memory: `memory_artifacts` (M8, `0016`; with `memory_processes`, `memory_connections`, `memory_injections`, `memory_images`). Disk (M9, `0017`): `disk_files` (the file listing), `disk_events` (parsed artifact events) and `disk_partitions`, with `disk_images` per job | findings of both stay in `analysis_findings`; M9 is in progress (see [Disk forensics (M9, migration 0017)](#disk-forensics-m9-migration-0017)) |
+| `analysis_results` of reverse jobs (M10) | `re_programs` (one per job) and the bulk `re_functions`, `re_call_edges`, `re_imports`, `re_import_refs`, `re_strings`, `re_string_refs`, `re_decompilations`, `re_function_capabilities` (`0018`), plus the shared `analysis_findings` and `iocs` | RE results are analysis results of `reverse` jobs: one validated `re.v1` stream per job, ingested in one transaction; M10 is in progress (see [Reverse engineering (M10, migration 0018)](#reverse-engineering-m10-migration-0018)) |
 
 ## Memory forensics (M8, migration 0016)
 
@@ -405,6 +406,47 @@ Findings, IOCs and the timeline of disk jobs use the shared `analysis_findings`,
 - `disk_exports_transition()` — `BEFORE UPDATE OR DELETE`: forward-only states (`pending → ready | failed`, `ready → promoted | expired`; phase 10 adds `ready → failed` for a promotion whose trusted re-hash differs), `object_deleted_at` set once, identity columns (`id`, org, jobs, `file_id`, `path`, `requested_by`, `created_at`) immutable.
 - Phase 10 (in progress) adds the policy `system_read` on `disk_exports`: a system session (no org context: the expiry beat, the retention sweep) may SELECT every row to find the orgs to act on, never write one; both then act per org in tenant sessions.
 - Never purged by retention: `disk_images`, `disk_partitions`, `disk_exports`, `analysis_job_segments`, `memory_sensitivity`, findings and IOCs.
+
+## Reverse engineering (M10, migration 0018)
+
+**In progress:** written in M10 phase 1 and not yet run in a container (an offline DDL dry-run with the Postgres dialect compiled every table and kept every name ≤ 63 characters; `test_migrations.py` 0018 down / up, `test_m10_schema.py`, `test_rls_coverage.py`, `test_append_only.py` and the RE ingest tests are written but pending their first run). `0018_m10_reverse_engineering` revises `0017` and follows the M4–M9 conventions: FORCE RLS on every tenant table (`organization_id = app_org_id()`), composite `(id, organization_id)` same-org FKs, SELECT / INSERT grants, named checks with `octet_length` caps, **no UPDATE or DELETE grant to the app role** on any RE table. `0018` is frozen; later schema needs take the next number (M11 expects `0019`). Details of the analyzer: [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md).
+
+### Changes to existing tables
+
+| Table / type | Change |
+|---|---|
+| `analyzer` enum | `ADD VALUE 'reverse'` in an autocommit block (the 0006 rule; later SQL compares `analyzer::text`); the downgrade cannot drop it |
+| `analysis_jobs.profile` | `ck_analysis_jobs_profile_valid` gains `quick`; `ck_analysis_jobs_profile_matches_analyzer` gains reverse ∈ (`quick`, `full`) (RT10: no `targeted`) |
+| `analysis_jobs.source_job_id`, `analysis_jobs.re_params` | new; NOT NULL exactly for reverse jobs (`ck_analysis_jobs_re_fields_iff_reverse`). `source_job_id` has a composite same-org FK to `analysis_jobs` (CASCADE) and the `BEFORE INSERT` trigger `analysis_jobs_re_source()` (not SECURITY DEFINER: read under the caller's RLS) requires a **static job of the same evidence**. `re_params` = `{"decompile_addresses": [decimal strings]}` ≤ 2 KiB, checked by `re_params_valid(jsonb, text)` (≤ 64 unique unsigned 64-bit values, non-empty only for `full`); the job guard keeps both write-once |
+| `job_outcomes.kind` | `ck_job_outcomes_kind` gains `reverse` |
+| `ai_runs`, `ai_context_refs`, `ai_citations` | the checks gain the task `explain_function`, the target kind `function` and the ref kinds `function` (G) and `code` (Q) |
+| `malware_capabilities` | + `locations` jsonb (default `[]`; `capability_locations_valid(jsonb)`: ≤ 32 decimal strings, sorted and unique) and a unique `(id, organization_id)` for the link FK; additive (RT18): rows ingested before M10 keep `[]` |
+| `malware_samples` | + `capa_base_address` `NUMERIC(20,0)` NULL (capa's analysis base; NULL for older results) |
+
+### Tables
+
+| Table | Scope | Notes |
+|---|---|---|
+| `re_programs` | tenant (PK `job_id`, composite FK to the job) | one per RE job, also for a diagnostic stream: `format` (`pe` / `elf`), `arch` (`x86` / `x86_64` / `other`), `machine`, `bits`, `endianness`, `language_id`, `compiler_spec`, `image_base`, **`preferred_base`** (the file's own base: PE `ImageBase`, ELF lowest `PT_LOAD`; RT8), `entry`, `analysis_status` (`complete` / `timeout` / `failed` / `not_run`), `peak_memory_bytes` (cgroup, RT14), `engine` (`ghidra` / `radare2` / `replay`), `engine_version`, `code_kind` (`pseudo_c` / `disasm`), jsonb `stages` ≤ 8 KiB, `counts` ≤ 4 KiB (incl. `capa_linked`, `capa_unlocated`), `truncated` ≤ 2 KiB, `tool_versions` ≤ 2 KiB, `audit` ≤ 2 KiB (audit-hook counts), `jvm_args` ≤ 16 KiB (the effective JVM arguments) |
+| `re_functions` | tenant, bulk | `id`, `organization_id`, `job_id` (every bulk table carries these three: retention counts by them and citations reference `id`); `entry`, `rva`, `name` ≤ 255, `name_source` (`export`, `import`, `symbol`, `debug`, `fid_library`, `generated`), `size`, `body` jsonb ≤ 16 ranges, `body_truncated`, `is_thunk`, `is_external`, `is_library`, `signature` ≤ 512, `calling_convention`, `instructions`, `callers`, `callees`, `decompile_status` (the decompile statuses + `not_selected`), `priority_rank` 0..19 999; unique (`job_id`, `entry`); indexes (`job_id`, `name`), (`job_id`, `priority_rank`) |
+| `re_call_edges` | tenant, bulk | `caller_entry`, `callee_entry`, `sites` ≥ 1; unique (`job_id`, `caller_entry`, `callee_entry`); index (`job_id`, `callee_entry`) |
+| `re_imports` / `re_import_refs` | tenant, bulk | imports: `library` ≤ 128, `name` ≤ 255 or `ordinal` 0..65 535, `address`; refs: `import_id` (the stream-local index mapped to the row id at ingest), `function_entry`, `count` ≥ 1 |
+| `re_strings` / `re_string_refs` | tenant, bulk | strings: `address`, `encoding`, `value` ≤ 1 024 characters, `length`; index (`job_id`, `address`); refs: `string_id`, `function_entry`, `count` ≥ 1; index (`job_id`, `function_entry`) |
+| `re_decompilations` | tenant, bulk | `function_entry`, `status` (`ok`, `timeout`, `failed`, `truncated`, `skipped_budget`), `code_kind`, `code` text ≤ 65 536 octets (TOAST-compressed), `lines`, `code_sha256`, `truncated_bytes`, `duration_ms`; `code` present iff `ok` / `truncated`, and the sha256 iff the code; unique (`job_id`, `function_entry`) |
+| `re_function_capabilities` | tenant, bulk | `function_entry`, `capability_id` (composite same-org FK to `malware_capabilities`), `file_va` (the lowest linked capa location, RT8); unique per (job, function, capability); indexes (`capability_id`), (`job_id`, `function_entry`). Written only by the trusted ingest's join, never sent by the worker |
+
+Addresses (`entry`, `rva`, bases, `address`, `file_va`, …) are `NUMERIC(20,0)` checked to 0..2⁶⁴ − 1 (the M3 rule). Findings and IOCs of RE jobs use the shared `analysis_findings` and `iocs`; the job-level summary is `analysis_jobs.summary` (≤ 32 KiB). **Size at the caps:** not measured yet (phase 12).
+
+### Grants and triggers (M10)
+
+| Table | `cyberlab_app` | `cyberlab_retention` |
+|---|---|---|
+| `re_programs` | SELECT, INSERT | SELECT (never DELETE: the program facts stay) |
+| `re_functions`, `re_call_edges`, `re_imports`, `re_import_refs`, `re_strings`, `re_string_refs`, `re_decompilations`, `re_function_capabilities` | SELECT, INSERT | SELECT, DELETE (closed-case purge of bulk rows; in `BULK_TABLES`, refs before their parents) |
+
+- `analysis_jobs_re_source()` — `BEFORE INSERT` on `analysis_jobs`: the source of an RE job is a static job of the same evidence and org.
+- The job guard (updated) keeps `source_job_id` and `re_params` write-once with the profile.
+- The check functions `re_params_valid(jsonb, text)` and `capability_locations_valid(jsonb)` are created by the migration (no new grant).
 
 ## Migrations
 
