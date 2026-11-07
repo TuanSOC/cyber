@@ -1,14 +1,14 @@
-# SPEC: Milestone 11 - Phase 3: Invitations, Email Verification & Registration Modes
+# SPEC: Milestone 11 - Phase 4: Account Recovery, Sessions & Security Events
 
 ## 1. Context & Objectives
 
-Phase 3 transitions CyberLab from direct, unconsented member addition to secure, invitation-based membership. It closes the fundamental security gaps accepted in M1:
-- **No Unconsented Membership:** Users must explicitly accept an invitation token sent to their email.
-- **Timing & Enumeration Resistance:** Creating an invitation answers `201 Created` with identical timing whether the email is registered or unknown (no user table query).
-- **Email Verification:** Email verification tokens are single-use, 24-hour expiring, URL fragment-based (`#t=<token>`), and verify accounts only when signed in as the token's recipient.
-- **Registration Modes:** Supports `open` and `invite_only`. In `invite_only` mode, registration without an invitation token immediately returns `403 registration_closed`.
-- **Legacy Direct Add Removal:** `POST /orgs/{org}/members` is decommissioned with `410 members_direct_add_removed`.
-- **Operator Bootstrap:** `admin_bootstrap.py` creates the first owner invitation for a fresh installation.
+Phase 4 implements secure self-service account recovery, session management, and personal security visibility:
+- **Forgot Password (`POST /auth/password/forgot`):** Always returns `202 Accepted` immediately after rate limits (5 / 10m per IP, 3 / hr per sha256(email)). Background task performs lookup, token creation, and outbox enqueue to prevent timing attacks.
+- **Reset Password (`POST /auth/password/reset`):** Single-use, atomic consumption of `user_action_tokens` (`purpose='password_reset'`). Updates password, sets `email_verified_at` if NULL, revokes **every** session via `sessions_store.revoke_all(user_id, reason=RevokedReason.PASSWORD_RESET)` (families + Redis denylist), preserves MFA factors, sends `password_changed` notification email, records `password_reset` auth event.
+- **Change Password (`POST /auth/password/change`):** Authenticated session principal; refuses SSO session of a user with a password (`403 local_reauth_required`). Requires step-up (`StepUpAction.password_change`) AND current password verification. Revokes all other sessions keeping current one.
+- **Session Management (`GET /auth/sessions`, `DELETE /auth/sessions/{id}`, `POST /auth/sessions/revoke-others`):** Lists user's live sessions with coarse User-Agent summary. Revoke kills refresh family and denylists access tokens in Redis immediately. Revoking current session clears cookies.
+- **Security Events (`GET /auth/events`):** Personal audit log showing caller's auth events (newest first, limit <= 100) with safe details.
+- **User-Agent Parser (`identity/ua.py`):** Strict allowlist parser converting raw UA into coarse summary (Browser on OS) to prevent UI injection and control fingerprinting.
 
 ---
 
@@ -16,144 +16,137 @@ Phase 3 transitions CyberLab from direct, unconsented member addition to secure,
 
 ```mermaid
 sequenceDiagram
-    participant A as Admin
+    participant C as Client
     participant API as FastAPI API
+    participant BG as BackgroundTasks
     participant DB as Postgres
-    participant OB as Email Outbox
+    participant R as Redis
     participant MW as Mail Worker
-    participant U as Invitee
 
-    A->>API: POST /orgs/{org}/invitations {email, role}
-    API->>DB: Lock org, verify permissions & step-up, check allowlist
-    API->>DB: Revoke any existing pending invitation for (org, email)
-    API->>DB: Insert org_invitations & invitation_index
-    API->>OB: Enqueue mail outbox (invite template, sealed token)
-    API-->>A: 201 InvitationOut (no token in response)
-    
-    MW->>OB: Claim row, unseal token, render plain text
-    MW->>U: Deliver email with link: /invite#t=<token>
-    
-    U->>API: POST /invitations/inspect {token}
-    API-->>U: 200 InvitationInspectOut (org name, inviter, role, email)
-    
-    U->>API: POST /invitations/accept {token} (signed in as invitee)
-    API->>DB: Consume token atomically, check email match, add member, set email_verified_at
-    API-->>U: 200 InvitationAcceptOut
+    Note over C,API: 1. Forgot Password
+    C->>API: POST /auth/password/forgot {email}
+    API->>R: Check rate limits (IP & sha256(email))
+    API->>BG: Schedule background lookup & outbox
+    API-->>C: 202 Accepted (immediate response)
+    BG->>DB: Lookup active human user with usable password
+    BG->>DB: Invalidate previous reset token, insert new user_action_tokens
+    BG->>DB: Enqueue email_outbox (template: password_reset)
+    MW->>C: Email delivered with /reset-password#t=<token>
+
+    Note over C,API: 2. Reset Password
+    C->>API: POST /auth/password/reset {token, new_password}
+    API->>DB: Atomic consume user_action_tokens
+    API->>DB: Update password_hash, password_changed_at, email_verified_at
+    API->>DB: Revoke all refresh families
+    API->>R: Denylist all session families in Redis
+    API->>DB: Record auth_event (password_reset) & enqueue password_changed email
+    API-->>C: 204 No Content
+
+    Note over C,API: 3. Session Management
+    C->>API: GET /auth/sessions
+    API->>DB: Query user_sessions (live, not expired/revoked)
+    API-->>C: 200 SessionList (coarse UA, current flag)
+
+    C->>API: DELETE /auth/sessions/{id}
+    API->>DB: Verify session ownership, revoke family
+    API->>R: Denylist family in Redis
+    API-->>C: 204 No Content (clears cookies if current)
 ```
 
 ---
 
-## 3. Detailed Component Specification
+## 3. Component Details & Requirements
 
-### 3.1 Invitation Service & Repository (`app/modules/invitations/`)
-1. **`create_invitation(ctx, data, request)`**:
-   - `require(Permission.MEMBERS_MANAGE)`.
-   - Lock org (`repo.lock_org`).
-   - If `role` is `admin` or `owner`: check step-up `StepUpAction.member_elevate`. Only owners can invite owners.
-   - Validate `data.email` (refuse special-use domains).
-   - Check `OrgSecurityPolicy.invite_domain_allowlist` (if configured and non-empty, raise `422 invite_domain_not_allowed` if domain not in allowlist).
-   - Rate limits: `30 / 10m` per actor, `100 / day` per actor, `200 / day` per org.
-   - Revoke existing pending invitation for same `(org_id, email)`:
-     `UPDATE org_invitations SET revoked_at=now(), revoked_by=ctx.user.id WHERE organization_id=:org_id AND email=:email AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()`.
-   - Generate 256-bit token (`secrets.token_urlsafe(32)`), `token_hash = sha256(token)`.
-   - Expiry: `now() + interval '7 days'`.
-   - Insert `org_invitations` and `invitation_index`.
-   - Enqueue outbox: `outbox.enqueue(session, template=MailTemplate.INVITE, to=email, params={...}, secret=token)`.
-   - Audit: `invitation.created` (`details={"email": email, "role": role.value}`).
-   - Publish outbox after commit (`outbox.publish_after_commit`).
-   - Return `InvitationOut` (no token!). **Zero queries on `users` table**.
+### 3.1 Account Recovery (`identity/recovery.py` & `router_recovery.py`)
+1. **`forgot_password(body, request, background_tasks)`**:
+   - Rate limit per IP: `5 / 10m` (`auth:forgot:ip:{client_ip}`).
+   - Rate limit per email: `3 / 1h` (`auth:forgot:email:{sha256(email.lower())}`).
+   - Return `202 Accepted` immediately without waiting for database lookup (RT6).
+   - In background task:
+     - Open `tenant_session(None, None)`.
+     - Find user by email: must be `kind == 'human'`, active, and have a usable password (does not start with `!`).
+     - If user eligible:
+       - Consume any existing active reset tokens for this user:
+         `UPDATE user_action_tokens SET consumed_at=now() WHERE user_id=:uid AND purpose='password_reset' AND consumed_at IS NULL AND expires_at > now()`.
+       - Generate 256-bit token (`secrets.token_urlsafe(32)`), `token_hash = sha256(token)`.
+       - Expiry: `now() + interval '30 minutes'`.
+       - Insert into `user_action_tokens` (`user_id`, `purpose='password_reset'`, `token_hash`, `email`, `expires_at`).
+       - Enqueue `outbox.enqueue(session, template=MailTemplate.PASSWORD_RESET, to=user.email, params={"display_name": user.display_name, "expiry_minutes": 30}, secret=token)`.
+       - Record auth event `password_reset_requested` with `user_id=user.id`.
+       - Commit and publish outbox.
+     - If user not eligible or not found:
+       - Record auth event `password_reset_requested` without `user_id` (safe audit, no enumeration).
 
-2. **`list_invitations(ctx, page)`**:
-   - `require(Permission.MEMBERS_READ)`.
-   - Paginated list with computed status (`pending`, `accepted`, `revoked`, `expired`).
-
-3. **`resend_invitation(ctx, invitation_id, request)`**:
-   - `require(Permission.MEMBERS_MANAGE)`.
-   - Check `resend_count < 3` per day.
-   - Rotate token and hash, update `expires_at = now() + 7 days`, increment `resend_count`.
-   - Update `invitation_index`.
-   - Enqueue new outbox mail with new token.
-   - Audit `invitation.resent`.
-
-4. **`revoke_invitation(ctx, invitation_id, request)`**:
-   - `require(Permission.MEMBERS_MANAGE)`.
-   - Set `revoked_at = now()`, `revoked_by = ctx.user.id`.
-   - Audit `invitation.revoked`.
-
-5. **`inspect_invitation(token)`**:
-   - Public route. Rate limit `20 / 10m` per IP.
-   - Compute `sha256(token)`, lookup `invitation_index`.
-   - If not found -> `404 invitation_invalid`.
-   - Open tenant session for `org_id` (vetted in `tenant_session_guard`).
-   - Query `org_invitations`. If not pending or expired -> `404 invitation_invalid`.
-   - Return `InvitationInspectOut`.
-
-6. **`accept_invitation(user, token, request)`**:
-   - Must be signed in as human user (`user.kind == "human"`).
-   - Find org via `invitation_index`.
-   - Open tenant session for `org_id`.
-   - Query `org_invitations`. If invalid/expired -> `404 invitation_invalid`.
-   - Check email match: `user.email.lower() == row.email.lower()`. If mismatch -> `409 invitation_email_mismatch` (without consuming!).
+2. **`reset_password(body, request)`**:
+   - Validate `body.new_password` against M1 password rules.
+   - Hash password using `hash_password_async` off the event loop.
+   - Token hash = `sha256(body.token)`.
+   - Open `tenant_session(None, None)`.
    - Atomic consume:
-     `UPDATE org_invitations SET accepted_at=now(), accepted_by=:user_id WHERE id=:id AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now() RETURNING ...`
-   - If user already member: return `InvitationAcceptOut` with current role.
-   - Else: insert `OrganizationMember(organization_id=org_id, user_id=user.id, role=row.role)`.
-   - Update `users.email_verified_at = coalesce(users.email_verified_at, now())`.
-   - Audits: `invitation.accepted`, `member.added` (`{"via": "invitation"}`).
-   - Auth event: `invitation_accepted`.
+     `UPDATE user_action_tokens SET consumed_at=now() WHERE token_hash=:h AND purpose='password_reset' AND consumed_at IS NULL AND expires_at > now() RETURNING user_id, email`.
+   - If no row returned -> `404 token_invalid` (`InvitationInvalid` / `NotFound(code="token_invalid")`).
+   - Update user:
+     `UPDATE users SET password_hash=:h, password_changed_at=now(), email_verified_at=coalesce(email_verified_at, now()) WHERE id=:user_id`.
+   - Revoke all sessions:
+     `await sessions_store.revoke_all(user_id, reason=RevokedReason.PASSWORD_RESET)`.
+   - Record auth event `password_reset`.
+   - Enqueue mail `password_changed`.
+   - Return `204 No Content`.
 
-7. **`register_with_invitation(data, password_hash, request)`**:
-   - Atomic flow called by `auth.service.register`.
-   - Consumes invitation, creates user with `email_verified_at = now()`, creates membership, starts session.
+3. **`change_password(body, user, request)`**:
+   - Caller must be session principal.
+   - If caller is in an SSO session (`user.method == "sso"` or has `sso_org_id`) AND user has a local password (does not start with `!`):
+     raise `403 local_reauth_required` (RT2).
+   - Verify step-up: `await require_recent_auth(session, user, action=StepUpAction.PASSWORD_CHANGE)`.
+   - Verify current password with `verify_password_async`. If invalid -> `401 invalid_credentials`.
+   - Validate `new_password` rules and hash off event loop.
+   - Update `password_hash`, `password_changed_at`.
+   - Revoke other sessions:
+     `await sessions_store.revoke_all(user.id, reason=RevokedReason.PASSWORD_RESET, keep=user.session_id)`.
+   - Enqueue mail `password_changed`.
+   - Record auth event `password_changed`.
+   - Return `204 No Content`.
 
-### 3.2 Registration Modes & Auth (`app/modules/auth/service.py`)
-- In `register()`:
-  - If `settings.registration_mode == "invite_only"` and `not data.invitation_token`:
-    Raise `Forbidden("Registration is invite-only", code="registration_closed")`.
+### 3.2 User-Agent Parser (`identity/ua.py`)
+- Parse User-Agent into a sanitized, safe summary string:
+  Format: `"{browser} on {os}"` or `"Unknown"`.
+- Browser family: Chrome, Firefox, Safari, Edge, Opera, Curl, Python.
+- OS family: Windows, macOS, Linux, Android, iOS.
+- Never echo raw attacker-supplied strings.
 
-### 3.3 Decommission Direct Add & Harden Members (`app/modules/organizations/members.py`)
-- Remove `add_member` / route returns `410 members_direct_add_removed`.
-- `change_role`: Add step-up `member_elevate` if changing to admin or owner. Refuse if target `user.kind == "service"` (`409 service_account_member`).
-- `remove_member`: Add step-up `member_remove`. Refuse if target `user.kind == "service"` (`409 service_account_member`).
-- `count_owners`: Filter by `User.kind == "human"`.
+### 3.3 Sessions API (`identity/sessions_api.py` & `router_sessions.py`)
+1. **`list_sessions(user)`**:
+   - Query `UserSession` for `user_id == user.id`, `revoked_at IS NULL`, `expires_at > now()`.
+   - Order by `last_seen_at DESC`.
+   - Parse `user_agent` using `ua.parse_user_agent`.
+   - Set `current = (row.id == user.session_id)`.
+   - Return `SessionList`.
 
-### 3.4 Email Verification (`app/modules/identity/email_verify.py` & `router_email.py`)
-- `POST /auth/email/verify-request`:
-  - Signed in user. Rate limit 3 / hour.
-  - Insert `user_action_tokens(purpose="email_verify", email=user.email, expires_at=now() + 24h)`.
-  - Enqueue outbox `MailTemplate.EMAIL_VERIFY`.
-- `POST /auth/email/verify {token}`:
-  - Signed in user.
-  - Atomic consume: `UPDATE user_action_tokens SET consumed_at=now() WHERE token_hash=:h AND user_id=:user_id AND purpose='email_verify' AND consumed_at IS NULL AND expires_at > now() RETURNING ...`
-  - If no row -> `404 token_invalid`.
-  - Update `users.email_verified_at = now()`.
-  - Record auth event `email_verified`.
+2. **`revoke_session(session_id, user, response)`**:
+   - Verify session exists and belongs to `user.id`. If not -> `404 not_found`.
+   - Revoke via `sessions_store.revoke(session_id, reason=RevokedReason.USER_REVOKED, user_id=user.id)`.
+   - Record auth event `session_revoked`.
+   - If `session_id == user.session_id`: clear cookies with `clear_auth_cookies(response)`.
+   - Return `204 No Content`.
 
-### 3.5 Operator Bootstrap (`app/modules/invitations/admin_bootstrap.py`)
-- CLI command: `bootstrap-owner --email <email> --org-name <name> --yes`.
-- Creates org with `created_by = SYSTEM_USER_ID`, owner invitation with `invited_by = SYSTEM_USER_ID`.
-- Prints registration link `{PUBLIC_BASE_URL}/register#t={token}` once to stdout.
+3. **`revoke_other_sessions(user)`**:
+   - Check SSO local reauth rule: if session is SSO and user has local password -> `403 local_reauth_required`.
+   - Call `sessions_store.revoke_all(user.id, reason=RevokedReason.USER_REVOKED, keep=user.session_id)`.
+   - Record auth event `session_revoked`.
+   - Return `204 No Content`.
+
+### 3.4 Personal Security Events (`identity/events_api.py` & `router_sessions.py`)
+- Query `AuthEvent` where `user_id == user.id`.
+- Order by `occurred_at DESC`.
+- Limit <= 100.
+- Sanitize details: format coarse UA, client IP, omit internal fields.
+- Return `AuthEventList`.
 
 ---
 
-## 4. Files to Create / Modify
-
-| File | Status | Description |
-|---|:---:|---|
-| `app/modules/invitations/service.py` | Overwrite | Full implementation of invitation lifecycle |
-| `app/modules/invitations/repository.py` | Create | Database queries for invitations and index |
-| `app/modules/invitations/router.py` | Overwrite | Real endpoints replacing 501 stubs |
-| `app/modules/invitations/admin_bootstrap.py` | Overwrite | Operator CLI for initial owner bootstrap |
-| `app/modules/organizations/members.py` | Modify | 410 direct add, step-up on elevate/remove, human owner counts |
-| `app/modules/organizations/router.py` | Modify | Endpoint update for 410 decommission |
-| `app/modules/organizations/repository.py` | Modify | Filter human owners in `count_owners` |
-| `app/modules/auth/service.py` | Modify | `invite_only` gate and hook `register_with_invitation` |
-| `app/modules/identity/email_verify.py` | Create | Logic for request & verify email |
-| `app/modules/identity/router_email.py` | Overwrite | Real endpoints replacing 501 stubs |
-| `tests/security/idor_cases_invitations.py` | Create | IDOR security test matrix for invitations |
-| `tests/integration/test_invitations_create.py` | Create | Test create, limits, allowlist, email outbox |
-| `tests/integration/test_invitations_accept.py` | Create | Test inspect, single-use, email mismatch, already member |
-| `tests/integration/test_invitations_enumeration.py` | Create | Anti-enumeration timing and query invariants |
-| `tests/integration/test_email_verify.py` | Create | Email verify request, scanner protection, verification |
-| `tests/integration/test_registration_mode.py` | Create | `invite_only` vs `open` registration modes |
-| `tests/integration/test_admin_bootstrap.py` | Create | Bootstrap owner CLI tests |
+## 4. Verification & Testing Plan
+- `tests/unit/test_ua_parse.py`: unit tests for User-Agent allowlist parser.
+- `tests/integration/test_password_reset.py`: forgot rate limits, background task execution, reset happy path, session kill, MFA preserved, token reuse.
+- `tests/integration/test_password_change.py`: step-up requirement, current password check, SSO refusal, revoke-others.
+- `tests/integration/test_sessions_api.py`: list own sessions, coarse UA, delete session, immediate access token denylist in Redis, cookie clearing.
+- `tests/integration/test_security_events.py`: personal event listing, isolation from other users, newest first.

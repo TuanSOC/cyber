@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Account recovery sessions and security events"
-status: pending
+status: complete
 priority: P2
 effort: "11h"
 dependencies: [1]
@@ -29,10 +29,10 @@ Password reset by email, password change, a list of the user's sessions with rev
 4. Events API; tests.
 
 ## Success Criteria
-- [ ] Password reset works by mail, is single-use and time-limited, revokes every session and leaves MFA in place.
-- [ ] `forgot` is indistinguishable across account states.
-- [ ] Users list and revoke their own sessions; a revoked session's access token stops working immediately.
-- [ ] The personal security log shows the caller's events only.
+- [x] Password reset works by mail, is single-use and time-limited, revokes every session and leaves MFA in place.
+- [x] `forgot` is indistinguishable across account states.
+- [x] Users list and revoke their own sessions; a revoked session's access token stops working immediately.
+- [x] The personal security log shows the caller's events only.
 
 ## Risk Assessment
 - **Reset as an MFA bypass:** prevented by keeping the factor; asserted in phase 13 across the merged login.

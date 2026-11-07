@@ -139,7 +139,8 @@ async def test_the_public_posts_pass_csrf_without_a_session(
 ) -> None:
     """RT4: a signed-out browser has no `cl_csrf`: 501 (the stub), never 403 csrf_failed."""
     response = await new_client().post(path, json=body)
-    assert response.status_code == 501, response.text
+    assert response.status_code != 403, response.text
+    assert response.status_code in (202, 404, 501), response.text
 
 
 async def test_accept_and_mfa_verify_stay_csrf_checked() -> None:
