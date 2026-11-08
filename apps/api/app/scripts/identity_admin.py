@@ -25,6 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     boot.set_defaults(run=admin_bootstrap.run)
     reset = sub.add_parser("reset-mfa", help="disable a user's MFA and revoke every session")
     reset.add_argument("--email", required=True)
+    reset.add_argument("--yes", action="store_true", help="confirm (required)")
     reset.set_defaults(run=admin_mfa.run)
     approve = sub.add_parser("approve-domain", help="mark a domain verified (method operator)")
     approve.add_argument("--org", required=True)

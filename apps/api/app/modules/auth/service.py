@@ -7,6 +7,7 @@ Commit rule: the failed-login event is committed (tenant_session block left) bef
 import uuid
 from dataclasses import dataclass, field
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from starlette.requests import HTTPConnection
 
@@ -22,7 +23,9 @@ from app.modules.auth import sessions
 from app.modules.auth.events import record_auth_event
 from app.modules.auth.models import AuthEventType
 from app.modules.auth.schemas import LoginIn, MembershipOut, MeOut, RegisterIn
+from app.modules.identity.challenge import MfaChallenge, create_challenge
 from app.modules.identity.errors import RegistrationClosed
+from app.modules.identity.models import MfaFactor, MfaStatus, MfaType
 from app.modules.invitations import service as invitations
 from app.modules.organizations import repository as orgs
 from app.modules.organizations.models import MemberRole, Organization, OrganizationMember
@@ -33,18 +36,6 @@ from app.modules.users.schemas import UserOut
 
 LOGIN_FAILURE_WINDOW_S = 15 * 60
 EMAIL_UNIQUE_CONSTRAINT = "uq_users_email"
-
-
-@dataclass(frozen=True)
-class MfaChallenge:
-    """M11 phase 5: the password was right and the account has an active factor. The router
-    answers `202 MfaChallengeOut`, sets `cl_mfa` (= `challenge_id`) and `cl_csrf`; no session
-    exists yet. Phase 1 never returns one (no factor can be enrolled before phase 5)."""
-
-    challenge_id: str = field(repr=False)
-    csrf_token: str = field(repr=False)
-    methods: tuple[str, ...]
-
 
 LoginResult = tuple[MeOut, IssuedTokens] | MfaChallenge
 
@@ -162,6 +153,34 @@ async def login(data: LoginIn, request: HTTPConnection) -> LoginResult:
         raise Unauthorized("Invalid email or password", code="invalid_credentials")
 
     await rate_limit.release(failure_key)
+
+    # Phase 5: Check if user has an active or locked MFA factor
+    async with tenant_session(None, user.id) as session:
+        factor_stmt = select(MfaFactor.status).where(
+            MfaFactor.user_id == user.id,
+            MfaFactor.type == MfaType.TOTP.value,
+            MfaFactor.status.in_((MfaStatus.ACTIVE.value, MfaStatus.LOCKED.value)),
+        )
+        factor_status = (await session.execute(factor_stmt)).scalar_one_or_none()
+
+    if factor_status is not None:
+        methods = ("recovery_code",) if factor_status == MfaStatus.LOCKED.value else ("totp", "recovery_code")
+        pwd_changed_str = user.password_changed_at.isoformat() if user.password_changed_at else None
+        challenge = await create_challenge(
+            user.id,
+            password_changed_at=pwd_changed_str,
+            methods=methods,
+        )
+        async with tenant_session(None, user.id) as session:
+            record_auth_event(
+                session,
+                AuthEventType.MFA_CHALLENGE,
+                request=request,
+                user_id=user.id,
+                email=email,
+            )
+        return challenge
+
     new_hash = (
         await hash_password_async(data.password)
         if password_needs_rehash(user.password_hash)

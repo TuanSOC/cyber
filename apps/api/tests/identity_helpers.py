@@ -41,15 +41,9 @@ TOTP_SECRET = base64.b32encode(b"12345678901234567890").decode()
 # The non-org M11 routes frozen as 501 stubs in phase 1 (method, path under /api/v1).
 # Phase 3 moves out email verification and invitation inspect/accept.
 # Phase 4 moves out password forgot/reset/change, sessions and events.
+# Phase 5 moves out MFA enrollment, challenge, recovery codes, and step-up.
 M11_NON_ORG_STUBS: frozenset[tuple[str, str]] = frozenset(
     {
-        ("POST", "/auth/mfa/verify"),
-        ("GET", "/auth/mfa"),
-        ("POST", "/auth/mfa/totp/setup"),
-        ("POST", "/auth/mfa/totp/confirm"),
-        ("DELETE", "/auth/mfa/totp"),
-        ("POST", "/auth/mfa/recovery-codes"),
-        ("POST", "/auth/step-up"),
         ("POST", "/auth/sso/start"),
         ("GET", "/auth/sso/callback"),
     }

@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "TOTP MFA recovery codes login challenge and step-up"
-status: pending
+status: complete
 priority: P2
 effort: "19h"
 dependencies: [1]
@@ -39,11 +39,11 @@ A second factor for password logins and the re-authentication that sensitive act
 5. Operator script; concurrency and throttle tests.
 
 ## Success Criteria
-- [ ] TOTP matches the RFC vectors and pyotp; a code is accepted at most once even under concurrency.
-- [ ] Password logins of enrolled users need a second factor; the per-challenge, per-user and 100-failure limits hold; a locked factor recovers only through a recovery code or the operator.
-- [ ] Recovery codes are single-use, shown once, hashed, and regenerating invalidates the previous batch.
-- [ ] Step-up sets `step_up_at` and refreshes the access cookie; failures are recorded.
-- [ ] No TOTP secret or recovery code is ever stored or logged in clear after the setup response.
+- [x] TOTP matches the RFC vectors and pyotp; a code is accepted at most once even under concurrency.
+- [x] Password logins of enrolled users need a second factor; the per-challenge, per-user and 100-failure limits hold; a locked factor recovers only through a recovery code or the operator.
+- [x] Recovery codes are single-use, shown once, hashed, and regenerating invalidates the previous batch.
+- [x] Step-up sets `step_up_at` and refreshes the access cookie; failures are recorded.
+- [x] No TOTP secret or recovery code is ever stored or logged in clear after the setup response.
 
 ## Risk Assessment
 - **Clock drift** on user devices: ±1 step (±30 s); the UI (phase 10) shows the device-time hint on repeated failures.

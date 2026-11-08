@@ -13,18 +13,20 @@ def record_auth_event(
     session: AsyncSession,
     event: AuthEventType,
     *,
-    request: HTTPConnection,
+    request: HTTPConnection | None = None,
     user_id: uuid.UUID | None = None,
     email: str | None = None,
     details: dict[str, Any] | None = None,
 ) -> None:
+    ip = client_ip(request) if request is not None else None
+    ua = user_agent(request) if request is not None else "cli"
     session.add(
         AuthEvent(
             event=event,
             user_id=user_id,
             email_attempted=email,
-            ip=client_ip(request),
-            user_agent=user_agent(request),
+            ip=ip,
+            user_agent=ua,
             details=sanitize(details),
         )
     )
