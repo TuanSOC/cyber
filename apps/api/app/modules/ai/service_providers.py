@@ -25,6 +25,7 @@ from app.core import rate_limit
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError, Conflict, TooManyRequests
 from app.core.rbac import OrgContext
+from app.core.stepup import StepUpAction, require_recent_auth
 from app.core.threads import broker_limiter
 from app.modules.ai import repository
 from app.modules.ai.availability import provider_available
@@ -301,6 +302,8 @@ async def update_provider(
 
     key_audit: dict[str, Any] | None = None
     if body.api_key is not None:
+        with ctx.session.no_autoflush:
+            await require_recent_auth(ctx.session, ctx.user, action=StepUpAction.PROVIDER_KEY_CHANGE)
         kid, public_key = _public_key(settings)
         version = (config.key_version or 0) + 1
         try:
@@ -375,6 +378,7 @@ async def remove_key(ctx: OrgContext, provider: AiProviderName, request: HTTPCon
     )
     if config is None or config.key_ct is None:
         raise ProviderNotConfigured()
+    await require_recent_auth(ctx.session, ctx.user, action=StepUpAction.PROVIDER_KEY_CHANGE)
     last4 = config.key_last4
     config.key_kid = None
     config.key_epk = None

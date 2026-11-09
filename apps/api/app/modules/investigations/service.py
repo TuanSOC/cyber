@@ -6,6 +6,7 @@ from starlette.requests import HTTPConnection
 from app.core.errors import AppError, Conflict, Forbidden, NotFound
 from app.core.pagination import PageParams
 from app.core.rbac import OrgContext, Permission
+from app.core.stepup import StepUpAction, require_recent_auth
 from app.modules.audit import service as audit
 from app.modules.investigations import policy
 from app.modules.investigations import repository as repo
@@ -147,7 +148,7 @@ def _changes(inv: Investigation, data: InvestigationUpdate) -> dict[str, Any]:
     return changes
 
 
-def _check_rules(
+async def _check_rules(
     ctx: OrgContext, inv: Investigation, data: InvestigationUpdate, changes: dict[str, Any]
 ) -> None:
     """The status transition and its reason, the TLP downgrade rule and the exclusion-flag
@@ -169,10 +170,13 @@ def _check_rules(
             )
         if data.acknowledge_tlp_downgrade is not True:
             raise TlpDowngradeNotAcknowledged()
+        await require_recent_auth(ctx.session, ctx.user, action=StepUpAction.TLP_DOWNGRADE)
     for flag in _EXCLUSION_FLAGS:
         turned_off = flag in changes and not changes[flag]["to"]
-        if turned_off and not can(ctx, Permission.INTEGRATIONS_MANAGE):
-            raise Forbidden("Turning a share-policy exclusion off needs integrations.manage")
+        if turned_off:
+            if not can(ctx, Permission.INTEGRATIONS_MANAGE):
+                raise Forbidden("Turning a share-policy exclusion off needs integrations.manage")
+            await require_recent_auth(ctx.session, ctx.user, action=StepUpAction.SHARE_POLICY_RELEASE)
 
 
 def _plain(value: Any) -> Any:
@@ -220,7 +224,7 @@ async def update_investigation(
         raise Conflict("Archived investigations are read-only", code="investigation_archived")
 
     changes = _changes(inv, data)
-    _check_rules(ctx, inv, data, changes)
+    await _check_rules(ctx, inv, data, changes)
     if not changes:
         return _to_out(row)
 

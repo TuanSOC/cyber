@@ -22,6 +22,7 @@ from app.modules.organizations.models import MemberRole
 from tests.ai_api_helpers import API, AiSent, capture_ai_sends, put_provider
 from tests.ai_helpers import AI_SENTINEL_KEY, new_ai_seal_keys
 from tests.factories import add_member, csrf, login, make_user, register, unique_email
+from tests.identity_helpers import session_id_of, set_step_up
 
 
 @pytest.fixture
@@ -357,11 +358,13 @@ async def test_replace_bumps_version_and_remove_keeps_it(sent: AiSent) -> None:
     assert [v[2] for v in sent.verifies] == [1, 2]
 
     url = f"{API}/{owner.org_id}/ai/providers/mock/key"
+    await set_step_up(session_id_of(owner.client), seconds_ago=0)
     removed = await owner.client.delete(url, headers=csrf(owner.client))
     assert removed.status_code == 204
     config = await _config(owner.org_id)
     assert (config.key_ct, config.key_last4, config.enabled) == (None, None, False)
     assert config.key_version == 2  # the version floor stays (RT18)
+    await set_step_up(session_id_of(owner.client), seconds_ago=0)
     again = await owner.client.delete(url, headers=csrf(owner.client))
     assert again.status_code == 409
     assert again.json()["error"]["code"] == "provider_not_configured"
@@ -398,6 +401,7 @@ async def test_mock_is_unavailable_in_prod(sent: AiSent, monkeypatch: pytest.Mon
         f"{API}/{owner.org_id}/ai/providers/mock/verify", headers=csrf(owner.client)
     )
     assert verify.json()["error"]["code"] == "provider_unavailable"
+    await set_step_up(session_id_of(owner.client), seconds_ago=0)
     removed = await owner.client.delete(
         f"{API}/{owner.org_id}/ai/providers/mock/key", headers=csrf(owner.client)
     )

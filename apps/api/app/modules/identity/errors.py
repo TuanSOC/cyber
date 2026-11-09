@@ -198,7 +198,7 @@ class DomainNotVerified(Conflict):
 # --- API keys --------------------------------------------------------------------------------
 
 
-class ApiKeysDisabled(Conflict):
+class ApiKeysDisabled(Forbidden):
     code = "api_keys_disabled"
     message = "API keys are disabled for this organization"
 

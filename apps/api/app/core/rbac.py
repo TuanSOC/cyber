@@ -190,7 +190,7 @@ async def org_session(
                 api_key_id=resolved.key_id,
             )
             if not policy_exempt:
-                await identity_policy.check_org_access(session, org_id, principal)
+                await identity_policy.check_org_access(session, org_id, principal, role=role)
             yield OrgContext(
                 org_id=org_id,
                 user=principal,
@@ -202,5 +202,5 @@ async def org_session(
     async with tenant_session(org_id, user.id, snapshot_read=snapshot_read) as session:
         role = check(await membership_role(session, org_id, user.id), permission)
         if not policy_exempt:
-            await identity_policy.check_org_access(session, org_id, user)
+            await identity_policy.check_org_access(session, org_id, user, role=role)
         yield OrgContext(org_id=org_id, user=user, role=role, session=session)

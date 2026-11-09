@@ -58,6 +58,7 @@ from app.core.rbac import (
     org_session,
 )
 from app.core.signing import SigningError
+from app.core.stepup import StepUpAction, require_recent_auth
 from app.modules.ai.models import AiOutput, AiRun
 from app.modules.ai.service_outputs import has_canary_leak
 from app.modules.analysis.models import AnalysisJob
@@ -403,6 +404,8 @@ async def create_report(
     _not_archived(case)
     tlp = body.tlp.value if body.tlp is not None else case.tlp
     downgraded = _tlp_rule(ctx.permissions, tlp, case.tlp, body.acknowledge_tlp_downgrade)
+    if downgraded:
+        await require_recent_auth(ctx.session, ctx.user, action=StepUpAction.TLP_DOWNGRADE)
     report = Report(
         organization_id=ctx.org_id,
         investigation_id=case.id,
@@ -485,6 +488,8 @@ async def update_report(
         downgraded = _tlp_rule(
             ctx.permissions, body.tlp.value, case.tlp, body.acknowledge_tlp_downgrade
         )
+        if downgraded:
+            await require_recent_auth(ctx.session, ctx.user, action=StepUpAction.TLP_DOWNGRADE)
         report.tlp = body.tlp.value
         changed.append("tlp")
     if body.profile is not None and body.profile.value != report.profile:
@@ -681,6 +686,8 @@ async def _prepare(
         downgraded = _tlp_rule(
             ctx.permissions, report.tlp, case.tlp, body.acknowledge_tlp_downgrade
         )
+        if downgraded:
+            await require_recent_auth(session, ctx.user, action=StepUpAction.TLP_DOWNGRADE)
         _profile_rules(report, body)
         built, snapshot = await _build_redacted(session, ctx, report, case, now, body.change_note)
         revision, latest, case_tlp = report.revision, report.latest_version, case.tlp
@@ -854,6 +861,8 @@ async def _write(
         downgraded = _tlp_rule(
             wctx.permissions, report.tlp, case.tlp, body.acknowledge_tlp_downgrade
         )
+        if downgraded:
+            await require_recent_auth(session, wctx.user, action=StepUpAction.TLP_DOWNGRADE)
         counts = section_counts(prepared.snapshot)
         version = ReportVersion(
             organization_id=org_id,

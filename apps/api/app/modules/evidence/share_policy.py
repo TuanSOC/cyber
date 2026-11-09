@@ -19,6 +19,7 @@ from starlette.requests import HTTPConnection
 
 from app.core.errors import Forbidden, NotFound
 from app.core.rbac import OrgContext, Permission
+from app.core.stepup import StepUpAction, require_recent_auth
 from app.modules.audit import service as audit
 from app.modules.evidence import repository as repo
 from app.modules.evidence import sensitivity as evidence_sensitivity
@@ -82,6 +83,7 @@ async def put_policy(
         source = await evidence_sensitivity.restriction_of(ctx.session, ctx.org_id, evidence_id)
         if source is not None:
             raise evidence_sensitivity.restricted_error(source)
+        await require_recent_auth(ctx.session, ctx.user, action=StepUpAction.SHARE_POLICY_RELEASE)
     if before == after:  # nothing changes: no write, no audit row
         return await _out(ctx, evidence_id, current)
 

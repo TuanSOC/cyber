@@ -14,6 +14,7 @@ from app.core.config import get_settings
 from app.core.tenancy import tenant_session
 from app.modules.organizations.models import MemberRole
 from tests.factories import Registered, add_member, csrf, login, make_user, register, unique_email
+from tests.identity_helpers import session_id_of, set_step_up
 from tests.integration.seed import Tenant
 from tests.ops_helpers import backdate_policy
 
@@ -22,6 +23,10 @@ NULLS: dict[str, Any] = {"ti_results_days": None, "ai_runs_days": None, "closed_
 
 
 async def _put(c: AsyncClient, org_id: uuid.UUID, **body: Any) -> Any:
+    try:
+        await set_step_up(session_id_of(c), seconds_ago=0)
+    except Exception:
+        pass
     payload = {**NULLS, "enforce": False, **body}
     return await c.put(f"{API}/{org_id}/retention/policy", json=payload, headers=csrf(c))
 

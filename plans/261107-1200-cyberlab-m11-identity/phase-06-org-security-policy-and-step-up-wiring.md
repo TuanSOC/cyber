@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Org security policy and step-up wiring"
-status: pending
+status: complete
 priority: P2
 effort: "13h"
 dependencies: [1]
@@ -41,9 +41,9 @@ Two things that sit on top of the phase-1 core: the per-org security policy (req
 3. Step-up wiring module by module, each with its test; the phase notes list every call site.
 
 ## Success Criteria
-- [ ] `require_mfa` and `sso_enforced` are enforced per org on every org route, with the documented exemptions and owner break-glass, and an owner cannot lock themself out through the policy route.
-- [ ] Every protected change in the M4–M7 modules requires a fresh step-up; the call-site list is complete (reviewed against a grep of the acknowledgement fields and key setters).
-- [ ] The per-request cost of the policy check is one indexed read.
+- [x] `require_mfa` and `sso_enforced` are enforced per org on every org route, with the documented exemptions and owner break-glass, and an owner cannot lock themself out through the policy route.
+- [x] Every protected change in the M4–M7 modules requires a fresh step-up; the call-site list is complete (reviewed against a grep of the acknowledgement fields and key setters).
+- [x] The per-request cost of the policy check is one indexed read.
 
 ## Risk Assessment
 - **Missed call sites** leave a sensitive change without step-up: the grep list and one test per site; the red team's seed question 6.

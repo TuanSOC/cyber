@@ -19,6 +19,7 @@ from app.core.config import get_settings
 from app.core.errors import AppError, Conflict, NotFound
 from app.core.pagination import PageParams
 from app.core.rbac import OrgContext
+from app.core.stepup import StepUpAction, require_recent_auth
 from app.core.threads import broker_limiter
 from app.modules.audit import service as audit
 from app.modules.investigations.schemas import case_ref
@@ -121,6 +122,10 @@ async def put_policy(
     row = await repo.ensure_policy(ctx.session, ctx.org_id, ctx.user.id)
     before = policies.state(row, at)
     after = policies.apply(before, body, at)
+    is_lowering = any(policies._is_lower(getattr(body, f), before.values[f]) for f in policies.FIELDS)
+    turning_enforce_on = bool(body.enforce and not before.enforce)
+    if is_lowering or turning_enforce_on:
+        await require_recent_auth(ctx.session, ctx.user, action=StepUpAction.RETENTION_DESTRUCTIVE)
     changed = after != before
     policies.write(row, after)
     row.updated_by = ctx.user.id
@@ -363,6 +368,8 @@ async def create_run(
         raise RunActive()
     effective = policies.effective(await repo.get_policy(ctx.session, ctx.org_id), at)
     mode = "enforce" if effective.enforce and body.dry_run is not True else "dry_run"
+    if mode == "enforce":
+        await require_recent_auth(ctx.session, ctx.user, action=StepUpAction.RETENTION_DESTRUCTIVE)
     run = RetentionRun(
         organization_id=ctx.org_id,
         mode=mode,
@@ -497,6 +504,7 @@ async def release_hold(
     hold, name, number = found
     if hold.released_at is not None:
         raise HoldAlreadyReleased()
+    await require_recent_auth(ctx.session, ctx.user, action=StepUpAction.LEGAL_HOLD_RELEASE)
     at = now()
     hold.released_at = at
     hold.released_by = ctx.user.id

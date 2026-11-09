@@ -32,6 +32,7 @@ from app.modules.ai.models import AiCitation, AiOrgSettings, AiOutput, AiRun, Ai
 from tests.ai_doubles import fake_build_run, fake_preview, make_context
 from tests.ai_helpers import AI_SENTINEL_KEY, seed_job
 from tests.factories import Registered, csrf
+from tests.identity_helpers import session_id_of, set_step_up
 from tests.integration.seed import Tenant
 
 API = "/api/v1/orgs"
@@ -108,8 +109,18 @@ def incident_builder(job_ids: Sequence[uuid.UUID]) -> Builder:
 
 
 async def put_provider(
-    client: AsyncClient, org_id: uuid.UUID, provider: str = "mock", **body: Any
+    client: AsyncClient,
+    org_id: uuid.UUID,
+    provider: str = "mock",
+    *,
+    auto_step_up: bool = True,
+    **body: Any,
 ) -> Response:
+    if auto_step_up and body.get("api_key") is not None:
+        try:
+            await set_step_up(session_id_of(client), seconds_ago=0)
+        except Exception:
+            pass
     return await client.put(
         f"{API}/{org_id}/ai/providers/{provider}", json=body, headers=csrf(client)
     )

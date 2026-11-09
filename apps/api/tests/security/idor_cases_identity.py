@@ -11,12 +11,20 @@ and empties its `*_PENDING_ROUTES`. Phase 13 asserts both are empty.
 from tests.security.idor_types import PathOverrides, RouteCases, StateHook, VictimExtender
 
 _ORG = "/api/v1/orgs/{org_id}"
+_PUT_POLICY = {
+    "require_mfa": False,
+    "sso_enforced": False,
+    "owners_break_glass": True,
+    "api_keys_enabled": False,
+    "invite_domain_allowlist": [],
+}
 
 # --- phase 6: org security policy -----------------------------------------------------------
-POLICY_ROUTE_CASES: RouteCases = {}
-POLICY_PENDING_ROUTES: frozenset[tuple[str, str]] = frozenset(
-    {("GET", f"{_ORG}/security-policy"), ("PUT", f"{_ORG}/security-policy")}
-)
+POLICY_ROUTE_CASES: RouteCases = {
+    ("GET", f"{_ORG}/security-policy"): lambda v: {},
+    ("PUT", f"{_ORG}/security-policy"): lambda v: {"json": _PUT_POLICY},
+}
+POLICY_PENDING_ROUTES: frozenset[tuple[str, str]] = frozenset()
 
 # --- phase 7: SSO administration ------------------------------------------------------------
 SSO_ADMIN_ROUTE_CASES: RouteCases = {}

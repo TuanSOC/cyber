@@ -17,6 +17,7 @@ from app.modules.threat_intel.models import TiResult, TiRunItem
 from app.modules.threat_intel.providers.base import IocType, compute_ioc_key
 from tests.analysis_helpers import new_case, upload
 from tests.factories import Registered, csrf
+from tests.identity_helpers import session_id_of, set_step_up
 from tests.pcap_results import seed_results
 from tests.ti_helpers import SENTINEL_KEY
 
@@ -56,8 +57,18 @@ def capture_sends(monkeypatch: pytest.MonkeyPatch, *, analyses: bool = True) -> 
 
 
 async def put_integration(
-    client: AsyncClient, org_id: uuid.UUID, provider: str = "mock", **body: Any
+    client: AsyncClient,
+    org_id: uuid.UUID,
+    provider: str = "mock",
+    *,
+    auto_step_up: bool = True,
+    **body: Any,
 ) -> Response:
+    if auto_step_up and body.get("api_key") is not None:
+        try:
+            await set_step_up(session_id_of(client), seconds_ago=0)
+        except Exception:
+            pass
     return await client.put(
         f"{API}/{org_id}/integrations/{provider}", json=body, headers=csrf(client)
     )

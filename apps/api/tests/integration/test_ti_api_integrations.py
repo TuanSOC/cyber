@@ -18,6 +18,7 @@ from app.modules.threat_intel.models import TiProviderConfig
 from app.modules.threat_intel.seal import SealedKey
 from app.modules.threat_intel.unseal import UnsealError, open_sealed
 from tests.factories import add_member, csrf, login, make_user, register, unique_email
+from tests.identity_helpers import session_id_of, set_step_up
 from tests.integration.seed import Tenant
 from tests.ti_api_helpers import API, Sent, capture_sends, enable, put_integration
 from tests.ti_helpers import SENTINEL_KEY, assert_key_absent, new_seal_keys
@@ -192,18 +193,17 @@ async def test_replace_bumps_version_and_remove_keeps_it(sent: Sent) -> None:
     assert (await _config(owner.org_id)).key_version == 2
     assert len(sent.verifies) == 2
 
-    removed = await owner.client.delete(
-        f"{API}/{owner.org_id}/integrations/mock/key", headers=csrf(owner.client)
-    )
+    url = f"{API}/{owner.org_id}/integrations/mock/key"
+    await set_step_up(session_id_of(owner.client), seconds_ago=0)
+    removed = await owner.client.delete(url, headers=csrf(owner.client))
     assert removed.status_code == 204
     config = await _config(owner.org_id)
     assert (config.key_ct, config.key_last4, config.enabled) == (None, None, False)
     assert config.key_version == 2  # the version floor stays (RT18)
     entry = _entry((await owner.client.get(f"{API}/{owner.org_id}/integrations")).json(), "mock")
     assert entry["configured"] is False and entry["key_last4"] is None
-    again = await owner.client.delete(
-        f"{API}/{owner.org_id}/integrations/mock/key", headers=csrf(owner.client)
-    )
+    await set_step_up(session_id_of(owner.client), seconds_ago=0)
+    again = await owner.client.delete(url, headers=csrf(owner.client))
     assert again.status_code == 409
     assert again.json()["error"]["code"] == "integration_not_configured"
     no_key = await put_integration(owner.client, owner.org_id, enabled=True)
@@ -329,6 +329,7 @@ async def test_mock_is_unavailable_in_prod(sent: Sent, monkeypatch: pytest.Monke
     )
     assert verify.json()["error"]["code"] == "provider_unavailable"
     # The key can still be removed.
+    await set_step_up(session_id_of(owner.client), seconds_ago=0)
     removed = await owner.client.delete(
         f"{API}/{owner.org_id}/integrations/mock/key", headers=csrf(owner.client)
     )
